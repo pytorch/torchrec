@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Any, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
 import torch.distributed as dist
@@ -15,6 +15,7 @@ from torchrec.distributed.dist_data import (
     KJTAllToAll,
     KJTOneToAll,
     PooledEmbeddingsReduceScatter,
+    VariableBatchPooledEmbeddingsReduceScatter,
 )
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -297,11 +298,6 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             Awaitable[Awaitable[KeyedJaggedTensor]]: awaitable of awaitable of KeyedJaggedTensor.
         """
 
-        if sparse_features.variable_stride_per_key():
-            raise ValueError(
-                "Variable batch per feature is not supported with row-wise sharding"
-            )
-
         (
             bucketized_features,
             self.unbucketize_permute_tensor,
@@ -332,18 +328,27 @@ class RwPooledEmbeddingDist(
     def __init__(
         self,
         pg: dist.ProcessGroup,
+        embedding_dims: List[int],
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
 
-        self._dist = PooledEmbeddingsReduceScatter(
-            pg,
-            codecs=qcomm_codecs_registry.get(
+        self._dist: Optional[
+            Union[
+                PooledEmbeddingsReduceScatter,
+                VariableBatchPooledEmbeddingsReduceScatter,
+            ]
+        ] = None
+        self._pg = pg
+        self._qcomm_codecs_registry = qcomm_codecs_registry
+        self._codecs: Optional[QuantizedCommCodecs] = (
+            qcomm_codecs_registry.get(
                 CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER.name, None
             )
             if qcomm_codecs_registry
-            else None,
+            else None
         )
+        self._embedding_dims = embedding_dims
 
     def forward(
         self,
@@ -355,15 +360,42 @@ class RwPooledEmbeddingDist(
 
         Args:
             local_embs (torch.Tensor): pooled embeddings tensor to distribute.
+            sharding_ctx (Optional[EmbeddingShardingContext]): shared context from
+                KJTAllToAll operation.
 
         Returns:
             Awaitable[torch.Tensor]: awaitable of pooled embeddings tensor.
         """
+        if self._dist is None:
+            self._create_output_dist_module(sharding_ctx)
 
         if sharding_ctx is None:
-            return self._dist(local_embs)
+            return cast(PooledEmbeddingsReduceScatter, self._dist)(local_embs)
+        elif sharding_ctx.variable_batch_per_feature:
+            return cast(VariableBatchPooledEmbeddingsReduceScatter, self._dist)(
+                local_embs,
+                batch_size_per_rank_per_feature=sharding_ctx.batch_size_per_rank_per_feature,
+                embedding_dims=self._embedding_dims,
+            )
         else:
-            return self._dist(local_embs, input_splits=sharding_ctx.batch_size_per_rank)
+            return cast(PooledEmbeddingsReduceScatter, self._dist)(
+                local_embs,
+                input_splits=sharding_ctx.batch_size_per_rank,
+            )
+
+    def _create_output_dist_module(
+        self, sharding_ctx: Optional[EmbeddingShardingContext] = None
+    ) -> None:
+        if sharding_ctx is not None and sharding_ctx.variable_batch_per_feature:
+            self._dist = VariableBatchPooledEmbeddingsReduceScatter(
+                pg=self._pg,
+                codecs=self._codecs,
+            )
+        else:
+            self._dist = PooledEmbeddingsReduceScatter(
+                pg=self._pg,
+                codecs=self._codecs,
+            )
 
 
 class InferRwPooledEmbeddingDist(
@@ -456,6 +488,7 @@ class RwPooledEmbeddingSharding(
             #  `Optional[ProcessGroup]`.
             self._pg,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
+            embedding_dims=self.embedding_dims(),
         )
 
 

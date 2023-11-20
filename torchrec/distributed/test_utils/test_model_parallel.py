@@ -356,11 +356,12 @@ class ModelParallelBase(ModelParallelTestShared):
             [
                 ShardingType.TABLE_WISE.value,
                 ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
             ]
         ),
         global_constant_batch=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_variable_batch(
         self,
         sharding_type: str,

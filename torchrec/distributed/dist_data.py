@@ -18,6 +18,7 @@ from torchrec.distributed.comm_ops import (
     alltoall_pooled,
     alltoall_sequence,
     reduce_scatter_base_pooled,
+    reduce_scatter_v_per_feature_pooled,
     reduce_scatter_v_pooled,
     variable_batch_alltoall_pooled,
 )
@@ -274,6 +275,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
             num_workers=self._workers,
             recat=self._recat,
             stride_per_rank=self._stride_per_rank,
+            stagger=self._stagger,
         )
 
 
@@ -993,6 +995,78 @@ class PooledEmbeddingsReduceScatter(nn.Module):
         return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 
 
+class VariableBatchPooledEmbeddingsReduceScatter(nn.Module):
+    """
+    The module class that wraps reduce-scatter communication primitives for pooled
+    embedding communication of variable batch in rw and twrw sharding.
+
+    For variable batch per feature pooled embeddings, we have a local model-parallel
+    output tensor with a 1d layout of the total sum of batch sizes per rank per feature
+    multiplied by corresponding embedding dim `[batch_size_r0_f0 * emb_dim_f0 + ...)]`.
+    We split the tensor into unequal chunks by rank according to
+    `batch_size_per_rank_per_feature` and corresponding `embedding_dims` and reduce them
+    into the output tensor and scatter the results for corresponding ranks.
+
+    The class returns the async `Awaitable` handle for pooled embeddings tensor.
+    The `reduce-scatter-v` operation is only available for NCCL backend.
+
+    Args:
+        pg (dist.ProcessGroup): the process group that the reduce-scatter communication
+            happens within.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
+
+     Example::
+
+        init_distributed(rank=rank, size=2, backend="nccl")
+        pg = dist.new_group(backend="nccl")
+        input = torch.randn(52)
+        batch_size_per_rank_per_feature = [[1, 3], [2, 2]]
+        embedding_dims = [4, 8]
+        m = VariableBatchPooledEmbeddingsReduceScatter(pg)
+        output = m(input, batch_size_per_rank_per_feature)
+        tensor = output.wait()
+    """
+
+    def __init__(
+        self,
+        pg: dist.ProcessGroup,
+        codecs: Optional[QuantizedCommCodecs] = None,
+    ) -> None:
+        super().__init__()
+        self._pg = pg
+        self._codecs = codecs
+
+    def forward(
+        self,
+        local_embs: torch.Tensor,
+        batch_size_per_rank_per_feature: List[List[int]],
+        embedding_dims: List[int],
+    ) -> PooledEmbeddingsAwaitable:
+        """
+        Performs reduce scatter operation on pooled embeddings tensor.
+
+        Args:
+            local_embs (torch.Tensor): tensor of shape
+                `[num_buckets * batch_size, dimension]`.
+            batch_size_per_rank_per_feature (List[List[int]]): batch size per rank per
+                feature used to determine input splits.
+            embedding_dims (List[int]): embedding dimensions per feature used to
+                determine input splits.
+
+        Returns:
+            PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
+        """
+
+        tensor_awaitable = reduce_scatter_v_per_feature_pooled(
+            input=local_embs,
+            batch_size_per_rank_per_feature=batch_size_per_rank_per_feature,
+            embedding_dims=embedding_dims,
+            group=self._pg,
+            codecs=self._codecs,
+        )
+        return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
+
+
 class PooledEmbeddingsAllGather(nn.Module):
     """
     The module class that wraps the all-gather communication primitive for pooled
@@ -1007,6 +1081,7 @@ class PooledEmbeddingsAllGather(nn.Module):
     Args:
         pg (dist.ProcessGroup): the process group that the all-gather communication
             happens within.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Example::
 
@@ -1096,6 +1171,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             happens within.
         features_per_rank (List[int]): list of number of features per rank.
         device (Optional[torch.device]): device on which buffers will be allocated.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
 
     Example::
 
