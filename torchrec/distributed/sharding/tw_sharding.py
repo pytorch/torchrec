@@ -340,7 +340,7 @@ class TwPooledEmbeddingDist(
                 pg=self._pg,
                 emb_dim_per_rank_per_feature=self._emb_dim_per_rank_per_feature,
                 device=self._device,
-                callbacks=self._callbacks,
+                callbacks=None,
                 codecs=self._codecs,
             )
         else:

@@ -191,15 +191,21 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         return (
             self._combined_embedding_dims
             if self._permute_embeddings
-            else super().embedding_dims()
+            else self.uncombined_embedding_dims()
         )
 
     def embedding_names(self) -> List[str]:
         return (
             self._combined_embedding_names
             if self._permute_embeddings
-            else super().embedding_names()
+            else self.uncombined_embedding_names()
         )
+
+    def uncombined_embedding_dims(self) -> List[int]:
+        return super().embedding_dims()
+
+    def uncombined_embedding_names(self) -> List[str]:
+        return super().embedding_names()
 
 
 class CwPooledEmbeddingSharding(
