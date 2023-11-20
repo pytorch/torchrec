@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import random
 from dataclasses import dataclass
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
@@ -31,7 +32,7 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 from torchrec.modules.feature_processor import PositionWeightedProcessor
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
 
 
@@ -234,6 +235,145 @@ class ModelInput(Pipelineable):
             local_inputs,
         )
 
+    @staticmethod
+    def generate_variable_batch_input(
+        average_batch_size: int,
+        world_size: int,
+        num_float_features: int,
+        tables: List[EmbeddingTableConfig],
+        pooling_avg: int = 10,
+        global_constant_batch: bool = False,
+    ) -> Tuple["ModelInput", List["ModelInput"]]:
+        torch.manual_seed(100)
+        random.seed(100)
+        keys = {}
+        for table in tables:
+            for feature_name in table.feature_names:
+                keys[feature_name] = table.num_embeddings
+        dedup_factor = 2
+        global_float = torch.rand(
+            (dedup_factor * average_batch_size * world_size, num_float_features)
+        )
+        local_model_input = []
+        values_per_rank_per_feature = {}
+        lengths_per_rank_per_feature = {}
+        strides_per_rank_per_feature = {}
+        inverse_indices_per_rank_per_feature = {}
+        label_per_rank = []
+        for rank in range(world_size):
+            # keys, values, lengths, strides
+            lengths_per_rank_per_feature[rank] = {}
+            values_per_rank_per_feature[rank] = {}
+            strides_per_rank_per_feature[rank] = {}
+            inverse_indices_per_rank_per_feature[rank] = {}
+            for key in keys:
+                batch_size = random.randint(1, average_batch_size * dedup_factor - 1)
+                lengths = torch.randint(low=0, high=5, size=(batch_size,))
+                lengths_per_rank_per_feature[rank][key] = lengths
+                lengths_sum = sum(lengths.tolist())
+                values = torch.randint(0, keys[key], (lengths_sum,))
+                values_per_rank_per_feature[rank][key] = values
+                strides_per_rank_per_feature[rank][key] = batch_size
+                inverse_indices_per_rank_per_feature[rank][key] = torch.randint(
+                    0, batch_size, (dedup_factor * average_batch_size,)
+                )
+            label_per_rank.append(torch.rand(dedup_factor * average_batch_size))
+            local_float = global_float[
+                rank
+                * dedup_factor
+                * average_batch_size : (rank + 1)
+                * dedup_factor
+                * average_batch_size
+            ]
+            inverse_indices = (
+                list(keys.keys()),
+                torch.stack(list(inverse_indices_per_rank_per_feature[rank].values())),
+            )
+            local_model_input.append(
+                ModelInput(
+                    idlist_features=KeyedJaggedTensor(
+                        keys=list(keys.keys()),
+                        values=torch.cat(
+                            list(values_per_rank_per_feature[rank].values())
+                        ),
+                        lengths=torch.cat(
+                            list(lengths_per_rank_per_feature[rank].values())
+                        ),
+                        stride_per_key_per_rank=[
+                            [stride]
+                            for stride in strides_per_rank_per_feature[rank].values()
+                        ],
+                        inverse_indices=inverse_indices,
+                    ),
+                    label=label_per_rank[rank],
+                    float_features=local_float,
+                    idscore_features=None,
+                ),
+            )
+
+        # global input
+        global_values = []
+        global_lengths = []
+        global_stride_per_key_per_rank = []
+        inverse_indices_per_feature_per_rank = []
+        for key in keys:
+            sum_stride = 0
+            for rank in range(world_size):
+                global_values.append(values_per_rank_per_feature[rank][key])
+                global_lengths.append(lengths_per_rank_per_feature[rank][key])
+                sum_stride += strides_per_rank_per_feature[rank][key]
+                inverse_indices_per_feature_per_rank.append(
+                    inverse_indices_per_rank_per_feature[rank][key]
+                )
+            global_stride_per_key_per_rank.append([sum_stride])
+        inverse_indices_list: List[torch.Tensor] = []
+        for key in keys.keys():
+            accum_batch_size = 0
+            inverse_indices = []
+            for rank in range(world_size):
+                inverse_indices += [
+                    index + accum_batch_size
+                    for index in inverse_indices_per_rank_per_feature[rank][key]
+                ]
+                accum_batch_size += strides_per_rank_per_feature[rank][key]
+            inverse_indices_list.append(torch.IntTensor(inverse_indices))
+        global_inverse_indices = (list(keys.keys()), torch.stack(inverse_indices_list))
+        if global_constant_batch:
+            global_offsets = []
+            for length in global_lengths:
+                global_offsets.append(_to_offsets(length))
+            reindexed_lengths = []
+            for length, indices in zip(
+                global_lengths, inverse_indices_per_feature_per_rank
+            ):
+                reindexed_lengths.append(torch.index_select(length, 0, indices))
+            lengths = torch.cat(reindexed_lengths)
+            reindexed_values = []
+            for values, offsets, indices in zip(
+                global_values, global_offsets, inverse_indices_per_feature_per_rank
+            ):
+                for idx in indices:
+                    reindexed_values.append(values[offsets[idx] : offsets[idx + 1]])
+            values = torch.cat(reindexed_values)
+            global_stride_per_key_per_rank = None
+            global_inverse_indices = None
+        else:
+            values = torch.cat(global_values)
+            lengths = torch.cat(global_lengths)
+        global_model_input = ModelInput(
+            idlist_features=KeyedJaggedTensor(
+                keys=list(keys.keys()),
+                values=values,
+                lengths=lengths,
+                stride_per_key_per_rank=global_stride_per_key_per_rank,
+                inverse_indices=global_inverse_indices,
+            ),
+            label=torch.cat(label_per_rank),
+            float_features=global_float,
+            idscore_features=None,
+        )
+        return (global_model_input, local_model_input)
+
     def to(self, device: torch.device, non_blocking: bool = False) -> "ModelInput":
         return ModelInput(
             float_features=self.float_features.to(
@@ -363,14 +503,17 @@ class TestOverArch(nn.Module):
         self,
         tables: List[EmbeddingBagConfig],
         weighted_tables: List[EmbeddingBagConfig],
+        embedding_names: Optional[List[str]] = None,
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         if device is None:
             device = torch.device("cpu")
-        self._features: List[str] = [
-            feature for table in tables for feature in table.feature_names
-        ]
+        self._embedding_names: List[str] = (
+            embedding_names
+            if embedding_names
+            else [feature for table in tables for feature in table.feature_names]
+        )
         self._weighted_features: List[str] = [
             feature for table in weighted_tables for feature in table.feature_names
         ]
@@ -393,8 +536,8 @@ class TestOverArch(nn.Module):
     ) -> torch.Tensor:
         ret_list = []
         ret_list.append(dense)
-        for feature_name in self._features:
-            ret_list.append(sparse[feature_name])
+        for embedding_name in self._embedding_names:
+            ret_list.append(sparse[embedding_name])
         for feature_name in self._weighted_features:
             ret_list.append(sparse[feature_name])
         return self.dhn_arch(torch.cat(ret_list, dim=1))
@@ -657,7 +800,11 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
             sparse_device,
             max_feature_lengths_list if max_feature_lengths_list is not None else None,
         )
-        self.over = TestOverArch(tables, weighted_tables, dense_device)
+
+        embedding_names = (
+            list(embedding_groups.values())[0] if embedding_groups else None
+        )
+        self.over = TestOverArch(tables, weighted_tables, embedding_names, dense_device)
         self.register_buffer(
             "dummy_ones",
             torch.ones(1, device=dense_device),
