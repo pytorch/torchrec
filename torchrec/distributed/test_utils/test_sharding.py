@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
-from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, cast, Dict, List, Optional, Protocol, Tuple, Type, Union
 
 import torch
 import torch.distributed as dist
@@ -47,7 +47,6 @@ from torchrec.distributed.types import (
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
-from typing_extensions import Protocol
 
 
 class SharderType(Enum):
@@ -113,27 +112,17 @@ class ModelInputCallable(Protocol):
         ...
 
 
-def generate_inputs(
-    world_size: int,
-    tables: List[EmbeddingTableConfig],
-    dedup_tables: List[EmbeddingTableConfig],
-    generate: ModelInputCallable = ModelInput.generate,
-    weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
-    batch_size: int = 4,
-    num_float_features: int = 16,
-    variable_batch_size: bool = False,
-    long_indices: bool = True,
-) -> Tuple[ModelInput, List[ModelInput]]:
-    return generate(
-        batch_size=batch_size,
-        world_size=world_size,
-        num_float_features=num_float_features,
-        tables=tables,
-        dedup_tables=dedup_tables,
-        weighted_tables=weighted_tables or [],
-        variable_batch_size=variable_batch_size,
-        long_indices=long_indices,
-    )
+class VariableBatchModelInputCallable(Protocol):
+    def __call__(
+        self,
+        average_batch_size: int,
+        world_size: int,
+        num_float_features: int,
+        tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
+        pooling_avg: int = 10,
+        global_constant_batch: bool = False,
+    ) -> Tuple["ModelInput", List["ModelInput"]]:
+        ...
 
 
 def gen_model_and_input(
@@ -141,7 +130,9 @@ def gen_model_and_input(
     tables: List[EmbeddingTableConfig],
     embedding_groups: Dict[str, List[str]],
     world_size: int,
-    generate: ModelInputCallable = ModelInput.generate,
+    generate: Union[
+        ModelInputCallable, VariableBatchModelInputCallable
+    ] = ModelInput.generate,
     weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
     num_float_features: int = 16,
     dense_device: Optional[torch.device] = None,
@@ -152,6 +143,7 @@ def gen_model_and_input(
     batch_size: int = 4,
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     long_indices: bool = True,
+    global_constant_batch: bool = False,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -182,13 +174,19 @@ def gen_model_and_input(
             feature_processor_modules=feature_processor_modules,
         )
     inputs = [
-        generate_inputs(
+        cast(VariableBatchModelInputCallable, generate)(
+            average_batch_size=batch_size,
+            world_size=world_size,
+            num_float_features=num_float_features,
+            tables=tables,
+            global_constant_batch=global_constant_batch,
+        )
+        if generate == ModelInput.generate_variable_batch_input
+        else cast(ModelInputCallable, generate)(
             world_size=world_size,
             tables=tables,
-            # pyre-ignore [6]
             dedup_tables=dedup_tables,
-            generate=generate,
-            weighted_tables=weighted_tables,
+            weighted_tables=weighted_tables or [],
             num_float_features=num_float_features,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
@@ -254,6 +252,8 @@ def sharding_single_rank_test(
     variable_batch_size: bool = False,
     batch_size: int = 4,
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
+    variable_batch_per_feature: bool = False,
+    global_constant_batch: bool = False,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -261,6 +261,12 @@ def sharding_single_rank_test(
         (global_model, inputs) = gen_model_and_input(
             model_class=model_class,
             tables=tables,
+            generate=cast(
+                VariableBatchModelInputCallable,
+                ModelInput.generate_variable_batch_input,
+            )
+            if variable_batch_per_feature
+            else ModelInput.generate,
             weighted_tables=weighted_tables,
             embedding_groups=embedding_groups,
             world_size=world_size,
@@ -268,6 +274,7 @@ def sharding_single_rank_test(
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
             feature_processor_modules=feature_processor_modules,
+            global_constant_batch=global_constant_batch,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)

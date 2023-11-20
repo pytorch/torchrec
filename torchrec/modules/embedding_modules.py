@@ -19,6 +19,15 @@ from torchrec.modules.embedding_configs import (
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
+# pyre-ignore[5]
+_orig_module_call = torch.nn.Module.__call__
+
+
+@torch.jit.ignore
+def is_fx_tracing() -> bool:
+    return torch.nn.Module.__call__ is not _orig_module_call
+
+
 class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
     """
     Interface for `EmbeddingBagCollection`.
@@ -191,6 +200,18 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     per_sample_weights=f.weights() if self._is_weighted else None,
                 ).float()
                 pooled_embeddings.append(res)
+        if features.inverse_indices_or_none() is not None and not is_fx_tracing():
+            inverse_indices = []
+            index_per_name = {
+                name: i for i, name in enumerate(features.inverse_indices()[0])
+            }
+            for table in self._feature_names:
+                for feature_name in table:
+                    index = index_per_name[feature_name.split("@")[0]]
+                    inverse_indices.append(features.inverse_indices()[1][index])
+            pooled_embeddings = torch.ops.fbgemm.group_index_select_dim0(
+                pooled_embeddings, inverse_indices
+            )
         data = torch.cat(pooled_embeddings, dim=1)
         return KeyedTensor(
             keys=self._embedding_names,

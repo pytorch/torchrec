@@ -92,6 +92,13 @@ def _get_weights_or_throw(weights: Optional[torch.Tensor]) -> torch.Tensor:
     return weights
 
 
+def _get_inverse_indices_or_throw(
+    inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
+) -> Tuple[List[str], torch.Tensor]:
+    assert inverse_indices is not None, "This KJT doesn't have inverse indices."
+    return inverse_indices
+
+
 def _assert_offsets_or_lengths_is_provided(
     offsets: Optional[torch.Tensor], lengths: Optional[torch.Tensor]
 ) -> None:
@@ -1052,6 +1059,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offset.
         index_per_key (Optional[Dict[str, int]]): index for each key.
         jt_dict (Optional[Dict[str, JaggedTensor]]):
+        inverse_indices (Optional[Tuple[List[str], torch.Tensor]]): inverse indices to
+            expand deduplicated embedding output for variable stride per key.
 
     Example::
 
@@ -1099,6 +1108,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         offset_per_key: Optional[List[int]] = None,
         index_per_key: Optional[Dict[str, int]] = None,
         jt_dict: Optional[Dict[str, JaggedTensor]] = None,
+        inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
     ) -> None:
         self._keys: List[str] = keys
         self._values: torch.Tensor = values
@@ -1143,6 +1153,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._offset_per_key: Optional[List[int]] = offset_per_key
         self._index_per_key: Optional[Dict[str, int]] = index_per_key
         self._jt_dict: Optional[Dict[str, JaggedTensor]] = jt_dict
+        self._inverse_indices: Optional[
+            Tuple[List[str], torch.Tensor]
+        ] = inverse_indices
         self._lengths_offset_per_key: List[int] = []
 
     @staticmethod
@@ -1153,6 +1166,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights: Optional[torch.Tensor] = None,
         stride: Optional[int] = None,
         stride_per_key_per_rank: Optional[List[List[int]]] = None,
+        inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
     ) -> "KeyedJaggedTensor":
         kjt = KeyedJaggedTensor(
             keys=keys,
@@ -1161,6 +1175,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offsets=offsets,
             stride=stride,
             stride_per_key_per_rank=stride_per_key_per_rank,
+            inverse_indices=inverse_indices,
         )
         return kjt.sync()
 
@@ -1172,6 +1187,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights: Optional[torch.Tensor] = None,
         stride: Optional[int] = None,
         stride_per_key_per_rank: Optional[List[List[int]]] = None,
+        inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
     ) -> "KeyedJaggedTensor":
         kjt = KeyedJaggedTensor(
             keys=keys,
@@ -1180,6 +1196,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             lengths=lengths,
             stride=stride,
             stride_per_key_per_rank=stride_per_key_per_rank,
+            inverse_indices=inverse_indices,
         )
         return kjt.sync()
 
@@ -1414,6 +1431,12 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def variable_stride_per_key(self) -> bool:
         return self._variable_stride_per_key
 
+    def inverse_indices(self) -> Tuple[List[str], torch.Tensor]:
+        return _get_inverse_indices_or_throw(self._inverse_indices)
+
+    def inverse_indices_or_none(self) -> Optional[Tuple[List[str], torch.Tensor]]:
+        return self._inverse_indices
+
     def _key_indices(self) -> Dict[str, int]:
         _index_per_key: Dict[str, int] = _maybe_compute_index_per_key(
             self._keys,
@@ -1491,6 +1514,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         offset_per_key=self._offset_per_key,
                         index_per_key=self._index_per_key,
                         jt_dict=self._jt_dict,
+                        inverse_indices=None,
                     )
                 )
             elif segment == 0:
@@ -1522,6 +1546,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         offset_per_key=None,
                         index_per_key=None,
                         jt_dict=None,
+                        inverse_indices=None,
                     )
                 )
             else:
@@ -1555,6 +1580,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         offset_per_key=None,
                         index_per_key=None,
                         jt_dict=None,
+                        inverse_indices=None,
                     )
                 )
             start = end
@@ -1637,6 +1663,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offset_per_key=None,
             index_per_key=None,
             jt_dict=None,
+            inverse_indices=None,
         )
         return kjt
 
@@ -1708,7 +1735,12 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         offset_per_key = self._offset_per_key
         index_per_key = self._index_per_key
         jt_dict = self._jt_dict
-
+        inverse_indices = self._inverse_indices
+        if inverse_indices is not None:
+            inverse_indices = (
+                inverse_indices[0],
+                inverse_indices[1].to(device, non_blocking=non_blocking),
+            )
         if weights is not None:
             if dtype is not None:
                 weights = weights.to(
@@ -1733,6 +1765,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offset_per_key=offset_per_key,
             index_per_key=index_per_key,
             jt_dict=jt_dict,
+            inverse_indices=inverse_indices,
         )
 
     def __str__(self) -> str:
@@ -1768,6 +1801,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             if self.variable_stride_per_key()
             else (self._stride, None)
         )
+        inverse_indices = self._inverse_indices
+        if inverse_indices is not None:
+            inverse_indices = (inverse_indices[0], inverse_indices[1].pin_memory())
 
         return KeyedJaggedTensor(
             keys=self._keys,
@@ -1781,6 +1817,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offset_per_key=self._offset_per_key,
             index_per_key=self._index_per_key,
             jt_dict=None,
+            inverse_indices=inverse_indices,
         )
 
     def dist_labels(self) -> List[str]:

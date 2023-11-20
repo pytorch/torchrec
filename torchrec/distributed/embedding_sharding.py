@@ -703,6 +703,12 @@ class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
     def embedding_tables(self) -> List[ShardedEmbeddingTable]:
         raise NotImplementedError
 
+    def uncombined_embedding_dims(self) -> List[int]:
+        return self.embedding_dims()
+
+    def uncombined_embedding_names(self) -> List[str]:
+        return self.embedding_names()
+
 
 @dataclass
 class EmbeddingShardingInfo:
