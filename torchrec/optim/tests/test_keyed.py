@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 import torch
 import torch.distributed as dist
+from hpc.optimizers.optimizer_modules import OptimizerModule
 from torch.autograd import Variable
 from torch.distributed._shard import sharded_tensor, sharding_spec
 from torchrec.optim.keyed import (
@@ -21,6 +22,15 @@ from torchrec.optim.keyed import (
     OptimizerWrapper,
 )
 from torchrec.test_utils import get_free_port
+
+
+class DummyOptimizerModule(OptimizerModule):
+    def __init__(
+        self,
+        tensor: torch.Tensor,
+    ) -> None:
+        super(DummyOptimizerModule, self).__init__()
+        self.tensor = tensor
 
 
 class TestKeyedOptimizer(unittest.TestCase):
@@ -35,6 +45,14 @@ class TestKeyedOptimizer(unittest.TestCase):
         torch.testing.assert_close(
             dict1["state"]["param_1"]["tensor"],
             dict2["state"]["param_1"]["tensor"],
+        )
+        torch.testing.assert_close(
+            dict1["state"]["param_1"]["nested_dictionary"]["tensor"],
+            dict2["state"]["param_1"]["nested_dictionary"]["tensor"],
+        )
+        torch.testing.assert_close(
+            dict1["state"]["param_1"]["optimizer_module"]["tensor"],
+            dict2["state"]["param_1"]["optimizer_module"]["tensor"],
         )
 
         torch.testing.assert_close(
@@ -64,6 +82,10 @@ class TestKeyedOptimizer(unittest.TestCase):
                         (4,),
                         fill_value=1.0,
                     ),
+                    "nested_dictionary": {
+                        "tensor": torch.tensor([7.0, 8.0]),
+                    },
+                    "optimizer_module": DummyOptimizerModule(torch.tensor([9.0, 10.0])),
                 },
                 param_2: {"two": 2.0},
             },
@@ -93,6 +115,12 @@ class TestKeyedOptimizer(unittest.TestCase):
                     (4,),
                     fill_value=1.0,
                 ),
+                "nested_dictionary": {
+                    "tensor": torch.tensor([7.0, 8.0]),
+                },
+                "optimizer_module": {
+                    "tensor": torch.tensor([9.0, 10.0]),
+                },
             },
             "param_2": {"two": 2.0},
         }
@@ -128,6 +156,14 @@ class TestKeyedOptimizer(unittest.TestCase):
             (4,),
             fill_value=10.0,
         )
+        # pyre-ignore [6]
+        expected_state_dict["state"]["param_1"]["nested_dictionary"][
+            "tensor"
+        ] = torch.tensor([70.0, 80.0])
+        # pyre-ignore [6]
+        expected_state_dict["state"]["param_1"]["optimizer_module"][
+            "tensor"
+        ] = torch.tensor([90.0, 100.0])
         # pyre-ignore [6]
         expected_state_dict["param_groups"][0]["param_group_val_0"] = 8.0
         # pyre-ignore [6]
