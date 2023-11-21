@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
 from copy import deepcopy
 from typing import (
     Any,
@@ -77,6 +78,65 @@ class KeyedOptimizer(optim.Optimizer):
                 )
             )
 
+    @staticmethod
+    def _extract_state_dict_content(
+        input_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Converts nested dictionary with objects with state dict functionality.
+
+        Args:
+            input_dict (Dict[str, Any]): Nested dictionary containing objects with
+                state dict functionality.
+
+        Output:
+            output_dict (Dict[str, Any]): Nested dictionary where the terminal values
+                cannot have state dict functionality.
+
+        """
+        result = {}
+        for k, v in input_dict.items():
+            if isinstance(v, dict):
+                result[k] = KeyedOptimizer._extract_state_dict_content(v)
+            elif hasattr(v, "state_dict") and callable(v.state_dict):
+                result[k] = v.state_dict()
+            else:
+                result[k] = v
+        return result
+
+    @staticmethod
+    def _update_param_state_dict_object(
+        current_param_state_dict: Dict[str, Any],
+        param_state_dict_to_load: Dict[str, Any],
+        parent_keys: List[Union[str, int, float, bool, None]],
+    ) -> None:
+
+        for k, v in current_param_state_dict.items():
+            new_v = param_state_dict_to_load[k]
+            parent_keys.append(k)
+
+            if isinstance(v, dict):
+                KeyedOptimizer._update_param_state_dict_object(
+                    v,
+                    new_v,
+                    parent_keys,
+                )
+            elif hasattr(v, "load_state_dict") and callable(v.load_state_dict):
+                v.load_state_dict(new_v)
+            elif isinstance(v, ShardedTensor):
+                assert isinstance(new_v, ShardedTensor)
+                num_shards = len(v.local_shards())
+                num_new_shards = len(new_v.local_shards())
+                if num_shards != num_new_shards:
+                    raise ValueError(
+                        f"Different number of shards {num_shards} vs {num_new_shards} for the path of {json.dumps(parent_keys)}"
+                    )
+                for shard, new_shard in zip(v.local_shards(), new_v.local_shards()):
+                    shard.tensor.detach().copy_(new_shard.tensor)
+            elif isinstance(v, torch.Tensor):
+                v.detach().copy_(new_v)
+            else:
+                current_param_state_dict[k] = deepcopy(new_v)
+
     def state_dict(self) -> Dict[str, Any]:
         """
         Returned state and param_groups will contain parameter keys
@@ -87,22 +147,14 @@ class KeyedOptimizer(optim.Optimizer):
         protocol.
         """
 
-        state = self.state
         param_groups = self.param_groups
         params = self.params
         param_to_key = {param: key for key, param in params.items()}
 
-        ret_state = {}
-        for param, state_val in state.items():
-            if isinstance(state_val, dict):
-                ret_state[param_to_key[param]] = {}
-                for k, v in state_val.items():
-                    if hasattr(v, "state_dict") and callable(v.state_dict):
-                        ret_state[param_to_key[param]][k] = v.state_dict()
-                    else:
-                        ret_state[param_to_key[param]][k] = v
-            else:
-                ret_state[param_to_key[param]] = state_val
+        ret_state = {
+            param_to_key[param]: self._extract_state_dict_content(param_state)
+            for param, param_state in self.state.items()
+        }
 
         ret_groups = []
         for group in param_groups:
@@ -156,34 +208,12 @@ class KeyedOptimizer(optim.Optimizer):
                 raise ValueError(
                     f"Different state size: {len(state[param])} vs {len(new_state[param_key])}"
                 )
-            for state_key, state_val in state[param].items():
-                if state_key not in new_state[param_key]:
-                    raise ValueError(
-                        f"State key {state_key} not found for param {param_key}"
-                    )
 
-                new_state_val = new_state[param_key][state_key]
-                if isinstance(state_val, ShardedTensor):
-                    assert isinstance(new_state_val, ShardedTensor)
-                    num_shards = len(state_val.local_shards())
-                    num_new_shards = len(new_state_val.local_shards())
-                    if num_shards != num_new_shards:
-                        raise ValueError(
-                            f"Different number of shards {num_shards} vs {num_new_shards} for {param_key}/{state_key}"
-                        )
-                    for shard, new_shard in zip(
-                        state_val.local_shards(), new_state_val.local_shards()
-                    ):
-                        shard.tensor.detach().copy_(new_shard.tensor)
-                elif isinstance(state_val, torch.Tensor):
-                    assert isinstance(new_state_val, torch.Tensor)
-                    state_val.detach().copy_(new_state_val)
-                elif hasattr(state_val, "load_state_dict") and callable(
-                    state_val.load_state_dict
-                ):
-                    state_val.load_state_dict(new_state_val)
-                else:
-                    state[param][state_key] = deepcopy(new_state_val)
+            KeyedOptimizer._update_param_state_dict_object(
+                current_param_state_dict=state[param],
+                param_state_dict_to_load=new_state[param_key],
+                parent_keys=[param_key],
+            )
 
         # Load param_groups.
         if self.defaults["_save_param_groups"]:
