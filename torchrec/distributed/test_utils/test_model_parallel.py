@@ -34,16 +34,28 @@ class ModelParallelTestShared(MultiProcessTestBase):
 
         num_features = 4
         num_weighted_features = 2
+        shared_features = 2
 
         self.tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
-                embedding_dim=(i + 2) * 4,
+                embedding_dim=(i + 2) * 8,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
             for i in range(num_features)
         ]
+        shared_features_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 2) * 8,
+                name="table_" + str(i + num_features),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(shared_features)
+        ]
+        self.tables += shared_features_tables
+
         self.weighted_tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
@@ -54,8 +66,15 @@ class ModelParallelTestShared(MultiProcessTestBase):
             for i in range(num_weighted_features)
         ]
 
+        self.shared_features = [f"feature_{i}" for i in range(shared_features)]
         self.embedding_groups = {
-            "group_0": ["feature_" + str(i) for i in range(num_features)]
+            "group_0": [
+                f"{feature}@{table.name}"
+                if feature in self.shared_features
+                else feature
+                for table in self.tables
+                for feature in table.feature_names
+            ]
         }
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -77,6 +96,9 @@ class ModelParallelTestShared(MultiProcessTestBase):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ] = None,
         variable_batch_size: bool = False,
+        variable_batch_per_feature: bool = False,
+        has_weighted_tables: bool = True,
+        global_constant_batch: bool = False,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
@@ -84,7 +106,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             local_size=local_size,
             model_class=model_class,
             tables=self.tables,
-            weighted_tables=self.weighted_tables,
+            weighted_tables=self.weighted_tables if has_weighted_tables else None,
             embedding_groups=self.embedding_groups,
             sharders=sharders,
             backend=backend,
@@ -93,6 +115,8 @@ class ModelParallelTestShared(MultiProcessTestBase):
             qcomms_config=qcomms_config,
             variable_batch_size=variable_batch_size,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_per_feature=variable_batch_per_feature,
+            global_constant_batch=global_constant_batch,
         )
 
 
@@ -320,4 +344,45 @@ class ModelParallelBase(ModelParallelTestShared):
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+            ]
+        ),
+        global_constant_batch=st.booleans(),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    def test_sharding_variable_batch(
+        self,
+        sharding_type: str,
+        global_constant_batch: bool,
+    ) -> None:
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type=SharderType.EMBEDDING_BAG_COLLECTION.value,
+                    sharding_type=sharding_type,
+                    kernel_type=EmbeddingComputeKernel.FUSED.value,
+                    device=self.device,
+                ),
+            ],
+            backend=self.backend,
+            constraints={
+                table.name: ParameterConstraints(min_partition=4)
+                for table in self.tables
+            },
+            variable_batch_per_feature=True,
+            has_weighted_tables=False,
+            global_constant_batch=global_constant_batch,
         )

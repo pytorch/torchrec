@@ -240,26 +240,6 @@ def _set_sharding_context_intra_a2a(
 
 
 # TODO: remove after packaging issue is resolved.
-def _set_sharding_context_pre_a2a(
-    awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
-    ctx: C,
-) -> None:
-    for awaitable, sharding_context in zip(
-        awaitables,
-        getattr(ctx, "sharding_contexts", []),
-    ):
-        kjt = (
-            awaitable._obj._obj
-            if isinstance(awaitable, NoWait)
-            else awaitable._input  # pyre-ignore[16]: KJTAllToAllSplitsAwaitable or KJTSplitsAllToAllMeta
-        )
-        if hasattr(sharding_context, "batch_size_per_feature_pre_a2a"):
-            sharding_context.batch_size_per_feature_pre_a2a = kjt.stride_per_key()
-        if hasattr(sharding_context, "variable_batch_per_feature"):
-            sharding_context.variable_batch_per_feature = kjt.variable_stride_per_key()
-
-
-# TODO: remove after packaging issue is resolved.
 @dataclass
 class KJTSplitsAllToAllMeta:
     pg: dist.ProcessGroup
@@ -294,8 +274,6 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
         self._awaitables: List[
             Union[KJTSplitsAllToAllMeta, Awaitable[Awaitable[KeyedJaggedTensor]]]
         ] = [awaitable for request in requests for awaitable in request.awaitables]
-        for req, ctx in zip(requests, self._contexts):
-            _set_sharding_context_pre_a2a(req.awaitables, ctx)
         self._output_lengths: List[int] = [
             len(request.awaitables) for request in requests
         ]

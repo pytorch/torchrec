@@ -665,6 +665,66 @@ def reduce_scatter_v_pooled(
     return myreq
 
 
+def reduce_scatter_v_per_feature_pooled(
+    input: Tensor,
+    batch_size_per_rank_per_feature: List[List[int]],
+    embedding_dims: List[int],
+    group: Optional[dist.ProcessGroup] = None,
+    codecs: Optional[QuantizedCommCodecs] = None,
+) -> Awaitable[Tensor]:
+    """
+    Performs reduce-scatter-v operation for a 1-d pooled embeddings tensor of variable
+    batch size per feature split unevenly into world size number of chunks. The result
+    of the reduce operation gets scattered to all processes in the group.
+
+    Args:
+        input (Tensor): tensors to scatter, one per rank.
+        batch_size_per_rank_per_feature (List[List[int]]): batch size per rank per
+            feature used to determine input splits.
+        embedding_dims (List[int]): embedding dimensions per feature used to determine
+            input splits.
+        group (Optional[dist.ProcessGroup]): The process group to work on. If None, the
+            default process group will be used.
+        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
+
+    Returns:
+        Awaitable[Tensor]: async work handle (Awaitable), which can be `wait()` later to get the resulting tensor.
+
+    .. warning::
+        `reduce_scatter_v_per_feature_pooled` is experimental and subject to change.
+    """
+
+    if group is None:
+        group = dist.distributed_c10d._get_default_group()
+
+    world_size = dist.get_world_size(group)
+    if world_size <= 1:
+        return NoWait(input)
+
+    myreq = Request(group, device=input.device)
+
+    input_splits = []
+    for rank in range(world_size):
+        rank_splits = 0
+        for batch_size, emb_dim in zip(
+            batch_size_per_rank_per_feature[rank], embedding_dims
+        ):
+            rank_splits += batch_size * emb_dim
+        input_splits.append(rank_splits)
+
+    input_sizes = [torch.Size([s]) for s in input_splits]
+
+    rsvi = ReduceScatterVInfo(
+        input_sizes=input_sizes,
+        input_splits=input_splits,
+        equal_splits=False,
+        total_input_size=list(input.size()),
+        codecs=codecs,
+    )
+    ReduceScatterV_Req.apply(group, myreq, rsvi, input)
+    return myreq
+
+
 # TODO: improve performance of _recat_pooled_embedding_grad_out, see T87591139
 def _recat_pooled_embedding_grad_out(
     grad_output: Tensor, num_features_per_rank: List[int]

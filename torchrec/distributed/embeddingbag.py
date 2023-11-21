@@ -23,6 +23,7 @@ from typing import (
 )
 
 import torch
+from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torch import nn, Tensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
@@ -56,6 +57,7 @@ from torchrec.distributed.types import (
     ShardedTensor,
     ShardingEnv,
     ShardingType,
+    ShardMetadata,
 )
 from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
@@ -75,7 +77,21 @@ from torchrec.modules.embedding_modules import (
 )
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import _pin_and_move, KeyedJaggedTensor, KeyedTensor
+
+try:
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:index_select_ops")
+except OSError:
+    pass
+
+
+# OSS
+try:
+    pass
+except ImportError:
+    pass
 
 
 def replace_placement_with_meta_device(
@@ -280,6 +296,49 @@ def construct_output_kt(
     )
 
 
+class VariableBatchEmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
+    def __init__(
+        self,
+        awaitables: List[Awaitable[torch.Tensor]],
+        inverse_indices: Tuple[List[str], torch.Tensor],
+        inverse_indices_permute_indices: torch.Tensor,
+        batch_size_per_feature_pre_a2a: List[int],
+        uncombined_embedding_dims: List[int],
+        embedding_names: List[str],
+        embedding_dims: List[int],
+        permute_op: PermutePooledEmbeddings,
+    ) -> None:
+        super().__init__()
+        self._awaitables = awaitables
+        self._inverse_indices = inverse_indices
+        self._inverse_indices_permute_indices = inverse_indices_permute_indices
+        self._batch_size_per_feature_pre_a2a = batch_size_per_feature_pre_a2a
+        self._uncombined_embedding_dims = uncombined_embedding_dims
+        self._embedding_names = embedding_names
+        self._embedding_dims = embedding_dims
+        self._permute_op = permute_op
+
+    def _wait_impl(self) -> KeyedTensor:
+        embeddings = [w.wait() for w in self._awaitables]
+        batch_size = self._inverse_indices[1].numel() // len(self._inverse_indices[0])
+        indices = torch.index_select(
+            self._inverse_indices[1], 0, self._inverse_indices_permute_indices
+        )
+        reindex_output = torch.ops.fbgemm.batch_index_select_dim0(
+            inputs=embeddings[0] if len(embeddings) == 1 else torch.cat(embeddings),
+            indices=indices.view(-1),
+            input_num_indices=[batch_size] * len(self._uncombined_embedding_dims),
+            input_rows=self._batch_size_per_feature_pre_a2a,
+            input_columns=self._uncombined_embedding_dims,
+            permute_output_dim_0_1=True,
+        ).view(batch_size, -1)
+        return construct_output_kt(
+            embeddings=[self._permute_op(reindex_output)],
+            embedding_names=self._embedding_names,
+            embedding_dims=self._embedding_dims,
+        )
+
+
 class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
     def __init__(
         self,
@@ -305,11 +364,15 @@ class EmbeddingBagCollectionContext(Multistreamable):
     sharding_contexts: List[Optional[EmbeddingShardingContext]] = field(
         default_factory=list
     )
+    inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None
+    variable_batch_per_feature: bool = False
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.sharding_contexts:
             if ctx:
                 ctx.record_stream(stream)
+        if self.inverse_indices is not None:
+            self.inverse_indices[1].record_stream(stream)
 
 
 class ShardedEmbeddingBagCollection(
@@ -394,6 +457,9 @@ class ShardedEmbeddingBagCollection(
         self._embedding_dims: List[int] = []
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
+        self._uncombined_embedding_names: List[str] = []
+        self._uncombined_embedding_dims: List[int] = []
+        self._inverse_indices_permute_indices: Optional[torch.Tensor] = None
         # to support the FP16 hook
         self._create_output_dist()
 
@@ -630,10 +696,53 @@ class ShardedEmbeddingBagCollection(
             self._lookups.append(sharding.create_lookup())
 
     def _create_output_dist(self) -> None:
+        embedding_shard_metadata: List[Optional[ShardMetadata]] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._output_dists.append(sharding.create_output_dist(device=self._device))
             self._embedding_names.extend(sharding.embedding_names())
             self._embedding_dims.extend(sharding.embedding_dims())
+            self._uncombined_embedding_names.extend(
+                sharding.uncombined_embedding_names()
+            )
+            self._uncombined_embedding_dims.extend(sharding.uncombined_embedding_dims())
+            embedding_shard_metadata.extend(sharding.embedding_shard_metadata())
+        embedding_shard_offsets: List[int] = [
+            meta.shard_offsets[1] if meta is not None else 0
+            for meta in embedding_shard_metadata
+        ]
+        embedding_name_order: Dict[str, int] = {}
+        for i, name in enumerate(self._uncombined_embedding_names):
+            embedding_name_order.setdefault(name, i)
+
+        def sort_key(input: Tuple[int, str]) -> Tuple[int, int]:
+            index, name = input
+            return (embedding_name_order[name], embedding_shard_offsets[index])
+
+        permute_indices = [
+            i
+            for i, _ in sorted(
+                enumerate(self._uncombined_embedding_names), key=sort_key
+            )
+        ]
+        self._permute_op: PermutePooledEmbeddings = PermutePooledEmbeddings(
+            self._uncombined_embedding_dims, permute_indices, self._device
+        )
+
+    def _create_inverse_indices_permute_indices(
+        self, inverse_indices: Optional[Tuple[List[str], torch.Tensor]]
+    ) -> None:
+        assert (
+            inverse_indices is not None
+        ), "inverse indices must be provided from KJT if using variable batch size per feature."
+        index_per_name = {name: i for i, name in enumerate(inverse_indices[0])}
+        permute_indices = [
+            index_per_name[name.split("@")[0]]
+            for name in self._uncombined_embedding_names
+        ]
+        self._inverse_indices_permute_indices = _pin_and_move(
+            torch.tensor(permute_indices),
+            inverse_indices[1].device,
+        )
 
     # pyre-ignore [14]
     def input_dist(
@@ -642,6 +751,13 @@ class ShardedEmbeddingBagCollection(
         if self._has_uninitialized_input_dist:
             self._create_input_dist(features.keys())
             self._has_uninitialized_input_dist = False
+        ctx.variable_batch_per_feature = features.variable_stride_per_key()
+        ctx.inverse_indices = features.inverse_indices_or_none()
+        if (
+            ctx.variable_batch_per_feature
+            and self._inverse_indices_permute_indices is None
+        ):
+            self._create_inverse_indices_permute_indices(ctx.inverse_indices)
         with torch.no_grad():
             if self._has_features_permute:
                 features = features.permute(
@@ -656,7 +772,12 @@ class ShardedEmbeddingBagCollection(
                 self._input_dists, features_by_shards
             ):
                 awaitables.append(input_dist(features_by_shard))
-                ctx.sharding_contexts.append(EmbeddingShardingContext())
+                ctx.sharding_contexts.append(
+                    EmbeddingShardingContext(
+                        batch_size_per_feature_pre_a2a=features_by_shard.stride_per_key(),
+                        variable_batch_per_feature=features_by_shard.variable_stride_per_key(),
+                    )
+                )
             return KJTListSplitsAwaitable(awaitables, ctx)
 
     def compute(
@@ -671,35 +792,77 @@ class ShardedEmbeddingBagCollection(
         ctx: EmbeddingBagCollectionContext,
         output: List[torch.Tensor],
     ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingBagCollectionAwaitable(
-            awaitables=[
-                dist(embeddings, sharding_ctx)
-                for dist, sharding_ctx, embeddings in zip(
-                    self._output_dists,
-                    ctx.sharding_contexts,
-                    output,
+        batch_size_per_feature_pre_a2a = []
+        awaitables = []
+        for dist, sharding_context, embeddings in zip(
+            self._output_dists,
+            ctx.sharding_contexts,
+            output,
+        ):
+            awaitables.append(dist(embeddings, sharding_context))
+            if sharding_context:
+                batch_size_per_feature_pre_a2a.extend(
+                    sharding_context.batch_size_per_feature_pre_a2a
                 )
-            ],
-            embedding_dims=self._embedding_dims,
-            embedding_names=self._embedding_names,
-        )
+
+        if ctx.variable_batch_per_feature:
+            assert (
+                ctx.inverse_indices is not None
+            ), "inverse indices must be provided from KJT if using variable batch size per feature."
+            return VariableBatchEmbeddingBagCollectionAwaitable(
+                awaitables=awaitables,
+                inverse_indices=ctx.inverse_indices,
+                inverse_indices_permute_indices=self._inverse_indices_permute_indices,
+                batch_size_per_feature_pre_a2a=batch_size_per_feature_pre_a2a,
+                uncombined_embedding_dims=self._uncombined_embedding_dims,
+                embedding_names=self._embedding_names,
+                embedding_dims=self._embedding_dims,
+                permute_op=self._permute_op,
+            )
+        else:
+            return EmbeddingBagCollectionAwaitable(
+                awaitables=awaitables,
+                embedding_dims=self._embedding_dims,
+                embedding_names=self._embedding_names,
+            )
 
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
-        return EmbeddingBagCollectionAwaitable(
-            awaitables=[
-                dist(lookup(features), sharding_ctx)
-                for lookup, dist, sharding_ctx, features in zip(
-                    self._lookups,
-                    self._output_dists,
-                    ctx.sharding_contexts,
-                    input,
+        batch_size_per_feature_pre_a2a = []
+        awaitables = []
+        for lookup, dist, sharding_context, features in zip(
+            self._lookups,
+            self._output_dists,
+            ctx.sharding_contexts,
+            input,
+        ):
+            awaitables.append(dist(lookup(features), sharding_context))
+            if sharding_context:
+                batch_size_per_feature_pre_a2a.extend(
+                    sharding_context.batch_size_per_feature_pre_a2a
                 )
-            ],
-            embedding_dims=self._embedding_dims,
-            embedding_names=self._embedding_names,
-        )
+
+        if ctx.variable_batch_per_feature:
+            assert (
+                ctx.inverse_indices is not None
+            ), "inverse indices must be provided from KJT if using variable batch size per feature."
+            return VariableBatchEmbeddingBagCollectionAwaitable(
+                awaitables=awaitables,
+                inverse_indices=ctx.inverse_indices,
+                inverse_indices_permute_indices=self._inverse_indices_permute_indices,
+                batch_size_per_feature_pre_a2a=batch_size_per_feature_pre_a2a,
+                uncombined_embedding_dims=self._uncombined_embedding_dims,
+                embedding_names=self._embedding_names,
+                embedding_dims=self._embedding_dims,
+                permute_op=self._permute_op,
+            )
+        else:
+            return EmbeddingBagCollectionAwaitable(
+                awaitables=awaitables,
+                embedding_dims=self._embedding_dims,
+                embedding_names=self._embedding_names,
+            )
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
