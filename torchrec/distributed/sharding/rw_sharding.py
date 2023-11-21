@@ -57,40 +57,6 @@ T = TypeVar("T")
 W = TypeVar("W")
 
 
-def get_embedding_shard_metadata(
-    grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]],
-) -> Tuple[List[List[int]], bool]:
-    is_even_sharding: bool = True
-    world_size = len(grouped_embedding_configs_per_rank)
-
-    def get_even_shard_sizes(hash_size: int, world_size: int) -> List[int]:
-        block_size: int = math.ceil(hash_size / world_size)
-        last_rank: int = hash_size // block_size
-
-        expected_even_shard_sizes = [block_size] * last_rank
-        if hash_size % world_size != 0:
-            expected_even_shard_sizes.append(hash_size - sum(expected_even_shard_sizes))
-        return expected_even_shard_sizes
-
-    embed_sharding = []
-    for table in grouped_embedding_configs_per_rank[0][0].embedding_tables:
-        embed_sharding_per_feature = []
-        total_rows = 0
-        sizes = []
-        # pyre-ignore [16]: `Optional` has no attribute `shards_metadata`
-        for metadata in table.global_metadata.shards_metadata:
-            embed_sharding_per_feature.append(metadata.shard_offsets[0])
-            total_rows += metadata.shard_sizes[0]
-            sizes.append(metadata.shard_sizes[0])
-        embed_sharding_per_feature.append(total_rows)
-        embed_sharding.extend([embed_sharding_per_feature] * len(table.embedding_names))
-        expected_even_sizes = get_even_shard_sizes(total_rows, world_size)
-        if sizes != expected_even_sizes:
-            is_even_sharding = False
-
-    return (embed_sharding, is_even_sharding)
-
-
 class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     """
     Base class for row-wise sharding.
@@ -496,27 +462,14 @@ class RwPooledEmbeddingSharding(
 def get_block_sizes_runtime_device(
     block_sizes: List[int],
     runtime_device: torch.device,
-    tensor_cache: Dict[str, Tuple[torch.Tensor, List[torch.Tensor]]],
-    embedding_shard_metadata: Optional[List[List[int]]],
-) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+    tensor_cache: Dict[str, torch.Tensor],
+) -> torch.Tensor:
     cache_key: str = "__block_sizes"
     if cache_key not in tensor_cache:
-        tensor_cache[cache_key] = (
-            torch.tensor(
-                block_sizes,
-                device=runtime_device,
-                dtype=torch.int32,
-            ),
-            []
-            if embedding_shard_metadata is None
-            else [
-                torch.tensor(
-                    row_pos,
-                    device=runtime_device,
-                    dtype=torch.int32,
-                )
-                for row_pos in embedding_shard_metadata
-            ],
+        tensor_cache[cache_key] = torch.tensor(
+            block_sizes,
+            device=runtime_device,
+            dtype=torch.int32,
         )
 
     return tensor_cache[cache_key]
@@ -532,7 +485,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         is_sequence: bool = False,
         has_feature_processor: bool = False,
         need_pos: bool = False,
-        embedding_shard_metadata: Optional[List[List[int]]] = None,
     ) -> None:
         super().__init__()
         self._world_size: int = world_size
@@ -541,10 +493,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             (hash_size + self._world_size - 1) // self._world_size
             for hash_size in feature_hash_sizes
         ]
-        self.tensor_cache: Dict[
-            str, Tuple[torch.Tensor, Optional[List[torch.Tensor]]]
-        ] = {}
-
+        self.tensor_cache: Dict[str, torch.Tensor] = {}
         self._dist = KJTOneToAll(
             splits=self._world_size * [self._num_features],
             world_size=world_size,
@@ -555,19 +504,14 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._need_pos = need_pos
         self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
 
-        self._embedding_shard_metadata: Optional[
-            List[List[int]]
-        ] = embedding_shard_metadata
-
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
     ) -> KJTList:
-        block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
+        block_sizes = get_block_sizes_runtime_device(
             self.feature_block_sizes,
             sparse_features.device(),
             self.tensor_cache,
-            self._embedding_shard_metadata,
         )
         (
             bucketized_features,
@@ -580,7 +524,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             bucketize_pos=self._has_feature_processor
             if sparse_features.weights_or_none() is None
             else self._need_pos,
-            block_bucketize_row_pos=block_bucketize_row_pos,
         )
         return self._dist.forward(bucketized_features)
 
@@ -596,17 +539,11 @@ class InferRwPooledEmbeddingSharding(
     ) -> BaseSparseFeaturesDist[KJTList]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
-
-        (embed_sharding, is_even_sharding) = get_embedding_shard_metadata(
-            self._grouped_embedding_configs_per_rank
-        )
-
         return InferRwSparseFeaturesDist(
             world_size=self._world_size,
             num_features=num_features,
             feature_hash_sizes=feature_hash_sizes,
             device=device if device is not None else self._device,
-            embedding_shard_metadata=embed_sharding if not is_even_sharding else None,
         )
 
     def create_lookup(
