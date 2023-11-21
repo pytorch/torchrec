@@ -305,7 +305,7 @@ def alltoall_pooled(
     cumsum_dim_sum_per_rank_tensor: Optional[Tensor] = None,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[Tensor]:
+) -> Tensor:
     """
     Performs AlltoAll operation for a single pooled embedding tensor. Each process
     splits the input pooled embeddings tensor based on the world size, and then scatters
@@ -339,19 +339,33 @@ def alltoall_pooled(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
-    if dist.get_world_size(group) <= 1:
-        return NoWait(a2a_pooled_embs_tensor)
+    input_embeddings = a2a_pooled_embs_tensor
+    my_rank = dist.get_rank(group)
+    (B_global, D_local_sum) = input_embeddings.shape
 
-    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
-    a2ai = All2AllPooledInfo(
-        batch_size_per_rank=batch_size_per_rank,
-        dim_sum_per_rank=dim_sum_per_rank,
-        dim_sum_per_rank_tensor=dim_sum_per_rank_tensor,
-        cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
+    dim_sum_per_rank = dim_sum_per_rank
+    batch_size_per_rank = batch_size_per_rank
+    B_local = batch_size_per_rank[my_rank]
+
+    assert B_global == sum(batch_size_per_rank)
+
+    sharded_input_embeddings = input_embeddings.view(-1)
+    output_split_sizes = [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+    input_split_sizes = [D_local_sum * B_rank for B_rank in batch_size_per_rank]
+
+    sharded_output_embeddings = all_to_all_single(
+        sharded_input_embeddings,
+        output_split_sizes=output_split_sizes,
+        input_split_sizes=input_split_sizes,
+        group=group,
         codecs=codecs,
     )
-    All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
-    return myreq
+
+    outputs_by_rank = sharded_output_embeddings.split(
+        [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+    )
+    result = torch.cat([output.view(B_local, -1) for output in outputs_by_rank], dim=1)
+    return result
 
 
 def variable_batch_alltoall_pooled(
@@ -1933,3 +1947,86 @@ class ReduceScatterV_Wait(Function):
         myreq.req = req
         myreq.tensor = grad_input
         return (None, None, myreq.dummy_tensor)
+
+
+from torch.distributed._functional_collectives import (
+    _expand_group,
+    RANK_TYPES,
+    wait_tensor,
+)
+
+
+def all_to_all_single(
+    input: torch.Tensor,
+    output_split_sizes: Optional[List[int]],
+    input_split_sizes: Optional[List[int]],
+    group: RANK_TYPES,
+    tag: str = "",
+    codecs: Optional[QuantizedCommCodecs] = None,
+) -> torch.Tensor:
+    a2a_out = _AlltoAllSingle.apply(
+        input, group, output_split_sizes, input_split_sizes, codecs
+    )
+    if a2a_out.grad_fn is not None:
+        a2a_out.grad_fn._stop_priority_sequence = True
+    return a2a_out
+
+
+class _AlltoAllSingle(Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,
+        tensor_input,
+        group,
+        output_split_sizes,
+        input_split_sizes,
+        codecs: Optional[QuantizedCommCodecs] = None,
+    ):
+        ctx.group = group
+        ctx.bwd_output_split_sizes = input_split_sizes
+        ctx.bwd_input_split_sizes = output_split_sizes
+        ctx.codecs = codecs
+
+        ctx.tag, ctx.rankset, ctx.group_size = _expand_group(group, "")
+
+        qcomm_ctx = None
+        if codecs is not None:
+            tensor_input = codecs.forward.encode(tensor_input, qcomm_ctx)
+
+        a2a_tensor = torch.ops.c10d_functional.all_to_all_single(tensor_input, output_split_sizes, input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+        wait_tensor(a2a_tensor)
+
+        if codecs:
+            a2a_tensor = codecs.forward.decode(a2a_tensor, qcomm_ctx)
+
+        return a2a_tensor
+
+    @staticmethod
+    # pyre-ignore
+    def backward(ctx, grad_output):
+        grad_output = grad_output.contiguous()
+        qcomm_ctx = None
+        if ctx.codecs is not None:
+            qcomm_ctx = ctx.codecs.backward.create_context()
+            grad_output = ctx.codecs.backward.encode(
+                grad_output,
+                qcomm_ctx,
+            )
+
+        a2a_tensor = torch.ops.c10d_functional.all_to_all_single(grad_output, ctx.bwd_output_split_sizes, ctx.bwd_input_split_sizes, ctx.tag, ctx.rankset, ctx.group_size)  # type: ignore[attr-defined]
+        wait_tensor(a2a_tensor)
+
+        if ctx.codecs:
+            a2a_tensor = ctx.codecs.backward.decode(a2a_tensor, qcomm_ctx)
+
+        if get_gradient_division():
+            a2a_tensor.div_(ctx.group_size)
+
+        return (
+            a2a_tensor,
+            None,
+            None,
+            None,
+            None,
+        )

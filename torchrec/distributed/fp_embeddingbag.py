@@ -38,11 +38,6 @@ from torchrec.modules.fp_embedding_modules import (
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
-def param_dp_sync(kt: KeyedTensor, no_op_tensor: torch.Tensor) -> KeyedTensor:
-    kt._values.add_(no_op_tensor)
-    return kt
-
-
 class ShardedFeatureProcessedEmbeddingBagCollection(
     ShardedEmbeddingModule[
         KJTList, List[torch.Tensor], KeyedTensor, EmbeddingBagCollectionContext
@@ -119,35 +114,30 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         self,
         ctx: EmbeddingBagCollectionContext,
         output: List[torch.Tensor],
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> KeyedTensor:
         lazy_awaitable_kt = self._embedding_bag_collection.output_dist(ctx, output)
         return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
 
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
-    ) -> LazyAwaitable[KeyedTensor]:
+    ) -> KeyedTensor:
         fp_features = self.apply_feature_processors_to_kjt_list(input)
-        lazy_awaitable_kt = self._embedding_bag_collection.compute_and_output_dist(
-            ctx, fp_features
-        )
-        return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
+        return self._embedding_bag_collection.compute_and_output_dist(ctx, fp_features)
 
-    def add_fp_params_grad_sync_callback(
-        self, lazy_awaitable_kt: LazyAwaitable[KeyedTensor]
-    ) -> LazyAwaitable[KeyedTensor]:
-        # This will ensure that all feature processor parameters participate in the
-        # autograd graph across all ranks. This will protect from mismatched collective
-        # calls order when using DistributedDataParallel over feature processors.
-        no_op_tensor = (
-            self._no_op_zero
-            * torch.cat(
-                [x.flatten() for x in self._feature_processors.parameters()]
-            ).sum()
-        )
-        lazy_awaitable_kt.callbacks.append(
-            partial(param_dp_sync, no_op_tensor=no_op_tensor)
-        )
-        return lazy_awaitable_kt
+        # with torch.cuda.stream(self._embedding_bag_collection._output_dist_stream):
+        #     # This will ensure that all feature processor parameters participate in the
+        #     # autograd graph across all ranks. This will protect from mismatched collective
+        #     # calls order when using DistributedDataParallel over feature processors.
+        #     no_op_tensor = (
+        #         self._no_op_zero
+        #         * torch.cat(
+        #             [x.flatten() for x in self._feature_processors.parameters()]
+        #         ).sum()
+        #     )
+        #     kt_out._values = kt_out._values + no_op_tensor
+        # return
+
+        # return self.add_fp_params_grad_sync_callback(lazy_awaitable_kt)
 
     def create_context(self) -> EmbeddingBagCollectionContext:
         return self._embedding_bag_collection.create_context()

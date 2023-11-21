@@ -625,7 +625,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
         self,
         local_embs: torch.Tensor,
         batch_size_per_rank: Optional[List[int]] = None,
-    ) -> PooledEmbeddingsAwaitable:
+    ) -> torch.Tensor:
         """
         Performs AlltoAll pooled operation on pooled embeddings tensor.
 
@@ -645,6 +645,7 @@ class PooledEmbeddingsAllToAll(nn.Module):
             ), f"num of ranks {self._pg.size()} doesn't divide global batch size {B_global}"
             B_local = B_global // self._pg.size()
             batch_size_per_rank = [B_local] * self._pg.size()
+
         tensor_awaitable = alltoall_pooled(
             a2a_pooled_embs_tensor=local_embs,
             batch_size_per_rank=batch_size_per_rank,
@@ -654,13 +655,9 @@ class PooledEmbeddingsAllToAll(nn.Module):
             group=self._pg,
             codecs=self._codecs,
         )
-
-        pooled_embedding_awaitable = PooledEmbeddingsAwaitable(
-            tensor_awaitable=tensor_awaitable,
-        )
-        pooled_embedding_awaitable.callbacks.extend(self._callbacks)
-
-        return pooled_embedding_awaitable
+        for callback in self._callbacks:
+            tensor_awaitable = callback(tensor_awaitable)
+        return tensor_awaitable
 
     @property
     def callbacks(self) -> List[Callable[[torch.Tensor], torch.Tensor]]:
