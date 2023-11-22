@@ -23,7 +23,6 @@ from typing import (
 )
 
 import torch
-from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torch import nn, Tensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
@@ -65,6 +64,7 @@ from torchrec.distributed.utils import (
     convert_to_fbgemm_types,
     merge_fused_params,
     optimizer_type_to_emb_opt_type,
+    PermutePooledEmbeddings,
 )
 from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
@@ -77,7 +77,7 @@ from torchrec.modules.embedding_modules import (
 )
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
-from torchrec.sparse.jagged_tensor import _pin_and_move, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -92,6 +92,14 @@ try:
     pass
 except ImportError:
     pass
+
+
+def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
+    return (
+        tensor
+        if device.type == "cpu"
+        else tensor.pin_memory().to(device=device, non_blocking=True)
+    )
 
 
 def replace_placement_with_meta_device(
