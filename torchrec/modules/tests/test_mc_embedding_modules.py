@@ -256,6 +256,39 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
 
         assert torch.all(remapped_kjt4["f2"].values() == remapped_kjt2["f2"].values())
 
+    def test_mc_collection_traceable(self) -> None:
+        device = torch.device("cpu")
+        zch_size = 20
+        update_interval = 2
+
+        embedding_configs = [
+            EmbeddingBagConfig(
+                name="t1",
+                embedding_dim=8,
+                num_embeddings=zch_size,
+                feature_names=["f1", "f2"],
+            ),
+        ]
+        mc_modules = {
+            "t1": cast(
+                ManagedCollisionModule,
+                MCHManagedCollisionModule(
+                    zch_size=zch_size,
+                    device=device,
+                    input_hash_size=2 * zch_size,
+                    eviction_interval=update_interval,
+                    eviction_policy=DistanceLFU_EvictionPolicy(),
+                ),
+            ),
+        }
+        mcc = ManagedCollisionCollection(
+            managed_collision_modules=mc_modules,
+            # pyre-ignore[6]
+            embedding_configs=embedding_configs,
+        )
+        gm: torch.fx.GraphModule = torch.fx.symbolic_trace(mcc)
+        gm.print_readable()
+
     def test_mch_ebc(self) -> None:
         device = torch.device("cpu")
         zch_size = 10

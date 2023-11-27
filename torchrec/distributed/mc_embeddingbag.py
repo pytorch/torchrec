@@ -91,6 +91,9 @@ class ShardedManagedCollisionEmbeddingBagCollection(
                 device=device,
             )
         )
+        # TODO: This is a hack since _embedding_bag_collection doesn't need input
+        # dist, so eliminating it so all fused a2a will ignore it.
+        self._embedding_bag_collection._has_uninitialized_input_dist = False
         self._managed_collision_collection: ShardedManagedCollisionCollection = mc_sharder.shard(
             module._managed_collision_collection,
             table_name_to_parameter_sharding,
