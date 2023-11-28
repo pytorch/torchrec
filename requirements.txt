@@ -1,7 +1,7 @@
 black
 cmake
 fbgemm-gpu
-hypothesis==6.70.1
+hypothesis
 iopath
 numpy
 pandas
