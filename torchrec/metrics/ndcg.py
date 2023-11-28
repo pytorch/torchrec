@@ -150,7 +150,7 @@ def get_ndcg_states(
     exponential_gain: bool,
 ) -> Dict[str, torch.Tensor]:
     n_tasks = labels.shape[0]
-    sum_ndcg = torch.zeros(n_tasks, dtype=torch.double)
+    sum_ndcg = torch.zeros(n_tasks, dtype=torch.double).to(labels.device)
 
     for i in range(n_tasks):
         session_lengths = session_ids_to_lengths(
