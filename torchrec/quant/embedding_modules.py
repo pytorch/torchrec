@@ -38,6 +38,11 @@ from torchrec.modules.embedding_modules import (
     EmbeddingCollectionInterface,
     get_embedding_names_by_table,
 )
+from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
+from torchrec.modules.fp_embedding_modules import (
+    FeatureProcessedEmbeddingBagCollection as OriginalFeatureProcessedEmbeddingBagCollection,
+)
+
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
@@ -555,6 +560,100 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
     @property
     def device(self) -> torch.device:
         return self._device
+
+
+class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        is_weighted: bool,
+        device: torch.device,
+        output_dtype: torch.dtype = torch.float,
+        table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None,
+        register_tbes: bool = False,
+        quant_state_dict_split_scale_bias: bool = False,
+        row_alignment: int = DEFAULT_ROW_ALIGNMENT,
+        # feature processor is Optional only for the sake of the last position in constructor
+        # Enforcing it to be non-None, for None case EmbeddingBagCollection must be used.
+        feature_processor: Optional[FeatureProcessorsCollection] = None,
+    ) -> None:
+        super().__init__(
+            tables,
+            is_weighted,
+            device,
+            output_dtype,
+            table_name_to_quantized_weights,
+            register_tbes,
+            quant_state_dict_split_scale_bias,
+            row_alignment,
+        )
+        assert (
+            feature_processor is not None
+        ), "Use EmbeddingBagCollection for no feature_processor"
+        self.feature_processor: FeatureProcessorsCollection = feature_processor
+
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> KeyedTensor:
+        features = self.feature_processor(features)
+        return super().forward(features)
+
+    def _get_name(self) -> str:
+        return "QuantFeatureProcessedEmbeddingBagCollection"
+
+    @classmethod
+    # pyre-ignore
+    def from_float(
+        cls, module: OriginalFeatureProcessedEmbeddingBagCollection
+    ) -> "FeatureProcessedEmbeddingBagCollection":
+        fp_ebc = module
+        ebc = module._embedding_bag_collection
+        qconfig = module.qconfig
+        assert hasattr(
+            module, "qconfig"
+        ), "FeatureProcessedEmbeddingBagCollection input float module must have qconfig defined"
+
+        embedding_bag_configs = copy.deepcopy(ebc.embedding_bag_configs())
+        _update_embedding_configs(
+            cast(List[BaseEmbeddingConfig], embedding_bag_configs),
+            qconfig,
+        )
+        pruning_dict: Dict[str, torch.Tensor] = getattr(
+            module, MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT, {}
+        )
+
+        for config in embedding_bag_configs:
+            if config.name in pruning_dict:
+                pruning_indices_remapping = pruning_dict[config.name]
+                config.num_embeddings = pruned_num_embeddings(pruning_indices_remapping)
+                config.pruning_indices_remapping = pruning_indices_remapping
+
+        table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
+        device = quantize_state_dict(
+            ebc,
+            table_name_to_quantized_weights,
+            {table.name: table.data_type for table in embedding_bag_configs},
+            pruning_dict,
+        )
+        return cls(
+            embedding_bag_configs,
+            ebc.is_weighted(),
+            device=device,
+            output_dtype=qconfig.activation().dtype,
+            table_name_to_quantized_weights=table_name_to_quantized_weights,
+            register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
+            quant_state_dict_split_scale_bias=getattr(
+                ebc, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            ),
+            row_alignment=getattr(
+                ebc, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
+            ),
+            # pyre-ignore
+            feature_processor=fp_ebc._feature_processors,
+        )
 
 
 class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):

@@ -63,8 +63,10 @@ from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
+    FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
     MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     MODULE_ATTR_REGISTER_TBES_BOOL,
     quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
@@ -161,11 +163,18 @@ def prep_inputs_multiprocess(
 
 def model_input_to_forward_args_kjt(
     mi: ModelInput,
-) -> Tuple[List[str], torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+) -> Tuple[
+    List[str],
+    torch.Tensor,
+    Optional[torch.Tensor],
+    Optional[torch.Tensor],
+    Optional[torch.Tensor],
+]:
     kjt = mi.idlist_features
     return (
         kjt._keys,
         kjt._values,
+        kjt._weights,
         kjt._lengths,
         kjt._offsets,
     )
@@ -249,6 +258,40 @@ def quantize(
         mapping={
             EmbeddingBagCollection: QuantEmbeddingBagCollection,
             EmbeddingCollection: QuantEmbeddingCollection,
+        },
+        inplace=inplace,
+    )
+
+
+def quantize_fpebc(
+    module: torch.nn.Module,
+    inplace: bool,
+    output_type: torch.dtype = torch.float,
+    register_tbes: bool = False,
+    quant_state_dict_split_scale_bias: bool = False,
+    weight_dtype: torch.dtype = torch.qint8,
+) -> torch.nn.Module:
+    module_types: List[Type[torch.nn.Module]] = [
+        torchrec.modules.fp_embedding_modules.FeatureProcessedEmbeddingBagCollection,
+    ]
+    if register_tbes:
+        quant_prep_enable_register_tbes(module, module_types)
+    if quant_state_dict_split_scale_bias:
+        quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
+            module, module_types
+        )
+
+    qconfig = quant.QConfig(
+        activation=quant.PlaceholderObserver.with_args(dtype=output_type),
+        weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
+    )
+    return quant.quantize_dynamic(
+        module,
+        qconfig_spec={
+            FeatureProcessedEmbeddingBagCollection: qconfig,
+        },
+        mapping={
+            FeatureProcessedEmbeddingBagCollection: QuantFeatureProcessedEmbeddingBagCollection,
         },
         inplace=inplace,
     )
@@ -356,12 +399,14 @@ class KJTInputWrapper(torch.nn.Module):
         self,
         keys: List[str],
         values: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         offsets: Optional[torch.Tensor] = None,
     ):
         kjt = KeyedJaggedTensor(
             keys=keys,
             values=values,
+            weights=weights,
             lengths=lengths,
             offsets=offsets,
         )
@@ -588,7 +633,7 @@ def assert_close(expected, actual) -> None:
         assert len(expected.keys()) == len(actual.keys())
         torch.testing.assert_close(expected.values(), actual.values())
         torch.testing.assert_close(expected.length_per_key(), actual.length_per_key())
-    if isinstance(expected, dict):
+    elif isinstance(expected, dict):
         assert list(expected.keys()) == list(actual.keys())
         for feature, jt_e in expected.items():
             jt_got = actual[feature]
