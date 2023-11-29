@@ -12,6 +12,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
+from torchrec.distributed.embedding_lookup import EmbeddingComputeKernel
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
@@ -45,14 +46,17 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
+from torchrec.distributed.utils import copy_to_device
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
     EmbeddingBagConfig,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
+from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
+    FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
     MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
@@ -357,3 +361,106 @@ class QuantEmbeddingBagCollectionSharder(
     @property
     def module_type(self) -> Type[QuantEmbeddingBagCollection]:
         return QuantEmbeddingBagCollection
+
+
+class ShardedQuantFeatureProcessedEmbeddingBagCollection(
+    ShardedQuantEmbeddingBagCollection,
+):
+    def __init__(
+        self,
+        module: EmbeddingBagCollectionInterface,
+        table_name_to_parameter_sharding: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
+        feature_processor: Optional[FeatureProcessorsCollection] = None,
+    ) -> None:
+        super().__init__(
+            module,
+            table_name_to_parameter_sharding,
+            env,
+            fused_params,
+            device,
+        )
+        assert feature_processor is not None
+        device_type: str = self._device.type if self._device is not None else "cuda"
+        self.feature_processors_per_rank: nn.ModuleList = torch.nn.ModuleList()
+        for i in range(env.world_size):
+            self.feature_processors_per_rank.append(
+                feature_processor
+                if device_type == "meta"
+                else copy_to_device(
+                    feature_processor,
+                    feature_processor.device,
+                    torch.device(f"{device_type}:{i}"),
+                )
+            )
+
+    def apply_feature_processor(
+        self,
+        kjt_list: KJTList,
+    ) -> KJTList:
+        l: List[KeyedJaggedTensor] = []
+        for i in range(len(self.feature_processors_per_rank)):
+            l.append(self.feature_processors_per_rank[i](kjt_list[i]))
+        return KJTList(l)
+
+    def compute(
+        self,
+        ctx: NullShardedModuleContext,
+        dist_input: ListOfKJTList,  # List_per_sharding[List_per_rank[KJT]]
+    ) -> List[List[torch.Tensor]]:
+        return [
+            lookup.forward(self.apply_feature_processor(dist_input[i]))
+            for i, lookup in enumerate(self._lookups)
+        ]
+
+
+class QuantFeatureProcessedEmbeddingBagCollectionSharder(
+    BaseQuantEmbeddingSharder[QuantFeatureProcessedEmbeddingBagCollection]
+):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [
+            ShardingType.TABLE_WISE.value,
+            ShardingType.COLUMN_WISE.value,
+        ]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [EmbeddingComputeKernel.QUANT.value]
+
+    def shard(
+        self,
+        module: QuantFeatureProcessedEmbeddingBagCollection,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+    ) -> ShardedQuantEmbeddingBagCollection:
+        qebc = module
+        assert isinstance(qebc, QuantEmbeddingBagCollection)
+        fused_params = self.fused_params if self.fused_params else {}
+        fused_params["output_dtype"] = data_type_to_sparse_type(
+            dtype_to_data_type(qebc.output_dtype())
+        )
+        if FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS not in fused_params:
+            fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+                qebc, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            )
+        if FUSED_PARAM_REGISTER_TBE_BOOL not in fused_params:
+            fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
+                qebc, FUSED_PARAM_REGISTER_TBE_BOOL, False
+            )
+
+        return ShardedQuantFeatureProcessedEmbeddingBagCollection(
+            qebc,
+            params,
+            env,
+            fused_params,
+            device=device,
+            feature_processor=module.feature_processor,
+        )
+
+    @property
+    def module_type(self) -> Type[QuantFeatureProcessedEmbeddingBagCollection]:
+        return QuantFeatureProcessedEmbeddingBagCollection

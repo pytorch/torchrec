@@ -322,6 +322,13 @@ class CombinedOptimizer(KeyedOptimizer):
                     raise ValueError(f"Duplicate param key {new_param}")
                 all_keys.add(new_param)
 
+        # pyre-ignore
+        self._optimizer_step_pre_hooks: Dict[int, Callable] = OrderedDict()
+        # pyre-ignore
+        self._optimizer_step_post_hooks: Dict[int, Callable] = OrderedDict()
+
+        self._patch_step_function()
+
     def __repr__(self) -> str:
         ret = []
         for key, opt in self._optims:
