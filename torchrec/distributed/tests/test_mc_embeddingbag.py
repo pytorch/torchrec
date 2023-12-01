@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
 from torchrec.distributed.mc_embeddingbag import (
     ManagedCollisionEmbeddingBagCollectionSharder,
     ShardedManagedCollisionEmbeddingBagCollection,
@@ -220,6 +221,22 @@ def _test_sharding_and_remapping(  # noqa C901
         assert isinstance(
             sharded_sparse_arch._mc_ebc, ShardedManagedCollisionEmbeddingBagCollection
         )
+        assert isinstance(
+            sharded_sparse_arch._mc_ebc._embedding_bag_collection,
+            ShardedEmbeddingBagCollection,
+        )
+        assert (
+            sharded_sparse_arch._mc_ebc._embedding_bag_collection._has_uninitialized_input_dist
+            is False
+        )
+        assert (
+            not hasattr(
+                sharded_sparse_arch._mc_ebc._embedding_bag_collection, "_input_dists"
+            )
+            or len(sharded_sparse_arch._mc_ebc._embedding_bag_collection._input_dists)
+            == 0
+        )
+
         assert isinstance(
             sharded_sparse_arch._mc_ebc._managed_collision_collection,
             ShardedManagedCollisionCollection,
