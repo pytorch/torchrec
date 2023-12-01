@@ -9,6 +9,8 @@ import unittest
 from typing import cast
 
 import torch
+from dper_lib.fx_tracing import DperTracer
+from dper_lib.fx_tracing.graph_module import DperGraphModule
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
@@ -255,6 +257,42 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
         ), "all remapped ids should be mapped to end of range"
 
         assert torch.all(remapped_kjt4["f2"].values() == remapped_kjt2["f2"].values())
+
+    def test_mc_collection_traceable(self) -> None:
+        device = torch.device("cpu")
+        zch_size = 20
+        update_interval = 2
+
+        embedding_configs = [
+            EmbeddingBagConfig(
+                name="t1",
+                embedding_dim=8,
+                num_embeddings=zch_size,
+                feature_names=["f1", "f2"],
+            ),
+        ]
+        mc_modules = {
+            "t1": cast(
+                ManagedCollisionModule,
+                MCHManagedCollisionModule(
+                    zch_size=zch_size,
+                    device=device,
+                    input_hash_size=2 * zch_size,
+                    eviction_interval=update_interval,
+                    eviction_policy=DistanceLFU_EvictionPolicy(),
+                ),
+            ),
+        }
+        mcc = ManagedCollisionCollection(
+            managed_collision_modules=mc_modules,
+            # pyre-ignore[6]
+            embedding_configs=embedding_configs,
+        )
+        graph: torch.fx.Graph = DperTracer().trace(mcc)
+        gm: torch.fx.GraphModule = DperGraphModule(mcc, graph)
+        gm.print_readable()
+
+        # TODO: since this is unsharded module, also check torch.jit.script
 
     def test_mch_ebc(self) -> None:
         device = torch.device("cpu")

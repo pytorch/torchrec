@@ -15,7 +15,11 @@ import torch
 
 from torch import nn
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import (
+    ComputeJTDictToKJT,
+    JaggedTensor,
+    KeyedJaggedTensor,
+)
 
 
 @torch.fx.wrap
@@ -146,6 +150,8 @@ class ManagedCollisionCollection(nn.Module):
             for feature in config.feature_names
         }
         self._table_to_features: Dict[str, List[str]] = defaultdict(list)
+
+        self._compute_jt_dict_to_kjt = ComputeJTDictToKJT()
         for feature, table in self._feature_to_table.items():
             self._table_to_features[table].append(feature)
 
@@ -190,7 +196,7 @@ class ManagedCollisionCollection(nn.Module):
             table_to_features=self._table_to_features,
             managed_collisions=self._managed_collision_modules,
         )
-        return KeyedJaggedTensor.from_jt_dict(features_dict)
+        return self._compute_jt_dict_to_kjt(features_dict)
 
     def evict(self) -> Dict[str, Optional[torch.Tensor]]:
         evictions: Dict[str, Optional[torch.Tensor]] = {}
