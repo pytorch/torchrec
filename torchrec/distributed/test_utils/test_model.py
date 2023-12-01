@@ -592,7 +592,9 @@ def _post_sparsenn_forward(
     elif fp_ebc is None and w_ebc is not None:
         return KeyedTensor(
             keys=ebc.keys() + w_ebc.keys(),
-            length_per_key=ebc.length_per_key() + w_ebc.length_per_key(),
+            length_per_key=torch.concat(
+                (ebc.length_per_key(), w_ebc.length_per_key()), dim=0
+            ),
             values=torch.cat(
                 [ebc_values, torch.jit._unwrap_optional(w_ebc_values)], dim=1
             ),

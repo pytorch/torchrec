@@ -136,7 +136,9 @@ def _regroup_keyed_tensors(
         group_length = 0
         for name in group:
             cat_input.append(embedding_dicts[key_to_idx[name]][name])
-            group_length += lengths[key_to_idx[name]][indices[key_to_idx[name]][name]]
+            group_length += lengths[key_to_idx[name]][
+                indices[key_to_idx[name]][name]
+            ].item()
         split_lengths.append(group_length)
     rearranged_values = torch.cat(cat_input, key_dim)
 
@@ -2000,11 +2002,14 @@ register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 
 def _maybe_compute_offset_per_key_kt(
-    length_per_key: List[int],
+    length_per_key: torch.Tensor,
     offset_per_key: Optional[List[int]],
 ) -> List[int]:
     if offset_per_key is None:
-        offset_per_key = _cumsum(length_per_key)
+        val: List[int] = torch.ops.fbgemm.asynchronous_complete_cumsum(
+            length_per_key
+        ).tolist()
+        offset_per_key = val
     return offset_per_key
 
 
@@ -2065,10 +2070,12 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             # tensor([[2, 1, 2], [2, 1, 2], [2, 1, 2]])
     """
 
+    _fields = ["_length_per_key", "_values"]
+
     def __init__(
         self,
         keys: List[str],
-        length_per_key: List[int],
+        length_per_key: Union[List[int], torch.Tensor],
         values: torch.Tensor,
         key_dim: int = 1,
         # Below exposed to ensure torch.script-able
@@ -2076,7 +2083,15 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         index_per_key: Optional[Dict[str, int]] = None,
     ) -> None:
         self._keys = keys
-        self._length_per_key = length_per_key
+        self._length_per_key: torch.Tensor = torch.tensor([0], dtype=torch.int64)
+        if isinstance(length_per_key, list):
+            self._length_per_key = torch.tensor(length_per_key, dtype=torch.int64)
+        else:
+            assert (
+                length_per_key.device.type == "cpu"
+            ), "Only CPU tensor is supported for length_per_key."
+            self._length_per_key = length_per_key
+
         self._values = values
         self._key_dim = key_dim
 
@@ -2112,7 +2127,7 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._offset_per_key = _offset_per_key
         return _offset_per_key
 
-    def length_per_key(self) -> List[int]:
+    def length_per_key(self) -> torch.Tensor:
         return self._length_per_key
 
     def _key_indices(self) -> Dict[str, int]:
@@ -2126,12 +2141,13 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def __getitem__(self, key: str) -> torch.Tensor:
         index = self._key_indices()[key]
         start = self.offset_per_key()[index]
-        length = self._length_per_key[index]
+        length = self._length_per_key[index].item()
+        # pyre-ignore [6]: In call `torch._C.TensorBase.narrow`, for argument `length`, expected `Union[int, SymInt]` but got `Union[bool, float, int]`.
         return self._values.narrow(dim=self._key_dim, start=start, length=length)
 
     def to_dict(self) -> Dict[str, torch.Tensor]:
         indices = self._key_indices()
-        lengths = self._length_per_key
+        lengths: List[int] = self._length_per_key.tolist()
         split_values = self._values.split(lengths, dim=self._key_dim)
         return {key: split_values[index] for (key, index) in indices.items()}
 
@@ -2180,3 +2196,21 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             )
             + "\n})\n"
         )
+
+
+def _kt_flatten(
+    kt: KeyedTensor,
+) -> Tuple[List[torch.Tensor], List[str]]:
+    return [getattr(kt, a) for a in KeyedTensor._fields], kt._keys
+
+
+def _kt_unflatten(values: List[torch.Tensor], context: List[str]) -> KeyedTensor:
+    return KeyedTensor(context, *values)
+
+
+def _kt_flatten_spec(kt: KeyedTensor, spec: TreeSpec) -> List[torch.Tensor]:
+    return [getattr(kt, a) for a in KeyedTensor._fields]
+
+
+_register_pytree_node(KeyedTensor, _kt_flatten, _kt_unflatten)
+register_pytree_flatten_spec(KeyedTensor, _kt_flatten_spec)
