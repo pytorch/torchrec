@@ -25,6 +25,7 @@ except ImportError:
 def save(
     name: str, model: torch.nn.Module, eg: Optional[Tuple] = None  # pyre-ignore
 ) -> None:
+    # pyre-fixme[10]: Name `p` is used but not defined.
     with PackageExporter(str(p / name)) as e:
         e.mock("iopath.**")
         e.intern("**")
@@ -41,10 +42,12 @@ def post_process(model: torch.nn.Module) -> None:
 parser = argparse.ArgumentParser(description="Generate Examples")
 parser.add_argument("--install_dir", help="Root directory for all output files")
 
-if __name__ == "__main__":
-    args = parser.parse_args()  # pyre-ignore
+
+def main() -> None:
+    global p
+    args = parser.parse_args()
     if args.install_dir is None:
-        p = Path(__file__).parent / "generated"  # pyre-ignore
+        p = Path(__file__).parent / "generated"
         p.mkdir(exist_ok=True)
     else:
         p = Path(args.install_dir)
@@ -57,3 +60,7 @@ if __name__ == "__main__":
 
     save("simple", simple, (torch.rand(10, 20),))
     save("nested", nested, (torch.rand(10, 20),))
+
+
+if __name__ == "__main__":
+    main()  # pragma: no cover
