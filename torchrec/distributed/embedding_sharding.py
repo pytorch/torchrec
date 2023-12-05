@@ -92,6 +92,7 @@ def bucketize_kjt_before_all2all(
     block_sizes: torch.Tensor,
     output_permute: bool = False,
     bucketize_pos: bool = False,
+    block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
 ) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]:
     """
     Bucketizes the `values` in KeyedJaggedTensor into `num_buckets` buckets,
@@ -107,6 +108,7 @@ def bucketize_kjt_before_all2all(
             values to bucketized values or not.
         bucketize_pos (bool): output the changed position of the bucketized values or
             not.
+        block_bucketize_row_pos (Optional[List[torch.Tensor]]): The offsets of shard size for each feature.
 
     Returns:
         Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]: the bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized value.
@@ -134,6 +136,7 @@ def bucketize_kjt_before_all2all(
         weights=kjt.weights_or_none(),
         batch_size_per_feature=_fx_wrap_batch_size_per_feature(kjt),
         max_B=_fx_wrap_max_B(kjt),
+        block_bucketize_pos=block_bucketize_row_pos,
     )
 
     return (

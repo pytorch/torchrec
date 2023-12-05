@@ -222,7 +222,7 @@ def main() -> None:
             dist.barrier()
 
 
-if __name__ == "__main__":
+def invoke_main() -> None:
     lc = pet.LaunchConfig(
         min_nodes=1,
         max_nodes=1,
@@ -234,3 +234,7 @@ if __name__ == "__main__":
         monitor_interval=1,
     )
     pet.elastic_launch(lc, entrypoint=main)()
+
+
+if __name__ == "__main__":
+    invoke_main()  # pragma: no cover
