@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
+from unittest.mock import MagicMock, patch
 
 import torch
 from torch.autograd import Variable
@@ -204,3 +205,25 @@ class TestGradientClippingOptimizer(unittest.TestCase):
         self.assertTrue(torch.allclose(param_1.grad, expected_grad_1))
         # pyre-fixme[6]: For 1st argument expected `Tensor` but got `Optional[Tensor]`.
         self.assertTrue(torch.allclose(param_2.grad, expected_grad_2))
+
+    @patch("torch.nn.utils.clip_grad_norm_")
+    def test_clip_no_gradients_norm_meta_device(
+        self, mock_clip_grad_norm: MagicMock
+    ) -> None:
+        # Clip all gradients to zero
+        param_1 = Variable(
+            torch.tensor([1.0, 2.0], device=torch.device("meta")), requires_grad=True
+        )
+
+        keyed_optimizer = DummyKeyedOptimizer(
+            {"param_1": param_1}, {}, [{"params": [param_1]}]
+        )
+
+        gradient_clipping_optimizer = GradientClippingOptimizer(
+            optimizer=keyed_optimizer, max_gradient=0.0, clipping=GradientClipping.NORM
+        )
+
+        gradient_clipping_optimizer.zero_grad()
+        gradient_clipping_optimizer.step()
+
+        mock_clip_grad_norm.assert_not_called()

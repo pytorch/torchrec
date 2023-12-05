@@ -38,6 +38,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
         super().__init__(optimizer)
         self._clipping = clipping
         self._max_gradient = max_gradient
+        self._check_meta: bool = True
 
         self._params: List[torch.Tensor] = []
         for param_group in self.param_groups:
@@ -45,6 +46,13 @@ class GradientClippingOptimizer(OptimizerWrapper):
 
     # pyre-ignore [2]
     def step(self, closure: Any = None) -> None:
+        if self._check_meta:
+            if any(t.device.type == "meta" for t in self._params):
+                # skip gradient clipping and early return
+                super().step(closure)
+                return
+            self._check_meta = False
+
         if self._clipping == GradientClipping.NORM:
             torch.nn.utils.clip_grad_norm_(self._params, self._max_gradient)
         elif self._clipping == GradientClipping.VALUE:
