@@ -504,7 +504,7 @@ def get_block_sizes_runtime_device(
     block_sizes: List[int],
     runtime_device: torch.device,
     tensor_cache: Dict[str, Tuple[torch.Tensor, List[torch.Tensor]]],
-    embedding_shard_metadata: Optional[List[List[int]]],
+    embedding_shard_metadata: Optional[List[List[int]]] = None,
 ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
     cache_key: str = "__block_sizes"
     if cache_key not in tensor_cache:
