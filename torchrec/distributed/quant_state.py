@@ -430,8 +430,8 @@ def sharded_tbes_weights_spec(
     ret: Dict[str, WeightSpec] = {}
     for module_fqn, module in sharded_model.named_modules():
         type_name: str = type(module).__name__
-        is_sqebc: bool = type_name == "ShardedQuantEmbeddingBagCollection"
-        is_sqec: bool = type_name == "ShardedQuantEmbeddingCollection"
+        is_sqebc: bool = "ShardedQuantEmbeddingBagCollection" in type_name
+        is_sqec: bool = "ShardedQuantEmbeddingCollection" in type_name
 
         if is_sqebc or is_sqec:
             tbes_configs: Dict[
