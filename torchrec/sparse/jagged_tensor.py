@@ -2180,3 +2180,21 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             )
             + "\n})\n"
         )
+
+
+def _kt_flatten(
+    kt: KeyedTensor,
+) -> Tuple[List[torch.Tensor], List[str]]:
+    return [torch.tensor(kt._length_per_key, dtype=torch.int64), kt._values], kt._keys
+
+
+def _kt_unflatten(values: List[torch.Tensor], context: List[str]) -> KeyedTensor:
+    return KeyedTensor(context, values[0].tolist(), values[1])
+
+
+def _kt_flatten_spec(kt: KeyedTensor, spec: TreeSpec) -> List[torch.Tensor]:
+    return _kt_flatten(kt)[0]
+
+
+_register_pytree_node(KeyedTensor, _kt_flatten, _kt_unflatten)
+register_pytree_flatten_spec(KeyedTensor, _kt_flatten_spec)
