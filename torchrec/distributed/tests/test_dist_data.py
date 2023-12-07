@@ -184,7 +184,6 @@ def _generate_variable_batch_sparse_features_batch(
         out_jagged.append(
             KeyedJaggedTensor.from_lengths_sync(
                 keys=out_keys,
-                # pyre-ignore[6]
                 stride_per_key_per_rank=[
                     list(_flatten(batch_sizes_by_rank[key_idx]))
                     for key_idx in key_indices
