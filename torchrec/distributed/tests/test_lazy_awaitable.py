@@ -242,6 +242,8 @@ class TestLazyAwaitable(unittest.TestCase):
 
         tempFile = None
         with tempfile.NamedTemporaryFile(delete=False) as f:
+            # pyre-fixme[6]: For 2nd argument expected `SupportsWrite[bytes]` but
+            #  got `_TemporaryFileWrapper[bytes]`.
             pickle.dump(gm, f)
             tempFile = f
 

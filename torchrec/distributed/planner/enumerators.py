@@ -108,6 +108,15 @@ class EmbeddingEnumerator(Enumerator):
                         named_modules_queue.append((n, m))
                 continue
 
+            # Determine the pooling state for all sharding_options using this
+            # (child_module, child_path). With this optimization, we change enumerate()
+            # from being O(N^2) with respect to the number of tables to O(N). The
+            # previous quadratic behavior is because in populate_estimates() invoked below, each
+            # sharding_option needs to determine its pooling state, which is does via
+            # an expensive O(N) walk through the list of embedding tables. With this
+            # change sharding_option.is_pooled becomes O(1).
+            is_pooled = ShardingOption.module_pooled(child_module, child_path)
+
             for name, param in sharder.shardable_parameters(child_module).items():
                 (
                     input_lengths,
@@ -160,6 +169,7 @@ class EmbeddingEnumerator(Enumerator):
                                 stochastic_rounding=stochastic_rounding,
                                 bounds_check_mode=bounds_check_mode,
                                 dependency=dependency,
+                                is_pooled=is_pooled,
                             )
                         )
                 if not sharding_options:

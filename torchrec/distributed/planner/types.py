@@ -262,6 +262,7 @@ class ShardingOption:
         stochastic_rounding: Optional[bool] = None,
         bounds_check_mode: Optional[BoundsCheckMode] = None,
         dependency: Optional[str] = None,
+        is_pooled: Optional[bool] = None,
     ) -> None:
         self.name = name
         self._tensor = tensor
@@ -279,7 +280,7 @@ class ShardingOption:
         self.stochastic_rounding = stochastic_rounding
         self.bounds_check_mode = bounds_check_mode
         self.dependency = dependency
-        self._is_pooled: Optional[bool] = None
+        self._is_pooled = is_pooled
         self.is_weighted: Optional[bool] = None
 
     @property
@@ -323,20 +324,23 @@ class ShardingOption:
 
     @property
     def is_pooled(self) -> bool:
-        if self._is_pooled is not None:
-            return self._is_pooled
-
-        if isinstance(self.module[1], EmbeddingCollectionInterface):
-            self._is_pooled = False
-            return self.is_pooled
-        for module in self.module[1].modules():
-            if isinstance(module, EmbeddingCollectionInterface):
-                for name, _ in module.named_parameters():
-                    if self.name in name:
-                        self._is_pooled = False
-                        return self._is_pooled
-        self._is_pooled = True
+        if self._is_pooled is None:
+            self._is_pooled = ShardingOption.module_pooled(self.module[1], self.name)
         return self._is_pooled
+
+    @staticmethod
+    def module_pooled(module: nn.Module, sharding_option_name: str) -> bool:
+        """Determine if module pools output (e.g. EmbeddingBag) or uses unpooled/sequential output."""
+        if isinstance(module, EmbeddingCollectionInterface):
+            return False
+
+        for submodule in module.modules():
+            if isinstance(submodule, EmbeddingCollectionInterface):
+                for name, _ in submodule.named_parameters():
+                    if sharding_option_name in name:
+                        return False
+
+        return True
 
     def __hash__(self) -> int:
         return hash(
