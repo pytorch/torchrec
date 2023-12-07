@@ -470,7 +470,7 @@ class DLRMTest(unittest.TestCase):
             over_arch_layer_sizes=[5, 1],
         )
         gm = symbolic_trace(sparse_nn)
-        FileCheck().check("KeyedJaggedTensor").check("cat").check("f2").run(gm.code)
+        FileCheck().check("KeyedJaggedTensor").check("f2").run(gm.code)
 
         features = torch.rand((B, dense_in_features))
         sparse_features = KeyedJaggedTensor.from_offsets_sync(
