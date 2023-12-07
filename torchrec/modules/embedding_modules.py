@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -19,34 +19,13 @@ from torchrec.modules.embedding_configs import (
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
-@torch.fx.wrap
-def reorder_inverse_indices(
-    inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
-    feature_names: List[List[str]],
-) -> Optional[torch.Tensor]:
-    if inverse_indices is None:
-        return None
-    index_per_name = {name: i for i, name in enumerate(inverse_indices[0])}
-    flat_feature_names: List[str] = []
-    for names in feature_names:
-        flat_feature_names.extend(names)
-    index = torch.tensor(
-        [index_per_name[name.split("@")[0]] for name in flat_feature_names],
-        device=inverse_indices[1].device,
-    )
-    return torch.index_select(inverse_indices[1], 0, index)
+# pyre-ignore[5]
+_orig_module_call = torch.nn.Module.__call__
 
 
-@torch.fx.wrap
-def process_pooled_embeddings(
-    pooled_embeddings: List[torch.Tensor],
-    inverse_indices: Optional[torch.Tensor],
-) -> torch.Tensor:
-    if inverse_indices is not None:
-        pooled_embeddings = torch.ops.fbgemm.group_index_select_dim0(
-            pooled_embeddings, list(torch.unbind(inverse_indices))
-        )
-    return torch.cat(pooled_embeddings, dim=1)
+@torch.jit.ignore
+def is_fx_tracing() -> bool:
+    return torch.nn.Module.__call__ is not _orig_module_call
 
 
 class EmbeddingBagCollectionInterface(abc.ABC, nn.Module):
@@ -208,11 +187,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         Returns:
             KeyedTensor
         """
+
         pooled_embeddings: List[torch.Tensor] = []
-        inverse_indices = reorder_inverse_indices(
-            inverse_indices=features.inverse_indices_or_none(),
-            feature_names=self._feature_names,
-        )
+
         feature_dict = features.to_dict()
         for i, embedding_bag in enumerate(self.embedding_bags.values()):
             for feature_name in self._feature_names[i]:
@@ -223,12 +200,22 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                     per_sample_weights=f.weights() if self._is_weighted else None,
                 ).float()
                 pooled_embeddings.append(res)
+        if features.inverse_indices_or_none() is not None and not is_fx_tracing():
+            inverse_indices = []
+            index_per_name = {
+                name: i for i, name in enumerate(features.inverse_indices()[0])
+            }
+            for table in self._feature_names:
+                for feature_name in table:
+                    index = index_per_name[feature_name.split("@")[0]]
+                    inverse_indices.append(features.inverse_indices()[1][index])
+            pooled_embeddings = torch.ops.fbgemm.group_index_select_dim0(
+                pooled_embeddings, inverse_indices
+            )
+        data = torch.cat(pooled_embeddings, dim=1)
         return KeyedTensor(
             keys=self._embedding_names,
-            values=process_pooled_embeddings(
-                pooled_embeddings=pooled_embeddings,
-                inverse_indices=inverse_indices,
-            ),
+            values=data,
             length_per_key=self._lengths_per_embedding,
         )
 

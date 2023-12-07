@@ -150,7 +150,7 @@ class SimpleDeepFMNNTest(unittest.TestCase):
             deep_fm_dimension=5,
         )
         gm = symbolic_trace(deepfm_nn)
-        FileCheck().check("KeyedJaggedTensor").check("f2").run(gm.code)
+        FileCheck().check("KeyedJaggedTensor").check("cat").check("f2").run(gm.code)
 
         features = torch.rand((B, num_dense_features))
         sparse_features = KeyedJaggedTensor.from_offsets_sync(
