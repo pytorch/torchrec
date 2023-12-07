@@ -703,14 +703,15 @@ def reduce_scatter_v_per_feature_pooled(
 
     myreq = Request(group, device=input.device)
 
-    input_splits = []
-    for rank in range(world_size):
-        rank_splits = 0
-        for batch_size, emb_dim in zip(
-            batch_size_per_rank_per_feature[rank], embedding_dims
-        ):
-            rank_splits += batch_size * emb_dim
-        input_splits.append(rank_splits)
+    input_splits = [0 for _ in range(world_size)]
+    if batch_size_per_rank_per_feature:
+        for rank in range(world_size):
+            rank_splits = 0
+            for batch_size, emb_dim in zip(
+                batch_size_per_rank_per_feature[rank], embedding_dims
+            ):
+                rank_splits += batch_size * emb_dim
+            input_splits[rank] = rank_splits
 
     input_sizes = [torch.Size([s]) for s in input_splits]
 
