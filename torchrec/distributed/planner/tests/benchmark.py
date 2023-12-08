@@ -76,7 +76,11 @@ class TestEnumeratorBenchmark(unittest.TestCase):
             )
 
 
+def main() -> None:
+    unittest.main()
+
+
 # This is structured as a unitttest like file so you can use its built-in command
 # line argument parsing to control which benchmarks to run, e.g. "-k Enumerator"
 if __name__ == "__main__":
-    unittest.main()
+    main()  # pragma: no cover
