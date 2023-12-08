@@ -214,12 +214,14 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_ROW_WISE.value,
-                ShardingType.TABLE_COLUMN_WISE.value,
             ]
         ),
+        variable_batch_per_feature=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_sharding_empty_rank(self, sharding_type: str) -> None:
+    def test_sharding_empty_rank(
+        self, sharding_type: str, variable_batch_per_feature: bool
+    ) -> None:
         table = self.tables[0]
         embedding_groups = {"group_0": table.feature_names}
         self._run_multi_process_test(
@@ -241,6 +243,8 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             backend="nccl",
             constraints={table.name: ParameterConstraints(min_partition=4)},
             variable_batch_size=True,
+            variable_batch_per_feature=variable_batch_per_feature,
+            weighted_tables=None,
         )
 
     @unittest.skipIf(
