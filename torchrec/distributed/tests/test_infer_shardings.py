@@ -771,7 +771,6 @@ class InferShardingsTest(unittest.TestCase):
             ShardingType.ROW_WISE.value,
         )
 
-    @unittest.skip("Need D51309697 before turn on")
     @unittest.skipIf(
         torch.cuda.device_count() <= 2,
         "Not enough GPUs available",
@@ -785,12 +784,14 @@ class InferShardingsTest(unittest.TestCase):
                 (500, 256, 128, 128),
             ]
         ),
+        device=st.sampled_from(["cuda"]),  # TODO: add cpu test when it's fixed
     )
     @settings(max_examples=4, deadline=None)
     def test_rw_uneven_sharding(
         self,
         weight_dtype: torch.dtype,
         uneven_shard_pattern: Tuple[int, int, int, int],
+        device: str,
     ) -> None:
         num_embeddings, size0, size1, size2 = uneven_shard_pattern
         size2 = min(size2, num_embeddings - size0 - size1)
@@ -798,7 +799,7 @@ class InferShardingsTest(unittest.TestCase):
         local_size = 3
         world_size = 3
         batch_size = 4
-        local_device = torch.device("cpu")
+        local_device = torch.device("cuda:0" if device == "cuda" else device)
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -816,15 +817,15 @@ class InferShardingsTest(unittest.TestCase):
             [
                 (
                     (0, 0, size0, 64),
-                    "rank:0/cpu",
+                    "rank:0/cpu" if device == "cpu" else "rank:0/cuda:0",
                 ),
                 (
                     (size0, 0, size1, 64),
-                    "rank:0/cpu",
+                    "rank:0/cpu" if device == "cpu" else "rank:1/cuda:1",
                 ),
                 (
                     (size0 + size1, 0, size2, 64),
-                    "rank:0/cpu",
+                    "rank:0/cpu" if device == "cpu" else "rank:2/cuda:2",
                 ),
             ],
         ]
@@ -838,7 +839,7 @@ class InferShardingsTest(unittest.TestCase):
         module_plan = construct_module_sharding_plan(
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
-                "table_0": row_wise(([size0, size1, size2], "cpu")),
+                "table_0": row_wise(([size0, size1, size2], "cuda")),
             },
             # pyre-ignore
             sharder=sharder,
@@ -871,7 +872,6 @@ class InferShardingsTest(unittest.TestCase):
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
-    @unittest.skip("Need D51309697 before turn on")
     @unittest.skipIf(
         torch.cuda.device_count() <= 3,
         "Not enough GPUs available",
@@ -879,18 +879,20 @@ class InferShardingsTest(unittest.TestCase):
     # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device=st.sampled_from(["cuda"]),  # TODO: add cpu test when it's fixed
     )
     @settings(max_examples=4, deadline=None)
     def test_rw_uneven_sharding_mutiple_table(
         self,
         weight_dtype: torch.dtype,
+        device: str,
     ) -> None:
         num_embeddings = 512
         emb_dim = 64
         local_size = 4
         world_size = 4
         batch_size = 1
-        local_device = torch.device("cpu")
+        local_device = torch.device("cuda:0" if device == "cuda" else device)
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -900,7 +902,7 @@ class InferShardingsTest(unittest.TestCase):
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
             weight_dtype=weight_dtype,
-            num_features=3,
+            num_features=4,
         )
 
         non_sharded_model = mi.quant_model
@@ -908,55 +910,73 @@ class InferShardingsTest(unittest.TestCase):
             [
                 (
                     (0, 0, 256, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 0),
                 ),
                 (
                     (256, 0, 128, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 1),
                 ),
                 (
                     (384, 0, 64, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 2),
                 ),
                 (
                     (448, 0, 64, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 3),
                 ),
             ],
             [
                 (
                     (0, 0, 128, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 0),
                 ),
                 (
                     (128, 0, 128, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 1),
                 ),
                 (
                     (256, 0, 128, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 2),
                 ),
                 (
                     (384, 0, 128, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 3),
                 ),
             ],
             [
                 (
                     (0, 0, 256, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 0),
                 ),
                 (
                     (256, 0, 128, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 1),
                 ),
                 (
                     (384, 0, 128, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 2),
                 ),
                 (
                     (512, 0, 0, 64),
-                    placement_helper("cpu", 0),
+                    placement_helper(device, 3),
+                ),
+            ],
+            [
+                (
+                    (0, 0, 0, 64),
+                    placement_helper(device, 0),
+                ),
+                (
+                    (0, 0, 128, 64),
+                    placement_helper(device, 1),
+                ),
+                (
+                    (128, 0, 128, 64),
+                    placement_helper(device, 2),
+                ),
+                (
+                    (256, 0, 256, 64),
+                    placement_helper(device, 3),
                 ),
             ],
         ]
@@ -971,10 +991,11 @@ class InferShardingsTest(unittest.TestCase):
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": row_wise(
-                    ([256, 128, 64, 64], "cpu"),
+                    ([256, 128, 64, 64], device),
                 ),
-                "table_1": row_wise(([128, 128, 128, 128], "cpu")),
-                "table_2": row_wise(([256, 128, 128, 0], "cpu")),
+                "table_1": row_wise(([128, 128, 128, 128], device)),
+                "table_2": row_wise(([256, 128, 128, 0], device)),
+                "table_3": row_wise(([0, 128, 128, 256], device)),
             },
             # pyre-ignore
             sharder=sharder,
