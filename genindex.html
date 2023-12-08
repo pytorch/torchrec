@@ -430,6 +430,8 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.lazy_extension.LazyModuleExtensionMixin.apply">apply() (torchrec.modules.lazy_extension.LazyModuleExtensionMixin method)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection.apply_feature_processor">apply_feature_processor() (torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection method)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.ArgInfo">ArgInfo (class in torchrec.distributed.train_pipeline)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.BaseForward.args">args (torchrec.distributed.train_pipeline.BaseForward property)</a>
@@ -645,6 +647,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.compute">(torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection.compute">(torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.compute">(torchrec.distributed.types.ShardedModule method)</a>
 </li>
       </ul></li>
@@ -677,6 +681,8 @@
       <ul>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.compute_kernels">(torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder.compute_kernels">(torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.compute_kernels">(torchrec.distributed.types.ModuleSharder method)</a>
 </li>
       </ul></li>
@@ -692,10 +698,10 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.construct_modulelist_from_single_module">construct_modulelist_from_single_module() (in module torchrec.modules.utils)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.construct_output_kt">construct_output_kt() (in module torchrec.distributed.embeddingbag)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.construct_output_kt">construct_output_kt() (in module torchrec.distributed.embeddingbag)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.convert_list_of_modules_to_modulelist">convert_list_of_modules_to_modulelist() (in module torchrec.modules.utils)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.convert_to_fbgemm_types">convert_to_fbgemm_types() (in module torchrec.distributed.utils)</a>
@@ -928,6 +934,12 @@
         <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface.embedding_bag_configs">(torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface method)</a>
 </li>
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingBagCollection.embedding_bag_configs">(torchrec.quant.embedding_modules.EmbeddingBagCollection method)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection.embedding_bags">embedding_bags (torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection.embedding_bags">(torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection attribute)</a>
 </li>
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingInfo.embedding_config">embedding_config (torchrec.distributed.embedding_sharding.EmbeddingShardingInfo attribute)</a>
@@ -1184,6 +1196,8 @@
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding.feature_names_per_rank">(torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection">FeatureProcessedEmbeddingBagCollection (class in torchrec.quant.embedding_modules)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.features_per_rank">features_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
 
       <ul>
@@ -1375,6 +1389,8 @@
 </li>
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingCollection.forward">(torchrec.quant.embedding_modules.EmbeddingCollection method)</a>
 </li>
+        <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection.forward">(torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection method)</a>
+</li>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.ComputeJTDictToKJT.forward">(torchrec.sparse.jagged_tensor.ComputeJTDictToKJT method)</a>
 </li>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict.forward">(torchrec.sparse.jagged_tensor.ComputeKJTToJTDict method)</a>
@@ -1394,6 +1410,8 @@
 
       <ul>
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingCollection.from_float">(torchrec.quant.embedding_modules.EmbeddingCollection class method)</a>
+</li>
+        <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection.from_float">(torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection class method)</a>
 </li>
       </ul></li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_jt_dict">from_jt_dict() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor static method)</a>
@@ -1471,6 +1489,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.get_ec_index_dedup">get_ec_index_dedup() (in module torchrec.distributed.embedding)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.get_embedding_names_by_table">get_embedding_names_by_table() (in module torchrec.modules.embedding_modules)</a>
+</li>
+      <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.get_embedding_shard_metadata">get_embedding_shard_metadata() (in module torchrec.distributed.sharding.rw_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.get_gradient_division">get_gradient_division() (in module torchrec.distributed.comm_ops)</a>
 </li>
@@ -1681,11 +1701,7 @@
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.INVSQRT">INVSQRT (torchrec.optim.warmup.WarmupPolicy attribute)</a>
 </li>
       <li><a href="torchrec.fx.html#torchrec.fx.tracer.is_fx_tracing">is_fx_tracing() (in module torchrec.fx.tracer)</a>
-
-      <ul>
-        <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.is_fx_tracing">(in module torchrec.modules.embedding_modules)</a>
 </li>
-      </ul></li>
       <li><a href="torchrec.distributed.html#id33">is_getitems (torchrec.distributed.train_pipeline.ArgInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.ArgInfo.is_getitems">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.collective_utils.is_leader">is_leader() (in module torchrec.distributed.collective_utils)</a>
@@ -2065,6 +2081,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchTrainPipelineContext.module_input_post_prefetch">module_input_post_prefetch (torchrec.distributed.train_pipeline.PrefetchTrainPipelineContext attribute)</a>
 </li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.module_pooled">module_pooled() (torchrec.distributed.planner.types.ShardingOption static method)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.Tracer.module_stack">module_stack (torchrec.distributed.train_pipeline.Tracer attribute)</a>
 
       <ul>
@@ -2079,6 +2097,8 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagSharder.module_type">(torchrec.distributed.embeddingbag.EmbeddingBagSharder property)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder.module_type">(torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder property)</a>
+</li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder.module_type">(torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder property)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.module_type">(torchrec.distributed.types.ModuleSharder property)</a>
 </li>
@@ -2465,6 +2485,8 @@
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer.prepend_opt_key">prepend_opt_key() (torchrec.optim.keyed.CombinedOptimizer static method)</a>
 </li>
+      <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.process_pooled_embeddings">process_pooled_embeddings() (in module torchrec.modules.embedding_modules)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.prod">prod() (in module torchrec.distributed.planner.utils)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.train_pipeline.PrefetchTrainPipelineSparseDist.progress">progress() (torchrec.distributed.train_pipeline.PrefetchTrainPipelineSparseDist method)</a>
@@ -2527,15 +2549,17 @@
 </li>
       <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.quant_prep_enable_register_tbes">quant_prep_enable_register_tbes() (in module torchrec.quant.embedding_modules)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.QUANT_UVM">QUANT_UVM (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.QUANT_UVM_CACHING">QUANT_UVM_CACHING (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.QuantConfig">QuantConfig (class in torchrec.modules.embedding_configs)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder">QuantEmbeddingBagCollectionSharder (class in torchrec.distributed.quant_embeddingbag)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder">QuantFeatureProcessedEmbeddingBagCollectionSharder (class in torchrec.distributed.quant_embeddingbag)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.quantize_dense">quantize_dense() (in module torchrec.inference.modules)</a>
 </li>
@@ -2626,6 +2650,8 @@
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.regroup">regroup() (torchrec.sparse.jagged_tensor.KeyedTensor static method)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.regroup_as_dict">regroup_as_dict() (torchrec.sparse.jagged_tensor.KeyedTensor static method)</a>
+</li>
+      <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.reorder_inverse_indices">reorder_inverse_indices() (in module torchrec.modules.embedding_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.replace_placement_with_meta_device">replace_placement_with_meta_device() (in module torchrec.distributed.embeddingbag)</a>
 </li>
@@ -2746,6 +2772,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder.shard">(torchrec.distributed.quant_embeddingbag.QuantEmbeddingBagCollectionSharder method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder.shard">(torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.shard">(torchrec.distributed.types.ModuleSharder class method)</a>
 </li>
       </ul></li>
@@ -2787,6 +2815,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection">ShardedQuantEmbeddingBagCollection (class in torchrec.distributed.quant_embeddingbag)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection">ShardedQuantFeatureProcessedEmbeddingBagCollection (class in torchrec.distributed.quant_embeddingbag)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.sharder_name">sharder_name() (in module torchrec.distributed.planner.utils)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardEstimator">ShardEstimator (class in torchrec.distributed.planner.types)</a>
@@ -2814,6 +2844,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder.sharding_types">(torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder.sharding_types">(torchrec.distributed.quant_embeddingbag.QuantFeatureProcessedEmbeddingBagCollectionSharder method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.sharding_types">(torchrec.distributed.types.ModuleSharder method)</a>
 </li>
       </ul></li>
@@ -2821,10 +2853,10 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption">ShardingOption (class in torchrec.distributed.planner.types)</a>
 </li>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.ShardingOptionGroup">ShardingOptionGroup (class in torchrec.distributed.planner.partitioners)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.ShardingOptionGroup">ShardingOptionGroup (class in torchrec.distributed.planner.partitioners)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan">ShardingPlan (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlanner">ShardingPlanner (class in torchrec.distributed.types)</a>
@@ -2983,6 +3015,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingType.TABLE_WISE">TABLE_WISE (torchrec.distributed.types.ShardingType attribute)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection.tbes">tbes (torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection.tbes">(torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection attribute)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.tbes_configs">tbes_configs() (torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.tensor">tensor (torchrec.distributed.planner.types.ShardingOption property)</a>
@@ -3506,6 +3544,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.training">(torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection attribute)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection.training">(torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection attribute)</a>
+</li>
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.cw_sharding.InferCwPooledEmbeddingDist.training">(torchrec.distributed.sharding.cw_sharding.InferCwPooledEmbeddingDist attribute)</a>
 </li>
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.cw_sharding.InferCwPooledEmbeddingDistWithPermute.training">(torchrec.distributed.sharding.cw_sharding.InferCwPooledEmbeddingDistWithPermute attribute)</a>
@@ -3587,6 +3627,8 @@
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingBagCollection.training">(torchrec.quant.embedding_modules.EmbeddingBagCollection attribute)</a>
 </li>
         <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.EmbeddingCollection.training">(torchrec.quant.embedding_modules.EmbeddingCollection attribute)</a>
+</li>
+        <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection.training">(torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection attribute)</a>
 </li>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.ComputeJTDictToKJT.training">(torchrec.sparse.jagged_tensor.ComputeJTDictToKJT attribute)</a>
 </li>
