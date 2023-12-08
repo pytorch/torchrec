@@ -22,16 +22,13 @@ from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, Keyed
 @torch.fx.wrap
 def reorder_inverse_indices(
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
-    feature_names: List[List[str]],
+    feature_names: List[str],
 ) -> Optional[torch.Tensor]:
     if inverse_indices is None:
         return None
     index_per_name = {name: i for i, name in enumerate(inverse_indices[0])}
-    flat_feature_names: List[str] = []
-    for names in feature_names:
-        flat_feature_names.extend(names)
     index = torch.tensor(
-        [index_per_name[name.split("@")[0]] for name in flat_feature_names],
+        [index_per_name[name.split("@")[0]] for name in feature_names],
         device=inverse_indices[1].device,
     )
     return torch.index_select(inverse_indices[1], 0, index)
@@ -208,11 +205,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         Returns:
             KeyedTensor
         """
-        pooled_embeddings: List[torch.Tensor] = []
+        flat_feature_names: List[str] = []
+        for names in self._feature_names:
+            flat_feature_names.extend(names)
         inverse_indices = reorder_inverse_indices(
             inverse_indices=features.inverse_indices_or_none(),
-            feature_names=self._feature_names,
+            feature_names=flat_feature_names,
         )
+        pooled_embeddings: List[torch.Tensor] = []
         feature_dict = features.to_dict()
         for i, embedding_bag in enumerate(self.embedding_bags.values()):
             for feature_name in self._feature_names[i]:

@@ -6,11 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import cast
+from typing import cast, List, Optional
 
 import torch
-from dper_lib.fx_tracing import DperTracer
-from dper_lib.fx_tracing.graph_module import DperGraphModule
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
@@ -21,6 +19,22 @@ from torchrec.modules.mc_modules import (
     MCHManagedCollisionModule,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+
+
+class Tracer(torch.fx.Tracer):
+    _leaf_module_names: List[str]
+
+    def __init__(self, leaf_module_names: Optional[List[str]] = None) -> None:
+        super().__init__()
+        self._leaf_module_names = leaf_module_names or []
+
+    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+        if (
+            type(m).__name__ in self._leaf_module_names
+            or module_qualified_name in self._leaf_module_names
+        ):
+            return True
+        return super().is_leaf_module(m, module_qualified_name)
 
 
 class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
@@ -288,8 +302,15 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
             # pyre-ignore[6]
             embedding_configs=embedding_configs,
         )
-        graph: torch.fx.Graph = DperTracer().trace(mcc)
-        gm: torch.fx.GraphModule = DperGraphModule(mcc, graph)
+
+        mcc = ManagedCollisionCollection(
+            managed_collision_modules=mc_modules,
+            # pyre-ignore[6]
+            embedding_configs=embedding_configs,
+        )
+        trec_tracer = Tracer(["ComputeJTDictToKJT"])
+        graph: torch.fx.Graph = trec_tracer.trace(mcc)
+        gm: torch.fx.GraphModule = torch.fx.GraphModule(mcc, graph)
         gm.print_readable()
 
         # TODO: since this is unsharded module, also check torch.jit.script

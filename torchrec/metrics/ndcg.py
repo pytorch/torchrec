@@ -250,7 +250,7 @@ class NDCGComputation(RecMetricComputation):
             exponential_gain=self._exponential_gain,
         )
         for state_name, state_value in states.items():
-            state = getattr(self, state_name)
+            state = getattr(self, state_name).to(labels.device)
             state += state_value
             self._aggregate_window_state(state_name, state_value, predictions.shape[-1])
 

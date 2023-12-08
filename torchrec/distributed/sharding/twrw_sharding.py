@@ -536,6 +536,8 @@ class TwRwPooledEmbeddingDist(
         Reorders `batch_size_per_rank_per_feature_stagger` so it's aligned with
         reordered features after AlltoAll.
         """
+        if not batch_size_per_rank_per_feature_stagger:
+            return [[]] * local_size, []
         batch_size_per_rank_per_feature_by_cross_group: List[List[List[int]]] = []
         batch_size_per_feature_sum_by_cross_group: List[List[int]] = []
         for local_rank in range(local_size):

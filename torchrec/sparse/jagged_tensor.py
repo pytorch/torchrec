@@ -1268,7 +1268,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights_dtype: Optional[torch.dtype] = None,
         lengths_dtype: torch.dtype = torch.int32,
     ) -> "KeyedJaggedTensor":
-        weights = None
+        weights = torch.jit.annotate(Optional[torch.Tensor], None)
         if is_weighted is True:
             weights = torch.tensor([], dtype=weights_dtype, device=device)
 
