@@ -44,6 +44,7 @@ class OptimType(Enum):
     ADAGRAD = "ADAGRAD"
     ROWWISE_ADAGRAD = "ROWWISE_ADAGRAD"
     SHAMPOO = "SHAMPOO"
+    SHAMPOO_V2 = "SHAMPOO_V2"
     LION = "LION"
 
 
