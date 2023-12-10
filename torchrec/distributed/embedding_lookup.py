@@ -321,9 +321,6 @@ class GroupedPooledEmbeddingsLookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
         ) -> BaseEmbedding:
-            for table in config.embedding_tables:
-                if table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING:
-                    self._need_prefetch = True
             if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbeddingBag(
                     config=config,
@@ -343,7 +340,6 @@ class GroupedPooledEmbeddingsLookup(
 
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
-        self._need_prefetch = False
         for config in grouped_configs:
             self._emb_modules.append(_create_lookup(config, device))
 
@@ -376,14 +372,20 @@ class GroupedPooledEmbeddingsLookup(
         sparse_features: KeyedJaggedTensor,
         forward_stream: Optional[torch.cuda.Stream] = None,
     ) -> None:
-        if not self._need_prefetch:
-            return
+        def _need_prefetch(config: GroupedEmbeddingConfig) -> bool:
+            for table in config.embedding_tables:
+                if table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING:
+                    return True
+            return False
+
         if len(self._emb_modules) > 0:
             assert sparse_features is not None
             features_by_group = sparse_features.split(
                 self._feature_splits,
             )
             for emb_op, features in zip(self._emb_modules, features_by_group):
+                if not _need_prefetch(emb_op.config):
+                    continue
                 if (
                     isinstance(emb_op.emb_module, SplitTableBatchedEmbeddingBagsCodegen)
                     and not emb_op.emb_module.prefetch_pipeline
