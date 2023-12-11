@@ -5,13 +5,23 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-ignore-all-errors
 
+import sys
 import unittest
 from typing import List, Tuple
 
 import torch
 import torch._dynamo.skipfiles
-from caffe2.test.inductor.test_aot_inductor import AOTInductorModelRunner
+
+try:
+    # pyre-ignore
+    from caffe2.test.inductor.test_aot_inductor import AOTInductorModelRunner
+except (unittest.SkipTest, ImportError):
+    if __name__ == "__main__":
+        sys.exit(0)
+
+
 from fbgemm_gpu import sparse_ops  # noqa: F401, E402
 from torch._export import dynamic_dim
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -108,11 +118,13 @@ class TestPt2(unittest.TestCase):
             assert_close(eager_output, export_gm_output)
 
             if test_aot_inductor:
+                # pyre-ignore
                 so_path: str = AOTInductorModelRunner.compile(
                     EM,
                     inputs,
                 )
                 device = "cuda"
+                # pyre-ignore
                 aot_inductor_module = AOTInductorModelRunner.load(
                     device, so_path, inputs
                 )
@@ -147,6 +159,11 @@ class TestPt2(unittest.TestCase):
             test_aot_inductor=False,
         )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
     def test_sharded_quant_ebc_dynamo_export_aot_inductor(self) -> None:
         sharded_model, input_kjts = _sharded_quant_ebc_model()
         kjt = input_kjts[0]
@@ -181,10 +198,12 @@ class TestPt2(unittest.TestCase):
             # TODO(ivankobzarev): Why dynamo outputs are different than expected, but aot outputs are correct.
             # assert_close(expected_outputs, dynamo_actual_outputs)
 
+            # pyre-ignore
             so_path: str = AOTInductorModelRunner.compile(
                 model,
                 example_inputs,
             )
+            # pyre-ignore
             aot_inductor_module = AOTInductorModelRunner.load(
                 device, so_path, example_inputs
             )
