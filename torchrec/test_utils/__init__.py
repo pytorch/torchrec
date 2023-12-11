@@ -10,9 +10,10 @@ import os
 import random
 import socket
 import time
+import unittest
 from contextlib import closing
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, TypeVar
+from typing import Any, Callable, Dict, Optional, Protocol, TypeVar
 
 import numpy as np
 import torch
@@ -88,8 +89,7 @@ def skip_if_asan(
     @wraps(func)
     def wrapper(*args: TParams.args, **kwargs: TParams.kwargs) -> Optional[TReturn]:
         if is_asan_or_tsan():
-            print("Skipping test run since we are in ASAN mode.")
-            return
+            raise unittest.SkipTest("Skipping test run since we are in ASAN mode.")
         return func(*args, **kwargs)
 
     return wrapper
@@ -97,9 +97,36 @@ def skip_if_asan(
 
 def skip_if_asan_class(cls: TReturn) -> Optional[TReturn]:
     if is_asan_or_tsan():
-        print("Skipping test run since we are in ASAN mode.")
-        return
+        cls.__unittest_skip__ = True
+        cls.__unittest_skip_why__ = "Skipping test run since we are in ASAN mode."
     return cls
+
+
+class TypeFuncDecorator(Protocol):
+    def __call__(
+        self,
+        func: Callable[TParams, TReturn],
+    ) -> Callable[TParams, Optional[TReturn]]:
+        ...
+
+
+def skip_if_lt_x_gpu(
+    x: int,
+) -> TypeFuncDecorator:
+    def decorator(
+        func: Callable[TParams, TReturn]
+    ) -> Callable[TParams, Optional[TReturn]]:
+        @wraps(func)
+        def wrapper(*args: TParams.args, **kwargs: TParams.kwargs) -> Optional[TReturn]:
+            if torch.cuda.is_available() and torch.cuda.device_count() >= x:
+                return func(*args, **kwargs)
+            raise unittest.SkipTest(
+                f"Skipping test run since need at least {x} CUDA devices."
+            )
+
+        return wrapper
+
+    return decorator
 
 
 def init_distributed_single_host(
