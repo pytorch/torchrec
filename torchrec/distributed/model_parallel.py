@@ -8,7 +8,7 @@
 import abc
 import copy
 from collections import OrderedDict
-from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Type
+from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type
 
 import torch
 import torch.distributed as dist
@@ -81,28 +81,22 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         self._find_unused_parameters: bool = find_unused_parameters
         self._allreduce_comm_precision = allreduce_comm_precision
 
-    def wrap(
+    def _ddp_wrap(
         self,
         dmp: "DistributedModelParallel",
         env: ShardingEnv,
         device: torch.device,
+        ddp_ignore_param_names: Set[str],
     ) -> None:
-        if isinstance(dmp._dmp_wrapped_module, DistributedDataParallel) or isinstance(
-            dmp._dmp_wrapped_module, FullyShardedDataParallel
-        ):
-            return
         pg = env.process_group
         if pg is None:
             raise RuntimeError("Can only init DDP for ProcessGroup-based ShardingEnv")
-        sharded_parameter_names = set(
-            DistributedModelParallel._sharded_parameter_names(dmp._dmp_wrapped_module)
-        )
         all_parameter_names = set(dict(dmp.named_parameters()).keys())
-        if len(all_parameter_names - sharded_parameter_names) == 0:
+        if len(all_parameter_names - ddp_ignore_param_names) == 0:
             return
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=dmp._dmp_wrapped_module,
-            params_and_buffers_to_ignore=sharded_parameter_names,
+            params_and_buffers_to_ignore=ddp_ignore_param_names,
         )
         # initialize DDP
         dmp._dmp_wrapped_module = cast(
@@ -126,6 +120,21 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
             dmp._dmp_wrapped_module.register_comm_hook(
                 None, ddp_default_hooks.bf16_compress_hook
             )
+
+    def wrap(
+        self,
+        dmp: "DistributedModelParallel",
+        env: ShardingEnv,
+        device: torch.device,
+    ) -> None:
+        if isinstance(dmp._dmp_wrapped_module, DistributedDataParallel) or isinstance(
+            dmp._dmp_wrapped_module, FullyShardedDataParallel
+        ):
+            return
+        sharded_parameter_names = set(
+            DistributedModelParallel._sharded_parameter_names(dmp._dmp_wrapped_module)
+        )
+        self._ddp_wrap(dmp, env, device, sharded_parameter_names)
 
 
 def get_unwrapped_module(module: nn.Module) -> nn.Module:
