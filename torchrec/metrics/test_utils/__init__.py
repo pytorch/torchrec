@@ -17,6 +17,7 @@ import torch
 import torch.distributed as dist
 import torch.distributed.launcher as pet
 from torchrec.metrics.auc import AUCMetric
+from torchrec.metrics.auprc import AUPRCMetric
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
 
@@ -454,7 +455,7 @@ def metric_test_helper(
     if rank == 0:
         for name in task_names:
             # we don't have lifetime metric for AUC due to OOM.
-            if target_clazz != AUCMetric:
+            if target_clazz != AUCMetric and target_clazz != AUPRCMetric:
                 assert torch.allclose(
                     target_metrics[
                         f"{str(target_clazz._namespace)}-{name}|lifetime_{metric_name}"

@@ -18,6 +18,7 @@ import torch.nn as nn
 from torch.profiler import record_function
 from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
+from torchrec.metrics.auprc import AUPRCMetric
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.mae import MAEMetric
@@ -54,6 +55,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.CTR: CTRMetric,
     RecMetricEnum.CALIBRATION: CalibrationMetric,
     RecMetricEnum.AUC: AUCMetric,
+    RecMetricEnum.AUPRC: AUPRCMetric,
     RecMetricEnum.MSE: MSEMetric,
     RecMetricEnum.MAE: MAEMetric,
     RecMetricEnum.MULTICLASS_RECALL: MulticlassRecallMetric,
