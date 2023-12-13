@@ -161,6 +161,7 @@ class AUCMetricValueTest(unittest.TestCase):
         )
 
         expected_auc = torch.tensor([0], dtype=torch.float)
+
         self.auc.update(**self.batches)
         actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
         torch.allclose(expected_auc, actual_auc)
@@ -176,6 +177,37 @@ class AUCMetricValueTest(unittest.TestCase):
         self.auc.update(**self.batches)
         actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
         torch.allclose(expected_auc, actual_auc)
+
+    def test_calc_multiple_updates(self) -> None:
+        expected_auc = torch.tensor([0.4464], dtype=torch.float)
+        # first batch
+        self.labels["DefaultTask"] = torch.tensor([1, 0, 0])
+        self.predictions["DefaultTask"] = torch.tensor([0.2, 0.6, 0.8])
+        self.weights["DefaultTask"] = torch.tensor([0.13, 0.2, 0.5])
+
+        self.auc.update(**self.batches)
+        # second batch
+        self.labels["DefaultTask"] = torch.tensor([1, 1])
+        self.predictions["DefaultTask"] = torch.tensor([0.4, 0.9])
+        self.weights["DefaultTask"] = torch.tensor([0.8, 0.75])
+
+        self.auc.update(**self.batches)
+        multiple_batch = self.auc.compute()["auc-DefaultTask|window_auc"]
+        torch.allclose(expected_auc, multiple_batch)
+
+    def test_stress_auc(self) -> None:
+        # window size is only 100, so we should expect expected AUC to be same
+        expected_auc = torch.tensor([1.0], dtype=torch.float)
+        # first batch
+        self.labels["DefaultTask"] = torch.tensor([[1, 0, 0, 1, 1]])
+        self.predictions["DefaultTask"] = torch.tensor([[1, 0, 0, 1, 1]])
+        self.weights["DefaultTask"] = torch.tensor([[1] * 5])
+
+        for _ in range(1000):
+            self.auc.update(**self.batches)
+
+        result = self.auc.compute()["auc-DefaultTask|window_auc"]
+        torch.allclose(expected_auc, result)
 
 
 def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
