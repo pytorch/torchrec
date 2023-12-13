@@ -23,9 +23,9 @@ from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, Keyed
 def reorder_inverse_indices(
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
     feature_names: List[str],
-) -> Optional[torch.Tensor]:
+) -> torch.Tensor:
     if inverse_indices is None:
-        return None
+        return torch.empty(0)
     index_per_name = {name: i for i, name in enumerate(inverse_indices[0])}
     index = torch.tensor(
         [index_per_name[name.split("@")[0]] for name in feature_names],
@@ -37,9 +37,9 @@ def reorder_inverse_indices(
 @torch.fx.wrap
 def process_pooled_embeddings(
     pooled_embeddings: List[torch.Tensor],
-    inverse_indices: Optional[torch.Tensor],
+    inverse_indices: torch.Tensor,
 ) -> torch.Tensor:
-    if inverse_indices is not None:
+    if inverse_indices.numel() > 0:
         pooled_embeddings = torch.ops.fbgemm.group_index_select_dim0(
             pooled_embeddings, list(torch.unbind(inverse_indices))
         )
