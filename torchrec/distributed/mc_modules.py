@@ -397,9 +397,7 @@ class ShardedManagedCollisionCollection(
         self,
         ctx: ManagedCollisionCollectionContext,
         features: KeyedJaggedTensor,
-        force_insert: bool = False,
     ) -> Awaitable[Awaitable[KJTList]]:
-        self._force_insert = force_insert
         if self._has_uninitialized_input_dists:
             self._create_input_dists(input_feature_names=features.keys())
             self._has_uninitialized_input_dists = False
@@ -472,7 +470,6 @@ class ShardedManagedCollisionCollection(
                 features_dict=features_dict,
                 table_to_features=self._table_to_features,
                 managed_collisions=self._managed_collision_modules,
-                force_insert=self._force_insert,
             )
             features_dict = apply_mc_method_to_jt_dict(
                 "remap",

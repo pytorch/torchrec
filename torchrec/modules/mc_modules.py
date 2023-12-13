@@ -9,7 +9,7 @@
 
 import abc
 from collections import defaultdict
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import torch
 
@@ -28,7 +28,6 @@ def apply_mc_method_to_jt_dict(
     features_dict: Dict[str, JaggedTensor],
     table_to_features: Dict[str, List[str]],
     managed_collisions: nn.ModuleDict,
-    force_insert: bool = False,
 ) -> Dict[str, JaggedTensor]:
     """
     Applies an MC method to a dictionary of JaggedTensors, returning the updated dictionary with same ordering
@@ -40,11 +39,38 @@ def apply_mc_method_to_jt_dict(
             mc_input[feature] = features_dict[feature]
         mc_module = managed_collisions[table]
         attr = getattr(mc_module, method)
-        if force_insert:
-            mc_output.update(attr(mc_input, force_insert))
-        else:
-            mc_output.update(attr(mc_input))
+        mc_output.update(attr(mc_input))
     return mc_output
+
+
+@torch.no_grad()
+def dynamic_threshold_filter(
+    id_counts: torch.Tensor,
+    threshold_skew_multiplier: float = 10.0,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+
+    num_ids = id_counts.numel()
+    total_count = id_counts.sum()
+
+    BASE_THRESHOLD = 1 / num_ids
+    threshold_mass = BASE_THRESHOLD * threshold_skew_multiplier
+
+    threshold = threshold_mass * total_count
+    threshold_mask = id_counts > threshold
+
+    return threshold_mask, threshold
+
+
+@torch.no_grad()
+def average_threshold_filter(
+    id_counts: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    if id_counts.dtype != torch.float:
+        id_counts = id_counts.float()
+    threshold = id_counts.mean()
+    threshold_mask = id_counts > threshold
+
+    return threshold_mask, threshold
 
 
 class ManagedCollisionModule(nn.Module):
@@ -175,7 +201,6 @@ class ManagedCollisionCollection(nn.Module):
     def forward(
         self,
         features: KeyedJaggedTensor,
-        force_insert: bool = False,
     ) -> KeyedJaggedTensor:
         features_dict = apply_mc_method_to_jt_dict(
             "preprocess",
@@ -188,7 +213,6 @@ class ManagedCollisionCollection(nn.Module):
             features_dict=features_dict,
             table_to_features=self._table_to_features,
             managed_collisions=self._managed_collision_modules,
-            force_insert=force_insert,
         )
         features_dict = apply_mc_method_to_jt_dict(
             "remap",
@@ -215,6 +239,23 @@ class MCHEvictionPolicyMetadataInfo(NamedTuple):
 
 
 class MCHEvictionPolicy(abc.ABC):
+    def __init__(
+        self,
+        metadata_info: List[MCHEvictionPolicyMetadataInfo],
+        threshold_filtering_func: Optional[
+            Callable[[torch.Tensor], Tuple[torch.Tensor, Union[float, torch.Tensor]]]
+        ] = None,  # experimental
+    ) -> None:
+        """
+        threshold_filtering_func (Optional[Callable]): function used to filter incoming ids before update/eviction. experimental feature.
+            [input: Tensor] the function takes as input a 1-d tensor of unique id counts.
+            [output1: Tensor] the function returns a boolean_mask or index array of corresponding elements in the input tensor that pass the filter.
+            [output2: float, Tensor] the function returns the threshold that will be used to filter ids before update/eviction. all values <= this value will be filtered out.
+
+        """
+        self._metadata_info = metadata_info
+        self._threshold_filtering_func = threshold_filtering_func
+
     @property
     @abc.abstractmethod
     def metadata_info(self) -> List[MCHEvictionPolicyMetadataInfo]:
@@ -246,6 +287,7 @@ class MCHEvictionPolicy(abc.ABC):
         unique_ids_counts: torch.Tensor,
         unique_inverse_mapping: torch.Tensor,
         additional_ids: Optional[torch.Tensor] = None,
+        threshold_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         """
         Args:
@@ -307,14 +349,22 @@ class MCHEvictionPolicy(abc.ABC):
 
 
 class LFU_EvictionPolicy(MCHEvictionPolicy):
-    def __init__(self) -> None:
-        self._metadata_info = [
-            MCHEvictionPolicyMetadataInfo(
-                metadata_name="counts",
-                is_mch_metadata=True,
-                is_history_metadata=False,
-            ),
-        ]
+    def __init__(
+        self,
+        threshold_filtering_func: Optional[
+            Callable[[torch.Tensor], Tuple[torch.Tensor, Union[float, torch.Tensor]]]
+        ] = None,  # experimental
+    ) -> None:
+        super().__init__(
+            metadata_info=[
+                MCHEvictionPolicyMetadataInfo(
+                    metadata_name="counts",
+                    is_mch_metadata=True,
+                    is_history_metadata=False,
+                ),
+            ],
+            threshold_filtering_func=threshold_filtering_func,
+        )
 
     @property
     def metadata_info(self) -> List[MCHEvictionPolicyMetadataInfo]:
@@ -336,6 +386,7 @@ class LFU_EvictionPolicy(MCHEvictionPolicy):
         unique_ids_counts: torch.Tensor,
         unique_inverse_mapping: torch.Tensor,
         additional_ids: Optional[torch.Tensor] = None,
+        threshold_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         # no-op; no history buffers
         return {}
@@ -390,19 +441,28 @@ class LFU_EvictionPolicy(MCHEvictionPolicy):
 
 
 class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
-    def __init__(self, decay_exponent: int = 2) -> None:
-        self._metadata_info = [
-            MCHEvictionPolicyMetadataInfo(
-                metadata_name="counts",
-                is_mch_metadata=True,
-                is_history_metadata=False,
-            ),
-            MCHEvictionPolicyMetadataInfo(
-                metadata_name="last_access_iter",
-                is_mch_metadata=True,
-                is_history_metadata=True,
-            ),
-        ]
+    def __init__(
+        self,
+        decay_exponent: float = 1.0,
+        threshold_filtering_func: Optional[
+            Callable[[torch.Tensor], Tuple[torch.Tensor, Union[float, torch.Tensor]]]
+        ] = None,  # experimental
+    ) -> None:
+        super().__init__(
+            metadata_info=[
+                MCHEvictionPolicyMetadataInfo(
+                    metadata_name="counts",
+                    is_mch_metadata=True,
+                    is_history_metadata=False,
+                ),
+                MCHEvictionPolicyMetadataInfo(
+                    metadata_name="last_access_iter",
+                    is_mch_metadata=True,
+                    is_history_metadata=True,
+                ),
+            ],
+            threshold_filtering_func=threshold_filtering_func,
+        )
         self._decay_exponent = decay_exponent
 
     @property
@@ -425,6 +485,7 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
         unique_ids_counts: torch.Tensor,
         unique_inverse_mapping: torch.Tensor,
         additional_ids: Optional[torch.Tensor] = None,
+        threshold_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         coalesced_history_metadata: Dict[str, torch.Tensor] = {}
         history_last_access_iter = history_metadata["last_access_iter"]
@@ -444,6 +505,10 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
             reduce="amax",
             include_self=False,
         )
+        if threshold_mask is not None:
+            coalesced_history_metadata["last_access_iter"] = coalesced_history_metadata[
+                "last_access_iter"
+            ][threshold_mask]
         return coalesced_history_metadata
 
     def update_metadata_and_generate_eviction_scores(
@@ -547,7 +612,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         eviction_interval (int): interval of eviction policy is triggered
         input_hash_size (int): input feature id range, will be passed to input_hash_func as second arg
         input_hash_func (Optional[Callable]): function used to generate hashes for input features.  This function is typically used to drive uniform distribution over range same or greater than input data
-        input_history_buffer_size (Optional[int]): size of history buffer where we store input ids for eviction policy calculations
         mch_size (Optional[int]): size of residual output (ie. legacy MCH), experimental feature.  Ids are internally shifted by output_size_offset + zch_output_range
         mch_hash_func (Optional[Callable]): function used to generate hashes for residual feature. will hash down to mch_size.
         output_global_offset (int): offset of the output id for output range, typically only used in sharding applications.
@@ -561,16 +625,15 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         eviction_interval: int,
         input_hash_size: int = 2**63,
         input_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
-        input_history_buffer_size: Optional[int] = None,
         mch_size: Optional[int] = None,  # experimental
         mch_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
+        name: Optional[str] = None,
         output_global_offset: int = 0,  # typically not provided by user
     ) -> None:
         super().__init__(device)
 
-        if input_history_buffer_size is None:
-            input_history_buffer_size = zch_size * 10
-        self._input_history_buffer_size: int = input_history_buffer_size
+        self._name = name
+        self._input_history_buffer_size: int = -1
         self._input_hash_size = input_hash_size
         self._zch_size: int = zch_size
         assert self._zch_size > 0, "zch_size must be > 0"
@@ -585,9 +648,13 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self._input_hash_func = input_hash_func
 
         self._eviction_interval = eviction_interval
+        assert self._eviction_interval > 0, "eviction_interval must be > 1"
         self._eviction_policy = eviction_policy
 
-        self._current_iter: int = 0
+        self._current_iter: int = -1
+        self._current_iter_tensor = torch.nn.Parameter(
+            torch.zeros(1, dtype=torch.int32, device=self.device), requires_grad=False
+        )
         self._init_buffers()
 
         ## ------ history info ------
@@ -597,6 +664,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self._current_history_buffer_offset: int = 0
 
         self._evicted: bool = False
+        self._last_eviction_iter: int = -1
 
     def _init_buffers(self) -> None:
         self.register_buffer(
@@ -611,13 +679,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self.register_buffer(
             "_mch_remapped_ids_mapping",
             torch.arange(self._zch_size, dtype=torch.int64, device=self.device),
-        )
-
-        # TODO: explicitly create / destory this buffer when going between training / eval
-        self._history_accumulator: torch.Tensor = torch.empty(
-            self._input_history_buffer_size if self.training else 0,
-            dtype=torch.int64,
-            device=self.device,
         )
 
         self._evicted_emb_indices: torch.Tensor = torch.empty((1,), device=self.device)
@@ -638,6 +699,22 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                     ),
                 )
                 self._mch_metadata[metadata_name] = getattr(self, buffer_name)
+
+    def _init_history_buffers(self, features: Dict[str, JaggedTensor]) -> None:
+        input_batch_value_size_cumsum = 0
+        for _, feature in features.items():
+            input_batch_value_size_cumsum += feature.values().numel()
+        self._input_history_buffer_size = int(
+            input_batch_value_size_cumsum * self._eviction_interval * 1.25
+        )
+        self._history_accumulator: torch.Tensor = torch.empty(
+            self._input_history_buffer_size,
+            dtype=torch.int64,
+            device=self.device,
+        )
+        eviction_metadata_info = self._eviction_policy.metadata_info
+        for metadata in eviction_metadata_info:
+            metadata_name, is_mch_metadata, is_history_metadata = metadata
             # history_metadata
             if is_history_metadata:
                 buffer_name = "_history_" + metadata_name
@@ -757,6 +834,13 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             return_inverse=True,
             return_counts=True,
         )
+        if self._eviction_policy._threshold_filtering_func is not None:
+            threshold_mask, threshold = self._eviction_policy._threshold_filtering_func(
+                uniq_ids_counts
+            )
+        else:
+            threshold_mask = None
+
         coalesced_eviction_history_metadata = (
             self._eviction_policy.coalesce_history_metadata(
                 self._current_iter,
@@ -768,8 +852,12 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                 },
                 uniq_ids_counts,
                 uniq_inverse_mapping,
+                threshold_mask=threshold_mask,
             )
         )
+        if threshold_mask is not None:
+            uniq_ids = uniq_ids[threshold_mask]
+            uniq_ids_counts = uniq_ids_counts[threshold_mask]
         self._update_and_evict(
             uniq_ids, uniq_ids_counts, coalesced_eviction_history_metadata
         )
@@ -780,18 +868,22 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
     def profile(
         self,
         features: Dict[str, JaggedTensor],
-        force_insert: bool = False,
     ) -> Dict[str, JaggedTensor]:
-        self._current_iter += 1
         if not self.training:
             return features
 
+        if self._current_iter == -1:
+            self._current_iter = int(self._current_iter_tensor.item())
+            self._last_eviction_iter = self._current_iter
+        self._current_iter += 1
+        self._current_iter_tensor.data += 1
+
+        # init history buffers if needed
+        if self._input_history_buffer_size == -1:
+            self._init_history_buffers(features)
+
         for _, feature in features.items():
             values = feature.values()
-            # TODO: Find a better way to force_insert, doesnt really work...
-            if force_insert:
-                values = values.repeat(5)
-
             free_elements = (
                 self._input_history_buffer_size - self._current_history_buffer_offset
             )
@@ -814,8 +906,9 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             self._current_history_buffer_offset += values.shape[0]
 
         # coalesce history / evict
-        if self._current_iter % self._eviction_interval == 0 or force_insert:
+        if self._current_iter - self._last_eviction_iter == self._eviction_interval:
             self._coalesce_history()
+            self._last_eviction_iter = self._current_iter
 
         return features
 
@@ -861,20 +954,15 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
     def forward(
         self,
         features: Dict[str, JaggedTensor],
-        force_insert: bool = False,
     ) -> Dict[str, JaggedTensor]:
         """
         Args:
         feature (JaggedTensor]): feature representation
-        force_insert (bool): force insert this step
         Returns:
             Dict[str, JaggedTensor]: modified JT
         """
 
-        features = self.profile(
-            features,
-            force_insert=force_insert,
-        )
+        features = self.profile(features)
         return self.remap(features)
 
     def output_size(self) -> int:
@@ -901,14 +989,11 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
         new_zch_size = int(self._zch_size * (new_output_size / self.output_size()))
         new_mch_size = new_output_size - new_zch_size
-        new_input_history_buffer_size = int(
-            self._input_history_buffer_size * (new_output_size / self.output_size())
-        )
 
         return type(self)(
+            name=self._name,
             zch_size=new_zch_size,
             device=device or self.device,
-            input_history_buffer_size=new_input_history_buffer_size,
             eviction_policy=self._eviction_policy,
             eviction_interval=self._eviction_interval,
             input_hash_size=self._input_hash_size,
