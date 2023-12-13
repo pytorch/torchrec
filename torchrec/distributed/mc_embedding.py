@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #
@@ -7,15 +8,17 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Type
+from typing import Dict, Optional, Type, Union
 
 import torch
-from torchrec.distributed.embedding_types import KJTList
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionContext,
-    EmbeddingBagCollectionSharder,
-    ShardedEmbeddingBagCollection,
+
+from torchrec.distributed.embedding import (
+    EmbeddingCollectionContext,
+    EmbeddingCollectionSharder,
+    ShardedEmbeddingCollection,
 )
+
+from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.mc_embedding_modules import (
     BaseManagedCollisionEmbeddingCollectionSharder,
     BaseShardedManagedCollisionEmbeddingCollection,
@@ -26,11 +29,11 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardingEnv,
 )
-from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
 
 
 @dataclass
-class ManagedCollisionEmbeddingBagCollectionContext(EmbeddingBagCollectionContext):
+class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
     evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = None
     remapped_kjt: Optional[KJTList] = None
 
@@ -46,16 +49,16 @@ class ManagedCollisionEmbeddingBagCollectionContext(EmbeddingBagCollectionContex
             self.remapped_kjt.record_stream(stream)
 
 
-class ShardedManagedCollisionEmbeddingBagCollection(
+class ShardedManagedCollisionEmbeddingCollection(
     BaseShardedManagedCollisionEmbeddingCollection[
-        ManagedCollisionEmbeddingBagCollectionContext
+        ManagedCollisionEmbeddingCollectionContext
     ]
 ):
     def __init__(
         self,
-        module: ManagedCollisionEmbeddingBagCollection,
+        module: ManagedCollisionEmbeddingCollection,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-        ebc_sharder: EmbeddingBagCollectionSharder,
+        ec_sharder: EmbeddingCollectionSharder,
         mc_sharder: ManagedCollisionCollectionSharder,
         # TODO - maybe we need this to manage unsharded/sharded consistency/state consistency
         env: ShardingEnv,
@@ -64,65 +67,59 @@ class ShardedManagedCollisionEmbeddingBagCollection(
         super().__init__(
             module,
             table_name_to_parameter_sharding,
-            ebc_sharder,
+            ec_sharder,
             mc_sharder,
             env,
             device,
         )
 
-        # For backwards compat, some references still to self._embedding_bag_collection
+        # For consistency with embeddingbag
         # pyre-ignore [8]
-        self._embedding_bag_collection: ShardedEmbeddingBagCollection = (
-            self._embedding_module
-        )
+        self._embedding_collection: ShardedEmbeddingCollection = self._embedding_module
 
     def create_context(
         self,
-    ) -> ManagedCollisionEmbeddingBagCollectionContext:
-        return ManagedCollisionEmbeddingBagCollectionContext(sharding_contexts=[])
+    ) -> ManagedCollisionEmbeddingCollectionContext:
+        return ManagedCollisionEmbeddingCollectionContext(sharding_contexts=[])
 
 
-class ManagedCollisionEmbeddingBagCollectionSharder(
-    BaseManagedCollisionEmbeddingCollectionSharder[
-        ManagedCollisionEmbeddingBagCollection
-    ]
+class ManagedCollisionEmbeddingCollectionSharder(
+    BaseManagedCollisionEmbeddingCollectionSharder[ManagedCollisionEmbeddingCollection]
 ):
     def __init__(
         self,
-        ebc_sharder: Optional[EmbeddingBagCollectionSharder] = None,
+        ec_sharder: Optional[EmbeddingCollectionSharder] = None,
         mc_sharder: Optional[ManagedCollisionCollectionSharder] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(
-            ebc_sharder
-            or EmbeddingBagCollectionSharder(
-                qcomm_codecs_registry=qcomm_codecs_registry
-            ),
+            ec_sharder
+            or EmbeddingCollectionSharder(qcomm_codecs_registry=qcomm_codecs_registry),
             mc_sharder or ManagedCollisionCollectionSharder(),
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
 
     def shard(
         self,
-        module: ManagedCollisionEmbeddingBagCollection,
+        module: ManagedCollisionEmbeddingCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
-    ) -> ShardedManagedCollisionEmbeddingBagCollection:
+    ) -> ShardedManagedCollisionEmbeddingCollection:
 
         if device is None:
             device = torch.device("cuda")
 
-        return ShardedManagedCollisionEmbeddingBagCollection(
+        return ShardedManagedCollisionEmbeddingCollection(
             module,
             params,
             # pyre-ignore [6]
-            ebc_sharder=self._e_sharder,
+            ec_sharder=self._e_sharder,
             mc_sharder=self._mc_sharder,
             env=env,
             device=device,
         )
 
     @property
-    def module_type(self) -> Type[ManagedCollisionEmbeddingBagCollection]:
-        return ManagedCollisionEmbeddingBagCollection
+    def module_type(self) -> Type[ManagedCollisionEmbeddingCollection]:
+        return ManagedCollisionEmbeddingCollection
