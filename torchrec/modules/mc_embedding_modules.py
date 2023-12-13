@@ -6,24 +6,114 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
+    EmbeddingCollection,
+)
 from torchrec.modules.mc_modules import ManagedCollisionCollection
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
 def evict(
-    evictions: Dict[str, Optional[torch.Tensor]], ebc: EmbeddingBagCollection
+    evictions: Dict[str, Optional[torch.Tensor]],
+    ebc: Union[EmbeddingBagCollection, EmbeddingCollection],
 ) -> None:
     # TODO: write function
     return
 
 
-class ManagedCollisionEmbeddingBagCollection(nn.Module):
+class BaseManagedCollisionEmbeddingCollection(nn.Module):
+    """
+    BaseManagedCollisionEmbeddingCollection represents a EC/EBC module and a set of managed collision modules.
+    The inputs into the MC-EC/EBC will first be modified by the managed collision module before being passed into the embedding collection.
+
+    Args:
+        embedding_module: EmbeddingCollection to lookup embeddings
+        managed_collision_modules: Dict of managed collision modules
+        return_remapped_features (bool): whether to return remapped input features
+            in addition to embeddings
+
+    """
+
+    def __init__(
+        self,
+        embedding_module: Union[EmbeddingBagCollection, EmbeddingCollection],
+        managed_collision_collection: ManagedCollisionCollection,
+        return_remapped_features: bool = False,
+    ) -> None:
+        super().__init__()
+        self._managed_collision_collection = managed_collision_collection
+        self._return_remapped_features = return_remapped_features
+        self._embedding_module: Union[
+            EmbeddingBagCollection, EmbeddingCollection
+        ] = embedding_module
+
+        if isinstance(embedding_module, EmbeddingBagCollection):
+            assert (
+                self._embedding_module.embedding_bag_configs()
+                == self._managed_collision_collection.embedding_configs()
+            ), "Embedding Bag Collection and Managed Collision Collection must contain the Embedding Configs"
+
+        else:
+            assert (
+                self._embedding_module.embedding_configs()
+                == self._managed_collision_collection.embedding_configs()
+            ), "Embedding Collection and Managed Collision Collection must contain the Embedding Configs"
+
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+        force_insert: bool = False,
+    ) -> Tuple[
+        Union[KeyedTensor, Dict[str, JaggedTensor]], Optional[KeyedJaggedTensor]
+    ]:
+
+        features = self._managed_collision_collection(features, force_insert)
+
+        embedding_res = self._embedding_module(features)
+
+        evict(self._managed_collision_collection.evict(), self._embedding_module)
+
+        if not self._return_remapped_features:
+            return embedding_res, None
+        return embedding_res, features
+
+
+class ManagedCollisionEmbeddingCollection(BaseManagedCollisionEmbeddingCollection):
+    """
+    ManagedCollisionEmbeddingCollection represents a EmbeddingCollection module and a set of managed collision modules.
+    The inputs into the MC-EC will first be modified by the managed collision module before being passed into the embedding collection.
+
+    For details of input and output types, see EmbeddingCollection
+
+    Args:
+        embedding_module: EmbeddingCollection to lookup embeddings
+        managed_collision_modules: Dict of managed collision modules
+        return_remapped_features (bool): whether to return remapped input features
+            in addition to embeddings
+
+    """
+
+    def __init__(
+        self,
+        embedding_collection: EmbeddingCollection,
+        managed_collision_collection: ManagedCollisionCollection,
+        return_remapped_features: bool = False,
+    ) -> None:
+        super().__init__(
+            embedding_collection, managed_collision_collection, return_remapped_features
+        )
+
+        # For consistency with embedding bag collection
+        self._embedding_collection: EmbeddingCollection = embedding_collection
+
+
+class ManagedCollisionEmbeddingBagCollection(BaseManagedCollisionEmbeddingCollection):
     """
     ManagedCollisionEmbeddingBagCollection represents a EmbeddingBagCollection module and a set of managed collision modules.
     The inputs into the MC-EBC will first be modified by the managed collision module before being passed into the embedding bag collection.
@@ -31,7 +121,7 @@ class ManagedCollisionEmbeddingBagCollection(nn.Module):
     For details of input and output types, see EmbeddingBagCollection
 
     Args:
-        embedding_bag_collection: EmbeddingBagCollection to lookup embeddings
+        embedding_module: EmbeddingBagCollection to lookup embeddings
         managed_collision_modules: Dict of managed collision modules
         return_remapped_features (bool): whether to return remapped input features
             in addition to embeddings
@@ -44,30 +134,13 @@ class ManagedCollisionEmbeddingBagCollection(nn.Module):
         managed_collision_collection: ManagedCollisionCollection,
         return_remapped_features: bool = False,
     ) -> None:
-        super().__init__()
-        self._embedding_bag_collection = embedding_bag_collection
-        self._managed_collision_collection = managed_collision_collection
-        self._return_remapped_features = return_remapped_features
-
-        assert (
-            self._embedding_bag_collection.embedding_bag_configs()
-            == self._managed_collision_collection.embedding_configs()
-        ), "Embedding Collection and Managed Collision Collection must contain the Embedding Configs"
-
-    def forward(
-        self,
-        features: KeyedJaggedTensor,
-        force_insert: bool = False,
-    ) -> Tuple[KeyedTensor, Optional[KeyedJaggedTensor]]:
-
-        features = self._managed_collision_collection(features, force_insert)
-
-        pooled_embeddings = self._embedding_bag_collection(features)
-
-        evict(
-            self._managed_collision_collection.evict(), self._embedding_bag_collection
+        super().__init__(
+            embedding_bag_collection,
+            managed_collision_collection,
+            return_remapped_features,
         )
 
-        if not self._return_remapped_features:
-            return pooled_embeddings, None
-        return pooled_embeddings, features
+        # For backwards compat, as references existed in tests
+        self._embedding_bag_collection: EmbeddingBagCollection = (
+            embedding_bag_collection
+        )
