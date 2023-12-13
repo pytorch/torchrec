@@ -46,6 +46,7 @@ class OptimType(Enum):
     SHAMPOO = "SHAMPOO"
     SHAMPOO_V2 = "SHAMPOO_V2"
     LION = "LION"
+    ADAMW = "ADAMW"
 
 
 @unique

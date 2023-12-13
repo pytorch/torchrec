@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import unittest
 from typing import Any, Dict, Optional, Tuple, Type
 
@@ -98,6 +99,9 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
             or not variable_batch_size
         )
+        # Make sure detail debug will work with non-even collective
+        os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
