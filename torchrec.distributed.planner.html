@@ -760,6 +760,59 @@ sharding options.</p>
 <section id="module-torchrec.distributed.planner.shard_estimators">
 <span id="torchrec-distributed-planner-shard-estimators"></span><h2>torchrec.distributed.planner.shard_estimators<a class="headerlink" href="#module-torchrec.distributed.planner.shard_estimators" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.shard_estimators.</span></span><span class="sig-name descname"><span class="pre">EmbeddingOffloadStats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cacheability</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expected_lookups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mrc_hist_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheStatistics" title="torchrec.distributed.types.CacheStatistics"><code class="xref py py-class docutils literal notranslate"><span class="pre">CacheStatistics</span></code></a></p>
+<p>Computes cache statistics for uvm_fused_cache tables.</p>
+<p>Args:</p>
+<dl class="simple">
+<dt>cachebility (float):</dt><dd><p>The area-under-the-curve of miss-ratio curve.</p>
+</dd>
+<dt>expected_lookups (float):</dt><dd><p>The expected number of unique embedding ids per global batch.</p>
+</dd>
+<dt>mrc_hist_counts (torch.Tensor):</dt><dd><p>A 1d tensor (size n) holding a histogram of LRU miss ratio curve. Each bin
+represents 1/nth of possible LRU cache sizes (from load_factor 0 to load_factor
+1.0). The bin contains the number of expected LRU operations that could be
+handled without a cache miss if the LRU load_factor was at least that size.</p>
+</dd>
+<dt>height (int):</dt><dd><p>The height (num_embeddings) of the embedding table.</p>
+</dd>
+</dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.cacheability">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">cacheability</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.cacheability" title="Permalink to this definition">¶</a></dt>
+<dd><p>Summarized measure of the difficulty to cache a dataset that is independent of
+cache size. A score of 0 means the dataset is very cacheable (e.g. high locality
+between accesses), a score of 1 is very difficult to cache.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.estimate_cache_miss_rate">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">estimate_cache_miss_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cache_sizes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bins</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.estimate_cache_miss_rate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate estimated cache miss ratio for the proposed cache_sizes, given the MRC
+histogram.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.expected_lookups">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">expected_lookups</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.expected_lookups" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of expected cache lookups per training step.</p>
+<p>This is the expected number of distinct values in a global training batch.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.expected_miss_rate">
+<span class="sig-name descname"><span class="pre">expected_miss_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">clf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingOffloadStats.expected_miss_rate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Expected cache lookup miss rate for a given cache size.</p>
+<p>When clf (cache load factor) is 0, returns 1.0 (100% miss). When clf is 1.0,
+returns 0 (100% hit). For values of clf between these extremes, returns the
+estimated miss rate of the cache, e.g. based on knowledge of the statistical
+properties of the training data set.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.shard_estimators.</span></span><span class="sig-name descname"><span class="pre">EmbeddingPerfEstimator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topology</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints" title="torchrec.distributed.planner.types.ParameterConstraints"><span class="pre">ParameterConstraints</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_inference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.planner.types.ShardEstimator" title="torchrec.distributed.planner.types.ShardEstimator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShardEstimator</span></code></a></p>
