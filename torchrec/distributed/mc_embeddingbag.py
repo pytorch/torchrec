@@ -121,14 +121,12 @@ class ShardedManagedCollisionEmbeddingBagCollection(
         self,
         ctx: ManagedCollisionEmbeddingBagCollectionContext,
         features: KeyedJaggedTensor,
-        force_insert: bool = False,
     ) -> Awaitable[Awaitable[KJTList]]:
         # TODO: resolve incompatiblity with different contexts
         return self._managed_collision_collection.input_dist(
             # pyre-fixme [6]
             ctx,
             features,
-            force_insert,
         )
 
     def _evict(self, evictions_per_table: Dict[str, Optional[torch.Tensor]]) -> None:
@@ -178,11 +176,11 @@ class ShardedManagedCollisionEmbeddingBagCollection(
                 ctx,
                 dist_input,
             )
-            evictions_per_table = self._managed_collision_collection.evict()
-
-            self._evict(evictions_per_table)
             ctx.remapped_kjt = remapped_kjt
-            ctx.evictions_per_table = evictions_per_table
+            if self.training:
+                evictions_per_table = self._managed_collision_collection.evict()
+                self._evict(evictions_per_table)
+                ctx.evictions_per_table = evictions_per_table
 
             return self._embedding_bag_collection.compute(ctx, remapped_kjt)
 

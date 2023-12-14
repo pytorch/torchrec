@@ -57,10 +57,9 @@ class ManagedCollisionEmbeddingBagCollection(nn.Module):
     def forward(
         self,
         features: KeyedJaggedTensor,
-        force_insert: bool = False,
     ) -> Tuple[KeyedTensor, Optional[KeyedJaggedTensor]]:
 
-        features = self._managed_collision_collection(features, force_insert)
+        features = self._managed_collision_collection(features)
 
         pooled_embeddings = self._embedding_bag_collection(features)
 

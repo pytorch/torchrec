@@ -34,7 +34,12 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import prod, sharder_name
-from torchrec.distributed.types import CommOp, ModuleSharder, ShardingType
+from torchrec.distributed.types import (
+    CacheStatistics,
+    CommOp,
+    ModuleSharder,
+    ShardingType,
+)
 
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 
@@ -1191,3 +1196,85 @@ def _get_optimizer_multipler(
         return 1 / shape[-1]
     else:
         return 1
+
+
+class EmbeddingOffloadStats(CacheStatistics):
+    """Computes cache statistics for uvm_fused_cache tables.
+
+    Args:
+
+    cachebility (float):
+        The area-under-the-curve of miss-ratio curve.
+    expected_lookups (float):
+        The expected number of unique embedding ids per global batch.
+    mrc_hist_counts (torch.Tensor):
+        A 1d tensor (size n) holding a histogram of LRU miss ratio curve. Each bin
+        represents 1/nth of possible LRU cache sizes (from load_factor 0 to load_factor
+        1.0). The bin contains the number of expected LRU operations that could be
+        handled without a cache miss if the LRU load_factor was at least that size.
+    height (int):
+        The height (num_embeddings) of the embedding table.
+    """
+
+    def __init__(
+        self,
+        cacheability: float,
+        expected_lookups: int,
+        mrc_hist_counts: torch.Tensor,
+        height: int,
+    ) -> None:
+        self._cacheability = cacheability
+        self._expected_lookups = expected_lookups
+        self.height = height
+
+        if mrc_hist_counts.dim() != 1:
+            raise ValueError(f"expected 1d tensor, got {mrc_hist_counts.dim()}d")
+        if mrc_hist_counts.size()[0] == 0:
+            raise ValueError("expected non-empty tensor")
+
+        self.hist: torch.Tensor = mrc_hist_counts
+        self.bins: torch.Tensor = torch.linspace(0, height, len(mrc_hist_counts) + 1)
+
+    @property
+    def expected_lookups(self) -> int:
+        return self._expected_lookups
+
+    def expected_miss_rate(self, clf: float) -> float:
+        cache_size = torch.tensor(clf * self.height)
+        miss_rate = EmbeddingOffloadStats.estimate_cache_miss_rate(
+            cache_sizes=cache_size, hist=self.hist, bins=self.bins
+        )
+        return miss_rate.item()
+
+    @property
+    def cacheability(self) -> float:
+        return self._cacheability
+
+    @staticmethod
+    def estimate_cache_miss_rate(
+        cache_sizes: torch.Tensor, hist: torch.Tensor, bins: torch.Tensor
+    ) -> torch.Tensor:
+        """Calculate estimated cache miss ratio for the proposed cache_sizes, given the MRC
+        histogram.
+        """
+        ys = hist.cumsum(dim=0)
+        if ys[-1] == 0:
+            # feature has no usage data -> no cache misses
+            return torch.zeros_like(cache_sizes, dtype=torch.float32)
+        ys = ys / ys[-1]  # rescale [0,1]
+        ys = 1 - ys  # make miss-ratio, not hit-ratio
+
+        # torch.bucketize has slightly different semantics to np.digitize,
+        # and np.digitize has a complex interface, read the docs carefully!
+        # we're trying to reverse the ops of np.histogram, indices are one larger than
+        # the insert positions, since with right=True, index returned such that x <
+        # bins[index], so x 'lives' in hist[index-1]
+        # A cache size of k will get hits for all stack distances of upto k-1 inclusive.
+        larger_bin_indices = torch.bucketize(cache_sizes - 1, bins, right=True)
+        # Augment ys to deal with torch.bucketize boundary conditions:
+        #   values outside of bins range map to 0, or len(bins).
+        # So we extend ys to populate sentinel values for these cases.  With the twist that
+        # the left-hand sentinel we put on the right side of the array, as larger_bin_indices - 1
+        # maps 0 -> -1, which pytorch maps to most right hand value.
+        ys = torch.cat((ys, torch.tensor([0.0, 1.0])))
+        return ys[larger_bin_indices - 1]
