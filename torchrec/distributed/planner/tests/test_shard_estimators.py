@@ -22,6 +22,7 @@ from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
     _calculate_storage_specific_sizes,
+    EmbeddingOffloadStats,
     EmbeddingPerfEstimator,
 )
 from torchrec.distributed.planner.types import Perf, Topology
@@ -447,3 +448,85 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
             )
 
             self.assertEqual(estimates, expected_storage)
+
+
+class TestEmbeddingOffloadStats(unittest.TestCase):
+    def test_basic(self) -> None:
+        stats = EmbeddingOffloadStats(
+            cacheability=0.42,
+            expected_lookups=31,
+            mrc_hist_counts=torch.tensor([99, 98, 97]),
+            height=92,
+        )
+        self.assertEqual(stats.cacheability, 0.42)
+        self.assertEqual(stats.expected_lookups, 31)
+        self.assertEqual(stats.expected_miss_rate(0), 1.0)
+        self.assertEqual(stats.expected_miss_rate(1), 0.0)
+        self.assertAlmostEqual(
+            stats.expected_miss_rate(0.5), 1 - (99 + 98) / (99 + 98 + 97)
+        )
+
+    def test_estimate_cache_miss_rate(self) -> None:
+        hist = torch.tensor([0, 6, 0, 8])
+        bins = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0])
+        miss_rates = EmbeddingOffloadStats.estimate_cache_miss_rate(
+            torch.tensor([0, 1, 2, 3, 4]), hist, bins
+        )
+        m = 1 - (6 / (6 + 8))  # from hist counts above
+        want = [
+            1,  # size 0 - 100% miss
+            1,  # size 1 - 100%, no immediate repetitions
+            m,  # size 2 - m (~57%) miss, 6 occurrences
+            m,  # size 3 - same as size 2, no 3 stack distances,
+            #              so increasing cache by 1 doesn't help
+            0,  # size 4 - 0% miss rate, everything fits
+        ]
+        torch.testing.assert_close(miss_rates, torch.tensor(want))
+
+        # test with bigger bins to better validate boundary conditions
+        # create simple linear miss rate curve
+        trace = torch.arange(100.0)
+        hist = torch.histc(trace, bins=10, min=0, max=100)
+        bins = torch.linspace(0, 100, len(hist) + 1)
+        cache_heights = [0, 9, 10, 11, 89, 99, 100]
+        miss_rates = EmbeddingOffloadStats.estimate_cache_miss_rate(
+            torch.tensor(cache_heights), hist, bins
+        )
+        want = [
+            1,  # 0 ->  no cache, 100% miss
+            0.9,  # 9 ->  bin 0, which is all cache sizes <= 10, has 90 misses of 100, so 90% miss
+            0.9,  # 10 -> bin 0, same as above
+            0.8,  # 11 -> bin 1, cache sizes (10, 20], 80 misses out of 100, so 80% miss
+            0.1,  # 89 -> bin 8, cache sizes (80, 90], 10 misses out of 100, so 10% miss
+            0,  # 99 -> bin 9, cache sizes (90, 100], final last bin gets scaled to 1, so 0% misses
+            0,  # 100 -> off the end of the histogram, 0% misses
+        ]
+        torch.testing.assert_close(miss_rates, torch.tensor(want))
+        # test using 0-d tensors works as well
+        miss_rates = torch.tensor(
+            [
+                EmbeddingOffloadStats.estimate_cache_miss_rate(
+                    torch.tensor(x), hist, bins
+                )
+                for x in cache_heights
+            ]
+        )
+        torch.testing.assert_close(miss_rates, torch.tensor(want))
+
+        # test features no with no data return non-nan
+        hist = torch.tensor([0, 0])
+        bins = torch.tensor([0, 1, 2])
+        miss_rates = EmbeddingOffloadStats.estimate_cache_miss_rate(
+            torch.tensor([0, 1, 2]), hist, bins
+        )
+        torch.testing.assert_close(miss_rates, torch.tensor([0.0, 0.0, 0.0]))
+        # test 0-d case
+        miss_rates = torch.tensor(
+            [
+                EmbeddingOffloadStats.estimate_cache_miss_rate(
+                    torch.tensor(x), hist, bins
+                )
+                for x in [0, 1, 2]
+            ]
+        )
+        torch.testing.assert_close(miss_rates, torch.tensor([0.0, 0.0, 0.0]))

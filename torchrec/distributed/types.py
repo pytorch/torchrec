@@ -451,6 +451,31 @@ class ModuleShardingPlan:
     pass
 
 
+class CacheStatistics(abc.ABC):
+    @property
+    @abc.abstractmethod
+    def expected_lookups(self) -> float:
+        """Number of expected cache lookups per training step.
+
+        This is the expected number of distinct values in a global training batch."""
+
+    @abc.abstractmethod
+    def expected_miss_rate(self, clf: float) -> float:
+        """Expected cache lookup miss rate for a given cache size.
+
+        When clf (cache load factor) is 0, returns 1.0 (100% miss). When clf is 1.0,
+        returns 0 (100% hit). For values of clf between these extremes, returns the
+        estimated miss rate of the cache, e.g. based on knowledge of the statistical
+        properties of the training data set."""
+
+    @property
+    @abc.abstractmethod
+    def cacheability(self) -> float:
+        """Summarized measure of the difficulty to cache a dataset that is independent of
+        cache size. A score of 0 means the dataset is very cacheable (e.g. high locality
+        between accesses), a score of 1 is very difficult to cache."""
+
+
 @dataclass
 class CacheParams:
     algorithm: Optional[CacheAlgorithm] = None
@@ -458,6 +483,7 @@ class CacheParams:
     reserved_memory: Optional[float] = None
     precision: Optional[DataType] = None
     prefetch_pipeline: Optional[bool] = None
+    stats: Optional[CacheStatistics] = None
 
     def __hash__(self) -> int:
         return hash(
