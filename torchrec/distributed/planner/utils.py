@@ -123,3 +123,43 @@ def _find_imbalance_tables(
         raise ValueError(f"Unknown target imbalance {target_imbalance}")
 
     return tables_in_max_value_ranks
+
+
+class BinarySearchPredicate:
+    """Generates values of X between A & B to invoke on an external predicate F(X) to
+    discover the largest X for which F(X) is true. Uses binary search to minimize the
+    number of invocations of F. Assumes F is a step function, i.e. if F(X) is false,
+    there is no point trying F(X+1)."""
+
+    def __init__(self, A: int, B: int, tolerance: int) -> None:
+        """A = lower boundary (inclusive)
+        B = upper boundary (inclusive)
+        tolerance = stop search early if remaining search range is less than tolerance"""
+        self.left = A
+        self.right = B
+        self.tolerance = tolerance
+        self.first = True
+
+    def next(self, prior_result: bool) -> Optional[int]:
+        """next() returns the next value to probe, given the result of the prior probe.
+        The first time next() is invoked the prior_result is ignored. Returns None if
+        entire range explored or threshold reached."""
+        if self.right - self.left < self.tolerance:
+            return None
+
+        mid = self._mid()
+        if self.first:
+            self.first = False
+            return mid
+
+        if prior_result:
+            self.left = mid + 1
+        else:
+            self.right = mid - 1
+        if self.right - self.left < self.tolerance:
+            return None
+
+        return self._mid()
+
+    def _mid(self) -> int:
+        return self.left + ((self.right - self.left) // 2)
