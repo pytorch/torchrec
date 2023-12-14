@@ -8,6 +8,7 @@
 import copy
 import unittest
 from typing import cast, List
+from unittest.mock import MagicMock
 
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -17,12 +18,16 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.partitioners import (
     GreedyPerfPartitioner,
     MemoryBalancedPartitioner,
+    OrderedDeviceHardware,
 )
 from torchrec.distributed.planner.types import (
+    DeviceHardware,
     ParameterConstraints,
     PartitionByType,
     Perf,
     PlannerError,
+    Shard,
+    ShardingOption,
     Storage,
     Topology,
 )
@@ -152,6 +157,84 @@ class TestGreedyPerfPartitioner(unittest.TestCase):
             solution_topology.devices[1].storage,
             self.topology.devices[1].storage - Storage(2000, 2000),
         )
+
+    def test_device_partition_heap_invariant(self) -> None:
+        """Validate that _device_partition maintains the minheap invariant."""
+
+        def assert_heap(heap: List[OrderedDeviceHardware]) -> None:
+            for i in range(len(heap)):
+                left_child = 2 * i + 1
+                right_child = 2 * i + 2
+                self.assertFalse(left_child < len(heap) and heap[i] > heap[left_child])
+                self.assertFalse(
+                    right_child < len(heap) and heap[i] > heap[right_child]
+                )
+
+        def device_heaps_equal(
+            heap1: List[OrderedDeviceHardware], heap2: List[OrderedDeviceHardware]
+        ) -> None:
+            # OrderedDeviceHardware 2-key is a partial-order (equally good items might
+            # permute), so we validate that each heap maintains its heap invariant and
+            # that device ids are identical between them.
+            assert_heap(heap1)
+            assert_heap(heap2)
+            self.assertEqual(
+                sorted([id(x.device) for x in heap1]),
+                sorted([id(x.device) for x in heap2]),
+            )
+            # TODO(damian): with 3-key we have a full total ordering, so we can test
+            # equivalence with the simpler below. For now leaving in the more complex
+            # verification that works for both 2-key and 3-key, if we decide on 3-key we
+            # can delete the more complex equality test.
+            #   self.assertEqual([id(x.device) for x in heap1],
+            #                    [id(x.device) for x in heap2])
+
+        def perf(x: float) -> Perf:
+            return Perf(fwd_compute=x, fwd_comms=0, bwd_compute=0, bwd_comms=0)
+
+        def empty_devices() -> List[DeviceHardware]:
+            return [
+                DeviceHardware(
+                    rank=x, storage=Storage(hbm=1_000_000, ddr=0), perf=perf(0)
+                )
+                for x in range(6)
+            ]
+
+        shards = [
+            Shard(storage=Storage(hbm=1000, ddr=0), perf=perf(1), size=[], offset=[])
+            for _ in range(30)
+        ]
+
+        sharding_option: ShardingOption = ShardingOption(
+            name=MagicMock(),
+            tensor=MagicMock(),
+            module=MagicMock(),
+            input_lengths=MagicMock(),
+            batch_size=MagicMock(),
+            sharding_type=MagicMock(),
+            partition_by=MagicMock(),
+            compute_kernel=MagicMock(),
+            shards=shards,
+        )
+        local_world_size: int = 3
+
+        def validate(threshold: float) -> None:
+            devices = empty_devices()
+            minheap_devices = GreedyPerfPartitioner._establish_minheap(
+                devices, local_world_size
+            )
+
+            GreedyPerfPartitioner._device_partition(
+                sharding_option, minheap_devices, threshold
+            )
+
+            want_minheap_devices = GreedyPerfPartitioner._establish_minheap(
+                devices, local_world_size
+            )
+            device_heaps_equal(minheap_devices, want_minheap_devices)
+
+        validate(0)  # force heapify
+        validate(1)  # force incremental rebuild
 
     def test_tw_unbalanced_perf_device(self) -> None:
         sharding_options = self.enumerator.enumerate(
