@@ -6,11 +6,15 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import List
+from typing import Callable, List
 from unittest.mock import MagicMock
 
 from torchrec.distributed.planner.types import Perf, Shard, ShardingOption, Storage
-from torchrec.distributed.planner.utils import _find_imbalance_tables, reset_shard_rank
+from torchrec.distributed.planner.utils import (
+    _find_imbalance_tables,
+    BinarySearchPredicate,
+    reset_shard_rank,
+)
 from torchrec.distributed.types import ShardingType
 
 
@@ -74,3 +78,36 @@ class TestFindImbalanceTables(unittest.TestCase):
             )
         ]
         self.assertTrue(expected_max_hbm_table_names, max_hbm_table_names)
+
+
+class TestBinarySearchPredicate(unittest.TestCase):
+    def test_binary_search_predicate(self) -> None:
+        def F(x: int) -> bool:
+            return x < 90
+
+        def probes(
+            search: BinarySearchPredicate, f: Callable[[int], bool]
+        ) -> List[int]:
+            r = []
+            probe = search.next(True)
+            while probe is not None:
+                r.append(probe)
+                probe = search.next(f(probe))
+            return r
+
+        got = probes(BinarySearchPredicate(0, 100, 0), F)
+        self.assertEqual(got, [50, 75, 88, 94, 91, 89, 90])
+        got = probes(BinarySearchPredicate(0, 100, 3), F)
+        self.assertEqual(got, [50, 75, 88, 94, 91])
+        got = probes(BinarySearchPredicate(0, 100, 20), F)
+        self.assertEqual(got, [50, 75, 88])
+
+        got = probes(BinarySearchPredicate(91, 100, 0), F)
+        self.assertEqual(got, [95, 92, 91])
+        got = probes(BinarySearchPredicate(1, 10, 0), F)
+        self.assertEqual(got, [5, 8, 9, 10])
+
+        got = probes(BinarySearchPredicate(1, 1, 0), F)
+        self.assertEqual(got, [1])
+        got = probes(BinarySearchPredicate(1, 0, 0), F)
+        self.assertEqual(got, [])
