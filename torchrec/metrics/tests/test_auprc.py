@@ -10,7 +10,8 @@ from typing import Dict, Iterable, List, Optional, Type, Union
 
 import torch
 from torch import no_grad
-from torchrec.metrics.auc import AUCMetric
+
+from torchrec.metrics.auprc import _compute_auprc_helper, AUPRCMetric
 from torchrec.metrics.metrics_config import DefaultTaskInfo
 from torchrec.metrics.rec_metric import (
     RecComputeMode,
@@ -25,23 +26,13 @@ from torchrec.metrics.test_utils import (
 )
 
 
-def compute_auc(
+def compute_auprc(
     predictions: torch.Tensor, labels: torch.Tensor, weights: torch.Tensor
 ) -> torch.Tensor:
-    _, sorted_index = torch.sort(predictions, descending=True)
-    sorted_labels = torch.index_select(labels, dim=0, index=sorted_index)
-    sorted_weights = torch.index_select(weights, dim=0, index=sorted_index)
-    cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)
-    cum_tp = torch.cumsum(sorted_weights * sorted_labels, dim=0)
-    auc = torch.where(
-        cum_fp[-1] * cum_tp[-1] == 0,
-        0.5,  # 0.5 is the no-signal default value for auc.
-        torch.trapz(cum_tp, cum_fp) / cum_fp[-1] / cum_tp[-1],
-    )
-    return auc
+    return _compute_auprc_helper(predictions, labels, weights)
 
 
-class TestAUCMetric(TestMetric):
+class TestAUPRCMetric(TestMetric):
     def __init__(
         self,
         world_size: int,
@@ -76,22 +67,22 @@ class TestAUCMetric(TestMetric):
 
     @staticmethod
     def _compute(states: Dict[str, torch.Tensor]) -> torch.Tensor:
-        return compute_auc(states["predictions"], states["labels"], states["weights"])
+        return compute_auprc(states["predictions"], states["labels"], states["weights"])
 
 
 WORLD_SIZE = 4
 
 
-class AUCMetricTest(unittest.TestCase):
-    clazz: Type[RecMetric] = AUCMetric
-    task_name: str = "auc"
+class AUPRCMetricTest(unittest.TestCase):
+    clazz: Type[RecMetric] = AUPRCMetric
+    task_name: str = "auprc"
 
-    def test_unfused_auc(self) -> None:
+    def test_unfused_auprc(self) -> None:
         rec_metric_value_test_launcher(
-            target_clazz=AUCMetric,
+            target_clazz=AUPRCMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            test_clazz=TestAUCMetric,
-            metric_name=AUCMetricTest.task_name,
+            test_clazz=TestAUPRCMetric,
+            metric_name=AUPRCMetricTest.task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
@@ -100,12 +91,12 @@ class AUCMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_fused_auc(self) -> None:
+    def test_fused_auprc(self) -> None:
         rec_metric_value_test_launcher(
-            target_clazz=AUCMetric,
+            target_clazz=AUPRCMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-            test_clazz=TestAUCMetric,
-            metric_name=AUCMetricTest.task_name,
+            test_clazz=TestAUPRCMetric,
+            metric_name=AUPRCMetricTest.task_name,
             task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
@@ -115,8 +106,8 @@ class AUCMetricTest(unittest.TestCase):
         )
 
 
-class AUCMetricValueTest(unittest.TestCase):
-    r"""This set of tests verify the computation logic of AUC in several
+class AUPRCMetricValueTest(unittest.TestCase):
+    r"""This set of tests verify the computation logic of AUPRC in several
     corner cases that we know the computation results. The goal is to
     provide some confidence of the correctness of the math formula.
     """
@@ -130,14 +121,14 @@ class AUCMetricValueTest(unittest.TestCase):
             "weights": self.weights,
             "labels": self.labels,
         }
-        self.auc = AUCMetric(
+        self.auprc = AUPRCMetric(
             world_size=1,
             my_rank=0,
             batch_size=100,
             tasks=[DefaultTaskInfo],
         )
 
-    def test_calc_auc_perfect(self) -> None:
+    def test_calc_auprc_perfect(self) -> None:
         self.predictions["DefaultTask"] = torch.Tensor(
             [[0.0001 * x for x in range(10000)] * 2]
         )
@@ -146,12 +137,12 @@ class AUCMetricValueTest(unittest.TestCase):
             [[1] * 5000 + [0] * 10000 + [1] * 5000]
         )
 
-        expected_auc = torch.tensor([1], dtype=torch.float)
-        self.auc.update(**self.batches)
-        actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
-        torch.allclose(expected_auc, actual_auc)
+        expected_auprc = torch.tensor([1], dtype=torch.float)
+        self.auprc.update(**self.batches)
+        actual_auprc = self.auprc.compute()["auprc-DefaultTask|window_auprc"]
+        torch.allclose(expected_auprc, actual_auprc)
 
-    def test_calc_auc_zero(self) -> None:
+    def test_calc_auprc_zero(self) -> None:
         self.predictions["DefaultTask"] = torch.Tensor(
             [[0.0001 * x for x in range(10000)] * 2]
         )
@@ -160,22 +151,22 @@ class AUCMetricValueTest(unittest.TestCase):
             [[0] * 5000 + [1] * 10000 + [0] * 5000]
         )
 
-        expected_auc = torch.tensor([0], dtype=torch.float)
-        self.auc.update(**self.batches)
-        actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
-        torch.allclose(expected_auc, actual_auc)
+        expected_auprc = torch.tensor([0.3069], dtype=torch.float)
+        self.auprc.update(**self.batches)
+        actual_auprc = self.auprc.compute()["auprc-DefaultTask|window_auprc"]
+        torch.allclose(expected_auprc, actual_auprc)
 
-    def test_calc_auc_balanced(self) -> None:
+    def test_calc_auprc_balanced(self) -> None:
         self.predictions["DefaultTask"] = torch.Tensor(
             [[0.0001 * x for x in range(10000)] * 2]
         )
         self.labels["DefaultTask"] = torch.Tensor([[0] * 10000 + [1] * 10000])
         self.weights["DefaultTask"] = torch.ones([1, 20000])
 
-        expected_auc = torch.tensor([0.5], dtype=torch.float)
-        self.auc.update(**self.batches)
-        actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
-        torch.allclose(expected_auc, actual_auc)
+        expected_auprc = torch.tensor([0.5], dtype=torch.float)
+        self.auprc.update(**self.batches)
+        actual_auprc = self.auprc.compute()["auprc-DefaultTask|window_auprc"]
+        torch.allclose(expected_auprc, actual_auprc)
 
 
 def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
@@ -186,7 +177,7 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
             "predictions": torch.tensor([[0.2, 0.6, 0.8, 0.4, 0.9]]),
             "weights": torch.tensor([[0.13, 0.2, 0.5, 0.8, 0.75]]),
             "grouping_keys": torch.tensor([0, 1, 0, 1, 1]),
-            "expected_auc": torch.tensor([0.2419]),
+            "expected_auprc": torch.tensor([0.5737]),
         },
         # perfect_condition
         {
@@ -194,7 +185,7 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
             "predictions": torch.tensor([[1, 0, 0, 1, 1]]),
             "weights": torch.tensor([[1] * 5]),
             "grouping_keys": torch.tensor([1, 1, 0, 0, 1]),
-            "expected_auc": torch.tensor([1.0]),
+            "expected_auprc": torch.tensor([1.0]),
         },
         # inverse_prediction
         {
@@ -202,7 +193,7 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
             "predictions": torch.tensor([[0, 1, 1, 0, 0]]),
             "weights": torch.tensor([[1] * 5]),
             "grouping_keys": torch.tensor([0, 1, 0, 1, 1]),
-            "expected_auc": torch.tensor([0.0]),
+            "expected_auprc": torch.tensor([0.5833]),
         },
         # all_scores_the_same
         {
@@ -210,7 +201,7 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
             "predictions": torch.tensor([[0.5] * 6]),
             "weights": torch.tensor([[1] * 6]),
             "grouping_keys": torch.tensor([1, 1, 1, 0, 0, 0]),
-            "expected_auc": torch.tensor([0.5]),
+            "expected_auprc": torch.tensor([0.5]),
         },
         # one_class_in_input
         {
@@ -218,7 +209,7 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
             "predictions": torch.tensor([[0.2, 0.6, 0.8, 0.4, 0.9]]),
             "weights": torch.tensor([[1] * 5]),
             "grouping_keys": torch.tensor([1, 0, 0, 1, 0]),
-            "expected_auc": torch.tensor([0.5]),
+            "expected_auprc": torch.tensor([1.0]),
         },
         # one_group
         {
@@ -226,7 +217,7 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
             "predictions": torch.tensor([[0.2, 0.6, 0.8, 0.4, 0.9]]),
             "weights": torch.tensor([[0.13, 0.2, 0.5, 0.8, 0.75]]),
             "grouping_keys": torch.tensor([1, 1, 1, 1, 1]),
-            "expected_auc": torch.tensor([0.4464]),
+            "expected_auprc": torch.tensor([0.8291]),
         },
         # two tasks
         {
@@ -244,24 +235,24 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
                 ]
             ),
             "grouping_keys": torch.tensor([0, 1, 0, 0, 1]),
-            "expected_auc": torch.tensor([0.4725, 0.25]),
+            "expected_auprc": torch.tensor([0.3980, 0.6232]),
         },
     ]
 
 
-class GroupedAUCValueTest(unittest.TestCase):
-    r"""This set of tests verify the computation logic of AUC in several
+class GroupedAUPRCValueTest(unittest.TestCase):
+    r"""This set of tests verify the computation logic of AUPRC in several
     corner cases that we know the computation results. The goal is to
     provide some confidence of the correctness of the math formula.
     """
 
     @no_grad()
-    def _test_grouped_auc_helper(
+    def _test_grouped_auprc_helper(
         self,
         labels: torch.Tensor,
         predictions: torch.Tensor,
         weights: torch.Tensor,
-        expected_auc: torch.Tensor,
+        expected_auprc: torch.Tensor,
         grouping_keys: Optional[torch.Tensor] = None,
     ) -> None:
         num_task = labels.shape[0]
@@ -289,54 +280,54 @@ class GroupedAUCValueTest(unittest.TestCase):
             # pyre-ignore
             inputs["weights"][task_info.name] = weights[i]
 
-        auc = AUCMetric(
+        auprc = AUPRCMetric(
             world_size=1,
             my_rank=0,
             batch_size=batch_size,
             tasks=task_list,
             # pyre-ignore
-            grouped_auc=True,
+            grouped_auprc=True,
         )
         # pyre-ignore
-        auc.update(**inputs)
-        actual_auc = auc.compute()
+        auprc.update(**inputs)
+        actual_auprc = auprc.compute()
 
         for task_id, task in enumerate(task_list):
-            cur_actual_auc = actual_auc[f"auc-{task.name}|window_grouped_auc"]
-            cur_expected_auc = expected_auc[task_id].unsqueeze(dim=0)
+            cur_actual_auprc = actual_auprc[f"auprc-{task.name}|window_grouped_auprc"]
+            cur_expected_auprc = expected_auprc[task_id].unsqueeze(dim=0)
 
             torch.testing.assert_close(
-                cur_actual_auc,
-                cur_expected_auc,
+                cur_actual_auprc,
+                cur_expected_auprc,
                 atol=1e-4,
                 rtol=1e-4,
                 check_dtype=False,
-                msg=f"Actual: {cur_actual_auc}, Expected: {cur_expected_auc}",
+                msg=f"Actual: {cur_actual_auprc}, Expected: {cur_expected_auprc}",
             )
 
-    def test_grouped_auc(self) -> None:
+    def test_grouped_auprc(self) -> None:
         test_data = generate_model_outputs_cases()
         for inputs in test_data:
             try:
-                self._test_grouped_auc_helper(**inputs)
+                self._test_grouped_auprc_helper(**inputs)
             except AssertionError:
                 print("Assertion error caught with data set ", inputs)
                 raise
 
-    def test_misconfigured_grouped_auc(self) -> None:
+    def test_misconfigured_grouped_auprc(self) -> None:
         with self.assertRaises(RecMetricException):
-            self._test_grouped_auc_helper(
+            self._test_grouped_auprc_helper(
                 **{
                     "labels": torch.tensor([[1, 0, 0, 1, 1]]),
                     "predictions": torch.tensor([[0.2, 0.6, 0.8, 0.4, 0.9]]),
                     "weights": torch.tensor([[0.13, 0.2, 0.5, 0.8, 0.75]]),
                     # no provided grouping_keys
-                    "expected_auc": torch.tensor([0.2419]),
+                    "expected_auprc": torch.tensor([0.8291]),
                 },
             )
 
-    def test_required_input_for_grouped_auc(self) -> None:
-        auc = AUCMetric(
+    def test_required_input_for_grouped_auprc(self) -> None:
+        auprc = AUPRCMetric(
             world_size=1,
             my_rank=0,
             batch_size=1,
@@ -349,7 +340,7 @@ class GroupedAUCValueTest(unittest.TestCase):
                 )
             ],
             # pyre-ignore
-            grouped_auc=True,
+            grouped_auprc=True,
         )
 
-        self.assertIn("grouping_keys", auc.get_required_inputs())
+        self.assertIn("grouping_keys", auprc.get_required_inputs())

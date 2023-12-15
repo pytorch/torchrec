@@ -10,6 +10,7 @@ from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from torchrec.metrics.metrics_config import RecComputeMode, RecTaskInfo
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
@@ -26,37 +27,54 @@ GROUPING_KEYS = "grouping_keys"
 REQUIRED_INPUTS = "required_inputs"
 
 
-def _compute_auc_helper(
+def _riemann_integral(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """Riemann integral approximates the area of each cell with a rectangle positioned at the egde.
+    It is conventionally used rather than trapezoid approximation, which uses a rectangle positioned in the
+    center"""
+    return -torch.sum((x[1:] - x[:-1]) * y[:-1])
+
+
+def _compute_auprc_helper(
     predictions: torch.Tensor,
     labels: torch.Tensor,
     weights: torch.Tensor,
-    apply_bin: bool = False,
 ) -> torch.Tensor:
     sorted_indices = torch.argsort(predictions, descending=True, dim=-1)
+
+    threshold = torch.index_select(predictions, dim=0, index=sorted_indices)
+
     sorted_labels = torch.index_select(labels, dim=0, index=sorted_indices)
-    if apply_bin:
-        # TODO - [add flag to set bining dyamically] for use with soft labels, >=0.039 --> 1, <0.039 --> 0
-        sorted_labels = torch.ge(sorted_labels, 0.039).to(dtype=sorted_labels.dtype)
+
     sorted_weights = torch.index_select(weights, dim=0, index=sorted_indices)
-    cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)
-    cum_tp = torch.cumsum(sorted_weights * sorted_labels, dim=0)
-    auc = torch.where(
-        cum_fp[-1] * cum_tp[-1] == 0,
-        0.5,  # 0.5 is the no-signal default value for auc.
-        torch.trapz(cum_tp, cum_fp) / cum_fp[-1] / cum_tp[-1],
-    )
-    return auc
+
+    mask = F.pad(threshold.diff(dim=0) != 0, [0, 1], value=1.0)
+    num_tp = torch.cumsum(sorted_weights * sorted_labels, dim=0)[mask]
+    num_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)[mask]
+
+    precision = (num_tp / (num_tp + num_fp)).flip(0)
+    recall = (num_tp / num_tp[-1]).flip(0)
+
+    # The last precision and recall values are 1.0 and 0.0 without a corresponding threshold.
+    # This ensures that the graph starts on the y-axis.
+    precision = torch.cat([precision, precision.new_ones(1)])
+    recall = torch.cat([recall, recall.new_zeros(1)])
+
+    # If recalls are NaNs, set NaNs to 1.0s.
+    if torch.isnan(recall[0]):
+        recall = torch.nan_to_num(recall, 1.0)
+
+    auprc = _riemann_integral(recall, precision)
+    return auprc
 
 
-def compute_auc(
+def compute_auprc(
     n_tasks: int,
     predictions: torch.Tensor,
     labels: torch.Tensor,
     weights: torch.Tensor,
-    apply_bin: bool = False,
 ) -> torch.Tensor:
     """
-    Computes AUC (Area Under the Curve) for binary classification.
+    Computes AUPRC (Area Under the Curve) for binary classification.
 
     Args:
         n_tasks (int): number of tasks.
@@ -64,14 +82,14 @@ def compute_auc(
         labels (torch.Tensor): tensor of size (n_tasks, n_examples).
         weights (torch.Tensor): tensor of size (n_tasks, n_examples).
     """
-    aucs = []
+    auprcs = []
     for predictions_i, labels_i, weights_i in zip(predictions, labels, weights):
-        auc = _compute_auc_helper(predictions_i, labels_i, weights_i, apply_bin)
-        aucs.append(auc.view(1))
-    return torch.cat(aucs)
+        auprc = _compute_auprc_helper(predictions_i, labels_i, weights_i)
+        auprcs.append(auprc.view(1))
+    return torch.cat(auprcs)
 
 
-def compute_auc_per_group(
+def compute_auprc_per_group(
     n_tasks: int,
     predictions: torch.Tensor,
     labels: torch.Tensor,
@@ -79,7 +97,7 @@ def compute_auc_per_group(
     grouping_keys: torch.Tensor,
 ) -> torch.Tensor:
     """
-    Computes AUC (Area Under the Curve) for binary classification for groups of predictions/labels.
+    Computes AUPRC (Area Under the Curve) for binary classification for groups of predictions/labels.
     Args:
         n_tasks (int): number of tasks
         predictions (torch.Tensor): tensor of size (n_tasks, n_examples)
@@ -88,9 +106,9 @@ def compute_auc_per_group(
         grouping_keys (torch.Tensor): tensor of size (n_examples,)
 
     Returns:
-        torch.Tensor: tensor of size (n_tasks,), average of AUCs per group.
+        torch.Tensor: tensor of size (n_tasks,), average of AUPRCs per group.
     """
-    aucs = []
+    auprcs = []
     if grouping_keys.numel() != 0 and grouping_keys[0] == -1:
         # we added padding  as the first elements during init to avoid floating point exception in sync()
         # removing the paddings to avoid numerical errors.
@@ -104,7 +122,7 @@ def compute_auc_per_group(
 
     for (predictions_i, labels_i, weights_i) in zip(predictions, labels, weights):
         # Loop over each group
-        auc_groups_sum = torch.tensor([0], dtype=torch.float32)
+        auprc_groups_sum = torch.tensor([0], dtype=torch.float32)
         for group_idx in group_indices:
             # get predictions, labels, and weights for this group
             group_mask = grouping_keys == group_idx
@@ -112,18 +130,18 @@ def compute_auc_per_group(
             grouped_labels = labels_i[group_mask]
             grouped_weights = weights_i[group_mask]
 
-            auc = _compute_auc_helper(
+            auprc = _compute_auprc_helper(
                 grouped_predictions, grouped_labels, grouped_weights
             )
-            auc_groups_sum = auc_groups_sum.to(auc.device)
-            auc_groups_sum += auc.view(1)
-        avg_auc = (
-            auc_groups_sum / len(group_indices)
+            auprc_groups_sum = auprc_groups_sum.to(auprc.device)
+            auprc_groups_sum += auprc.view(1)
+        avg_auprc = (
+            auprc_groups_sum / len(group_indices)
             if len(group_indices) > 0
             else torch.tensor([0.5], dtype=torch.float32)
         )
-        aucs.append(avg_auc)
-    return torch.cat(aucs)
+        auprcs.append(avg_auprc)
+    return torch.cat(auprcs)
 
 
 def _state_reduction(state: List[torch.Tensor], dim: int = 1) -> List[torch.Tensor]:
@@ -134,14 +152,14 @@ def _state_reduction(state: List[torch.Tensor], dim: int = 1) -> List[torch.Tens
 _grouping_keys_state_reduction = partial(_state_reduction, dim=0)
 
 
-class AUCMetricComputation(RecMetricComputation):
+class AUPRCMetricComputation(RecMetricComputation):
     r"""
-    This class implements the RecMetricComputation for AUC, i.e. Area Under the Curve.
+    This class implements the RecMetricComputation for AUPRC, i.e. Area Under the Curve.
 
     The constructor arguments are defined in RecMetricComputation.
     See the docstring of RecMetricComputation for more detail.
     Args:
-        grouped_auc (bool): If True, computes AUC per group and returns average AUC across all groups.
+        grouped_auprc (bool): If True, computes AUPRC per group and returns average AUPRC across all groups.
             The `grouping_keys` is provided during state updates along with predictions, labels, weights.
             This feature is currently not enabled for `fused_update_limit`.
     """
@@ -149,19 +167,17 @@ class AUCMetricComputation(RecMetricComputation):
     def __init__(
         self,
         *args: Any,
-        grouped_auc: bool = False,
-        apply_bin: bool = False,
+        grouped_auprc: bool = False,
         fused_update_limit: int = 0,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        if grouped_auc and fused_update_limit > 0:
+        if grouped_auprc and fused_update_limit > 0:
             raise RecMetricException(
-                "Grouped AUC and Fused Update Limit cannot be enabled together yet."
+                "Grouped AUPRC and Fused Update Limit cannot be enabled together yet."
             )
 
-        self._grouped_auc: bool = grouped_auc
-        self._apply_bin: bool = apply_bin
+        self._grouped_auprc: bool = grouped_auprc
         self._add_state(
             PREDICTIONS,
             [],
@@ -183,7 +199,7 @@ class AUCMetricComputation(RecMetricComputation):
             dist_reduce_fx=_state_reduction,
             persistent=False,
         )
-        if self._grouped_auc:
+        if self._grouped_auprc:
             self._add_state(
                 GROUPING_KEYS,
                 [],
@@ -214,7 +230,7 @@ class AUCMetricComputation(RecMetricComputation):
         getattr(self, WEIGHTS).append(
             torch.zeros((self._n_tasks, 1), dtype=torch.float, device=self.device)
         )
-        if self._grouped_auc:
+        if self._grouped_auprc:
             getattr(self, GROUPING_KEYS).append(torch.tensor([-1], device=self.device))
 
     def update(
@@ -231,12 +247,12 @@ class AUCMetricComputation(RecMetricComputation):
             labels (torch.Tensor): tensor of size (n_task, n_examples)
             weights (torch.Tensor): tensor of size (n_task, n_examples)
             grouping_key (torch.Tensor): Optional tensor of size (1, n_examples) that specifies the groups of
-                    predictions/labels per batch. If provided, the AUC metric also
-                    computes AUC per group and returns the average AUC across all groups.
+                    predictions/labels per batch. If provided, the PR AUC metric also
+                    computes PR AUC per group and returns the average PR AUC across all groups.
         """
         if predictions is None or weights is None:
             raise RecMetricException(
-                "Inputs 'predictions' and 'weights' should not be None for AUCMetricComputation update"
+                "Inputs 'predictions' and 'weights' should not be None for AUPRCMetricComputation update"
             )
         predictions = predictions.float()
         labels = labels.float()
@@ -260,12 +276,12 @@ class AUCMetricComputation(RecMetricComputation):
             [cast(torch.Tensor, getattr(self, WEIGHTS)[0])[:, start_index:], weights],
             dim=-1,
         )
-        if self._grouped_auc:
+        if self._grouped_auprc:
             if REQUIRED_INPUTS not in kwargs or (
                 (grouping_keys := kwargs[REQUIRED_INPUTS].get(GROUPING_KEYS)) is None
             ):
                 raise RecMetricException(
-                    f"Input '{GROUPING_KEYS}' are required for AUCMetricComputation grouped update"
+                    f"Input '{GROUPING_KEYS}' are required for AUPRCMetricComputation grouped update"
                 )
             getattr(self, GROUPING_KEYS)[0] = torch.cat(
                 [
@@ -278,23 +294,22 @@ class AUCMetricComputation(RecMetricComputation):
     def _compute(self) -> List[MetricComputationReport]:
         reports = [
             MetricComputationReport(
-                name=MetricName.AUC,
+                name=MetricName.AUPRC,
                 metric_prefix=MetricPrefix.WINDOW,
-                value=compute_auc(
+                value=compute_auprc(
                     self._n_tasks,
                     cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
                     cast(torch.Tensor, getattr(self, LABELS)[0]),
                     cast(torch.Tensor, getattr(self, WEIGHTS)[0]),
-                    self._apply_bin,
                 ),
             )
         ]
-        if self._grouped_auc:
+        if self._grouped_auprc:
             reports.append(
                 MetricComputationReport(
-                    name=MetricName.GROUPED_AUC,
+                    name=MetricName.GROUPED_AUPRC,
                     metric_prefix=MetricPrefix.WINDOW,
-                    value=compute_auc_per_group(
+                    value=compute_auprc_per_group(
                         self._n_tasks,
                         cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
                         cast(torch.Tensor, getattr(self, LABELS)[0]),
@@ -310,9 +325,9 @@ class AUCMetricComputation(RecMetricComputation):
         self._init_states()
 
 
-class AUCMetric(RecMetric):
-    _namespace: MetricNamespace = MetricNamespace.AUC
-    _computation_class: Type[RecMetricComputation] = AUCMetricComputation
+class AUPRCMetric(RecMetric):
+    _namespace: MetricNamespace = MetricNamespace.AUPRC
+    _computation_class: Type[RecMetricComputation] = AUPRCMetricComputation
 
     def __init__(
         self,
@@ -341,5 +356,5 @@ class AUCMetric(RecMetric):
             process_group=process_group,
             **kwargs,
         )
-        if kwargs.get("grouped_auc"):
+        if kwargs.get("grouped_auprc"):
             self._required_inputs.add(GROUPING_KEYS)

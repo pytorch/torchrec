@@ -22,6 +22,7 @@ class RecMetricEnum(RecMetricEnumBase):
     LOG_LOSS = "log_loss"
     CTR = "ctr"
     AUC = "auc"
+    AUPRC = "auprc"
     CALIBRATION = "calibration"
     MSE = "mse"
     MAE = "mae"

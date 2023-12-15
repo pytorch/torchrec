@@ -10,10 +10,12 @@ from typing import cast, List, Optional
 from unittest.mock import MagicMock
 
 import torch
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import (
+    EmbeddingOffloadScaleupProposer,
     GreedyProposer,
     GridSearchProposer,
     proposers_to_proposals_list,
@@ -21,12 +23,18 @@ from torchrec.distributed.planner.proposers import (
 )
 from torchrec.distributed.planner.types import (
     Enumerator,
+    ParameterConstraints,
     Proposer,
     ShardingOption,
     Topology,
 )
 from torchrec.distributed.test_utils.test_model import TestSparseNN
-from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.distributed.types import (
+    CacheParams,
+    CacheStatistics,
+    ModuleSharder,
+    ShardingType,
+)
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -49,6 +57,23 @@ class MockProposer(Proposer):
 
     def propose(self) -> Optional[List[ShardingOption]]:
         pass
+
+
+class MockCacheStatistics(CacheStatistics):
+    def __init__(self, expected_lookups: int, cacheability: float) -> None:
+        self._expected_lookups = expected_lookups
+        self._cacheability = cacheability
+
+    @property
+    def expected_lookups(self) -> int:
+        return self._expected_lookups
+
+    def expected_miss_rate(self, clf: float) -> float:
+        return clf
+
+    @property
+    def cacheability(self) -> float:
+        return self._cacheability
 
 
 class TestProposers(unittest.TestCase):
@@ -315,6 +340,293 @@ class TestProposers(unittest.TestCase):
             num_proposals += 1
 
         self.assertEqual(num_pruned_options ** len(tables), num_proposals)
+
+    def test_allocate_budget(self) -> None:
+        model = torch.tensor([[1.0, 0.0], [2.0, 3.0], [4.0, 5.0]])
+        got = EmbeddingOffloadScaleupProposer.clf_to_bytes(
+            model, torch.tensor([0, 0.5, 1])
+        )
+        torch.testing.assert_close(got, torch.tensor([0, 4, 9]))
+
+        # Scenario 1, enough budget to scale everything to 1.0
+        model = torch.tensor(
+            [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
+        )
+        mins = torch.tensor([0.1, 0.1, 1])
+        budget = 100_000_000
+        got = EmbeddingOffloadScaleupProposer.allocate_budget(
+            model,
+            clfs=torch.tensor(mins),
+            budget=budget,
+            allocation_priority=torch.tensor([2, 2, 2]),
+        )
+        torch.testing.assert_close(got, torch.tensor([1.0, 1.0, 1.0]))
+        increase = (
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, got).sum()
+            - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
+        ).item()
+        self.assertLess(increase, budget)
+
+        # Scenario 2, limited budget, uniform scale up
+        model = torch.tensor(
+            [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
+        )
+        mins = torch.tensor([0.1, 0.1, 1])
+        budget = 10_000_000
+        got = EmbeddingOffloadScaleupProposer.allocate_budget(
+            model, clfs=mins, budget=budget, allocation_priority=torch.tensor([2, 2, 2])
+        )
+        torch.testing.assert_close(got, torch.tensor([0.26667, 0.26667, 1.0]))
+        increase = (
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, got).sum()
+            - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
+        )
+        self.assertEqual(increase, budget)
+
+        # Scenario 3, limited budget, skewed scale up
+        model = torch.tensor(
+            [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
+        )
+        mins = torch.tensor([0.1, 0.1, 1])
+        budget = 10_000_000
+        got = EmbeddingOffloadScaleupProposer.allocate_budget(
+            model, clfs=mins, budget=budget, allocation_priority=torch.tensor([2, 4, 2])
+        )
+        # increase is twice as much for table 2 (started at 0.1)
+        torch.testing.assert_close(
+            got, torch.tensor([0.1 + 0.11111, 0.1 + 2 * 0.11111, 1.0])
+        )
+        increase = (
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, got).sum()
+            - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
+        )
+        self.assertEqual(increase, budget)
+
+        # Scenario 4, multi-pass scale up
+        model = torch.tensor(
+            [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
+        )
+        mins = torch.tensor([0.1, 0.3, 0.5])
+        budget = 50_000_000
+        got = EmbeddingOffloadScaleupProposer.allocate_budget(
+            model,
+            clfs=mins,
+            budget=budget,
+            allocation_priority=torch.tensor([1, 2, 100]),
+        )
+        torch.testing.assert_close(got, torch.tensor([0.56667, 1.0, 1.0]))
+        increase = (
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, got).sum()
+            - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
+        )
+        self.assertEqual(increase, budget)
+
+    def test_scaleup(self) -> None:
+
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=2_000_000,
+                embedding_dim=10,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(3)
+        ]
+
+        # Place first two tables into cache, 3rd table leave on hbm. table_1 has a
+        # larger cacheability score so budget should be skewed to scaling table_1 more
+        # than table_0.
+        constraints = {
+            "table_0": ParameterConstraints(
+                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
+                cache_params=CacheParams(
+                    load_factor=0.1,
+                    stats=MockCacheStatistics(expected_lookups=2, cacheability=0.2),
+                ),
+            ),
+            "table_1": ParameterConstraints(
+                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
+                cache_params=CacheParams(
+                    load_factor=0.1,
+                    stats=MockCacheStatistics(expected_lookups=2, cacheability=0.5),
+                ),
+            ),
+        }
+
+        MB = 1024 * 1024
+        storage_constraint = Topology(
+            world_size=2, compute_device="cuda", hbm_cap=100 * MB, ddr_cap=1000 * MB
+        )
+
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        enumerator = EmbeddingEnumerator(
+            topology=storage_constraint, batch_size=BATCH_SIZE, constraints=constraints
+        )
+        search_space = enumerator.enumerate(
+            module=model,
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
+            ],
+        )
+        proposer = EmbeddingOffloadScaleupProposer()
+        proposer.load(search_space, enumerator=enumerator)
+
+        output = []
+        proposal = proposer.propose()
+        while proposal is not None:
+            output.append(
+                [
+                    (
+                        candidate.name,
+                        candidate.compute_kernel,
+                        candidate.cache_params.load_factor
+                        if candidate.cache_params
+                        else None,
+                    )
+                    for candidate in proposal
+                ]
+            )
+            proposer.feedback(
+                partitionable=True,
+                plan=proposal,
+                storage_constraint=storage_constraint,
+            )
+            proposal = proposer.propose()
+
+        # Expected output (name, kernel clf).
+        # First attempt uses the mins supplied, then as we apply increasing budget
+        # clfs increase, with the later attempts enough to promote table_3 into hbm.
+        expected_output = [
+            [
+                ("table_0", "fused_uvm_caching", 0.1),
+                ("table_1", "fused_uvm_caching", 0.1),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused_uvm_caching", 0.3025801181793213),
+                ("table_1", "fused_uvm_caching", 0.6064502596855164),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused_uvm_caching", 0.403870165348053),
+                ("table_1", "fused_uvm_caching", 0.859675407409668),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused_uvm_caching", 0.4545151889324188),
+                ("table_1", "fused_uvm_caching", 0.9862880110740662),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused_uvm_caching", 0.5294319987297058),
+                ("table_1", "fused", None),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused_uvm_caching", 0.573746383190155),
+                ("table_1", "fused", None),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused_uvm_caching", 0.5959035754203796),
+                ("table_1", "fused", None),
+                ("table_2", "fused", None),
+            ],
+        ]
+
+        self.assertEqual(output, expected_output)
+
+    def test_scaleup_ample_budget_and_deprecated_feature(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=2_000_000,
+                embedding_dim=10,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(3)
+        ]
+
+        # Place first two tables into cache, 3rd table leave on hbm. table_1 has an
+        # expected lookup of 0 (deprecated feature).
+        constraints = {
+            "table_0": ParameterConstraints(
+                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
+                cache_params=CacheParams(
+                    load_factor=0.1,
+                    stats=MockCacheStatistics(expected_lookups=2, cacheability=0.2),
+                ),
+            ),
+            "table_1": ParameterConstraints(
+                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
+                cache_params=CacheParams(
+                    load_factor=0.1,
+                    stats=MockCacheStatistics(expected_lookups=0, cacheability=0),
+                ),
+            ),
+        }
+
+        MB = 1024 * 1024
+        storage_constraint = Topology(
+            world_size=2, compute_device="cuda", hbm_cap=100 * MB, ddr_cap=1000 * MB
+        )
+
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        enumerator = EmbeddingEnumerator(
+            topology=storage_constraint, batch_size=BATCH_SIZE, constraints=constraints
+        )
+        search_space = enumerator.enumerate(
+            module=model,
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
+            ],
+        )
+        proposer = EmbeddingOffloadScaleupProposer()
+        proposer.load(search_space, enumerator=enumerator)
+
+        output = []
+        proposal = proposer.propose()
+        while proposal is not None:
+            output.append(
+                [
+                    (
+                        candidate.name,
+                        candidate.compute_kernel,
+                        candidate.cache_params.load_factor
+                        if candidate.cache_params
+                        else None,
+                    )
+                    for candidate in proposal
+                ]
+            )
+            proposer.feedback(
+                partitionable=True,
+                plan=proposal,
+                storage_constraint=storage_constraint,
+            )
+            proposal = proposer.propose()
+
+        # Expected output (name, kernel clf).
+        # First attempt uses the mins supplied, then as we apply increasing budget
+        # clfs increase, table 0 gets promoted, table 1 left as original minimum.
+        expected_output = [
+            [
+                ("table_0", "fused_uvm_caching", 0.1),
+                ("table_1", "fused_uvm_caching", 0.1),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused_uvm_caching", 0.8090304136276245),
+                ("table_1", "fused_uvm_caching", 0.1),
+                ("table_2", "fused", None),
+            ],
+            [
+                ("table_0", "fused", None),
+                ("table_1", "fused_uvm_caching", 0.1),
+                ("table_2", "fused", None),
+            ],
+        ]
+        self.assertEqual(output[0:3], expected_output)
 
     def test_proposers_to_proposals_list(self) -> None:
         def make_mock_proposal(name: str) -> List[ShardingOption]:
