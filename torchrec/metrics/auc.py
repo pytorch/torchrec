@@ -50,9 +50,9 @@ def _compute_auc_helper(
 
 def compute_auc(
     n_tasks: int,
-    predictions: List[torch.Tensor],
-    labels: List[torch.Tensor],
-    weights: List[torch.Tensor],
+    predictions: torch.Tensor,
+    labels: torch.Tensor,
+    weights: torch.Tensor,
     apply_bin: bool = False,
 ) -> torch.Tensor:
     """
@@ -60,18 +60,10 @@ def compute_auc(
 
     Args:
         n_tasks (int): number of tasks.
-        predictions (List[torch.Tensor]): tensor of size (n_tasks, n_examples).
-        labels (List[torch.Tensor]): tensor of size (n_tasks, n_examples).
-        weights (List[torch.Tensor]): tensor of size (n_tasks, n_examples).
+        predictions (torch.Tensor): tensor of size (n_tasks, n_examples).
+        labels (torch.Tensor): tensor of size (n_tasks, n_examples).
+        weights (torch.Tensor): tensor of size (n_tasks, n_examples).
     """
-    # concatenate tensors along dim = -1
-    # pyre-ignore[9]
-    predictions = torch.cat(predictions, dim=-1)
-    # pyre-ignore[9]
-    labels = torch.cat(labels, dim=-1)
-    # pyre-ignore[9]
-    weights = torch.cat(weights, dim=-1)
-
     aucs = []
     for predictions_i, labels_i, weights_i in zip(predictions, labels, weights):
         auc = _compute_auc_helper(predictions_i, labels_i, weights_i, apply_bin)
@@ -81,9 +73,9 @@ def compute_auc(
 
 def compute_auc_per_group(
     n_tasks: int,
-    predictions: List[torch.Tensor],
-    labels: List[torch.Tensor],
-    weights: List[torch.Tensor],
+    predictions: torch.Tensor,
+    labels: torch.Tensor,
+    weights: torch.Tensor,
     grouping_keys: torch.Tensor,
 ) -> torch.Tensor:
     """
@@ -98,25 +90,14 @@ def compute_auc_per_group(
     Returns:
         torch.Tensor: tensor of size (n_tasks,), average of AUCs per group.
     """
-    # concatenate tensors along dim = -1
-    # pyre-ignore[9]
-    predictions = torch.cat(predictions, dim=-1)
-    # pyre-ignore[9]
-    labels = torch.cat(labels, dim=-1)
-    # pyre-ignore[9]
-    weights = torch.cat(weights, dim=-1)
-
     aucs = []
     if grouping_keys.numel() != 0 and grouping_keys[0] == -1:
         # we added padding  as the first elements during init to avoid floating point exception in sync()
         # removing the paddings to avoid numerical errors.
         grouping_keys = grouping_keys[1:]
-        # pyre-ignore[9]
-        predictions = predictions[:, 1:]  # pyre-ignore[6]
-        # pyre-ignore[9]
-        labels = labels[:, 1:]  # pyre-ignore[6]
-        # pyre-ignore[9]
-        weights = weights[:, 1:]  # pyre-ignore[6]
+        predictions = predictions[:, 1:]
+        labels = labels[:, 1:]
+        weights = weights[:, 1:]
 
     # get unique group indices
     group_indices = torch.unique(grouping_keys)
@@ -181,7 +162,6 @@ class AUCMetricComputation(RecMetricComputation):
 
         self._grouped_auc: bool = grouped_auc
         self._apply_bin: bool = apply_bin
-        self._num_samples: int = 0
         self._add_state(
             PREDICTIONS,
             [],
@@ -224,7 +204,7 @@ class AUCMetricComputation(RecMetricComputation):
     def _init_states(self) -> None:
         if len(getattr(self, PREDICTIONS)) > 0:
             return
-        self._num_samples = 0
+
         getattr(self, PREDICTIONS).append(
             torch.zeros((self._n_tasks, 1), dtype=torch.float, device=self.device)
         )
@@ -261,32 +241,25 @@ class AUCMetricComputation(RecMetricComputation):
         predictions = predictions.float()
         labels = labels.float()
         weights = weights.float()
+        num_samples = getattr(self, PREDICTIONS)[0].size(-1)
         batch_size = predictions.size(-1)
-        start_index = max(self._num_samples + batch_size - self._window_size, 0)
-        self._num_samples += batch_size
-
+        start_index = max(num_samples + batch_size - self._window_size, 0)
         # Using `self.predictions =` will cause Pyre errors.
-        w_preds = getattr(self, PREDICTIONS)
-        w_labels = getattr(self, LABELS)
-        w_weights = getattr(self, WEIGHTS)
-
-        w_preds.append(predictions)
-        w_labels.append(labels)
-        w_weights.append(weights)
-
-        while self._num_samples > self._window_size:
-            diff = self._num_samples - self._window_size
-            if diff > w_preds[0].size(-1):
-                self._num_samples -= w_preds[0].size(-1)
-                # Remove the first element from predictions, labels, and weights
-                [lst.pop(0) for lst in [w_preds, w_labels, w_weights]]
-            else:
-                # Update the first element of predictions, labels, and weights
-                # Off by one potentially - keeping legacy behaviour
-                for attribute in [w_preds, w_labels, w_weights]:
-                    attribute[0] = attribute[0][:, diff:]
-                self._num_samples -= diff
-
+        getattr(self, PREDICTIONS)[0] = torch.cat(
+            [
+                cast(torch.Tensor, getattr(self, PREDICTIONS)[0])[:, start_index:],
+                predictions,
+            ],
+            dim=-1,
+        )
+        getattr(self, LABELS)[0] = torch.cat(
+            [cast(torch.Tensor, getattr(self, LABELS)[0])[:, start_index:], labels],
+            dim=-1,
+        )
+        getattr(self, WEIGHTS)[0] = torch.cat(
+            [cast(torch.Tensor, getattr(self, WEIGHTS)[0])[:, start_index:], weights],
+            dim=-1,
+        )
         if self._grouped_auc:
             if REQUIRED_INPUTS not in kwargs or (
                 (grouping_keys := kwargs[REQUIRED_INPUTS].get(GROUPING_KEYS)) is None
@@ -309,9 +282,9 @@ class AUCMetricComputation(RecMetricComputation):
                 metric_prefix=MetricPrefix.WINDOW,
                 value=compute_auc(
                     self._n_tasks,
-                    cast(List[torch.Tensor], getattr(self, PREDICTIONS)),
-                    cast(List[torch.Tensor], getattr(self, LABELS)),
-                    cast(List[torch.Tensor], getattr(self, WEIGHTS)),
+                    cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
+                    cast(torch.Tensor, getattr(self, LABELS)[0]),
+                    cast(torch.Tensor, getattr(self, WEIGHTS)[0]),
                     self._apply_bin,
                 ),
             )
@@ -323,10 +296,10 @@ class AUCMetricComputation(RecMetricComputation):
                     metric_prefix=MetricPrefix.WINDOW,
                     value=compute_auc_per_group(
                         self._n_tasks,
-                        cast(List[torch.Tensor], getattr(self, PREDICTIONS)),
-                        cast(List[torch.Tensor], getattr(self, LABELS)),
-                        cast(List[torch.Tensor], getattr(self, WEIGHTS)),
-                        cast(torch.Tensor, getattr(self, GROUPING_KEYS))[0],
+                        cast(torch.Tensor, getattr(self, PREDICTIONS)[0]),
+                        cast(torch.Tensor, getattr(self, LABELS)[0]),
+                        cast(torch.Tensor, getattr(self, WEIGHTS)[0]),
+                        cast(torch.Tensor, getattr(self, GROUPING_KEYS)[0]),
                     ),
                 )
             )
