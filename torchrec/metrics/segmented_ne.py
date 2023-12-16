@@ -106,10 +106,10 @@ def get_segemented_ne_states(
 ) -> Dict[str, torch.Tensor]:
     groups = torch.unique(grouping_keys)
     cross_entropy, weighted_num_samples, pos_labels, neg_labels = (
-        torch.zeros(num_groups),
-        torch.zeros(num_groups),
-        torch.zeros(num_groups),
-        torch.zeros(num_groups),
+        torch.zeros(num_groups).to(labels.device),
+        torch.zeros(num_groups).to(labels.device),
+        torch.zeros(num_groups).to(labels.device),
+        torch.zeros(num_groups).to(labels.device),
     )
     for group in groups:
         group_mask = grouping_keys == group
