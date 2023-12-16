@@ -6,10 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import heapq
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import cast, Dict, List
+from typing import cast, Dict, List, Optional
 
 from torchrec.distributed.planner.perf_models import NoopPerfModel
 
@@ -127,6 +128,25 @@ def _group_and_sort_non_uniform_sharding_options(
     return sharding_option_groups
 
 
+@dataclass
+class OrderedDeviceHardware:
+    device: DeviceHardware
+    local_world_size: int
+
+    def __lt__(self, other: "OrderedDeviceHardware") -> bool:
+        # Use local rank as a tie breaker to ensure that we don't overload a single
+        # host's DDR limit.
+        return (
+            self.device.perf.total,
+            self.device.rank % self.local_world_size,
+            self.device.rank,
+        ) < (
+            other.device.perf.total,
+            other.device.rank % self.local_world_size,
+            other.device.rank,
+        )
+
+
 class GreedyPerfPartitioner(Partitioner):
     """Greedy Partitioner
 
@@ -205,10 +225,7 @@ class GreedyPerfPartitioner(Partitioner):
         """
 
         _topology: Topology = copy.deepcopy(storage_constraint)
-        # shallow copy to keep an almost sorted list around
-        # we try to not modify the order of devices in the topology
-        # since _get_host_level_devices relies on the order
-        sorted_devices = _topology.devices.copy()
+        minheap_devices: Optional[List[OrderedDeviceHardware]] = None
         _host_level_devices = GreedyPerfPartitioner._get_host_level_devices(_topology)
 
         # first partition the uniform sharding options (RW & DP)
@@ -231,17 +248,22 @@ class GreedyPerfPartitioner(Partitioner):
                 GreedyPerfPartitioner._cohost_partition(
                     sharding_option_group, _host_level_devices
                 )
+                # _cohost_partition invalidates minheap_devices, force rebuild before using
+                minheap_devices = None
             elif (
                 sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.DEVICE.value
             ):
+                if minheap_devices is None:
+                    minheap_devices = GreedyPerfPartitioner._establish_minheap(
+                        _topology.devices, _topology.local_world_size
+                    )
                 assert (
                     len(sharding_option_group.sharding_options) == 1
                 ), f"Unexpected length for sharding options: {len(sharding_option_group.sharding_options)}"
                 GreedyPerfPartitioner._device_partition(
                     sharding_option_group.sharding_options[0],
-                    sorted_devices,
-                    _topology.local_world_size,
+                    minheap_devices,
                 )
             else:
                 raise RuntimeError(
@@ -252,36 +274,53 @@ class GreedyPerfPartitioner(Partitioner):
         return proposal
 
     @staticmethod
+    def _establish_minheap(
+        devices: List[DeviceHardware], local_world_size: int
+    ) -> List[OrderedDeviceHardware]:
+        minheap_devices = [
+            OrderedDeviceHardware(device, local_world_size) for device in devices
+        ]
+        heapq.heapify(minheap_devices)
+        return minheap_devices
+
+    @staticmethod
     def _device_partition(
         sharding_option: ShardingOption,
-        devices: List[DeviceHardware],
-        local_world_size: int = 1,
+        minheap_devices: List[OrderedDeviceHardware],
+        bulk_heapify_threshold: float = 0.25,
     ) -> None:
+        pushlimit = len(minheap_devices) * bulk_heapify_threshold
         for shard in sharding_option.shards:
-            devices.sort(
-                # We use the "local_rank" as the secondary key for sorting. This
-                # is to even out the pressure on different hosts. For example, in UVM
-                # case, we will allocate UVM table with the global rank order, and host0
-                # will use a lot more CPU memory than the others. With local rank as the
-                # secondary key, we could even out CPU memory pressure on different host
-                key=lambda device: (device.perf.total, device.rank % local_world_size),
-            )
-            success = False
-            for device in devices:
-                if cast(Storage, shard.storage).fits_in(device.storage):
+            tmp_heap = []
+            while minheap_devices:
+                ordered_device = minheap_devices[0]
+                device = ordered_device.device
+                storage = cast(Storage, shard.storage)
+                if storage.fits_in(device.storage):
                     shard.rank = device.rank
                     device.storage -= cast(Storage, shard.storage)
                     device.perf += cast(Perf, shard.perf)
-                    success = True
+                    heapq.heapreplace(minheap_devices, ordered_device)
                     break
-            if not success:
+                else:
+                    heapq.heappop(minheap_devices)
+                    tmp_heap.append(ordered_device)
+            else:
                 raise PlannerError(
                     error_type=PlannerErrorType.PARTITION,
                     message=(
                         f"Device partition failed. Couldn't find a rank for shard {shard} of table {sharding_option.name}, "
-                        f"largest device storage: {max(devices, key=lambda device: device.storage).storage}"
+                        f"largest device storage: {max(ordered_device.device.storage for ordered_device in tmp_heap)}"
                     ),
                 )
+            if tmp_heap:
+                # restablish minheap
+                if len(tmp_heap) <= pushlimit:
+                    for ordered_device in tmp_heap:
+                        heapq.heappush(minheap_devices, ordered_device)
+                else:
+                    minheap_devices.extend(tmp_heap)
+                    heapq.heapify(minheap_devices)
 
     @staticmethod
     def _cohost_partition(
@@ -298,6 +337,7 @@ class GreedyPerfPartitioner(Partitioner):
                 continue
 
             success = True
+            minheap_devices: Optional[List[OrderedDeviceHardware]] = None
             for sharding_option in sharding_option_group.sharding_options:
                 try:
                     if (
@@ -307,12 +347,19 @@ class GreedyPerfPartitioner(Partitioner):
                         GreedyPerfPartitioner._uniform_partition(
                             [sharding_option], host_devices
                         )
+                        # _uniform_partition invalidates minheap_devices, force rebuild
+                        # before using
+                        minheap_devices = None
                     elif (
                         sharding_option.sharding_type
                         == ShardingType.TABLE_COLUMN_WISE.value
                     ):
+                        if minheap_devices is None:
+                            minheap_devices = GreedyPerfPartitioner._establish_minheap(
+                                host_devices, len(host_devices)
+                            )
                         GreedyPerfPartitioner._device_partition(
-                            sharding_option, host_devices, len(host_devices)
+                            sharding_option, minheap_devices
                         )
                     else:
                         raise RuntimeError(
