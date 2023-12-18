@@ -9,10 +9,11 @@
 
 import sys
 import unittest
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 import torch._dynamo.skipfiles
+from torchrec.sparse.jagged_tensor import JaggedTensor
 
 try:
     # pyre-ignore
@@ -29,12 +30,14 @@ from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.infer_utils import (
     assert_close,
     create_test_model_ebc_only,
+    create_test_model_ec_only,
     dynamo_skipfiles_allow,
     KJTInputExportWrapper,
     prep_inputs,
     replace_registered_tbes_with_mock_tbes,
     replace_sharded_quant_modules_tbes_with_mock_tbes,
     TestQuantEBCSharder,
+    TestQuantECSharder,
 )
 from torchrec.distributed.types import ShardingEnv, ShardingType
 from torchrec.sparse.jagged_tensor import ComputeKJTToJTDict, KeyedJaggedTensor
@@ -77,6 +80,51 @@ def _sharded_quant_ebc_model() -> Tuple[torch.nn.Module, List[KeyedJaggedTensor]
 
     sharding_type: ShardingType = ShardingType.TABLE_WISE
     sharder = TestQuantEBCSharder(
+        sharding_type=sharding_type.value,
+        kernel_type=EmbeddingComputeKernel.QUANT.value,
+        shardable_params=[table.name for table in mi.tables],
+    )
+    # pyre-ignore
+    plan = mi.planner.plan(
+        model,
+        [sharder],
+    )
+    sharded_model = _shard_modules(
+        module=model,
+        # pyre-ignore
+        sharders=[sharder],
+        device=local_device,
+        plan=plan,
+        # pyre-ignore
+        env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+    )
+    return sharded_model, input_kjts
+
+
+def _sharded_quant_ec_model() -> Tuple[torch.nn.Module, List[KeyedJaggedTensor]]:
+    num_embeddings = 256
+    emb_dim = 12
+    world_size = 2
+    batch_size = 4
+    local_device = torch.device("cuda:0")
+    mi = create_test_model_ec_only(
+        num_embeddings,
+        emb_dim,
+        world_size,
+        batch_size,
+        num_features=2,
+        dense_device=local_device,
+        sparse_device=local_device,
+        quant_state_dict_split_scale_bias=True,
+    )
+    input_kjts = [
+        inp.to(local_device).idlist_features
+        for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+    ]
+    model: torch.nn.Module = KJTInputExportWrapper(mi.quant_model, input_kjts[0].keys())
+
+    sharding_type: ShardingType = ShardingType.TABLE_WISE
+    sharder = TestQuantECSharder(
         sharding_type=sharding_type.value,
         kernel_type=EmbeddingComputeKernel.QUANT.value,
         shardable_params=[table.name for table in mi.tables],
@@ -164,6 +212,15 @@ class TestPt2(unittest.TestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
+    @unittest.skip("TODO add torch._check_is_size etc. in KJT to_dict")
+    def test_kjt_to_dict(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
+                return kjt.to_dict()
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+        self._test_kjt_input_module(M(), kjt.keys(), (kjt._values, kjt._lengths))
+
     def test_sharded_quant_ebc_dynamo_export_aot_inductor(self) -> None:
         sharded_model, input_kjts = _sharded_quant_ebc_model()
         kjt = input_kjts[0]
@@ -223,3 +280,103 @@ class TestPt2(unittest.TestCase):
             # TODO: turn on AOT Inductor test once the support is ready
             test_aot_inductor=False,
         )
+
+    @unittest.skip("Unbacked SymInt for ShardedQEC")
+    def test_sharded_quant_ec_dynamo_export_aot_inductor(self) -> None:
+        sharded_model, input_kjts = _sharded_quant_ec_model()
+        kjt = input_kjts[0]
+        sharded_model(kjt.values(), kjt.lengths())
+
+        model: torch.nn.Module = sharded_model
+        model.training = False
+        replace_registered_tbes_with_mock_tbes(model)
+        replace_sharded_quant_modules_tbes_with_mock_tbes(model)
+
+        example_inputs = (kjt.values(), kjt.lengths())
+
+        # pyre-ignore
+        def kjt_to_inputs(kjt):
+            return (kjt.values(), kjt.lengths())
+
+        expected_outputs = [model(*kjt_to_inputs(kjt)) for kjt in input_kjts[1:]]
+        print(f"XXX expected_outputs[0]:\n{expected_outputs[0]}")
+
+        device: str = "cuda"
+
+        with dynamo_skipfiles_allow("torchrec"):
+            tracing_values = kjt.values()
+            tracing_lengths = kjt.lengths()
+            torch._dynamo.mark_dynamic(tracing_values, 0)
+            print(f"XXX ShardedQEC model:\n{model}")
+            dynamo_gm, guard = torch._dynamo.export(model, same_signature=False)(
+                tracing_values, tracing_lengths
+            )
+            print("XXX ShardedQuantEC DYNAMO graph:")
+            dynamo_gm.print_readable()
+
+            dynamo_actual_outputs = [
+                dynamo_gm(*kjt_to_inputs(kjt)) for kjt in input_kjts[1:]
+            ]
+            print(f"XXX dynamo_actual_outputs[0]:\n{dynamo_actual_outputs[0]}")
+            # TODO(ivankobzarev): Why dynamo outputs are different than expected, but aot outputs are correct.
+            # assert_close(expected_outputs, dynamo_actual_outputs)
+
+            so_path: str = AOTInductorModelRunner.compile(
+                model,
+                example_inputs,
+            )
+            aot_inductor_module = AOTInductorModelRunner.load(
+                device, so_path, example_inputs
+            )
+            aot_inductor_module(example_inputs)
+
+            aot_actual_outputs = [
+                aot_inductor_module(*kjt_to_inputs(kjt)) for kjt in input_kjts[1:]
+            ]
+            assert_close(expected_outputs, aot_actual_outputs)
+
+    # Needs additions of dynamic shapes checks before concatenation of indices
+    @unittest.skip("Dynamic shapes failure")
+    def test_quant_dynamo_export(self) -> None:
+        with dynamo_skipfiles_allow("torchrec"):
+            num_embeddings = 256
+            emb_dim = 12
+            world_size = 2
+            batch_size = 4
+            local_device = torch.device("cuda:0")
+            mi = create_test_model_ebc_only(
+                num_embeddings,
+                emb_dim,
+                world_size,
+                batch_size,
+                num_features=2,
+                dense_device=local_device,
+                sparse_device=local_device,
+                quant_state_dict_split_scale_bias=True,
+            )
+            model: torch.nn.Module = mi.quant_model
+            print(f"XXX QUANT_MODEL:\n{model}")
+            model.training = False
+            replace_registered_tbes_with_mock_tbes(model)
+            print(f"XXX QUANT_MODEL_AFTER_REPLACE:\n{model}")
+            inputs = [
+                inp.to(local_device).idlist_features
+                for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+            ]
+            eager_outputs = [model(inp) for inp in inputs]
+            kjt = inputs[0]
+            # Recreating new KJT for tracing without any caches:
+            kjt_for_tracing = KeyedJaggedTensor(
+                keys=kjt._keys, values=kjt._values, lengths=kjt._lengths
+            )
+            # kjt = KeyedJaggedTensor.for_dynamo_tracing(inputs[0])
+            torch._dynamo.mark_dynamic(kjt_for_tracing._values, 0)
+            x = torch._dynamo.export(model, same_signature=True)(kjt_for_tracing)
+            export_gm = x.graph_module
+            print("XXX export_gm.print_readable:")
+            export_gm.print_readable()
+
+            for i, inp in enumerate(inputs):
+                eager_output = eager_outputs[i]
+                export_gm_output = export_gm(inp)
+                assert_close(eager_output, export_gm_output)

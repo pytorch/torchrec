@@ -98,7 +98,9 @@ class TestModelInfo:
     tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]] = field(
         default_factory=list
     )
-    weighted_tables: List[EmbeddingBagConfig] = field(default_factory=list)
+    weighted_tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]] = field(
+        default_factory=list
+    )
     model: torch.nn.Module = torch.nn.Module()
     quant_model: torch.nn.Module = torch.nn.Module()
     sharders: List[ModuleSharder] = field(default_factory=list)
@@ -615,6 +617,75 @@ def create_test_model_ebc_only(
     return mi
 
 
+def create_test_model_ec_only(
+    num_embeddings: int,
+    emb_dim: int,
+    world_size: int,
+    batch_size: int,
+    num_features: int,
+    dense_device: torch.device,
+    sparse_device: torch.device,
+    quant_state_dict_split_scale_bias: bool = False,
+) -> TestModelInfo:
+    topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+    mi = TestModelInfo(
+        dense_device=dense_device,
+        sparse_device=sparse_device,
+        num_features=num_features,
+        num_float_features=8,
+        num_weighted_features=1,
+        topology=topology,
+    )
+
+    mi.planner = EmbeddingShardingPlanner(
+        topology=topology,
+        batch_size=batch_size,
+        enumerator=EmbeddingEnumerator(
+            topology=topology,
+            batch_size=batch_size,
+            estimator=[
+                EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                EmbeddingStorageEstimator(topology=topology),
+            ],
+        ),
+    )
+
+    mi.tables = [
+        EmbeddingConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="table_" + str(i),
+            feature_names=["feature_" + str(i)],
+        )
+        for i in range(mi.num_features)
+    ]
+
+    mi.weighted_tables = [
+        EmbeddingConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="weighted_table_" + str(i),
+            feature_names=["weighted_feature_" + str(i)],
+        )
+        for i in range(mi.num_weighted_features)
+    ]
+
+    mi.model = torch.nn.Sequential(
+        EmbeddingCollection(
+            tables=mi.tables,
+            device=mi.sparse_device,
+        )
+    )
+    mi.model.training = False
+    mi.quant_model = quantize(
+        module=mi.model,
+        inplace=False,
+        register_tbes=True,
+        quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+    )
+    return mi
+
+
 def shard_qebc(
     mi: TestModelInfo,
     sharding_type: ShardingType,
@@ -859,7 +930,9 @@ def replace_registered_tbes_with_mock_tbes(M: torch.nn.Module, path: str = "") -
 
 def replace_sharded_quant_modules_tbes_with_mock_tbes(M: torch.nn.Module) -> None:
     for m in M.modules():
-        if isinstance(m, ShardedQuantEmbeddingBagCollection):
+        if isinstance(
+            m, (ShardedQuantEmbeddingBagCollection, ShardedQuantEmbeddingCollection)
+        ):
             for lookup in m._lookups:
                 for lookup_per_rank in lookup._embedding_lookups_per_rank:
                     replace_registered_tbes_with_mock_tbes(lookup_per_rank)

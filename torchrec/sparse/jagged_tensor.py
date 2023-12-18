@@ -692,6 +692,7 @@ def _maybe_compute_offset_per_key(
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
 ) -> Tuple[List[int], List[int]]:
+    # TODO(ivankobzarev): _cumsum -> fbgemm cumsum?
     if length_per_key is None:
         _length_per_key: List[int] = _maybe_compute_length_per_key(
             keys=keys,

@@ -7,7 +7,6 @@
 
 import copy
 import itertools
-from collections import defaultdict
 from typing import Callable, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
@@ -58,6 +57,14 @@ try:
     pass
 except ImportError:
     pass
+
+try:
+    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+except Exception:
+
+    def is_torchdynamo_compiling():  # type: ignore[misc]
+        return False
+
 
 MODULE_ATTR_REGISTER_TBES_BOOL: str = "__register_tbes_in_named_modules"
 
@@ -306,7 +313,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._embedding_bag_configs: List[EmbeddingBagConfig] = tables
         self._key_to_tables: Dict[
             Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
-        ] = defaultdict(list)
+        ] = {}
         self._length_per_key: List[int] = []
         # Registering in a List instead of ModuleList because we want don't want them to be auto-registered.
         # Their states will be modified via self.embedding_bags
@@ -327,7 +334,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 [table.embedding_dim] * len(table.feature_names)
             )
             key = (table.pooling, table.data_type)
+            if key not in self._key_to_tables:
+                self._key_to_tables[key] = []
             self._key_to_tables[key].append(table)
+        self._key_to_tables_keys: List[Tuple[PoolingType, DataType]] = list(
+            self._key_to_tables.keys()
+        )
 
         self._sum_length_per_key: int = sum(self._length_per_key)
 
@@ -453,9 +465,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         # TODO ideally we can accept KJTs with any feature order. However, this will require an order check + permute, which will break torch.script.
         # Once torchsccript is no longer a requirement, we should revisit this.
 
-        for emb_op, (_key, tables) in zip(
-            self._emb_modules, self._key_to_tables.items()
-        ):
+        keys = self._key_to_tables_keys
+        for i in range(len(self._emb_modules)):
+            emb_op = self._emb_modules[i]
+            key = keys[i]
+            tables = self._key_to_tables[key]
+
             indices = []
             lengths = []
             offsets = []
@@ -468,6 +483,15 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                     lengths.append(f.lengths())
                     if self._is_weighted:
                         weights.append(f.weights())
+
+            if not torch.jit.is_scripting() and is_torchdynamo_compiling():
+
+                cat_size = 0
+                for i in indices:
+                    torch._check(i.ndim == 1)
+                    cat_size += i.size(0)
+
+                torch._check_is_size(cat_size)
 
             indices = torch.cat(indices)
             lengths = torch.cat(lengths)
