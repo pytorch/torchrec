@@ -825,6 +825,13 @@ def _maybe_compute_kjt_to_jt_dict(
 
     if jt_dict is None:
         _jt_dict: Dict[str, JaggedTensor] = {}
+        if not torch.jit.is_scripting() and is_torchdynamo_compiling():
+            cat_size = 0
+            total_size = values.size(0)
+            for i in length_per_key:
+                cat_size += i
+                torch._check(cat_size <= total_size)
+            torch._check(cat_size == total_size)
         values_list = torch.split(values, length_per_key)
         if variable_stride_per_key:
             split_lengths = torch.split(lengths, stride_per_key)
