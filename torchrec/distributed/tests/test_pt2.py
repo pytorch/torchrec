@@ -37,7 +37,7 @@ from torchrec.distributed.test_utils.infer_utils import (
     TestQuantEBCSharder,
 )
 from torchrec.distributed.types import ShardingEnv, ShardingType
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import ComputeKJTToJTDict, KeyedJaggedTensor
 
 
 def make_kjt(values: List[int], lengths: List[int]) -> KeyedJaggedTensor:
@@ -213,3 +213,13 @@ class TestPt2(unittest.TestCase):
                 aot_inductor_module(*kjt_to_inputs(kjt)) for kjt in input_kjts[1:]
             ]
             assert_close(expected_outputs, aot_actual_outputs)
+
+    def test_maybe_compute_kjt_to_jt_dict(self) -> None:
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+        self._test_kjt_input_module(
+            ComputeKJTToJTDict(),
+            kjt.keys(),
+            (kjt._values, kjt._lengths),
+            # TODO: turn on AOT Inductor test once the support is ready
+            test_aot_inductor=False,
+        )
