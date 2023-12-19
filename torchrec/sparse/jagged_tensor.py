@@ -246,14 +246,13 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights_dtype: Optional[torch.dtype] = None,
         lengths_dtype: torch.dtype = torch.int32,
     ) -> "JaggedTensor":
-        weights = torch.jit.annotate(Optional[torch.Tensor], None)
-        if is_weighted:
-            weights = torch.empty((0), dtype=weights_dtype, device=device)
-
+        weights = (
+            torch.empty(0, dtype=weights_dtype, device=device) if is_weighted else None
+        )
         return JaggedTensor(
-            values=torch.empty((0), dtype=values_dtype, device=device),
-            offsets=torch.empty((0), dtype=lengths_dtype, device=device),
-            lengths=torch.empty((0), dtype=lengths_dtype, device=device),
+            values=torch.empty(0, dtype=values_dtype, device=device),
+            offsets=torch.empty(0, dtype=lengths_dtype, device=device),
+            lengths=torch.empty(0, dtype=lengths_dtype, device=device),
             weights=weights,
         )
 
@@ -1274,15 +1273,14 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights_dtype: Optional[torch.dtype] = None,
         lengths_dtype: torch.dtype = torch.int32,
     ) -> "KeyedJaggedTensor":
-        weights = torch.jit.annotate(Optional[torch.Tensor], None)
-        if is_weighted:
-            weights = torch.empty((0), dtype=weights_dtype, device=device)
-
+        weights = (
+            torch.empty(0, dtype=weights_dtype, device=device) if is_weighted else None
+        )
         return KeyedJaggedTensor(
             keys=torch.jit.annotate(List[str], []),
-            values=torch.empty((0), dtype=values_dtype, device=device),
+            values=torch.empty(0, dtype=values_dtype, device=device),
             weights=weights,
-            lengths=torch.empty((0), dtype=lengths_dtype, device=device),
+            lengths=torch.empty(0, dtype=lengths_dtype, device=device),
             stride=0,
         )
 
@@ -1295,11 +1293,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
         return KeyedJaggedTensor(
             keys=[],
-            values=torch.tensor([], device=kjt.device(), dtype=kjt.values().dtype),
+            values=torch.empty(0, device=kjt.device(), dtype=kjt.values().dtype),
             weights=None
             if kjt.weights_or_none() is None
-            else torch.tensor([], device=kjt.device(), dtype=kjt.weights().dtype),
-            lengths=torch.tensor([], device=kjt.device(), dtype=kjt.lengths().dtype),
+            else torch.empty(0, device=kjt.device(), dtype=kjt.weights().dtype),
+            lengths=torch.empty(0, device=kjt.device(), dtype=kjt.lengths().dtype),
             stride=stride,
             stride_per_key_per_rank=stride_per_key_per_rank,
         )

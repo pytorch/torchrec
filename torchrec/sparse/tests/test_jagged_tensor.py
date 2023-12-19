@@ -556,6 +556,9 @@ class TestJaggedTensor(unittest.TestCase):
         self.assertTrue(torch.equal(jt.values(), torch.tensor([], dtype=torch.int64)))
         self.assertTrue(torch.equal(jt.offsets(), torch.tensor([], dtype=torch.int32)))
 
+        jt_from_script = torch.jit.script(JaggedTensor.empty)()
+        self.assertEqual(jt_from_script.to_dense(), [])
+
     def test_2d(self) -> None:
         values = torch.Tensor([[i * 0.5, i * 1.0, i * 1.5] for i in range(1, 4)])
         offsets = torch.IntTensor([0, 2, 2, 3])
@@ -1098,6 +1101,11 @@ class TestKeyedJaggedTensor(unittest.TestCase):
 
         kjt_2 = KeyedJaggedTensor.empty()
         self.assertEqual(kjt_2.to_dict(), {})
+
+        kjt_from_script = torch.jit.script(KeyedJaggedTensor.empty)()
+        kjt_like = torch.jit.script(KeyedJaggedTensor.empty_like)(kjt_from_script)
+        self.assertEqual(kjt_from_script.to_dict(), {})
+        self.assertEqual(kjt_like.to_dict(), {})
 
     def test_empty_to_dict(self) -> None:
         keys = ["index_0", "index_1"]
