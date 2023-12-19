@@ -1817,6 +1817,17 @@ class TestKeyedJaggedTensorScripting(unittest.TestCase):
         torch.jit.script(create_kjt)
         torch.jit.script(create_vb_kjt)
 
+    def test_scriptable_empty(self) -> None:
+        def create_empty() -> KeyedJaggedTensor:
+            return KeyedJaggedTensor.empty()
+
+        def create_empty_weighted() -> KeyedJaggedTensor:
+            return KeyedJaggedTensor.empty(is_weighted=True)
+
+        # assert that we can script KJT creation
+        torch.jit.script(create_empty)
+        torch.jit.script(create_empty_weighted)
+
 
 class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
     def test_jit_tracable(self) -> None:
@@ -1880,6 +1891,31 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         m = ModuleCreateAndAccessKeyedJaggedTensor()
         gm = symbolic_trace(m)
         FileCheck().check("return 35").check_not("KeyedJaggedTensor").run(gm.code)
+        ref_out = m(8)
+        traced_out = gm(8)
+        self.assertEqual(ref_out, traced_out)
+        torch.jit.script(gm)
+
+    def test_create_and_access_empty_keyed_jagged_tensor(self) -> None:
+        class ModuleCreateAndAccessEmptyKeyedJaggedTensor(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, input: int) -> int:
+                features = KeyedJaggedTensor.empty(is_weighted=True)
+                return (
+                    len(features.keys())
+                    + features.values().numel()
+                    + features.weights().numel()
+                    + features.lengths().numel()
+                    + features.offsets().numel()
+                )
+
+        # Case 4: KeyedJaggedTensor is only used within the root module and not as part of
+        # the root module's input/output interface.
+        m = ModuleCreateAndAccessEmptyKeyedJaggedTensor()
+        gm = symbolic_trace(m)
+        FileCheck().check("return 1").check_not("KeyedJaggedTensor").run(gm.code)
         ref_out = m(8)
         traced_out = gm(8)
         self.assertEqual(ref_out, traced_out)
