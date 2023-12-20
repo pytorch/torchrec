@@ -7,7 +7,6 @@
 
 import abc
 import copy
-import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
@@ -251,7 +250,6 @@ def group_tables(
             else EmbDimBucketerPolicy.SINGLE_BUCKET
         )
         emb_dim_bucketer = EmbDimBucketer(embedding_tables, emb_dim_bucketer_policy)
-        logging.info(f"bucket count {emb_dim_bucketer.bucket_count()}")
 
         # populate grouping keys
         grouping_keys = []
@@ -304,9 +302,6 @@ def group_tables(
                 fused_params_group = {}
 
             if grouped_tables:
-                logging.info(
-                    f"{len(grouped_tables)} tables are grouped for bucket: {dim_bucket}."
-                )
                 cache_load_factor = _get_weighted_avg_cache_load_factor(grouped_tables)
                 per_tbe_fused_params = copy.copy(fused_params_group)
                 if cache_load_factor is not None:
