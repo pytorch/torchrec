@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import logging
 from enum import Enum, unique
 from typing import Dict, List
 
@@ -85,8 +84,6 @@ class EmbDimBucketer:
             )
         else:
             AssertionError(f"Invalid bucketization config {cfg}")
-
-        logging.info(f"Using emb dim bucketing: {cfg}, buckets: {self.emb_dim_buckets}")
 
     def bucket_count(self) -> int:
         return self.num_buckets
