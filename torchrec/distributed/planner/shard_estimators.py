@@ -161,6 +161,21 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     else False
                 )
 
+            expected_cache_fetches = 0
+            if (
+                caching_ratio is not None
+                and sharding_option.cache_params is not None
+                and sharding_option.cache_params.stats is not None
+            ):
+                _stats = sharding_option.cache_params.stats
+                expected_cache_fetches = (
+                    _stats.expected_miss_rate(caching_ratio) * _stats.expected_lookups
+                )
+                # Note, the above is not correct for data-parallel. stats.expected_lookups is
+                # calculated by estimating the cardinality of a global batch size worth of data.
+                # But for data-parallel, we need the calculate the cardinality of the local
+                # input batch.  For now, we don't use cache stats with data parallel.
+
             shard_perfs = perf_func_emb_wall_time(
                 shard_sizes=[shard.size for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
@@ -187,6 +202,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 is_inference=self._is_inference,
                 caching_ratio=caching_ratio,
                 prefetch_pipeline=prefetch_pipeline,
+                expected_cache_fetches=expected_cache_fetches,
             )
 
             for shard, perf in zip(sharding_option.shards, shard_perfs):
@@ -219,6 +235,7 @@ def perf_func_emb_wall_time(
     caching_ratio: Optional[float] = None,
     is_inference: bool = False,
     prefetch_pipeline: bool = False,
+    expected_cache_fetches: float = 0,
 ) -> List[Perf]:
     """
     Attempts to model perfs as a function of relative wall times.
@@ -254,6 +271,7 @@ def perf_func_emb_wall_time(
         caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
             of device.
         prefetch_pipeline (bool = False): whether prefetch pipeline is enabled.
+        expected_cache_fetches (float): number of expected cache fetches across global batch
 
     Returns:
         List[float]: the list of perf for each shard.
@@ -290,6 +308,7 @@ def perf_func_emb_wall_time(
                 fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
                 bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                 num_poolings=num_poolings,
+                ddr_mem_bw=ddr_mem_bw,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
                 intra_host_bw=intra_host_bw,
@@ -297,6 +316,7 @@ def perf_func_emb_wall_time(
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
                 is_inference=is_inference,
+                expected_cache_fetches=expected_cache_fetches,
             )
         elif sharding_type == ShardingType.ROW_WISE.value:
             shard_perf = _get_rw_sharding_perf(
@@ -312,12 +332,14 @@ def perf_func_emb_wall_time(
                 fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
                 bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                 num_poolings=num_poolings,
+                ddr_mem_bw=ddr_mem_bw,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
                 intra_host_bw=intra_host_bw,
                 bwd_compute_multiplier=bwd_compute_multiplier,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
+                expected_cache_fetches=expected_cache_fetches,
             )
         elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
             shard_perf = _get_twrw_sharding_perf(
@@ -333,12 +355,14 @@ def perf_func_emb_wall_time(
                 fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
                 bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                 num_poolings=num_poolings,
+                ddr_mem_bw=ddr_mem_bw,
                 device_bw=device_bw,
                 inter_host_bw=inter_host_bw,
                 intra_host_bw=intra_host_bw,
                 bwd_compute_multiplier=bwd_compute_multiplier,
                 is_pooled=is_pooled,
                 is_weighted=is_weighted,
+                expected_cache_fetches=expected_cache_fetches,
             )
         elif sharding_type == ShardingType.DATA_PARALLEL.value:
             shard_perf = _get_dp_sharding_perf(
@@ -366,6 +390,17 @@ def perf_func_emb_wall_time(
     return shard_perfs
 
 
+def _get_expected_cache_prefetch_time(
+    ddr_mem_bw: float,
+    expected_cache_fetches: float,
+    emb_dim: int,
+    table_data_type_size: float,
+) -> float:
+    # TODO: validate cost model with empirical test
+    prefetch_bytes = expected_cache_fetches * emb_dim * table_data_type_size
+    return prefetch_bytes / ddr_mem_bw
+
+
 def _get_tw_sharding_perf(
     batch_sizes: List[int],
     world_size: int,
@@ -377,6 +412,7 @@ def _get_tw_sharding_perf(
     fwd_a2a_comm_data_type_size: float,
     bwd_a2a_comm_data_type_size: float,
     num_poolings: List[float],
+    ddr_mem_bw: float,
     device_bw: float,
     inter_host_bw: float,
     intra_host_bw: float,
@@ -384,6 +420,7 @@ def _get_tw_sharding_perf(
     is_pooled: bool,
     is_weighted: bool = False,
     is_inference: bool = False,
+    expected_cache_fetches: float = 0,
 ) -> Perf:
     batch_inputs = sum(
         [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
@@ -441,6 +478,10 @@ def _get_tw_sharding_perf(
     # includes fused optimizers
     bwd_compute = fwd_compute * bwd_compute_multiplier
 
+    prefetch_compute = _get_expected_cache_prefetch_time(
+        ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
+    )
+
     # in order of model parallel execution, starting with:
     # BWD DP -> BWD MP ... FWD MP -> FWD DP
     return Perf(
@@ -448,6 +489,7 @@ def _get_tw_sharding_perf(
         fwd_comms=fwd_comms,
         bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
         bwd_comms=bwd_comms,
+        prefetch_compute=prefetch_compute,
     )
 
 
@@ -464,12 +506,14 @@ def _get_rw_sharding_perf(
     fwd_sr_comm_data_type_size: float,
     bwd_sr_comm_data_type_size: float,
     num_poolings: List[float],
+    ddr_mem_bw: float,
     device_bw: float,
     inter_host_bw: float,
     intra_host_bw: float,
     bwd_compute_multiplier: float,
     is_pooled: bool,
     is_weighted: bool = False,
+    expected_cache_fetches: float = 0,
 ) -> Perf:
     batch_inputs = (
         sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
@@ -515,11 +559,17 @@ def _get_rw_sharding_perf(
 
     bwd_compute = fwd_compute * bwd_compute_multiplier
 
+    # for row-wise, expected_cache_fetches per shard is / world_size
+    prefetch_compute = _get_expected_cache_prefetch_time(
+        ddr_mem_bw, expected_cache_fetches / world_size, emb_dim, table_data_type_size
+    )
+
     return Perf(
         fwd_compute=fwd_compute,
         fwd_comms=fwd_comms,
         bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
         bwd_comms=bwd_comms + bwd_batched_copy,
+        prefetch_compute=prefetch_compute,
     )
 
 
@@ -536,12 +586,14 @@ def _get_twrw_sharding_perf(
     fwd_sr_comm_data_type_size: float,
     bwd_sr_comm_data_type_size: float,
     num_poolings: List[float],
+    ddr_mem_bw: float,
     device_bw: float,
     inter_host_bw: float,
     intra_host_bw: float,
     bwd_compute_multiplier: float,
     is_pooled: bool,
     is_weighted: bool = False,
+    expected_cache_fetches: float = 0,
 ) -> Perf:
     batch_inputs = (
         sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
@@ -594,11 +646,20 @@ def _get_twrw_sharding_perf(
 
     bwd_compute = fwd_compute * bwd_compute_multiplier
 
+    # for table-wise-row-wise, expected_cache_fetches per shard is / local_world_size
+    prefetch_compute = _get_expected_cache_prefetch_time(
+        ddr_mem_bw,
+        expected_cache_fetches / local_world_size,
+        emb_dim,
+        table_data_type_size,
+    )
+
     return Perf(
         fwd_compute=fwd_compute,
         fwd_comms=fwd_comms,
         bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
         bwd_comms=bwd_comms + bwd_batched_copy,
+        prefetch_compute=prefetch_compute,
     )
 
 
@@ -662,6 +723,8 @@ def _get_dp_sharding_perf(
         fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
     )
 
+    # TODO(T170641643): we don't model prefetch_compute for data parallel yet, see
+    # comment in perf_func_emb_wall_time() regarding expected_cache_fetches calculation.
     return Perf(
         fwd_compute=fwd_compute,
         fwd_comms=0,
