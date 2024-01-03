@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
-from torch.utils._pytree import _register_pytree_node
+from torch.utils._pytree import register_pytree_node
 
 from torchrec.streamable import Pipelineable
 
@@ -583,7 +583,7 @@ def _jt_flatten_spec(t: JaggedTensor, spec: TreeSpec) -> List[Optional[torch.Ten
     return [getattr(t, a) for a in JaggedTensor._fields]
 
 
-_register_pytree_node(JaggedTensor, _jt_flatten, _jt_unflatten)
+register_pytree_node(JaggedTensor, _jt_flatten, _jt_unflatten)
 register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 
 
@@ -1979,27 +1979,7 @@ def _kjt_flatten_spec(
     return [getattr(t, a) for a in KeyedJaggedTensor._fields]
 
 
-try:
-
-    def _kjt_to_str(spec: TreeSpec, child_strings: List[str]) -> str:
-        assert spec.type == KeyedJaggedTensor
-        return f"K({json.dumps([spec.context, ','.join(child_strings)])})"
-
-    # pyre-ignore[3]
-    def _maybe_str_to_kjt(str_spec: str):
-        if not str_spec.startswith("K"):
-            return None
-        assert str_spec[1] == "("
-        assert str_spec[-1] == ")"
-        r = json.loads(str_spec[2:-1])
-        return KeyedJaggedTensor, r[0], r[1]
-
-    _register_pytree_node(
-        KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten, _kjt_to_str, _maybe_str_to_kjt
-    )
-
-except TypeError:
-    _register_pytree_node(KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten)
+register_pytree_node(KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten)
 register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 
@@ -2200,5 +2180,5 @@ def _kt_flatten_spec(kt: KeyedTensor, spec: TreeSpec) -> List[torch.Tensor]:
     return _kt_flatten(kt)[0]
 
 
-_register_pytree_node(KeyedTensor, _kt_flatten, _kt_unflatten)
+register_pytree_node(KeyedTensor, _kt_flatten, _kt_unflatten)
 register_pytree_flatten_spec(KeyedTensor, _kt_flatten_spec)
