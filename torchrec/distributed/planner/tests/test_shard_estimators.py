@@ -12,6 +12,7 @@ import torch
 import torchrec.optim as trec_optim
 
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.fbgemm_qcomm_codec import (
     CommType,
@@ -25,12 +26,17 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingOffloadStats,
     EmbeddingPerfEstimator,
 )
-from torchrec.distributed.planner.types import Perf, Topology
+from torchrec.distributed.planner.types import ParameterConstraints, Perf, Topology
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.tests.test_quant_model_parallel import _quantize
 from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
-from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.distributed.types import (
+    CacheParams,
+    CacheStatistics,
+    ModuleSharder,
+    ShardingType,
+)
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 
 
@@ -407,6 +413,125 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         }
 
         self.assertEqual(total_perfs, expected_total_perfs)
+
+    def test_prefetch_compute(self) -> None:
+        class MyCacheStatistics(CacheStatistics):
+            def __init__(self, expected_lookups: int, cacheability: float) -> None:
+                self._expected_lookups = expected_lookups
+                self._cacheability = cacheability
+
+            @property
+            def expected_lookups(self) -> int:
+                return self._expected_lookups
+
+            def expected_miss_rate(self, clf: float) -> float:
+                return clf
+
+            @property
+            def cacheability(self) -> float:
+                return self._cacheability
+
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=10,
+                name="table_0",
+                feature_names=["feature_0"],
+            )
+        ]
+        constraints = {
+            "table_0": ParameterConstraints(
+                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
+                cache_params=CacheParams(
+                    load_factor=0.1,
+                    stats=MyCacheStatistics(expected_lookups=200_000, cacheability=0.2),
+                ),
+            ),
+        }
+        enumerator = EmbeddingEnumerator(
+            topology=self.topology,
+            batch_size=BATCH_SIZE,
+            estimator=self.estimator,
+            constraints=constraints,
+        )
+        model = TestSparseNN(tables=tables, weighted_tables=[])
+        sharding_options = enumerator.enumerate(
+            module=model,
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
+            ],
+        )
+
+        expected_perfs = {
+            ("fused_uvm_caching", "column_wise"): [
+                Perf(
+                    fwd_compute=0.021661629015717183,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.043323258031434365,
+                    bwd_comms=6.357828776041667e-05,
+                    prefetch_compute=0.014608981562595743,
+                )
+            ],
+            ("fused_uvm_caching", "row_wise"): [
+                Perf(
+                    fwd_compute=0.004501117717551623,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.009002235435103246,
+                    bwd_comms=0.006969980785628689,
+                    prefetch_compute=0.007304490781297871,
+                ),
+                Perf(
+                    fwd_compute=0.004501117717551623,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.009002235435103246,
+                    bwd_comms=0.006969980785628689,
+                    prefetch_compute=0.007304490781297871,
+                ),
+            ],
+            ("fused_uvm_caching", "table_column_wise"): [
+                Perf(
+                    fwd_compute=0.021661629015717183,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.043323258031434365,
+                    bwd_comms=6.357828776041667e-05,
+                    prefetch_compute=0.014608981562595743,
+                )
+            ],
+            ("fused_uvm_caching", "table_row_wise"): [
+                Perf(
+                    fwd_compute=0.004501117717551623,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.009002235435103246,
+                    bwd_comms=0.006969980785628689,
+                    prefetch_compute=0.007304490781297871,
+                ),
+                Perf(
+                    fwd_compute=0.004501117717551623,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.009002235435103246,
+                    bwd_comms=0.006969980785628689,
+                    prefetch_compute=0.007304490781297871,
+                ),
+            ],
+            ("fused_uvm_caching", "table_wise"): [
+                Perf(
+                    fwd_compute=0.021661629015717183,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.043323258031434365,
+                    bwd_comms=6.357828776041667e-05,
+                    prefetch_compute=0.014608981562595743,
+                )
+            ],
+        }
+        perfs = {
+            (
+                sharding_option.compute_kernel,
+                sharding_option.sharding_type,
+            ): [shard.perf for shard in sharding_option.shards]
+            for sharding_option in sharding_options
+        }
+
+        self.assertEqual(expected_perfs, perfs)
 
 
 # pyre-ignore[3]
