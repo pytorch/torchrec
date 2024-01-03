@@ -46,10 +46,32 @@ class Perf:
     fwd_comms: float
     bwd_compute: float
     bwd_comms: float
+    prefetch_compute: float = 0.0
 
     @property
     def total(self) -> float:
-        return self.fwd_compute + self.bwd_compute + self.fwd_comms + self.bwd_comms
+        # When using embedding offload, there is a prefetch compute component. This
+        # prefetch can overlap with fwd_compute + fwd_comm and dense fwd (some of it
+        # overlaps with fwd_compute) and dense bwd. (fwd_compute and bwd_compute are
+        # embedding fwd/bwd, nothing to do with dense). Only when prefetch is longer
+        # than fwd_compute + dense_fwd + dense_bwd it will block bwd_compute. However,
+        # we don't have an effective way to estimate dense fwd/bwd at this point, so our
+        # cost model is too simplistic.  Instead prefetch is always considered blocking.
+        #
+        # Also note, measuring prefetch blocking can only be done after partitioning,
+        # here are only have the per shard estimates.
+        #
+        # However adding a per-shard prefetch component to the cost model does have the
+        # benefit that 1) it enables the ScaleupProposer to explore the trade off
+        # between increasing cache sizes vs more difficult bin-packing constraints. 2)
+        # it helps balance the prefetch compute across the ranks.
+        return (
+            self.fwd_compute
+            + self.bwd_compute
+            + self.fwd_comms
+            + self.bwd_comms
+            + self.prefetch_compute
+        )
 
     def __add__(self, other: "Perf") -> "Perf":
         return Perf(
@@ -57,6 +79,7 @@ class Perf:
             fwd_comms=self.fwd_comms + other.fwd_comms,
             bwd_compute=self.bwd_compute + other.bwd_compute,
             bwd_comms=self.bwd_comms + other.bwd_comms,
+            prefetch_compute=self.prefetch_compute + other.prefetch_compute,
         )
 
     def __hash__(self) -> int:
@@ -66,6 +89,7 @@ class Perf:
                 self.fwd_comms,
                 self.bwd_compute,
                 self.bwd_comms,
+                self.prefetch_compute,
             )
         )
 

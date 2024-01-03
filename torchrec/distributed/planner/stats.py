@@ -378,7 +378,7 @@ class EmbeddingStats(Stats):
             for row in formatted_table:
                 self._stats_table.append(f"# {row: <{self._width-3}}#")
 
-            perf_breakdown = "Perf: Total perf (Forward compute, Forward comms, Backward compute, Backward comms)"
+            perf_breakdown = "Perf: Total perf (Forward compute, Forward comms, Backward compute, Backward comms, Prefetch compute)"
             legend = (
                 "Input: MB/iteration, Output: MB/iteration, Shards: number of tables"
             )
@@ -487,12 +487,14 @@ class EmbeddingStats(Stats):
         max_fwd_comms_perf_text = f"Maximum of Forward Comms: {_generate_max_text([perf.fwd_comms for perf in perfs])}"
         max_bwd_compute_perf_text = f"Maximum of Backward Compute: {_generate_max_text([perf.bwd_compute for perf in perfs])}"
         max_bwd_comms_perf_text = f"Maximum of Backward Comms: {_generate_max_text([perf.bwd_comms for perf in perfs])}"
+        max_prefetch_compute_perf_text = f"Maximum of Prefetch Compute: {_generate_max_text([perf.prefetch_compute for perf in perfs])}"
 
         sum_of_maxima = (
             max(perf.fwd_compute for perf in perfs)
             + max(perf.fwd_comms for perf in perfs)
             + max(perf.bwd_compute for perf in perfs)
             + max(perf.bwd_comms for perf in perfs)
+            + max(perf.prefetch_compute for perf in perfs)
         )
         sum_of_maxima_text = f"Sum of Maxima: {round(sum_of_maxima, 3)} ms"
 
@@ -502,6 +504,9 @@ class EmbeddingStats(Stats):
         self._stats_table.append(f"# {max_fwd_comms_perf_text : <{self._width-3}}#")
         self._stats_table.append(f"# {max_bwd_compute_perf_text : <{self._width-3}}#")
         self._stats_table.append(f"# {max_bwd_comms_perf_text : <{self._width-3}}#")
+        self._stats_table.append(
+            f"# {max_prefetch_compute_perf_text : <{self._width-3}}#"
+        )
         self._stats_table.append(f"# {sum_of_maxima_text : <{self._width-3}}#")
 
         max_hbm = max(used_hbm)
@@ -628,6 +633,7 @@ def _format_perf_breakdown(perf: Perf) -> str:
         perf.fwd_comms,
         perf.bwd_compute,
         perf.bwd_comms,
+        perf.prefetch_compute,
     ]
     breakdown_string = ",".join(
         [str(round(num)) if num >= 1 else round_to_one_sigfig(num) for num in breakdown]
