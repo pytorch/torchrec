@@ -16,7 +16,7 @@ import torch._dynamo.skipfiles
 
 try:
     # pyre-ignore
-    from caffe2.test.inductor.test_aot_inductor import AOTInductorModelRunner
+    from caffe2.test.inductor.test_aot_inductor import AOTIRunnerUtil
 except (unittest.SkipTest, ImportError):
     if __name__ == "__main__":
         sys.exit(0)
@@ -119,15 +119,13 @@ class TestPt2(unittest.TestCase):
 
             if test_aot_inductor:
                 # pyre-ignore
-                so_path: str = AOTInductorModelRunner.compile(
+                so_path: str = AOTIRunnerUtil.compile(
                     EM,
                     inputs,
                 )
                 device = "cuda"
                 # pyre-ignore
-                aot_inductor_module = AOTInductorModelRunner.load(
-                    device, so_path, inputs
-                )
+                aot_inductor_module = AOTIRunnerUtil.load(device, so_path)
                 aot_actual_output = aot_inductor_module(inputs)
                 assert_close(eager_output, aot_actual_output)
 
@@ -199,14 +197,12 @@ class TestPt2(unittest.TestCase):
             # assert_close(expected_outputs, dynamo_actual_outputs)
 
             # pyre-ignore
-            so_path: str = AOTInductorModelRunner.compile(
+            so_path: str = AOTIRunnerUtil.compile(
                 model,
                 example_inputs,
             )
             # pyre-ignore
-            aot_inductor_module = AOTInductorModelRunner.load(
-                device, so_path, example_inputs
-            )
+            aot_inductor_module = AOTIRunnerUtil.load(device, so_path)
             aot_inductor_module(example_inputs)
 
             aot_actual_outputs = [
