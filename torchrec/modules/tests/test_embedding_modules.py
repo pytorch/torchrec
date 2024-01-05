@@ -126,6 +126,28 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings.keys(), ["f1", "f3", "f2"])
         self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3, 6, 10])
 
+    def test_padded(self) -> None:
+        eb_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1"],
+            padding_idx=0,
+        )
+        ebc = EmbeddingBagCollection(tables=[eb_config])
+
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1"],
+            values=torch.tensor([0, 1, 0]),
+            offsets=torch.tensor([0, 2, 3]),
+        )
+
+        pooled_embeddings = ebc(features)
+        self.assertEqual(pooled_embeddings.values().size(), (2, 3))
+        self.assertEqual(pooled_embeddings.keys(), ["f1"])
+        self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3])
+        torch.testing.assert_close(pooled_embeddings.values()[1], torch.zeros(3))
+
     def test_fx(self) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1", "f3"]
@@ -251,6 +273,29 @@ class EmbeddingCollectionTest(unittest.TestCase):
         )
         self.assertTrue(
             torch.equal(sequence_embeddings["f2@t2"].weights(), torch.tensor([3]))
+        )
+
+    def test_padded(self) -> None:
+        tb_config = EmbeddingConfig(
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1"],
+            padding_idx=0,
+        )
+        ec = EmbeddingCollection(tables=[tb_config])
+
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1"],
+            values=torch.tensor([0, 1]),
+            offsets=torch.tensor([0, 2]),
+        )
+
+        sequence_embeddings = ec(features)
+        self.assertEqual(sequence_embeddings["f1"].values().size(), (2, 3))
+        self.assertEqual(list(sequence_embeddings.keys()), ["f1"])
+        torch.testing.assert_close(
+            sequence_embeddings["f1"].values()[0], torch.zeros(3)
         )
 
     def test_fx(self) -> None:

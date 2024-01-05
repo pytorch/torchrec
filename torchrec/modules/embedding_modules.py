@@ -178,6 +178,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 num_embeddings=embedding_config.num_embeddings,
                 embedding_dim=embedding_config.embedding_dim,
                 mode=pooling_type_to_str(embedding_config.pooling),
+                padding_idx=embedding_config.padding_idx,
                 device=self._device,
                 include_last_offset=True,
                 dtype=dtype,
@@ -377,11 +378,17 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
             self.embeddings[config.name] = nn.Embedding(
                 num_embeddings=config.num_embeddings,
                 embedding_dim=config.embedding_dim,
+                padding_idx=config.padding_idx,
                 device=device,
                 dtype=dtype,
             )
             if config.init_fn is not None:
                 config.init_fn(self.embeddings[config.name].weight)
+                if config.padding_idx is not None:
+                    nn.init.constant_(
+                        self.embeddings[config.name].weight[config.padding_idx],
+                        0.0,
+                    )
 
             if not config.feature_names:
                 config.feature_names = [config.name]
