@@ -373,6 +373,9 @@ class ShardedEmbeddingCollection(
         self._table_names: List[str] = [
             config.name for config in self._embedding_configs
         ]
+        self._table_name_to_config: Dict[str, EmbeddingConfig] = {
+            config.name: config for config in self._embedding_configs
+        }
         self.module_sharding_plan: EmbeddingModuleShardingPlan = cast(
             EmbeddingModuleShardingPlan,
             {
