@@ -23,6 +23,7 @@ from torchrec.distributed.sharding_plan import (
     FusedEmbeddingBagCollectionSharder,
     get_module_to_default_sharders,
     ManagedCollisionEmbeddingBagCollectionSharder,
+    ManagedCollisionEmbeddingCollectionSharder,
     ParameterShardingGenerator,
     QuantEmbeddingBagCollectionSharder,
     QuantEmbeddingCollectionSharder,
@@ -52,7 +53,10 @@ from torchrec.modules.embedding_modules import (
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.modules.fused_embedding_modules import FusedEmbeddingBagCollection
-from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
+from torchrec.modules.mc_embedding_modules import (
+    ManagedCollisionEmbeddingBagCollection,
+    ManagedCollisionEmbeddingCollection,
+)
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
@@ -710,6 +714,7 @@ movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1
                 QuantEmbeddingBagCollection,
                 QuantEmbeddingCollection,
                 ManagedCollisionEmbeddingBagCollection,
+                ManagedCollisionEmbeddingCollection,
             ],
         )
         self.assertIsInstance(
@@ -737,4 +742,9 @@ movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1
         self.assertIsInstance(
             default_sharder_map[ManagedCollisionEmbeddingBagCollection],
             ManagedCollisionEmbeddingBagCollectionSharder,
+        )
+
+        self.assertIsInstance(
+            default_sharder_map[ManagedCollisionEmbeddingCollection],
+            ManagedCollisionEmbeddingCollectionSharder,
         )
