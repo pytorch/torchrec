@@ -76,10 +76,18 @@ torchrec.modules.utils
    :undoc-members:
    :show-inheritance:
 
-Module contents
+torchrec.modules.mc_modules
 ---------------
 
-.. automodule:: torchrec.modules
+.. automodule:: torchrec.modules.mc_modules
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.modules.mc_embedding_modules
+---------------
+
+.. automodule:: torchrec.modules.mc_modules
    :members:
    :undoc-members:
    :show-inheritance:

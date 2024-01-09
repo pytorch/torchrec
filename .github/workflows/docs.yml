@@ -1,6 +1,7 @@
 # This workflow builds the torchrec docs and deploys them to gh-pages.
 name: Generate documentation
 on:
+  pull_request:
   push:
     branches:
       - main
