@@ -124,3 +124,27 @@ torchrec.distributed.utils
    :members:
    :undoc-members:
    :show-inheritance:
+
+torchrec.distributed.mc_modules
+--------------------------
+
+.. automodule:: torchrec.distributed.mc_modules
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.mc_embeddingbag
+--------------------------
+
+.. automodule:: torchrec.distributed.mc_embeddingbag
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+torchrec.distributed.mc_embedding
+--------------------------
+
+.. automodule:: torchrec.distributed.mc_embedding
+   :members:
+   :undoc-members:
+   :show-inheritance:
