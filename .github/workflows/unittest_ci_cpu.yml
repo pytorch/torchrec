@@ -38,7 +38,7 @@ jobs:
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: ${{ matrix.os }}
-      timeout: 30
+      timeout: 15
       script: |
         ldd --version
         conda create -y --name build_binary python=${{ matrix.python-version }}
