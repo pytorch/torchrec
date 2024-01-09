@@ -21,6 +21,7 @@ import os
 import sys
 
 import pytorch_sphinx_theme
+import torchrec
 
 current_dir = os.path.dirname(__file__)
 target_dir = os.path.abspath(os.path.join(current_dir, "../.."))
@@ -34,7 +35,7 @@ copyright = "2022, Meta"
 author = "Meta"
 
 # The full version, including alpha/beta/rc tags
-release = "0.0.1"
+release = torchrec.__version__
 
 
 # -- General configuration ---------------------------------------------------
