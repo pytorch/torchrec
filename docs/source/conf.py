@@ -35,8 +35,8 @@ copyright = "2022, Meta"
 author = "Meta"
 
 # The full version, including alpha/beta/rc tags
-release = torchrec.__version__
-
+# First 3 as format is 0.x.x.*
+release = ".".join(torchrec.__version__.split(".")[:3])
 
 # -- General configuration ---------------------------------------------------
 
