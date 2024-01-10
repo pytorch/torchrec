@@ -68,7 +68,8 @@ jobs:
         echo "numpy succeeded"
         conda install -n build_binary -y pytest
         conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors -k 'not test_sharding_gloo_cw and not test_load_state_dict_prefix and not test_load_state_dict_cw_multiple_shards' --ignore-glob=**/test_utils/
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
+          --ignore-glob=**/test_utils/
         echo "Starting C++ Tests"
         conda install -n build_binary -y gxx_linux-64
         conda run -n build_binary \
