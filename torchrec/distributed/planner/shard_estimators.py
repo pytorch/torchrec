@@ -166,6 +166,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 caching_ratio is not None
                 and sharding_option.cache_params is not None
                 and sharding_option.cache_params.stats is not None
+                and sharding_option.compute_kernel
+                == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
             ):
                 _stats = sharding_option.cache_params.stats
                 expected_cache_fetches = (
