@@ -7,7 +7,7 @@
 
 import unittest
 from typing import cast, List
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import torch
 from torchrec.distributed.embedding_tower_sharding import (
@@ -16,6 +16,9 @@ from torchrec.distributed.embedding_tower_sharding import (
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.mc_embeddingbag import (
+    ManagedCollisionEmbeddingBagCollectionSharder,
+)
 from torchrec.distributed.planner.constants import BIGINT_DTYPE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
@@ -648,6 +651,158 @@ class TestEnumerators(unittest.TestCase):
             self.assertNotIn(sharding_option.sharding_type, unexpected_sharding_types)
             self.assertIn(sharding_option.compute_kernel, expected_compute_kernels)
             self.assertNotIn(sharding_option.compute_kernel, unexpected_compute_kernels)
+
+    def test_filter_sharding_types_ebc(self) -> None:
+        constraint = ParameterConstraints(
+            sharding_types=[
+                ShardingType.TABLE_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ],
+        )
+        constraints = {"table_0": constraint}
+        enumerator = EmbeddingEnumerator(
+            topology=MagicMock(),
+            batch_size=MagicMock(),
+            constraints=constraints,
+        )
+
+        sharder = EmbeddingBagCollectionSharder()
+        allowed_sharding_types = enumerator._filter_sharding_types(
+            "table_0", sharder.sharding_types("cuda")
+        )
+
+        self.assertEqual(
+            set(allowed_sharding_types),
+            {
+                ShardingType.TABLE_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            },
+        )
+
+    def test_filter_sharding_types_mch_ebc(self) -> None:
+        constraint = ParameterConstraints(
+            sharding_types=[
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ],
+        )
+        constraints = {"table_0": constraint}
+        enumerator = EmbeddingEnumerator(
+            topology=MagicMock(),
+            batch_size=MagicMock(),
+            constraints=constraints,
+        )
+
+        sharder = ManagedCollisionEmbeddingBagCollectionSharder()
+        allowed_sharding_types = enumerator._filter_sharding_types(
+            "table_0", sharder.sharding_types("cuda")
+        )
+
+        self.assertEqual(
+            set(allowed_sharding_types),
+            {
+                ShardingType.ROW_WISE.value,
+            },
+        )
+
+    def test_filter_sharding_types_mch_ebc_no_available(self) -> None:
+        constraint = ParameterConstraints(
+            sharding_types=[
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ],
+        )
+        constraints = {"table_0": constraint}
+        enumerator = EmbeddingEnumerator(
+            topology=MagicMock(),
+            batch_size=MagicMock(),
+            constraints=constraints,
+        )
+
+        sharder = ManagedCollisionEmbeddingBagCollectionSharder()
+        with self.assertWarns(Warning):
+            allowed_sharding_types = enumerator._filter_sharding_types(
+                "table_0", sharder.sharding_types("cuda")
+            )
+
+        self.assertEqual(allowed_sharding_types, [])
+
+    def test_filter_compute_kernels_ebc(self) -> None:
+        constraint = ParameterConstraints(
+            compute_kernels=[
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ],
+        )
+        constraints = {"table_0": constraint}
+        enumerator = EmbeddingEnumerator(
+            topology=MagicMock(),
+            batch_size=MagicMock(),
+            constraints=constraints,
+        )
+
+        sharder = EmbeddingBagCollectionSharder()
+        allowed_compute_kernels = enumerator._filter_compute_kernels(
+            "table_0", sharder.compute_kernels(ShardingType.ROW_WISE.value, "cuda")
+        )
+
+        self.assertEqual(
+            set(allowed_compute_kernels),
+            {
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            },
+        )
+
+    def test_filter_compute_kernels_mch_ebc(self) -> None:
+        constraint = ParameterConstraints(
+            compute_kernels=[
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ],
+        )
+        constraints = {"table_0": constraint}
+        enumerator = EmbeddingEnumerator(
+            topology=MagicMock(),
+            batch_size=MagicMock(),
+            constraints=constraints,
+        )
+
+        sharder = ManagedCollisionEmbeddingBagCollectionSharder()
+        allowed_compute_kernels = enumerator._filter_compute_kernels(
+            "table_0", sharder.compute_kernels(ShardingType.ROW_WISE.value, "cuda")
+        )
+
+        self.assertEqual(
+            set(allowed_compute_kernels),
+            {EmbeddingComputeKernel.FUSED.value},
+        )
+
+    def test_filter_compute_kernels_mch_ebc_no_available(self) -> None:
+        constraint = ParameterConstraints(
+            compute_kernels=[
+                EmbeddingComputeKernel.DENSE.value,
+            ],
+        )
+        constraints = {"table_0": constraint}
+        enumerator = EmbeddingEnumerator(
+            topology=MagicMock(),
+            batch_size=MagicMock(),
+            constraints=constraints,
+        )
+
+        sharder = ManagedCollisionEmbeddingBagCollectionSharder()
+        with self.assertWarns(Warning):
+            allowed_compute_kernels = enumerator._filter_compute_kernels(
+                "table_0", sharder.compute_kernels(ShardingType.ROW_WISE.value, "cuda")
+            )
+
+        self.assertEqual(allowed_compute_kernels, [])
 
     def test_tower_sharding(self) -> None:
         # five tables
