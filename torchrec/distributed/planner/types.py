@@ -31,6 +31,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
 )
 from torchrec.modules.embedding_modules import EmbeddingCollectionInterface
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
 
 # ---- Perf ---- #
 
@@ -355,11 +356,15 @@ class ShardingOption:
     @staticmethod
     def module_pooled(module: nn.Module, sharding_option_name: str) -> bool:
         """Determine if module pools output (e.g. EmbeddingBag) or uses unpooled/sequential output."""
-        if isinstance(module, EmbeddingCollectionInterface):
+        if isinstance(module, EmbeddingCollectionInterface) or isinstance(
+            module, ManagedCollisionEmbeddingCollection
+        ):
             return False
 
         for submodule in module.modules():
-            if isinstance(submodule, EmbeddingCollectionInterface):
+            if isinstance(submodule, EmbeddingCollectionInterface) or isinstance(
+                module, ManagedCollisionEmbeddingCollection
+            ):
                 for name, _ in submodule.named_parameters():
                     if sharding_option_name in name:
                         return False
