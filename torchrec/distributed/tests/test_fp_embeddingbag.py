@@ -335,18 +335,22 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             use_fp_collection=use_fp_collection,
         )
 
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     # pyre-ignore
-    @given(use_fp_collection=st.booleans())
-    def test_sharding_fp_ebc_from_meta(self, use_fp_collection: bool) -> None:
+    @given(use_fp_collection=st.booleans(), backend=st.sampled_from(["nccl", "gloo"]))
+    def test_sharding_fp_ebc_from_meta(
+        self, use_fp_collection: bool, backend: str
+    ) -> None:
         embedding_bag_config, kjt_input_per_rank = get_configs_and_kjt_inputs()
         self._run_multi_process_test(
             callable=_test_sharding_from_meta,
             world_size=2,
             tables=embedding_bag_config,
             sharder=FeatureProcessedEmbeddingBagCollectionSharder(),
-            backend="nccl"
-            if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
-            else "gloo",
+            backend=backend,
             use_fp_collection=use_fp_collection,
         )
