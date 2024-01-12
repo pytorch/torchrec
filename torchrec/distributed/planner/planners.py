@@ -162,7 +162,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             performance_model if performance_model else NoopPerfModel(topology=topology)
         )
 
-        if stats:
+        if stats is not None:
             self._stats: List[Stats] = [stats] if not isinstance(stats, list) else stats
         else:
             self._stats = [EmbeddingStats()]
