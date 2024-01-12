@@ -479,7 +479,7 @@ def create_test_model(
     quant_state_dict_split_scale_bias: bool = False,
     num_features: int = 1,
     num_float_features: int = 8,
-    num_weight_features: int = 1,
+    num_weighted_features: int = 1,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     weight_dtype: torch.dtype = torch.qint8,
 ) -> TestModelInfo:
@@ -489,7 +489,7 @@ def create_test_model(
         sparse_device=sparse_device,
         num_features=num_features,
         num_float_features=num_float_features,
-        num_weighted_features=num_weight_features,
+        num_weighted_features=num_weighted_features,
         topology=topology,
     )
 
@@ -546,23 +546,24 @@ def create_test_model(
     return mi
 
 
-def create_test_model_ebc_only(
+def create_test_model_ebc_only_no_quantize(
     num_embeddings: int,
     emb_dim: int,
     world_size: int,
     batch_size: int,
-    num_features: int,
     dense_device: torch.device,
     sparse_device: torch.device,
-    quant_state_dict_split_scale_bias: bool = False,
+    num_features: int = 1,
+    num_float_features: int = 8,
+    num_weighted_features: int = 1,
 ) -> TestModelInfo:
     topology: Topology = Topology(world_size=world_size, compute_device="cuda")
     mi = TestModelInfo(
         dense_device=dense_device,
         sparse_device=sparse_device,
         num_features=num_features,
-        num_float_features=8,
-        num_weighted_features=1,
+        num_float_features=num_float_features,
+        num_weighted_features=num_weighted_features,
         topology=topology,
     )
 
@@ -606,6 +607,32 @@ def create_test_model_ebc_only(
         )
     )
     mi.model.training = False
+    return mi
+
+
+def create_test_model_ebc_only(
+    num_embeddings: int,
+    emb_dim: int,
+    world_size: int,
+    batch_size: int,
+    dense_device: torch.device,
+    sparse_device: torch.device,
+    num_features: int = 1,
+    num_float_features: int = 8,
+    num_weighted_features: int = 1,
+    quant_state_dict_split_scale_bias: bool = False,
+) -> TestModelInfo:
+    mi = create_test_model_ebc_only_no_quantize(
+        num_embeddings=num_embeddings,
+        emb_dim=emb_dim,
+        world_size=world_size,
+        batch_size=batch_size,
+        dense_device=dense_device,
+        sparse_device=sparse_device,
+        num_features=num_features,
+        num_float_features=num_float_features,
+        num_weighted_features=num_weighted_features,
+    )
     mi.quant_model = quantize(
         module=mi.model,
         inplace=False,

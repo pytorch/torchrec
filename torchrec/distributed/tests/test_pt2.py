@@ -65,6 +65,7 @@ def _sharded_quant_ebc_model() -> Tuple[torch.nn.Module, List[KeyedJaggedTensor]
         world_size,
         batch_size,
         num_features=2,
+        num_weighted_features=1,
         dense_device=local_device,
         sparse_device=local_device,
         quant_state_dict_split_scale_bias=True,
