@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+from hypothesis import given, settings, strategies as st
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
 from torchrec.distributed.mc_embeddingbag import (
     ManagedCollisionEmbeddingBagCollectionSharder,
@@ -264,12 +265,14 @@ def _test_sharding_and_remapping(  # noqa C901
 
 @skip_if_asan_class
 class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_uneven_sharding(self) -> None:
+    # pyre-ignore
+    @given(backend=st.sampled_from(["nccl"]))
+    @settings(deadline=20000)
+    def test_uneven_sharding(self, backend: str) -> None:
         WORLD_SIZE = 2
 
         embedding_bag_config = [
@@ -292,15 +295,17 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             world_size=WORLD_SIZE,
             tables=embedding_bag_config,
             sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
-            backend="nccl",
+            backend=backend,
         )
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_even_sharding(self) -> None:
+    # pyre-ignore
+    @given(backend=st.sampled_from(["nccl"]))
+    @settings(deadline=20000)
+    def test_even_sharding(self, backend: str) -> None:
         WORLD_SIZE = 2
 
         embedding_bag_config = [
@@ -323,15 +328,17 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             world_size=WORLD_SIZE,
             tables=embedding_bag_config,
             sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
-            backend="nccl",
+            backend=backend,
         )
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_sharding_zch_mc_ebc(self) -> None:
+    # pyre-ignore
+    @given(backend=st.sampled_from(["nccl"]))
+    @settings(deadline=20000)
+    def test_sharding_zch_mc_ebc(self, backend: str) -> None:
 
         WORLD_SIZE = 2
 
@@ -427,15 +434,17 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             kjt_input_per_rank=kjt_input_per_rank,
             kjt_out_per_iter_per_rank=kjt_out_per_iter_per_rank,
             sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
-            backend="nccl",
+            backend=backend,
         )
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_sharding_zch_mch_mc_ebc(self) -> None:
+    # pyre-ignore
+    @given(backend=st.sampled_from(["nccl"]))
+    @settings(deadline=20000)
+    def test_sharding_zch_mch_mc_ebc(self, backend: str) -> None:
 
         WORLD_SIZE = 2
 
@@ -560,5 +569,5 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             kjt_input_per_rank=kjt_input_per_rank,
             kjt_out_per_iter_per_rank=kjt_out_per_iter_per_rank,
             sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
-            backend="nccl",
+            backend=backend,
         )
