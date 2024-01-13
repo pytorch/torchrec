@@ -694,3 +694,25 @@ def _reduce_int_list(input_list: List[int]) -> str:
         reduced.append(str(prev_num))
 
     return ", ".join(reduced)
+
+
+class NoopEmbeddingStats(Stats):
+    """
+    Noop Stats for a sharding planner execution.
+    """
+
+    def log(
+        self,
+        sharding_plan: ShardingPlan,
+        topology: Topology,
+        batch_size: int,
+        storage_reservation: StorageReservation,
+        num_proposals: int,
+        num_plans: int,
+        run_time: float,
+        best_plan: List[ShardingOption],
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        debug: bool = True,
+    ) -> None:
+        pass
