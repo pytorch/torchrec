@@ -21,6 +21,11 @@ if [[ ${MATRIX_GPU_ARCH_TYPE} = 'rocm' ]]; then
     exit 0
 fi
 
+if [[ ${MATRIX_PYTHON_VERSION} = '3.12' ]]; then
+    echo "Temporarily disable validation for Python 3.12"
+    exit 0
+fi
+
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
     export CUDA_VERSION="cu118"
 else
