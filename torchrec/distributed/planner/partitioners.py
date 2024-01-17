@@ -80,7 +80,7 @@ def _group_and_sort_non_uniform_sharding_options(
         if path not in param_count:
             param_count[path] = 0
         param_count[path] += 1
-    logger.info(f"param_count is {param_count}")
+    logger.debug(f"param_count is {param_count}")
 
     sharding_option_groups_by_dependency = {}
     for sharding_option in sharding_options:
