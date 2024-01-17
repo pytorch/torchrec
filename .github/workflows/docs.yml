@@ -1,12 +1,12 @@
 # This workflow builds the torchrec docs and deploys them to gh-pages.
 name: Generate documentation
 on:
-  push:
-    branches:
-      - main
+  pull_request:
   workflow_dispatch:
 jobs:
   build_docs_job:
+    permissions:
+      contents: write
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
