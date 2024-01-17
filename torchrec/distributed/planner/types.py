@@ -321,6 +321,12 @@ class ShardingOption:
         return self.module[0] + "." + self.name
 
     @property
+    def cache_load_factor(self) -> Optional[float]:
+        if self.cache_params is not None:
+            return self.cache_params.load_factor
+        return None
+
+    @property
     def path(self) -> str:
         return self.module[0]
 

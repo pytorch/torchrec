@@ -410,9 +410,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             * none_to_zero(
                 EmbeddingOffloadScaleupProposer.get_expected_lookups(sharding_option)
             )
-            * none_to_zero(
-                EmbeddingOffloadScaleupProposer.get_load_factor(sharding_option)
-            )
+            * none_to_zero(sharding_option.cache_load_factor)
             > 0
         ]
         # Nothing to scale
@@ -423,10 +421,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             cache_tables, enumerator
         )
         clfs = torch.tensor(
-            [
-                EmbeddingOffloadScaleupProposer.get_load_factor(sharding_option)
-                for sharding_option in cache_tables
-            ]
+            [sharding_option.cache_load_factor for sharding_option in cache_tables]
         )
         # cooked_cacheability is cacheability scaled by the expected number of cache
         # lookups.
@@ -482,16 +477,6 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         ):
             return None
         return sharding_option.cache_params.stats.expected_lookups
-
-    @staticmethod
-    def get_load_factor(sharding_option: ShardingOption) -> Optional[float]:
-        # helper to appease pyre type checker, as cache_params is Optional it maybe None
-        if (
-            sharding_option.cache_params is None
-            or sharding_option.cache_params.stats is None
-        ):
-            return None
-        return sharding_option.cache_params.load_factor
 
     # The relationship between clf and shard memory usage is non-linear due to non-clf
     # overheads like optimization stats and input/output storage. We model it as an

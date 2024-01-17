@@ -329,10 +329,7 @@ class EmbeddingStats(Stats):
                     or so.sharding_type == ShardingType.TABLE_COLUMN_WISE.value
                     else f"{so.tensor.shape[1]}"
                 )
-                cache_load_factor = _get_cache_load_factor(sharding_option=so)
-                cache_load_factor = (
-                    str(cache_load_factor) if cache_load_factor is not None else "None"
-                )
+                cache_load_factor = str(so.cache_load_factor)
                 hash_size = so.tensor.shape[0]
                 param_table.append(
                     [
@@ -596,16 +593,6 @@ def _generate_max_text(perfs: List[float]) -> str:
     max_perf_ranks = f"{rank_text} {','.join(max_perf_indices)}"
 
     return f"{round(max_perf, 3)} ms on {max_perf_ranks}"
-
-
-def _get_cache_load_factor(
-    sharding_option: ShardingOption,
-) -> Optional[float]:
-    return (
-        sharding_option.cache_params.load_factor
-        if sharding_option.cache_params
-        else None
-    )
 
 
 def _get_sharding_type_abbr(sharding_type: str) -> str:
