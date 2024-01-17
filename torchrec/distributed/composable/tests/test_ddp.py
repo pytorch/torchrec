@@ -42,7 +42,12 @@ class DDPTest(unittest.TestCase):
         else:
             device: torch.device = torch.device("cpu")
             backend = "gloo"
-        dist.init_process_group(backend=backend)
+        dist.init_process_group(
+            backend=backend,
+            rank=rank,
+            world_size=world_size,
+            init_method=f"file://{os.path.join(path, 'dist_rdvz')}",
+        )
         num_float_features = 32
 
         tables = [
@@ -94,7 +99,12 @@ class DDPTest(unittest.TestCase):
         else:
             device: torch.device = torch.device("cpu")
             backend = "gloo"
-        dist.init_process_group(backend=backend)
+        dist.init_process_group(
+            backend=backend,
+            rank=rank,
+            world_size=world_size,
+            init_method=f"file://{os.path.join(path, 'dist_rdvz')}",
+        )
         num_float_features = 32
 
         tables = [
