@@ -8,6 +8,9 @@ on:
 jobs:
   build_docs_job:
     runs-on: ${{ matrix.os }}
+    permissions:
+      # Grant write permission here so that the doc can be pushed to gh-pages branch
+      contents: write
     strategy:
       matrix:
         include:
