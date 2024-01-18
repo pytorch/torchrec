@@ -437,6 +437,17 @@ class MetricModuleTest(unittest.TestCase):
         # 24 (initial states) + 3 (tensors) * 128 (batch_size) * 4 (float)
         self.assertEqual(metric_module.get_memory_usage(), 1548)
 
+        # Test memory usage over multiple updates does not increase unexpectedly, we don't need to force OOM as just knowing if the memory usage is increeasing how we expect is enough
+        for _ in range(10):
+            metric_module.update(gen_test_batch(128))
+
+        # 24 initial states + 3 tensors * 128 batch size * 4 float * 11 updates - 12 initial memory
+        self.assertEqual(metric_module.get_memory_usage(), 16908)
+
+        # Ensure reset frees memory correctly
+        metric_module.reset()
+        self.assertEqual(metric_module.get_memory_usage(), 12)
+
     def test_check_memory_usage(self) -> None:
         mock_optimizer = MockOptimizer()
         config = DefaultMetricsConfig
