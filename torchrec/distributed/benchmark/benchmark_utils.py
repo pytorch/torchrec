@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass
 
 from enum import Enum
-from typing import List, Tuple, TypeVar
+from typing import Dict, List, Tuple, TypeVar, Union
 
 import torch
 from torch.autograd.profiler import record_function
@@ -30,8 +30,8 @@ from torchrec.distributed.test_utils.test_model import ModelInput
 
 from torchrec.distributed.types import DataType, ModuleSharder, ShardingEnv
 from torchrec.fx import symbolic_trace
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 logger: logging.Logger = logging.getLogger()
 
@@ -47,6 +47,63 @@ class BenchmarkResult:
     short_name: str
     elapsed_time: torch.Tensor
     max_mem_allocated: List[int]
+
+
+class ECWrapper(torch.nn.Module):
+    """
+    Wrapper Module for benchmarking EC Modules
+
+    Args:
+        module: module to benchmark
+
+    Call Args:
+        input: KeyedJaggedTensor KJT input to module
+
+    Returns:
+        output: KT output from module
+
+    Example:
+        e1_config = EmbeddingConfig(
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
+        )
+        e2_config = EmbeddingConfig(
+            name="t2", embedding_dim=3, num_embeddings=10, feature_names=["f2"]
+        )
+
+        ec = EmbeddingCollection(tables=[e1_config, e2_config])
+
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+
+        ec.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=torch.qint8
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=torch.qint8),
+        )
+
+        qec = QuantEmbeddingCollection.from_float(ecc)
+
+        wrapped_module = ECWrapper(qec)
+        quantized_embeddings = wrapped_module(features)
+    """
+
+    def __init__(self, module: torch.nn.Module) -> None:
+        super().__init__()
+        self._module = module
+
+    def forward(self, input: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
+        """
+        Args:
+            input (KeyedJaggedTensor): KJT of form [F X B X L].
+
+        Returns:
+            Dict[str, JaggedTensor]
+        """
+        return self._module.forward(input)
 
 
 class EBCWrapper(torch.nn.Module):
@@ -109,24 +166,36 @@ T = TypeVar("T", bound=torch.nn.Module)
 
 
 def get_tables(
-    table_sizes: List[Tuple[int, int]],
-) -> List[EmbeddingBagConfig]:
-    tables: List[EmbeddingBagConfig] = [
-        EmbeddingBagConfig(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            name="table_" + str(i),
-            feature_names=["feature_" + str(i)],
-            data_type=DataType.INT8,
-        )
-        for i, (num_embeddings, embedding_dim) in enumerate(table_sizes)
-    ]
+    table_sizes: List[Tuple[int, int]], is_pooled: bool = True
+) -> Union[List[EmbeddingBagConfig], List[EmbeddingConfig]]:
+    if is_pooled:
+        tables: List[EmbeddingBagConfig] = [
+            EmbeddingBagConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=embedding_dim,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+                data_type=DataType.INT8,
+            )
+            for i, (num_embeddings, embedding_dim) in enumerate(table_sizes)
+        ]
+    else:
+        tables: List[EmbeddingConfig] = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=embedding_dim,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+                data_type=DataType.INT8,
+            )
+            for i, (num_embeddings, embedding_dim) in enumerate(table_sizes)
+        ]
 
     return tables
 
 
 def get_inputs(
-    tables: List[EmbeddingBagConfig],
+    tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
     batch_size: int,
     world_size: int,
     num_inputs: int,
@@ -366,7 +435,7 @@ def benchmark_module(
     sharder: ModuleSharder[T],
     sharding_types: List[ShardingType],
     compile_modes: List[CompileMode],
-    tables: List[EmbeddingBagConfig],
+    tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
     warmup_iters: int = 20,
     bench_iters: int = 2000,
     prof_iters: int = 20,
@@ -409,7 +478,10 @@ def benchmark_module(
     bench_inputs = inputs[warmup_iters : (warmup_iters + bench_iters)]
     prof_inputs = inputs[-prof_iters:]
 
-    wrapped_module = EBCWrapper(module)
+    if isinstance(tables[0], EmbeddingBagConfig):
+        wrapped_module = EBCWrapper(module)
+    else:
+        wrapped_module = ECWrapper(module)
 
     for sharding_type in sharding_types:
         for compile_mode in compile_modes:

@@ -74,11 +74,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
 
-            caching_ratio = (
-                sharding_option.cache_params.load_factor
-                if sharding_option.cache_params
-                else None
-            )
+            caching_ratio = sharding_option.cache_load_factor
             # TODO: remove after deprecating fused_params in sharder
             if caching_ratio is None:
                 caching_ratio = (
@@ -819,11 +815,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
 
-            caching_ratio = (
-                sharding_option.cache_params.load_factor
-                if sharding_option.cache_params
-                else None
-            )
+            caching_ratio = sharding_option.cache_load_factor
             # TODO: remove after deprecating fused_params in sharder
             if caching_ratio is None:
                 caching_ratio = (
