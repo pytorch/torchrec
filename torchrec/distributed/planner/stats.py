@@ -329,7 +329,16 @@ class EmbeddingStats(Stats):
                     or so.sharding_type == ShardingType.TABLE_COLUMN_WISE.value
                     else f"{so.tensor.shape[1]}"
                 )
-                cache_load_factor = str(so.cache_load_factor)
+                sharder_cache_load_factor = (
+                    sharder.fused_params.get("cache_load_factor")  # pyre-ignore[16]
+                    if hasattr(sharder, "fused_params") and sharder.fused_params
+                    else None
+                )
+                cache_load_factor = str(
+                    so.cache_load_factor
+                    if so.cache_load_factor is not None
+                    else sharder_cache_load_factor
+                )
                 hash_size = so.tensor.shape[0]
                 param_table.append(
                     [
