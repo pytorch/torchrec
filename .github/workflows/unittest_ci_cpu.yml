@@ -21,6 +21,7 @@ jobs:
   build_test:
     strategy:
         fail-fast: false
+        max-attempts: 2
         matrix:
           include:
             - os: linux.2xlarge
