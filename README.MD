@@ -21,7 +21,7 @@ Torchrec requires Python >= 3.8 and CUDA >= 11.8 (CUDA is highly recommended for
 
 ## Binaries
 
-Experimental binary on Linux for Python 3.8, 3.9, 3.10 and 3.11, and CPU, CUDA 11.8 and CUDA 12.1 can be installed via pip wheels from [download.pytorch.org](download.pytorch.org) and PyPI (only for CUDA 12.1).
+Experimental binary on Linux for Python 3.8, 3.9, 3.10, 3.11 and 3.12 (experimental), and CPU, CUDA 11.8 and CUDA 12.1 can be installed via pip wheels from [download.pytorch.org](download.pytorch.org) and PyPI (only for CUDA 12.1).
 
 Below we show installations for CUDA 12.1 as an example. For CPU or CUDA 11.8, swap "cu121" for "cpu" or "cu118".
 
@@ -105,7 +105,7 @@ We are currently iterating on the setup experience. For now, we provide manual i
    python setup.py install develop
    ```
 
-5. Test the installation (use torchx-nightly for 3.11).
+5. Test the installation (use torchx-nightly for 3.11; for 3.12, torchx currently doesn't work).
    ```
    GPU mode
 
