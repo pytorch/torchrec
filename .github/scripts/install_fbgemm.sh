@@ -12,7 +12,9 @@ echo "CHANNEL"
 echo "$CHANNEL"
 
 if [ "$CHANNEL" = "nightly" ]; then
+    ${CONDA_RUN} pip install numpy
     ${CONDA_RUN} pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/"$CU_VERSION"
 elif [ "$CHANNEL" = "test" ]; then
+    ${CONDA_RUN} pip install numpy
     ${CONDA_RUN} pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/"$CU_VERSION"
 fi
