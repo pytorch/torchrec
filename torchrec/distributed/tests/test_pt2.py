@@ -127,7 +127,7 @@ class TestPt2(unittest.TestCase):
                 device = "cuda"
                 # pyre-ignore
                 aot_inductor_module = AOTIRunnerUtil.load(device, so_path)
-                aot_actual_output = aot_inductor_module(inputs)
+                aot_actual_output = aot_inductor_module(*inputs)
                 assert_close(eager_output, aot_actual_output)
 
     def test_kjt_split(self) -> None:
@@ -204,7 +204,7 @@ class TestPt2(unittest.TestCase):
             )
             # pyre-ignore
             aot_inductor_module = AOTIRunnerUtil.load(device, so_path)
-            aot_inductor_module(example_inputs)
+            aot_inductor_module(*example_inputs)
 
             aot_actual_outputs = [
                 aot_inductor_module(*kjt_to_inputs(kjt)) for kjt in input_kjts[1:]
