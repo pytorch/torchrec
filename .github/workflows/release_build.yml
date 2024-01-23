@@ -4,11 +4,12 @@
 name: Push Binary Release
 
 on:
-  workflow_call:
-    secrets:
-      PYPI_TOKEN:
-        required: false
-  workflow_dispatch:
+  # workflow_call:
+  #   secrets:
+  #     PYPI_TOKEN:
+  #       required: false
+  # workflow_dispatch:
+  pull_request:
 
 jobs:
 
@@ -206,14 +207,14 @@ jobs:
         conda run -n build_binary \
           python -c "import torchrec"
     # Push to Pypi
-    - name: Push TorchRec Binary to PYPI
-      env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-      run: |
-        conda run -n build_binary python -m pip install twine
-        conda run -n build_binary \
-          python -m twine upload \
-            --username __token__ \
-            --password "$PYPI_TOKEN" \
-            --skip-existing \
-            torchrec-*.whl
+    # - name: Push TorchRec Binary to PYPI
+    #   env:
+    #       PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    #   run: |
+    #     conda run -n build_binary python -m pip install twine
+    #     conda run -n build_binary \
+    #       python -m twine upload \
+    #         --username __token__ \
+    #         --password "$PYPI_TOKEN" \
+    #         --skip-existing \
+    #         torchrec-*.whl
