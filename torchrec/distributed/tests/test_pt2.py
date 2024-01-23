@@ -23,7 +23,6 @@ except (unittest.SkipTest, ImportError):
 
 
 from fbgemm_gpu import sparse_ops  # noqa: F401, E402
-from torch._export import dynamic_dim
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.infer_utils import (
@@ -49,7 +48,6 @@ def make_kjt(values: List[int], lengths: List[int]) -> KeyedJaggedTensor:
         values=values_tensor,
         lengths=lengths_tensor,
     )
-    dynamic_dim(kjt._values, 0)
     return kjt
 
 
