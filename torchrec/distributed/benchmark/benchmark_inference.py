@@ -220,8 +220,12 @@ def main() -> None:
         write_report_func(benchmark_results_per_module[i])
 
 
-if __name__ == "__main__":
+def invoke_main() -> None:
     logging.basicConfig()
     logging.getLogger().setLevel(logging.DEBUG)
 
     main()
+
+
+if __name__ == "__main__":
+    invoke_main()  # pragma: no cover
