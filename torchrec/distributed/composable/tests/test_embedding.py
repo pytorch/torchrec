@@ -95,6 +95,8 @@ def _test_sharding(  # noqa C901
         sharded_model = _shard_modules(
             module=unsharded_model,
             plan=ShardingPlan({"": module_sharding_plan}),
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             # pyre-ignore
             sharders=[sharder],

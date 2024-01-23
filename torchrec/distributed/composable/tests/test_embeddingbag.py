@@ -123,6 +123,8 @@ def _test_sharding(  # noqa C901
         plan: ShardingPlan = planner.collective_plan(model, [sharder], ctx.pg)
         sharded_model = shard(
             module=model,
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             plan=plan.get_plan_for_module(""),
             sharder=sharder,

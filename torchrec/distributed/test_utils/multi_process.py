@@ -48,8 +48,7 @@ class MultiProcessContext:
             torch.backends.cuda.matmul.allow_tf32 = False
         self.pg: Optional[dist.ProcessGroup] = None
 
-    # pyre-ignore
-    def __enter__(self):
+    def __enter__(self) -> "MultiProcessContext":
         """
         Override local_size after pg construction because unit test device count is
         larger than local_size setup. This can be problematic for twrw because we have
