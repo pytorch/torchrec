@@ -93,6 +93,8 @@ def _test_sharding(
         plan: ShardingPlan = planner.collective_plan(model, [sharder], ctx.pg)
         sharded_model = DistributedModelParallel(
             module=model,
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             plan=plan,
             sharders=[sharder],
@@ -321,6 +323,8 @@ def _test_sharding_ec(
         plan: ShardingPlan = planner.collective_plan(model, [sharder], ctx.pg)
         sharded_model = DistributedModelParallel(
             module=model,
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             plan=plan,
             sharders=[sharder],
