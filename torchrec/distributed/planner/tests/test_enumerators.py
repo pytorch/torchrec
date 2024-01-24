@@ -858,3 +858,49 @@ class TestEnumerators(unittest.TestCase):
     def test_empty(self) -> None:
         sharding_options = self.enumerator.enumerate(self.model, sharders=[])
         self.assertFalse(sharding_options)
+
+    def test_throw_ex_no_sharding_option_for_table(self) -> None:
+        cw_constraint = ParameterConstraints(
+            sharding_types=[
+                ShardingType.COLUMN_WISE.value,
+            ],
+            compute_kernels=[
+                EmbeddingComputeKernel.FUSED.value,
+            ],
+        )
+
+        rw_constraint = ParameterConstraints(
+            sharding_types=[
+                ShardingType.TABLE_ROW_WISE.value,
+            ],
+            compute_kernels=[
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            ],
+        )
+
+        constraints = {
+            "table_0": cw_constraint,
+            "table_1": rw_constraint,
+            "table_2": cw_constraint,
+            "table_3": cw_constraint,
+        }
+
+        enumerator = EmbeddingEnumerator(
+            topology=Topology(
+                world_size=self.world_size,
+                compute_device=self.compute_device,
+                local_world_size=self.local_world_size,
+            ),
+            batch_size=self.batch_size,
+            constraints=constraints,
+        )
+
+        sharder = cast(ModuleSharder[torch.nn.Module], CWSharder())
+
+        with self.assertRaises(Exception) as context:
+            _ = enumerator.enumerate(self.model, [sharder])
+
+        self.assertTrue(
+            "No available sharding type and compute kernel combination after applying user provided constraints for table_1"
+            in str(context.exception)
+        )

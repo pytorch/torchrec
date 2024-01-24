@@ -127,6 +127,8 @@ class EmbeddingEnumerator(Enumerator):
                     bounds_check_mode,
                 ) = _extract_constraints_for_param(self._constraints, name)
 
+                sharding_options_per_table: List[ShardingOption] = []
+
                 for sharding_type in self._filter_sharding_types(
                     name, sharder.sharding_types(self._compute_device)
                 ):
@@ -150,7 +152,7 @@ class EmbeddingEnumerator(Enumerator):
                         elif isinstance(child_module, EmbeddingTowerCollection):
                             tower_index = _get_tower_index(name, child_module)
                             dependency = child_path + ".tower_" + str(tower_index)
-                        sharding_options.append(
+                        sharding_options_per_table.append(
                             ShardingOption(
                                 name=name,
                                 tensor=param,
@@ -172,11 +174,13 @@ class EmbeddingEnumerator(Enumerator):
                                 is_pooled=is_pooled,
                             )
                         )
-                if not sharding_options:
+                if not sharding_options_per_table:
                     raise RuntimeError(
                         "No available sharding type and compute kernel combination "
                         f"after applying user provided constraints for {name}"
                     )
+
+                sharding_options.extend(sharding_options_per_table)
 
         self.populate_estimates(sharding_options)
 
