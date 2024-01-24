@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
+from dataclasses import replace
 from typing import Dict, List, Optional, Type
 
 import hypothesis.strategies as st
@@ -16,6 +17,7 @@ from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
     EmbeddingConfig,
+    PoolingType,
     QuantConfig,
 )
 from torchrec.modules.embedding_modules import (
@@ -37,8 +39,9 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         pooled_embeddings_2: KeyedTensor,
         atol: float = 1e-08,
     ) -> None:
-
-        self.assertEqual(pooled_embeddings_1.keys(), pooled_embeddings_2.keys())
+        self.assertEqual(
+            set(pooled_embeddings_1.keys()), set(pooled_embeddings_2.keys())
+        )
         for key in pooled_embeddings_1.keys():
             self.assertEqual(
                 pooled_embeddings_1[key].shape, pooled_embeddings_2[key].shape
@@ -92,7 +95,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         self.assertEqual(quantized_embeddings.values().dtype, output_type)
 
-        self._asserting_same_embeddings(embeddings, quantized_embeddings, atol=1.0)
+        self._asserting_same_embeddings(embeddings, quantized_embeddings, atol=0.1)
 
         # test state dict
         state_dict = ebc.state_dict()
@@ -147,28 +150,30 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             feature_names=["f1"],
             data_type=data_type,
         )
-        eb2_config = EmbeddingBagConfig(
-            name="t2",
-            embedding_dim=16,
-            num_embeddings=10,
-            feature_names=["f2"],
-            data_type=data_type,
+        eb1_mean_config = replace(
+            eb1_config,
+            name="t1_mean",
+            pooling=PoolingType.MEAN,
+            embedding_dim=32,
         )
+        eb2_config = replace(eb1_config, name="t2", feature_names=["f2"])
         features = (
             KeyedJaggedTensor(
                 keys=["f1", "f2"],
-                values=torch.as_tensor([0, 1]),
-                lengths=torch.as_tensor([1, 1]),
+                values=torch.as_tensor([0, 2, 1, 3]),
+                lengths=torch.as_tensor([1, 1, 2, 0]),
             )
             if not permute_order
             else KeyedJaggedTensor(
                 keys=["f2", "f1"],
-                values=torch.as_tensor([1, 0]),
-                lengths=torch.as_tensor([1, 1]),
+                values=torch.as_tensor([1, 3, 0, 2]),
+                lengths=torch.as_tensor([2, 0, 1, 1]),
             )
         )
+        # The key for grouping tables is (pooling, data_type).  Test having a different
+        # key value in the middle.
         self._test_ebc(
-            [eb1_config, eb2_config],
+            [eb1_config, eb1_mean_config, eb2_config],
             features,
             quant_type,
             output_type,
@@ -176,7 +181,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         self._test_ebc(
-            [eb1_config, eb2_config],
+            [eb1_config, eb1_mean_config, eb2_config],
             features,
             quant_type,
             output_type,

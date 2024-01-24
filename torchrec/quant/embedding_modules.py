@@ -323,13 +323,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             if table.name in table_names:
                 raise ValueError(f"Duplicate table name {table.name}")
             table_names.add(table.name)
-            self._length_per_key.extend(
-                [table.embedding_dim] * len(table.feature_names)
-            )
             key = (table.pooling, table.data_type)
             self._key_to_tables[key].append(table)
-
-        self._sum_length_per_key: int = sum(self._length_per_key)
 
         location = (
             EmbeddingLocation.HOST if device.type == "cpu" else EmbeddingLocation.DEVICE
@@ -381,9 +376,15 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 emb_module.initialize_weights()
             self._emb_modules.append(emb_module)
 
+        ordered_tables = list(itertools.chain(*self._key_to_tables.values()))
         self._embedding_names: List[str] = list(
-            itertools.chain(*get_embedding_names_by_table(self._embedding_bag_configs))
+            itertools.chain(*get_embedding_names_by_table(ordered_tables))
         )
+        for table in ordered_tables:
+            self._length_per_key.extend(
+                [table.embedding_dim] * len(table.feature_names)
+            )
+
         # We map over the parameters from FBGEMM backed kernels to the canonical nn.EmbeddingBag
         # representation. This provides consistency between this class and the EmbeddingBagCollection
         # nn.Module API calls (state_dict, named_modules, etc)
@@ -491,11 +492,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 )
             )
 
-        embeddings = torch.stack(embeddings).reshape(-1, self._sum_length_per_key)
-
         return KeyedTensor(
             keys=self._embedding_names,
-            values=embeddings,
+            values=torch.cat(embeddings, dim=1),
             length_per_key=self._length_per_key,
         )
 
