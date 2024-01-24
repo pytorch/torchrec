@@ -4,15 +4,12 @@
 name: Push Binary Release
 
 on:
-  workflow_call:
-    secrets:
-      AWS_PYTORCH_UPLOADER_ACCESS_KEY_ID:
-        required: true
-      AWS_PYTORCH_UPLOADER_SECRET_ACCESS_KEY:
-        required: true
-      PYPI_TOKEN:
-        required: false
-  workflow_dispatch:
+  # workflow_call:
+  #   secrets:
+  #     PYPI_TOKEN:
+  #       required: false
+  # workflow_dispatch:
+  pull_request:
 
 jobs:
 
@@ -25,15 +22,23 @@ jobs:
          - os: linux.2xlarge
            python-version: 3.8
            python-tag: "py38"
-           cuda-tag: "cu11"
+           cuda-tag: "cu121"
          - os: linux.2xlarge
            python-version: 3.9
            python-tag: "py39"
-           cuda-tag: "cu11"
+           cuda-tag: "cu121"
          - os: linux.2xlarge
            python-version: '3.10'
            python-tag: "py310"
-           cuda-tag: "cu11"
+           cuda-tag: "cu121"
+         - os: linux.2xlarge
+           python-version: '3.11'
+           python-tag: "py311"
+           cuda-tag: "cu121"
+         - os: linux.2xlarge
+           python-version: '3.12'
+           python-tag: "py312"
+           cuda-tag: "cu121"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
@@ -69,7 +74,12 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-test -c nvidia
+        conda run -n build_binary pip install torch --index-url https://download.pytorch.org/whl/test/cu121
+    - name: Install fbgemm
+      shell: bash
+      run: |
+        conda run -n build_binary pip install numpy
+        conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/cu121
     - name: Install Dependencies
       shell: bash
       run: |
@@ -102,8 +112,8 @@ jobs:
     strategy:
       matrix:
         os: [linux.4xlarge.nvidia.gpu]
-        python-version: [3.8, 3.9, "3.10"]
-        cuda-tag: ["cu11"]
+        python-version: [3.8, 3.9, "3.10", "3.11", "3.12"]
+        cuda-tag: ["cu121"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
@@ -168,8 +178,17 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda install -n build_binary -y pytorch pytorch-cuda=11.7 -c pytorch-test -c nvidia
+        conda run -n build_binary pip install torch --index-url https://download.pytorch.org/whl/test/cu121
     # download wheel from GHA
+    - name: Install fbgemm
+      shell: bash
+      run: |
+        conda run -n build_binary pip install numpy
+        conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/cu121
+    - name: Install torchmetrics
+      shell: bash
+      run: |
+        conda run -n build_binary pip install torchmetrics==1.0.3
     - name: Download wheel
       uses: actions/download-artifact@v2
       with:
@@ -184,16 +203,18 @@ jobs:
       shell: bash
       run: |
         conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        conda run -n build_binary \
           python -c "import torchrec"
     # Push to Pypi
-    - name: Push TorchRec Binary to PYPI
-      env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-      run: |
-        conda run -n build_binary python -m pip install twine
-        conda run -n build_binary \
-          python -m twine upload \
-            --username __token__ \
-            --password "$PYPI_TOKEN" \
-            --skip-existing \
-            torchrec-*.whl
+    # - name: Push TorchRec Binary to PYPI
+    #   env:
+    #       PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+    #   run: |
+    #     conda run -n build_binary python -m pip install twine
+    #     conda run -n build_binary \
+    #       python -m twine upload \
+    #         --username __token__ \
+    #         --password "$PYPI_TOKEN" \
+    #         --skip-existing \
+    #         torchrec-*.whl
