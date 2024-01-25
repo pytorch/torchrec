@@ -94,6 +94,8 @@ def _test_sharding(
         sharded_model = sharder.shard(
             module=model,
             params=module_sharding_plan,
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             device=ctx.device,
         )

@@ -354,6 +354,8 @@ def sharding_single_rank_test(
 
         local_model = DistributedModelParallel(
             local_model,
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             plan=plan,
             sharders=sharders,

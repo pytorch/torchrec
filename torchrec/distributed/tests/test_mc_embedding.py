@@ -148,6 +148,8 @@ def _test_sharding(  # noqa C901
         sharded_sparse_arch = _shard_modules(
             module=copy.deepcopy(sparse_arch),
             plan=ShardingPlan({"_mc_ec": module_sharding_plan}),
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             sharders=[sharder],
             device=ctx.device,
@@ -207,6 +209,8 @@ def _test_sharding_and_remapping(  # noqa C901
         sharded_sparse_arch = _shard_modules(
             module=copy.deepcopy(sparse_arch),
             plan=ShardingPlan({"_mc_ec": module_sharding_plan}),
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             sharders=[sharder],
             device=ctx.device,

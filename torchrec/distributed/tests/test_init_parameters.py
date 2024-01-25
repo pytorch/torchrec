@@ -70,6 +70,8 @@ def initialize_and_test_parameters(
         model = DistributedModelParallel(
             module=embedding_tables,
             plan=ShardingPlan({"": module_sharding_plan}),
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             sharders=sharders,
             device=ctx.device,
