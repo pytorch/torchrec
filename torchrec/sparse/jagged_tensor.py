@@ -1671,6 +1671,27 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
         return kjt
 
+    def flatten_lengths(self) -> "KeyedJaggedTensor":
+        stride, stride_per_key_per_rank = (
+            (None, self.stride_per_key_per_rank())
+            if self.variable_stride_per_key()
+            else (self._stride, None)
+        )
+        return KeyedJaggedTensor(
+            keys=self._keys,
+            values=self._values,
+            weights=self._weights,
+            lengths=self.lengths().view(-1),
+            offsets=None,
+            stride=stride,
+            stride_per_key_per_rank=stride_per_key_per_rank,
+            length_per_key=self.length_per_key(),
+            offset_per_key=None,
+            index_per_key=None,
+            jt_dict=None,
+            inverse_indices=None,
+        )
+
     def __getitem__(self, key: str) -> JaggedTensor:
         offset_per_key = self.offset_per_key()
         index = self._key_indices()[key]
