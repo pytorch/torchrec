@@ -57,6 +57,7 @@ class MetricName(MetricNameBase):
     TOWER_QPS = "qps"
     ACCURACY = "accuracy"
     NDCG = "ndcg"
+    XAUC = "xauc"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -87,6 +88,7 @@ class MetricNamespace(MetricNamespaceBase):
 
     TOWER_QPS = "qps"
     NDCG = "ndcg"
+    XAUC = "xauc"
 
 
 class MetricPrefix(StrValueMixin, Enum):
