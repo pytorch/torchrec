@@ -72,6 +72,11 @@ except Exception:
 torch.fx.wrap("len")
 
 
+@torch.fx.wrap
+def flatten_feature_lengths(features: KeyedJaggedTensor) -> KeyedJaggedTensor:
+    return features.flatten_lengths() if features.lengths().dim() > 1 else features
+
+
 def create_infer_embedding_bag_sharding(
     sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
@@ -278,6 +283,8 @@ class ShardedQuantEmbeddingBagCollection(
                     self._features_order,
                     self._features_order_tensor,
                 )
+            else:
+                features = flatten_feature_lengths(features)
             features_by_shards = (
                 [features]
                 if len(self._feature_splits) == 1

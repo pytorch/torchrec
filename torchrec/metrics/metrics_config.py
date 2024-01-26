@@ -32,6 +32,7 @@ class RecMetricEnum(RecMetricEnumBase):
     TOWER_QPS = "tower_qps"
     ACCURACY = "accuracy"
     NDCG = "ndcg"
+    XAUC = "xauc"
 
 
 @dataclass(unsafe_hash=True, eq=True)
