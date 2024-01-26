@@ -477,6 +477,7 @@ class ModelTraceScriptTest(unittest.TestCase):
 
             if test_type == FxJitTestType.FX_JIT:
                 gm_script = torch.jit.script(gm)
+                # pyre-fixme[29]: `Never` is not a function.
                 gm_script_output = gm_script(*inputs[0])
 
                 if isinstance(eager_output, Awaitable):
@@ -486,6 +487,7 @@ class ModelTraceScriptTest(unittest.TestCase):
 
                 for inp in inputs[1:]:
                     eager_output = model(*inp)
+                    # pyre-fixme[29]: `Never` is not a function.
                     script_output = gm_script(*inp)
                     assert_close(eager_output, script_output)
 

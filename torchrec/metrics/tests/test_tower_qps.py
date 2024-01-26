@@ -255,6 +255,7 @@ class TowerQPSMetricTest(unittest.TestCase):
                     labels={"DefaultTask": model_output["label"]},
                     weights={"DefaultTask": model_output["weight"]},
                 )
+            # pyre-fixme[16]: `TowerQPSMetricTest` has no attribute `assertEquals`.
             self.assertEquals(
                 qps._metrics_computations[0].warmup_examples,
                 batch_size * warmup_steps * (i + 1),
@@ -301,6 +302,7 @@ class TowerQPSMetricTest(unittest.TestCase):
             else:
                 del labels["t2"]
             qps.update(predictions=predictions, labels=labels, weights=weights)
+            # pyre-fixme[16]: `TowerQPSMetricTest` has no attribute `assertEquals`.
             self.assertEquals(
                 qps._metrics_computations[0].num_examples, (step + 1) // 2 * batch_size
             )

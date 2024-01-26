@@ -152,6 +152,8 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             list(module_copy.named_buffers(recurse=recurse))
             + list(module_copy.named_parameters(recurse=recurse)),
         ):
+            # pyre-fixme[16]: `QuantModelParallelModelCopyTest` has no attribute
+            #  `assertEquals`.
             self.assertEquals(name, name_copy)
             actual, expected = buffer.detach().cpu(), buffer_copy.detach().cpu()
             rtol, atol = _get_default_rtol_and_atol(actual, expected)

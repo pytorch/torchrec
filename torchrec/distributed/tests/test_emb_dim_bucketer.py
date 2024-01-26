@@ -31,6 +31,7 @@ class TestEmbDimBucketer(unittest.TestCase):
         num_tables = 103
         num_buckets = 11
         embeddings: List[ShardedEmbeddingTable] = []
+        # pyre-fixme[20]: Argument `k` expected.
         buckets = random.sample(range(1024), num_buckets)
 
         for i in range(num_tables):

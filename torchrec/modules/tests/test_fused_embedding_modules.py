@@ -859,6 +859,8 @@ class FusedEmbeddingCollectionTest(unittest.TestCase):
         ).to(device)
 
         sequential_embeddings = ec(features)
+        # pyre-fixme[16]: `FusedEmbeddingCollectionTest` has no attribute
+        #  `assertEquals`.
         self.assertEquals(
             set(sequential_embeddings.keys()),
             {"f1", "f1_1", "f_shared@t1", "f2", "f_shared@t2", "f3"},
