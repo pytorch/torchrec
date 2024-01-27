@@ -16,10 +16,7 @@ import torch.distributed as dist
 from torch import nn
 from torch.distributed._shard.sharded_tensor import Shard
 from torchrec.distributed.comm import get_local_rank
-from torchrec.distributed.embedding import (
-    _construct_jagged_tensors,
-    EmbeddingCollectionContext,
-)
+from torchrec.distributed.embedding import EmbeddingCollectionContext
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingContext,
@@ -56,6 +53,7 @@ from torchrec.modules.mc_modules import (
     apply_mc_method_to_jt_dict,
     ManagedCollisionCollection,
 )
+from torchrec.modules.utils import construct_jagged_tensors
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 
@@ -83,7 +81,7 @@ class ManagedCollisionCollectionAwaitable(LazyAwaitable[KeyedJaggedTensor]):
             self._embedding_names_per_sharding,
         ):
             jt_dict.update(
-                _construct_jagged_tensors(
+                construct_jagged_tensors(
                     embeddings=w.wait(),
                     features=f,
                     embedding_names=e,

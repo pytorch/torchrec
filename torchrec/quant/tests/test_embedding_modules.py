@@ -29,7 +29,7 @@ from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
     quant_prep_enable_quant_state_dict_split_scale_bias,
 )
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
 class EmbeddingBagCollectionTest(unittest.TestCase):
@@ -466,6 +466,26 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
 
 class EmbeddingCollectionTest(unittest.TestCase):
+    def _comp_ec_output(
+        self,
+        embeddings: Dict[str, JaggedTensor],
+        transformed_graph_embeddings: Dict[str, JaggedTensor],
+        atol: int = 1,
+    ) -> None:
+        self.assertEqual(embeddings.keys(), transformed_graph_embeddings.keys())
+        for key in embeddings.keys():
+            self.assertEqual(
+                embeddings[key].values().size(),
+                transformed_graph_embeddings[key].values().size(),
+            )
+            self.assertTrue(
+                torch.allclose(
+                    embeddings[key].values().cpu().float(),
+                    transformed_graph_embeddings[key].values().cpu().float(),
+                    atol=atol,
+                )
+            )
+
     def _test_ec(
         self,
         tables: List[EmbeddingConfig],
@@ -493,20 +513,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         self.assertEqual(
             list(quantized_embeddings.values())[0].values().dtype, output_type
         )
-
-        self.assertEqual(embeddings.keys(), quantized_embeddings.keys())
-        for key in embeddings.keys():
-            self.assertEqual(
-                embeddings[key].values().size(),
-                quantized_embeddings[key].values().size(),
-            )
-            self.assertTrue(
-                torch.allclose(
-                    embeddings[key].values().cpu().float(),
-                    quantized_embeddings[key].values().cpu().float(),
-                    atol=1,
-                )
-            )
+        self._comp_ec_output(embeddings, quantized_embeddings)
 
         # test state dict
         state_dict = ec.state_dict()
@@ -547,20 +554,65 @@ class EmbeddingCollectionTest(unittest.TestCase):
             name="t1",
             embedding_dim=16,
             num_embeddings=10,
-            feature_names=["f1"],
+            feature_names=["f1", "f2"],
             data_type=data_type,
         )
         eb2_config = EmbeddingConfig(
             name="t2",
             embedding_dim=16,
             num_embeddings=10,
-            feature_names=["f2"],
+            feature_names=["f3", "f4"],
             data_type=data_type,
         )
         features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.as_tensor([0, 1]),
-            lengths=torch.as_tensor([1, 1]),
+            keys=["f1", "f2", "f3", "f4"],
+            values=torch.as_tensor(
+                [
+                    5,
+                    1,
+                    0,
+                    0,
+                    4,
+                    3,
+                    4,
+                    9,
+                    2,
+                    2,
+                    3,
+                    3,
+                    1,
+                    5,
+                    0,
+                    7,
+                    5,
+                    0,
+                    9,
+                    9,
+                    3,
+                    5,
+                    6,
+                    6,
+                    9,
+                    3,
+                    7,
+                    8,
+                    7,
+                    7,
+                    9,
+                    1,
+                    2,
+                    6,
+                    7,
+                    6,
+                    1,
+                    8,
+                    3,
+                    8,
+                    1,
+                    9,
+                ]
+            ),
+            lengths=torch.as_tensor([9, 12, 9, 12]),
         )
         self._test_ec(
             tables=[eb1_config, eb2_config],
@@ -658,3 +710,51 @@ class EmbeddingCollectionTest(unittest.TestCase):
             else:
                 self.assertEqual(config.name, "t2")
                 self.assertEqual(config.data_type, DataType.INT8)
+
+    def test_trace_and_script(self) -> None:
+        data_type = DataType.FP16
+        quant_type = torch.half
+        output_type = torch.half
+
+        ec1_config = EmbeddingConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1", "f2"],
+            data_type=data_type,
+        )
+        ec2_config = EmbeddingConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f3", "f4"],
+            data_type=data_type,
+        )
+
+        ec = EmbeddingCollection(tables=[ec1_config, ec2_config])
+        ec.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        qec = QuantEmbeddingCollection.from_float(ec)
+
+        from torchrec.fx import symbolic_trace
+
+        gm = symbolic_trace(qec)
+
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3", "f4"],
+            values=torch.as_tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            lengths=torch.as_tensor([1, 2, 3, 2]),
+        )
+
+        original_out = qec(features)
+        traced_out = gm(features)
+
+        scripted_module = torch.jit.script(gm)
+        scripted_out = scripted_module(features)
+        self._comp_ec_output(original_out, traced_out, atol=0)
+        self._comp_ec_output(original_out, scripted_out, atol=0)
