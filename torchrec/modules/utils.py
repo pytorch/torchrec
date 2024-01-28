@@ -6,9 +6,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-from typing import Callable, Iterable, Tuple, Union
+from collections import defaultdict
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
+from torch.profiler import record_function
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 
 def extract_module_or_tensor_callable(
@@ -112,3 +115,58 @@ def convert_list_of_modules_to_modulelist(
         return torch.nn.ModuleList(
             convert_list_of_modules_to_modulelist(m, sizes[1:]) for m in modules
         )
+
+
+def construct_jagged_tensors(
+    embeddings: torch.Tensor,
+    features: KeyedJaggedTensor,
+    embedding_names: List[str],
+    need_indices: bool = False,
+    features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
+    original_features: Optional[KeyedJaggedTensor] = None,
+    reverse_indices: Optional[torch.Tensor] = None,
+) -> Dict[str, JaggedTensor]:
+    with record_function("## construct_jagged_tensors ##"):
+        if original_features is not None:
+            features = original_features
+        if reverse_indices is not None:
+            embeddings = torch.index_select(
+                embeddings, 0, reverse_indices.to(torch.int32)
+            )
+
+        ret: Dict[str, JaggedTensor] = {}
+        stride = features.stride()
+        length_per_key = features.length_per_key()
+        values = features.values()
+
+        lengths = features.lengths().view(-1, stride)
+        lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+        embeddings_list = torch.split(embeddings, length_per_key, dim=0)
+        values_list = torch.split(values, length_per_key) if need_indices else None
+
+        key_indices = defaultdict(list)
+        for i, key in enumerate(embedding_names):
+            key_indices[key].append(i)
+        for key, indices in key_indices.items():
+            # combines outputs in correct order for CW sharding
+            indices = (
+                _permute_indices(indices, features_to_permute_indices[key])
+                if features_to_permute_indices and key in features_to_permute_indices
+                else indices
+            )
+            ret[key] = JaggedTensor(
+                lengths=lengths_tuple[indices[0]],
+                values=embeddings_list[indices[0]]
+                if len(indices) == 1
+                else torch.cat([embeddings_list[i] for i in indices], dim=1),
+                # pyre-ignore
+                weights=values_list[indices[0]] if need_indices else None,
+            )
+        return ret
+
+
+def _permute_indices(indices: List[int], permute: List[int]) -> List[int]:
+    permuted_indices = [0] * len(indices)
+    for i, permuted_index in enumerate(permute):
+        permuted_indices[i] = indices[permuted_index]
+    return permuted_indices
