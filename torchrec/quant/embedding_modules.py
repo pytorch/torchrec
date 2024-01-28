@@ -43,6 +43,7 @@ from torchrec.modules.fp_embedding_modules import (
     FeatureProcessedEmbeddingBagCollection as OriginalFeatureProcessedEmbeddingBagCollection,
 )
 
+from torchrec.modules.utils import construct_jagged_tensors
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
@@ -72,16 +73,6 @@ MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT: str = (
 )
 
 DEFAULT_ROW_ALIGNMENT = 16
-
-
-@torch.fx.wrap
-def set_fake_stbe_offsets(values: torch.Tensor) -> torch.Tensor:
-    return torch.arange(
-        0,
-        values.numel() + 1,
-        device=values.device,
-        dtype=values.dtype,
-    )
 
 
 def for_each_module_of_type_do(
@@ -725,84 +716,109 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
     ) -> None:
         super().__init__()
         self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
-        self.embeddings: nn.ModuleDict = nn.ModuleDict()
-
         self._embedding_configs = tables
         self._embedding_dim: int = -1
         self._need_indices: bool = need_indices
         self._output_dtype = output_dtype
         self._device = device
         self.row_alignment = row_alignment
+        self._key_to_tables: Dict[DataType, List[EmbeddingConfig]] = defaultdict(list)
+        self._feature_names: List[str] = []
+
+        self._table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = table_name_to_quantized_weights
 
         table_names = set()
-        for config in tables:
-            if config.name in table_names:
-                raise ValueError(f"Duplicate table name {config.name}")
-            table_names.add(config.name)
+        for table in self._embedding_configs:
+            if table.name in table_names:
+                raise ValueError(f"Duplicate table name {table.name}")
+            table_names.add(table.name)
             self._embedding_dim = (
-                config.embedding_dim if self._embedding_dim < 0 else self._embedding_dim
+                table.embedding_dim if self._embedding_dim < 0 else self._embedding_dim
             )
-            if self._embedding_dim != config.embedding_dim:
+            if self._embedding_dim != table.embedding_dim:
                 raise ValueError(
                     "All tables in a EmbeddingCollection are required to have same embedding dimension."
-                    + f" Violating case: {config.name}'s embedding_dim {config.embedding_dim} !="
+                    + f" Violating case: {table.name}'s embedding_dim {table.embedding_dim} !="
                     + f" {self._embedding_dim}"
                 )
+            key = table.data_type
+            self._key_to_tables[key].append(table)
+            self._feature_names.extend(table.feature_names)
+        self._feature_splits: List[int] = []
+        for key, emb_configs in self._key_to_tables.items():
+            data_type = key
+            embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
             ] = ([] if table_name_to_quantized_weights else None)
-            if table_name_to_quantized_weights:
-                none_throws(weight_lists).append(
-                    table_name_to_quantized_weights[config.name]
-                )
-            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=[
+            feature_table_map: List[int] = []
+            for idx, table in enumerate(emb_configs):
+                embedding_specs.append(
                     (
-                        config.name,
-                        config.num_embeddings,
-                        config.embedding_dim,
-                        data_type_to_sparse_type(config.data_type),
+                        table.name,
+                        table.num_embeddings,
+                        table.embedding_dim,
+                        data_type_to_sparse_type(data_type),
                         EmbeddingLocation.HOST
                         if device.type == "cpu"
                         else EmbeddingLocation.DEVICE,
                     )
-                ],
-                pooling_mode=PoolingMode.SUM,
+                )
+                if table_name_to_quantized_weights:
+                    none_throws(weight_lists).append(
+                        table_name_to_quantized_weights[table.name]
+                    )
+                feature_table_map.extend([idx] * table.num_features())
+            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
+                embedding_specs=embedding_specs,
+                pooling_mode=PoolingMode.NONE,
                 weight_lists=weight_lists,
                 device=device,
                 output_dtype=data_type_to_sparse_type(dtype_to_data_type(output_dtype)),
                 row_alignment=row_alignment,
+                feature_table_map=feature_table_map,
             )
             if weight_lists is None:
                 emb_module.initialize_weights()
-
             self._emb_modules.append(emb_module)
-            self.embeddings[config.name] = torch.nn.Module()
-            # register as a buffer so it's exposed in state_dict.
-            # TODO: register as param instead of buffer
-            # however, since this is only needed for inference, we do not need to expose it as part of parameters.
-            # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
-            weights_list = emb_module.split_embedding_weights_with_scale_bias(
-                split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
+            self._feature_splits.append(
+                sum(table.num_features() for table in emb_configs)
             )
 
-            weight = weights_list[0][0]
-            if config.data_type == DataType.INT4:
-                weight = UInt4Tensor(weight)
-            elif config.data_type == DataType.INT2:
-                weight = UInt2Tensor(weight)
+        self.embeddings: nn.ModuleDict = nn.ModuleDict()
+        for (_key, tables), emb_module in zip(
+            self._key_to_tables.items(), self._emb_modules
+        ):
+            for embedding_config, (weight, qscale, qbias) in zip(
+                tables,
+                emb_module.split_embedding_weights_with_scale_bias(
+                    split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
+                ),
+            ):
+                self.embeddings[embedding_config.name] = torch.nn.Module()
+                # register as a buffer so it's exposed in state_dict.
+                # TODO: register as param instead of buffer
+                # however, since this is only needed for inference, we do not need to expose it as part of parameters.
+                # Additionally, we cannot expose uint8 weights as parameters due to autograd restrictions.
+                if embedding_config.data_type == DataType.INT4:
+                    weight = UInt4Tensor(weight)
+                elif embedding_config.data_type == DataType.INT2:
+                    weight = UInt2Tensor(weight)
+                self.embeddings[embedding_config.name].register_buffer("weight", weight)
+                if quant_state_dict_split_scale_bias:
+                    self.embeddings[embedding_config.name].register_buffer(
+                        "weight_qscale", qscale
+                    )
+                    self.embeddings[embedding_config.name].register_buffer(
+                        "weight_qbias", qbias
+                    )
 
-            self.embeddings[config.name].register_buffer("weight", weight)
-            if quant_state_dict_split_scale_bias:
-                self.embeddings[config.name].register_buffer(
-                    "weight_qscale", weights_list[0][1]
-                )
-                self.embeddings[config.name].register_buffer(
-                    "weight_qbias", weights_list[0][2]
-                )
-
-            if not config.feature_names:
-                config.feature_names = [config.name]
+        self._embedding_names_by_batched_tables: Dict[DataType, List[str]] = {
+            key: list(itertools.chain(*get_embedding_names_by_table(tables)))
+            for key, table in self._key_to_tables.items()
+        }
 
         self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
             tables
@@ -830,29 +846,30 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         """
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
-        jt_dict: Dict[str, JaggedTensor] = features.to_dict()
-        for config, embedding_names, emb_module in zip(
-            self._embedding_configs,
-            self._embedding_names_by_table,
-            self._emb_modules,
+        kjt_keys = features.keys()
+        kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
+        kjt_permute = features.permute(kjt_permute_order)
+        kjts_per_key = kjt_permute.split(self._feature_splits)
+        for i, (emb_module, key) in enumerate(
+            zip(self._emb_modules, self._key_to_tables.keys())
         ):
-            for feature_name, embedding_name in zip(
-                config.feature_names, embedding_names
-            ):
-                f = jt_dict[feature_name]
-                values = f.values()
-                offsets = set_fake_stbe_offsets(values)
-                # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
-                lookup = (
-                    emb_module(indices=values, offsets=offsets)
-                    if self.register_tbes
-                    else emb_module.forward(indices=values, offsets=offsets)
-                )
-                feature_embeddings[embedding_name] = JaggedTensor(
-                    values=lookup,
-                    lengths=f.lengths(),
-                    weights=f.values() if self.need_indices else None,
-                )
+            f = kjts_per_key[i]
+            indices = f.values()
+            offsets = f.offsets()
+            lookup = (
+                emb_module(indices=indices, offsets=offsets)
+                if self.register_tbes
+                else emb_module.forward(indices=indices, offsets=offsets)
+            )
+            embedding_names = self._embedding_names_by_batched_tables[key]
+            jt = construct_jagged_tensors(
+                embeddings=lookup,
+                features=f,
+                embedding_names=embedding_names,
+                need_indices=self.need_indices(),
+            )
+            for embedding_name in embedding_names:
+                feature_embeddings[embedding_name] = jt[embedding_name]
         return feature_embeddings
 
     @classmethod
