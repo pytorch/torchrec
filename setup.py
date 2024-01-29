@@ -29,7 +29,7 @@ def _get_version():
     else:
         with open(os.path.join(ROOT_DIR, "version.txt"), "r") as f:
             version = f.readline().strip()
-        if sha is not None:
+        if sha is not None and "OFFICIAL_RELEASE" not in os.environ:
             version += "+" + sha[:7]
 
     if sha is None:
