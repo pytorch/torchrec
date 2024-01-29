@@ -679,6 +679,7 @@ class ShardedEmbeddingBagCollection(
         input_feature_names: List[str],
     ) -> None:
         feature_names: List[str] = []
+        self._feature_splits: List[int] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._input_dists.append(sharding.create_input_dist())
             feature_names.extend(sharding.feature_names())
@@ -687,6 +688,7 @@ class ShardedEmbeddingBagCollection(
         if feature_names == input_feature_names:
             self._has_features_permute = False
         else:
+            self._features_order: List[int] = []
             for f in feature_names:
                 self._features_order.append(input_feature_names.index(f))
             self.register_buffer(
