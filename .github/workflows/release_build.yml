@@ -94,6 +94,8 @@ jobs:
     # for the conda run with quotes, we have to use "\" and double quotes
     # here is the issue: https://github.com/conda/conda/issues/10972
     - name: Build TorchRec
+      env:
+        OFFICIAL_RELEASE: 1
       run: |
         rm -r dist || true
         conda run -n build_binary \
