@@ -6,14 +6,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-import json
 import operator
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
-from torch.utils._pytree import register_pytree_node
+from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
 
 from torchrec.streamable import Pipelineable
 
@@ -575,6 +574,14 @@ def _jt_flatten(
     return [getattr(t, a) for a in JaggedTensor._fields], None
 
 
+def _jt_flatten_with_keys(
+    t: JaggedTensor,
+) -> Tuple[List[Tuple[KeyEntry, Optional[torch.Tensor]]], None]:
+    values, context = _jt_flatten(t)
+    # pyre can't tell that GetAttrKey implements the KeyEntry protocol
+    return [(GetAttrKey(k), v) for k, v in zip(JaggedTensor._fields, values)], context  # pyre-ignore[7]
+
+
 def _jt_unflatten(values: List[Optional[torch.Tensor]], context: None) -> JaggedTensor:
     return JaggedTensor(*values)
 
@@ -583,7 +590,9 @@ def _jt_flatten_spec(t: JaggedTensor, spec: TreeSpec) -> List[Optional[torch.Ten
     return [getattr(t, a) for a in JaggedTensor._fields]
 
 
-register_pytree_node(JaggedTensor, _jt_flatten, _jt_unflatten)
+register_pytree_node(
+    JaggedTensor, _jt_flatten, _jt_unflatten, flatten_with_keys_fn=_jt_flatten_with_keys
+)
 register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 
 
@@ -1988,6 +1997,16 @@ def _kjt_flatten(
     return [getattr(t, a) for a in KeyedJaggedTensor._fields], t._keys
 
 
+def _kjt_flatten_with_keys(
+    t: KeyedJaggedTensor,
+) -> Tuple[List[Tuple[KeyEntry, Optional[torch.Tensor]]], List[str]]:
+    values, context = _kjt_flatten(t)
+    # pyre can't tell that GetAttrKey implements the KeyEntry protocol
+    return [  # pyre-ignore[7]
+        (GetAttrKey(k), v) for k, v in zip(KeyedJaggedTensor._fields, values)
+    ], context
+
+
 def _kjt_unflatten(
     values: List[Optional[torch.Tensor]], context: List[str]  # context is the _keys
 ) -> KeyedJaggedTensor:
@@ -2000,7 +2019,12 @@ def _kjt_flatten_spec(
     return [getattr(t, a) for a in KeyedJaggedTensor._fields]
 
 
-register_pytree_node(KeyedJaggedTensor, _kjt_flatten, _kjt_unflatten)
+register_pytree_node(
+    KeyedJaggedTensor,
+    _kjt_flatten,
+    _kjt_unflatten,
+    flatten_with_keys_fn=_kjt_flatten_with_keys,
+)
 register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 
