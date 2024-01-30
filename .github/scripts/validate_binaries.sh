@@ -12,6 +12,8 @@ conda create -y -n build_binary python="${MATRIX_PYTHON_VERSION}"
 
 conda run -n build_binary python --version
 
+conda run -n build_binary python -m pip cache purge
+
 # Install pytorch, torchrec and fbgemm as per
 # installation instructions on following page
 # https://github.com/pytorch/torchrec#installations
