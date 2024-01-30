@@ -16,9 +16,9 @@ class ModelParallelTestGloo(ModelParallelBase):
     pass
 
 
-class ModelParallelStateDictTestNccl(ModelParallelStateDictBase):
+class ModelParallelStateDictTestGloo(ModelParallelStateDictBase):
     pass
 
 
-class ModelParallelSparseOnlyTestNccl(ModelParallelSparseOnlyBase):
+class ModelParallelSparseOnlyTestGloo(ModelParallelSparseOnlyBase):
     pass
