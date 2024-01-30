@@ -12,7 +12,7 @@ conda create -y -n build_binary python="${MATRIX_PYTHON_VERSION}"
 
 conda run -n build_binary python --version
 
-conda run -n build_binary python -m pip cache purge
+conda run -n build_binary pip cache purge
 
 # Install pytorch, torchrec and fbgemm as per
 # installation instructions on following page
@@ -63,7 +63,7 @@ else
     conda run -n build_binary pip install torch --index-url "$PYTORCH_URL"
 
     # install fbgemm
-    conda run -n build_binary pip install fbgemm-gpu --index-url "$PYTORCH_URL"
+    conda run -n build_binary pip install --no-cache-dir fbgemm-gpu --extra-index-url "$PYTORCH_URL"
 
     # install requirements from pypi
     conda run -n build_binary pip install torchmetrics==1.0.3
