@@ -15,11 +15,15 @@ import torch
 
 from torch import nn
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
-from torchrec.sparse.jagged_tensor import (
-    ComputeJTDictToKJT,
-    JaggedTensor,
-    KeyedJaggedTensor,
-)
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
+
+try:
+    from torchrec.sparse.jagged_tensor import ComputeJTDictToKJT
+except ImportError:
+    # Dummy implementation, use try catch for torch package compatibility issue
+    torch._C._log_api_usage_once(
+        "ImportError ComputeJTDictToKJT, ignoring, but possible incompatiblity with torch.package"
+    )
 
 
 @torch.fx.wrap
