@@ -178,10 +178,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
 
 
 class ModelParallelSparseOnlyBase(unittest.TestCase):
-    def tearDown(self) -> None:
-        dist.destroy_process_group()
-
-    def test_sharding_ebc_as_top_level(self) -> None:
+    def setUp(self, backend: str = "nccl") -> None:
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
         os.environ["LOCAL_WORLD_SIZE"] = "1"
@@ -189,15 +186,22 @@ class ModelParallelSparseOnlyBase(unittest.TestCase):
         os.environ["MASTER_PORT"] = str(get_free_port())
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
 
+        self.backend = backend
         if torch.cuda.is_available():
-            curr_device = torch.device("cuda:0")
-            torch.cuda.set_device(curr_device)
-            backend = "nccl"
+            self.device = torch.device("cuda:0")
+            torch.cuda.set_device(self.device)
         else:
-            curr_device = torch.device("cpu")
-            backend = "gloo"
-        dist.init_process_group(backend=backend)
+            self.device = torch.device("cpu")
 
+        if self.backend == "nccl" and self.device == torch.device("cpu"):
+            self.skipTest("NCCL not supported on CPUs.")
+
+        dist.init_process_group(backend=self.backend)
+
+    def tearDown(self) -> None:
+        dist.destroy_process_group()
+
+    def test_sharding_ebc_as_top_level(self) -> None:
         embedding_dim = 128
         num_embeddings = 256
         ebc = EmbeddingBagCollection(
@@ -213,27 +217,11 @@ class ModelParallelSparseOnlyBase(unittest.TestCase):
             ],
         )
 
-        model = DistributedModelParallel(ebc, device=curr_device)
+        model = DistributedModelParallel(ebc, device=self.device)
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
 
     def test_sharding_fused_ebc_as_top_level(self) -> None:
-        os.environ["RANK"] = "0"
-        os.environ["WORLD_SIZE"] = "1"
-        os.environ["LOCAL_WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
-
-        if torch.cuda.is_available():
-            curr_device = torch.device("cuda:0")
-            torch.cuda.set_device(curr_device)
-            backend = "nccl"
-        else:
-            curr_device = torch.device("cpu")
-            backend = "gloo"
-        dist.init_process_group(backend=backend)
-
         embedding_dim = 128
         num_embeddings = 256
         ebc = FusedEmbeddingBagCollection(
@@ -251,26 +239,30 @@ class ModelParallelSparseOnlyBase(unittest.TestCase):
             optimizer_kwargs={"lr": 0.02},
         )
 
-        model = DistributedModelParallel(ebc, device=curr_device)
+        model = DistributedModelParallel(ebc, device=self.device)
 
         self.assertTrue(isinstance(model.module, ShardedFusedEmbeddingBagCollection))
 
 
 class ModelParallelStateDictBase(unittest.TestCase):
-    def setUp(self) -> None:
+    def setUp(self, backend: str = "nccl") -> None:
         os.environ["RANK"] = "0"
         os.environ["WORLD_SIZE"] = "1"
         os.environ["LOCAL_WORLD_SIZE"] = "1"
         os.environ["MASTER_ADDR"] = str("localhost")
         os.environ["MASTER_PORT"] = str(get_free_port())
         os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+
+        self.backend = backend
         if torch.cuda.is_available():
             self.device = torch.device("cuda:0")
-            backend = "nccl"
             torch.cuda.set_device(self.device)
         else:
             self.device = torch.device("cpu")
-            backend = "gloo"
+
+        if self.backend == "nccl" and self.device == torch.device("cpu"):
+            self.skipTest("NCCL not supported on CPUs.")
+
         dist.init_process_group(backend=backend)
 
         num_features = 4
@@ -377,27 +369,28 @@ class ModelParallelStateDictBase(unittest.TestCase):
             def reset_parameters(self) -> None:
                 nn.init.constant_(self.p, self.val)
 
-        dist.destroy_process_group()
-        dist.init_process_group(backend="gloo")
-
         # Check that already allocated parameters are left 'as is'.
-        cpu_model = MyModel(device="cpu", val=3.2)
+        unsharded_model = MyModel(device=self.device, val=3.2)
         sharded_model = DistributedModelParallel(
-            cpu_model,
+            unsharded_model,
+            device=self.device,
         )
         sharded_param = next(sharded_model.parameters())
         np.testing.assert_array_equal(
-            np.array([3.2, 3.2, 3.2], dtype=np.float32), sharded_param.detach().numpy()
+            np.array([3.2, 3.2, 3.2], dtype=np.float32),
+            sharded_param.detach().cpu().numpy(),
         )
 
         # Check that parameters over 'meta' device are allocated and initialized.
         meta_model = MyModel(device="meta", val=7.5)
         sharded_model = DistributedModelParallel(
             meta_model,
+            device=self.device,
         )
         sharded_param = next(sharded_model.parameters())
         np.testing.assert_array_equal(
-            np.array([7.5, 7.5, 7.5], dtype=np.float32), sharded_param.detach().numpy()
+            np.array([7.5, 7.5, 7.5], dtype=np.float32),
+            sharded_param.detach().cpu().numpy(),
         )
 
     def test_meta_device_dmp_state_dict(self) -> None:
