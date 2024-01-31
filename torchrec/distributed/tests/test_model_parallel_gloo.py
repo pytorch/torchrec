@@ -11,14 +11,19 @@ from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelStateDictBase,
 )
 
+# CPU tests for Gloo.
+
 
 class ModelParallelTestGloo(ModelParallelBase):
-    pass
+    def setUp(self, backend: str = "gloo") -> None:
+        super().setUp(backend=backend)
 
 
 class ModelParallelStateDictTestGloo(ModelParallelStateDictBase):
-    pass
+    def setUp(self, backend: str = "gloo") -> None:
+        super().setUp(backend=backend)
 
 
 class ModelParallelSparseOnlyTestGloo(ModelParallelSparseOnlyBase):
-    pass
+    def setUp(self, backend: str = "gloo") -> None:
+        super().setUp(backend=backend)

@@ -36,16 +36,16 @@ class MultiProcessContext:
         self.backend = backend
         self.local_size = local_size
 
-        if backend == "nccl":
-            device = torch.device(f"cuda:{rank}")
-            torch.cuda.set_device(device)
-        else:
-            device = torch.device("cpu")
-        self.device: torch.device = device
-        torch.use_deterministic_algorithms(True)
         if torch.cuda.is_available():
+            self.device: torch.device = torch.device(f"cuda:{rank}")
+            torch.cuda.set_device(self.device)
+
             torch.backends.cudnn.allow_tf32 = False
             torch.backends.cuda.matmul.allow_tf32 = False
+        else:
+            self.device: torch.device = torch.device("cpu")
+        torch.use_deterministic_algorithms(True)
+
         self.pg: Optional[dist.ProcessGroup] = None
 
     def __enter__(self) -> "MultiProcessContext":
