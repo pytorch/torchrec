@@ -579,7 +579,9 @@ def _jt_flatten_with_keys(
 ) -> Tuple[List[Tuple[KeyEntry, Optional[torch.Tensor]]], None]:
     values, context = _jt_flatten(t)
     # pyre can't tell that GetAttrKey implements the KeyEntry protocol
-    return [(GetAttrKey(k), v) for k, v in zip(JaggedTensor._fields, values)], context  # pyre-ignore[7]
+    return [  # pyre-ignore[7]
+        (GetAttrKey(k), v) for k, v in zip(JaggedTensor._fields, values)
+    ], context
 
 
 def _jt_unflatten(values: List[Optional[torch.Tensor]], context: None) -> JaggedTensor:
