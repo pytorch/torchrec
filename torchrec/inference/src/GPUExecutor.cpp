@@ -124,11 +124,15 @@ GPUExecutor::GPUExecutor(
 
   // Acquire sessionn in main thread for interpreter 0 to avoid deadlock in
   // torch deploy.
-  LOG(INFO) << " - pre-acquire deploy session of loading model: interpreter 0";
-  auto start = std::chrono::steady_clock::now();
-  model_.acquireSession(&manager_->allInstances().at(0));
-  LOG(INFO) << "   - finished pre-acquire deploy session, interpreter 0, by "
-            << getTimeElapsedMS(start).count() / 1000 << "s";
+  {
+    std::lock_guard<std::mutex> lock(warmUpAcquireSessionMutex_);
+    LOG(INFO)
+        << " - pre-acquire deploy session of loading model: interpreter 0";
+    auto start = std::chrono::steady_clock::now();
+    model_.acquireSession(&manager_->allInstances().at(0));
+    LOG(INFO) << "   - finished pre-acquire deploy session, interpreter 0, by "
+              << getTimeElapsedMS(start).count() / 1000 << "s";
+  }
 
   std::unique_lock<std::mutex> lock(warmUpMutex_);
   warmUpCV_.wait(lock, [&] { return warmUpCounter_ == numThreadsPerGPU_ - 1; });
@@ -182,6 +186,7 @@ void GPUExecutor::process(int idx) {
   }
 
   if (idx != 0) {
+    std::lock_guard<std::mutex> lock(warmUpAcquireSessionMutex_);
     LOG(INFO) << " - Pre-acquire deploy session of loading model, interpreter "
               << idx;
     auto start = std::chrono::steady_clock::now();
