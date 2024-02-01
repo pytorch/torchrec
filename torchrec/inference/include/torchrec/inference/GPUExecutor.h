@@ -85,6 +85,7 @@ class GPUExecutor {
   std::function<void()> warmupFn_;
 
   std::mutex warmUpMutex_;
+  std::mutex warmUpAcquireSessionMutex_;
   std::condition_variable warmUpCV_;
   int warmUpCounter_{0};
 
