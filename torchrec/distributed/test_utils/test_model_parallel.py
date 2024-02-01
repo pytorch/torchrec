@@ -29,7 +29,7 @@ from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 class ModelParallelTestShared(MultiProcessTestBase):
     @seed_and_log
-    def setUp(self) -> None:
+    def setUp(self, backend: str = "nccl") -> None:
         super().setUp()
 
         num_features = 4
@@ -76,12 +76,14 @@ class ModelParallelTestShared(MultiProcessTestBase):
                 for feature in table.feature_names
             ]
         }
+        self.backend = backend
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
-            self.backend = "nccl"
         else:
             self.device = torch.device("cpu")
-            self.backend = "gloo"
+
+        if self.backend == "nccl" and self.device == torch.device("cpu"):
+            self.skipTest("NCCL not supported on CPUs.")
 
     def _test_sharding(
         self,
@@ -122,8 +124,8 @@ class ModelParallelTestShared(MultiProcessTestBase):
 
 @skip_if_asan_class
 class ModelParallelBase(ModelParallelTestShared):
-    def setUp(self) -> None:
-        super().setUp()
+    def setUp(self, backend: str = "nccl") -> None:
+        super().setUp(backend=backend)
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
@@ -166,6 +168,11 @@ class ModelParallelBase(ModelParallelTestShared):
         ],
         variable_batch_size: bool,
     ) -> None:
+        if self.backend == "gloo":
+            self.skipTest(
+                "Gloo reduce_scatter_base fallback not supported with async_op=True"
+            )
+
         sharding_type = ShardingType.ROW_WISE.value
         kernel_type = EmbeddingComputeKernel.FUSED.value
         assume(
@@ -367,6 +374,11 @@ class ModelParallelBase(ModelParallelTestShared):
         sharding_type: str,
         global_constant_batch: bool,
     ) -> None:
+        if self.backend == "gloo":
+            # error is from FBGEMM, it says CPU even if we are on GPU.
+            self.skipTest(
+                "bounds_check_indices on CPU does not support variable length (batch size)"
+            )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
