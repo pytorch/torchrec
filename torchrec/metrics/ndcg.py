@@ -307,6 +307,9 @@ class NDCGMetric(RecMetric):
             process_group=process_group,
             **kwargs,
         )
-        # session_key is set through front end config
-        # pyre-ignore[6]
-        self._required_inputs.add(kwargs["session_key"])
+        # session_key is set through front end config, default back to "session_id" if does not exist
+        if "session_key" not in kwargs:
+            self._required_inputs.add(SESSION_KEY)
+        else:
+            # pyre-ignore[6]
+            self._required_inputs.add(kwargs["session_key"])
