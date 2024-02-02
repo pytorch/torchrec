@@ -422,6 +422,17 @@ class ShardedEmbeddingCollection(
             self.load_state_dict(module.state_dict())
 
     @staticmethod
+    def _pre_state_dict_hook(
+        self: "ShardedEmbeddingCollection",
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> None:
+        for lookup in self._lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            lookup.flush()
+
+    @staticmethod
     def _pre_load_state_dict_hook(
         self: "ShardedEmbeddingCollection",
         state_dict: Dict[str, Any],
@@ -474,6 +485,11 @@ class ShardedEmbeddingCollection(
                     if not local_shards
                     else torch.cat(local_shards, dim=0)
                 )
+
+        for lookup in self._lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            lookup.purge()
 
     def _initialize_torch_state(self) -> None:  # noqa
         """
@@ -562,6 +578,7 @@ class ShardedEmbeddingCollection(
                 destination_key = f"{prefix}embeddings.{table_name}.weight"
                 destination[destination_key] = sharded_t
 
+        self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)
         self._register_load_state_dict_pre_hook(
             self._pre_load_state_dict_hook, with_module=True

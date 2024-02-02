@@ -276,6 +276,14 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             ) in embedding_kernel.named_parameters_by_table():
                 yield (table_name, tbe_slice)
 
+    def flush(self) -> None:
+        for emb_module in self._emb_modules:
+            emb_module.flush()
+
+    def purge(self) -> None:
+        for emb_module in self._emb_modules:
+            emb_module.purge()
+
 
 class CommOpGradientScaling(torch.autograd.Function):
     @staticmethod
@@ -503,6 +511,14 @@ class GroupedPooledEmbeddingsLookup(
             ) in embedding_kernel.named_parameters_by_table():
                 yield (table_name, tbe_slice)
 
+    def flush(self) -> None:
+        for emb_module in self._emb_modules:
+            emb_module.flush()
+
+    def purge(self) -> None:
+        for emb_module in self._emb_modules:
+            emb_module.purge()
+
 
 class MetaInferGroupedEmbeddingsLookup(
     BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor], TBEToRegisterMixIn
@@ -626,6 +642,14 @@ class MetaInferGroupedEmbeddingsLookup(
         )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
+
+    def flush(self) -> None:
+        # not implemented
+        pass
+
+    def purge(self) -> None:
+        # not implemented
+        pass
 
 
 class MetaInferGroupedPooledEmbeddingsLookup(
@@ -770,6 +794,14 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         )
         for emb_module in self._emb_modules:
             yield from emb_module.named_buffers(prefix, recurse)
+
+    def flush(self) -> None:
+        # not implemented
+        pass
+
+    def purge(self) -> None:
+        # not implemented
+        pass
 
 
 class InferGroupedLookupMixin(ABC):
