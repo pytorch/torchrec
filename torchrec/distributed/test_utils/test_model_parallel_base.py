@@ -462,14 +462,102 @@ class ModelParallelStateDictBase(unittest.TestCase):
 
     # pyre-ignore[56]
     @given(
-        sharders=st.sampled_from(
+        sharder_type=st.sampled_from(
             [
-                [EmbeddingBagCollectionSharder()],
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_load_state_dict(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                ),
+            ),
+        ]
+        models, batch = self._generate_dmps_and_batch(sharders)
+        m1, m2 = models
+
+        # load the second's (m2's) with the first (m1's) state_dict
+        m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
+
+        # validate the models are equivalent
+        with torch.no_grad():
+            loss1, pred1 = m1(batch)
+            loss2, pred2 = m2(batch)
+            self.assertTrue(torch.equal(loss1, loss2))
+            self.assertTrue(torch.equal(pred1, pred2))
+        sd1 = m1.state_dict()
+        for key, value in m2.state_dict().items():
+            v2 = sd1[key]
+            if isinstance(value, ShardedTensor):
+                assert len(value.local_shards()) == 1
+                dst = value.local_shards()[0].tensor
+            else:
+                dst = value
+            if isinstance(v2, ShardedTensor):
+                assert len(v2.local_shards()) == 1
+                src = v2.local_shards()[0].tensor
+            else:
+                src = v2
+            self.assertTrue(torch.equal(src, dst))
+
+    # pyre-ignore[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.DATA_PARALLEL.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
             ]
         ),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_load_state_dict(self, sharders: List[ModuleSharder[nn.Module]]) -> None:
+    def test_load_state_dict_dp(
+        self, sharder_type: str, sharding_type: str, kernel_type: str
+    ) -> None:
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                ),
+            ),
+        ]
         models, batch = self._generate_dmps_and_batch(sharders)
         m1, m2 = models
 

@@ -516,6 +516,17 @@ class ShardedEmbeddingBagCollection(
             self.load_state_dict(module.state_dict(), strict=False)
 
     @staticmethod
+    def _pre_state_dict_hook(
+        self: "ShardedEmbeddingBagCollection",
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> None:
+        for lookup in self._lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            lookup.flush()
+
+    @staticmethod
     def _pre_load_state_dict_hook(
         self: "ShardedEmbeddingBagCollection",
         state_dict: Dict[str, Any],
@@ -570,6 +581,11 @@ class ShardedEmbeddingBagCollection(
                 raise RuntimeError(
                     f"Unexpected state_dict key type {type(state_dict[key])} found for {key}"
                 )
+
+        for lookup in self._lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            lookup.purge()
 
     def _initialize_torch_state(self) -> None:  # noqa
         """
@@ -657,6 +673,7 @@ class ShardedEmbeddingBagCollection(
                 destination_key = f"{prefix}embedding_bags.{table_name}.weight"
                 destination[destination_key] = sharded_t
 
+        self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)
         self._register_load_state_dict_pre_hook(
             self._pre_load_state_dict_hook, with_module=True
