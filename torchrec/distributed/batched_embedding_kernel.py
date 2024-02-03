@@ -529,6 +529,9 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
     def flush(self) -> None:
         pass
 
+    def purge(self) -> None:
+        pass
+
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
@@ -648,6 +651,9 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
 
     def flush(self) -> None:
         self._emb_module.flush()
+
+    def purge(self) -> None:
+        self._emb_module.reset_cache_states()
 
 
 class BatchedDenseEmbedding(BaseBatchedEmbedding[torch.Tensor]):
@@ -810,6 +816,9 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
     def flush(self) -> None:
         pass
 
+    def purge(self) -> None:
+        pass
+
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
@@ -934,6 +943,9 @@ class BatchedFusedEmbeddingBag(
 
     def flush(self) -> None:
         self._emb_module.flush()
+
+    def purge(self) -> None:
+        self._emb_module.reset_cache_states()
 
 
 class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
