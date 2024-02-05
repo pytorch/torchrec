@@ -34,7 +34,7 @@ try:
         "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_cpu"
     )
     torch.ops.load_library(
-        "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_gpu"
+        "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_cuda"
     )
 except OSError:
     pass
