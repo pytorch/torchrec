@@ -182,10 +182,8 @@ class ShardedQuantEmbeddingBagCollection(
             )
         else:
             table_wise_sharded_only: bool = all(
-                [
-                    sharding_type == ShardingType.TABLE_WISE.value
-                    for sharding_type in self._sharding_type_to_sharding.keys()
-                ]
+                sharding_type == ShardingType.TABLE_WISE.value
+                for sharding_type in self._sharding_type_to_sharding.keys()
             )
             assert (
                 table_wise_sharded_only
