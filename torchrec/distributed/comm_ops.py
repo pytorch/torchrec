@@ -79,7 +79,7 @@ class Request(Awaitable[W]):
         # are stored in self.tensor
         self.dummy_tensor: torch.Tensor = torch.empty(
             1,
-            requires_grad=True,
+            requires_grad=False,
             device=device,
         )
 
