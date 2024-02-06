@@ -583,14 +583,12 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            all([param.device == device for param in dmp.module.sparse.ebc.buffers()])
+            all(param.device == device for param in dmp.module.sparse.ebc.buffers())
         )
         self.assertTrue(
             all(
-                [
-                    param.device == torch.device("cpu")
-                    for param in dmp.module.sparse.weighted_ebc.buffers()
-                ]
+                param.device == torch.device("cpu")
+                for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )
 
@@ -664,14 +662,12 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            all([param.device == device for param in dmp.module.sparse.ebc.buffers()])
+            all(param.device == device for param in dmp.module.sparse.ebc.buffers())
         )
         self.assertTrue(
             all(
-                [
-                    param.device == torch.device("meta")
-                    for param in dmp.module.sparse.weighted_ebc.buffers()
-                ]
+                param.device == torch.device("meta")
+                for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )
 
@@ -743,14 +739,12 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            all([param.device == device for param in dmp.module.sparse.ebc.buffers()])
+            all(param.device == device for param in dmp.module.sparse.ebc.buffers())
         )
         self.assertTrue(
             all(
-                [
-                    param.device == device
-                    for param in dmp.module.sparse.weighted_ebc.buffers()
-                ]
+                param.device == device
+                for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )
 

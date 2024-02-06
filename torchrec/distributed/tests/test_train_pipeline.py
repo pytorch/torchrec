@@ -565,9 +565,7 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
         self.assertEqual(len(cpu_preds), len(gpu_preds))
         self.assertTrue(
             all(
-                [
-                    cpu_pred.size() == gpu_pred.size()
-                    for cpu_pred, gpu_pred in zip(cpu_preds, gpu_preds)
-                ]
+                cpu_pred.size() == gpu_pred.size()
+                for cpu_pred, gpu_pred in zip(cpu_preds, gpu_preds)
             )
         )
