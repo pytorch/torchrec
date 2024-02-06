@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-from typing import cast, List
+from typing import cast, List, Optional
 
 import torch
 from torch import nn
@@ -14,7 +14,12 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
-from torchrec.distributed.planner.types import PlannerError, PlannerErrorType, Topology
+from torchrec.distributed.planner.types import (
+    PlannerError,
+    PlannerErrorType,
+    ShardingOption,
+    Topology,
+)
 from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import (
@@ -174,33 +179,7 @@ class TestEmbeddingShardingPlannerWithConstraints(unittest.TestCase):
         self.topology = Topology(
             world_size=2, hbm_cap=1024 * 1024 * 2, compute_device=compute_device
         )
-        self.constraints = {
-            "table_0": ParameterConstraints(
-                enforce_hbm=True,
-                cache_params=CacheParams(
-                    algorithm=CacheAlgorithm.LFU,
-                ),
-            ),
-            "table_1": ParameterConstraints(
-                enforce_hbm=False,
-                stochastic_rounding=True,
-            ),
-            "table_2": ParameterConstraints(bounds_check_mode=BoundsCheckMode.FATAL),
-            "table_3": ParameterConstraints(
-                cache_params=CacheParams(
-                    algorithm=CacheAlgorithm.LFU,
-                    load_factor=0.1,
-                    reserved_memory=1.0,
-                    precision=DataType.FP16,
-                ),
-            ),
-        }
-        self.planner = EmbeddingShardingPlanner(
-            topology=self.topology, constraints=self.constraints
-        )
-
-    def test_fused_paramters_from_constraints(self) -> None:
-        tables = [
+        self.tables = [
             EmbeddingBagConfig(
                 num_embeddings=100,
                 embedding_dim=64,
@@ -209,7 +188,39 @@ class TestEmbeddingShardingPlannerWithConstraints(unittest.TestCase):
             )
             for i in range(4)
         ]
-        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        self.constraints = {
+            "table_0": ParameterConstraints(
+                enforce_hbm=True,
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                ),
+                feature_names=self.tables[0].feature_names,
+            ),
+            "table_1": ParameterConstraints(
+                enforce_hbm=False,
+                stochastic_rounding=True,
+                feature_names=self.tables[1].feature_names,
+            ),
+            "table_2": ParameterConstraints(
+                bounds_check_mode=BoundsCheckMode.FATAL,
+                feature_names=self.tables[2].feature_names,
+            ),
+            "table_3": ParameterConstraints(
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                    load_factor=0.1,
+                    reserved_memory=1.0,
+                    precision=DataType.FP16,
+                ),
+                feature_names=self.tables[3].feature_names,
+            ),
+        }
+        self.planner = EmbeddingShardingPlanner(
+            topology=self.topology, constraints=self.constraints
+        )
+
+    def test_fused_paramters_from_constraints(self) -> None:
+        model = TestSparseNN(tables=self.tables, sparse_device=torch.device("meta"))
         sharding_plan = self.planner.plan(module=model, sharders=get_default_sharders())
 
         expected_fused_params = {
@@ -253,3 +264,28 @@ class TestEmbeddingShardingPlannerWithConstraints(unittest.TestCase):
                 ),
                 expected_fused_params[table],
             )
+
+    def test_passing_info_through_constraints(self) -> None:
+        model = TestSparseNN(tables=self.tables, sparse_device=torch.device("meta"))
+        _ = self.planner.plan(module=model, sharders=get_default_sharders())
+
+        best_plan: Optional[List[ShardingOption]] = self.planner._best_plan
+        self.assertIsNotNone(best_plan)
+
+        for table, constraint, sharding_option in zip(
+            self.tables, self.constraints.values(), best_plan
+        ):
+            self.assertEqual(table.name, sharding_option.name)
+
+            self.assertEqual(table.feature_names, sharding_option.feature_names)
+            self.assertEqual(table.feature_names, constraint.feature_names)
+
+            self.assertEqual(constraint.cache_params, sharding_option.cache_params)
+            self.assertEqual(constraint.enforce_hbm, sharding_option.enforce_hbm)
+            self.assertEqual(
+                constraint.stochastic_rounding, sharding_option.stochastic_rounding
+            )
+            self.assertEqual(
+                constraint.bounds_check_mode, sharding_option.bounds_check_mode
+            )
+            self.assertEqual(constraint.is_weighted, sharding_option.is_weighted)
