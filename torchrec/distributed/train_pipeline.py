@@ -46,6 +46,14 @@ from torchrec.distributed.types import Awaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
+try:
+    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+except Exception:
+
+    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
+        return False
+
+
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -430,26 +438,32 @@ class PipelinedForward(BaseForward):
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert self._name in self._context.input_dist_tensors_requests
         request = self._context.input_dist_tensors_requests[self._name]
-        assert isinstance(request, Awaitable)
-        with record_function("## wait_sparse_data_dist ##"):
-            # Finish waiting on the dist_stream,
-            # in case some delayed stream scheduling happens during the wait() call.
-            with torch.cuda.stream(self._stream):
-                data = request.wait()
+        if is_torchdynamo_compiling():
+            # Awaitable iteration pipelining is not dynamo traceable.
+            # torch.cuda.stream specification is not dynamo traceable.
+            # This shortpath allows to get only synchronous graph without iteration (Awaitable) and cross-iteration pipelining (torch.cuda.stream).
+            data = request.wait()
+        else:
+            assert isinstance(request, Awaitable)
+            with record_function("## wait_sparse_data_dist ##"):
+                # Finish waiting on the dist_stream,
+                # in case some delayed stream scheduling happens during the wait() call.
+                with torch.cuda.stream(self._stream):
+                    data = request.wait()
 
-        # Make sure that both result of input_dist and context
-        # are properly transferred to the current stream.
-        if self._stream is not None:
-            torch.cuda.current_stream().wait_stream(self._stream)
-            cur_stream = torch.cuda.current_stream()
+            # Make sure that both result of input_dist and context
+            # are properly transferred to the current stream.
+            if self._stream is not None:
+                torch.cuda.current_stream().wait_stream(self._stream)
+                cur_stream = torch.cuda.current_stream()
 
-            assert isinstance(
-                data, (torch.Tensor, Multistreamable)
-            ), f"{type(data)} must implement Multistreamable interface"
-            data.record_stream(cur_stream)
+                assert isinstance(
+                    data, (torch.Tensor, Multistreamable)
+                ), f"{type(data)} must implement Multistreamable interface"
+                data.record_stream(cur_stream)
 
-            ctx = self._context.module_contexts[self._name]
-            ctx.record_stream(cur_stream)
+                ctx = self._context.module_contexts[self._name]
+                ctx.record_stream(cur_stream)
 
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data
