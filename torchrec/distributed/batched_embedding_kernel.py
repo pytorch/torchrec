@@ -283,7 +283,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             )
 
             if all(
-                [opt_state is not None for opt_state in shard_params.optimizer_states]
+                opt_state is not None for opt_state in shard_params.optimizer_states
             ):
                 # pyre-ignore
                 def get_sharded_optim_state(momentum_idx: int) -> ShardedTensor:

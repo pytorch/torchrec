@@ -468,15 +468,11 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
 
         if self._shardable_params:
             assert all(
-                [
-                    table_name in self._shardable_params
-                    for table_name in shardable_params.keys()
-                ]
+                table_name in self._shardable_params
+                for table_name in shardable_params.keys()
             ) or all(
-                [
-                    table_name not in self._shardable_params
-                    for table_name in shardable_params.keys()
-                ]
+                table_name not in self._shardable_params
+                for table_name in shardable_params.keys()
             ), f"Cannot partially shard {type(module)}, please check sharder kwargs"
             shardable_params = {
                 table_name: param

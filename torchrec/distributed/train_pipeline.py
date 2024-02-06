@@ -42,7 +42,7 @@ from torchrec.distributed.embedding_sharding import (
     KJTListSplitsAwaitable,
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
-from torchrec.distributed.types import Awaitable, NoWait
+from torchrec.distributed.types import Awaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 

@@ -52,6 +52,10 @@ def dynamic_threshold_filter(
     id_counts: torch.Tensor,
     threshold_skew_multiplier: float = 10.0,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Threshold is total_count / num_ids * threshold_skew_multiplier. An id is
+    added if its count is strictly greater than the threshold.
+    """
 
     num_ids = id_counts.numel()
     total_count = id_counts.sum()
@@ -69,10 +73,34 @@ def dynamic_threshold_filter(
 def average_threshold_filter(
     id_counts: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Threshold is average of id_counts. An id is added if its count is strictly
+    greater than the mean.
+    """
     if id_counts.dtype != torch.float:
         id_counts = id_counts.float()
     threshold = id_counts.mean()
     threshold_mask = id_counts > threshold
+
+    return threshold_mask, threshold
+
+
+@torch.no_grad()
+def probabilistic_threshold_filter(
+    id_counts: torch.Tensor,
+    per_id_probability: float = 0.01,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Each id has probability per_id_probability of being added. For example,
+    if per_id_probability is 0.01 and an id appears 100 times, then it has a 60%
+    of being added. More precisely, the id score is 1 - (1 - per_id_probability) ^ id_count,
+    and for a randomly generated threshold, the id score is the chance of it being added.
+    """
+    probability = torch.full_like(id_counts, 1 - per_id_probability, dtype=torch.float)
+    id_scores = 1 - torch.pow(probability, id_counts)
+
+    threshold: torch.Tensor = torch.rand(id_counts.size(), device=id_counts.device)
+    threshold_mask = id_scores > threshold
 
     return threshold_mask, threshold
 
