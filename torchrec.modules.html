@@ -2317,12 +2317,25 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.modules.mc_modules.average_threshold_filter">
 <span class="sig-prename descclassname"><span class="pre">torchrec.modules.mc_modules.</span></span><span class="sig-name descname"><span class="pre">average_threshold_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">id_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.mc_modules.average_threshold_filter" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Threshold is average of id_counts. An id is added if its count is strictly
+greater than the mean.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.modules.mc_modules.dynamic_threshold_filter">
 <span class="sig-prename descclassname"><span class="pre">torchrec.modules.mc_modules.</span></span><span class="sig-name descname"><span class="pre">dynamic_threshold_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">id_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold_skew_multiplier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.mc_modules.dynamic_threshold_filter" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Threshold is total_count / num_ids * threshold_skew_multiplier. An id is
+added if its count is strictly greater than the threshold.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.mc_modules.probabilistic_threshold_filter">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.mc_modules.</span></span><span class="sig-name descname"><span class="pre">probabilistic_threshold_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">id_counts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_id_probability</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.01</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.mc_modules.probabilistic_threshold_filter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Each id has probability per_id_probability of being added. For example,
+if per_id_probability is 0.01 and an id appears 100 times, then it has a 60%
+of being added. More precisely, the id score is 1 - (1 - per_id_probability) ^ id_count,
+and for a randomly generated threshold, the id score is the chance of it being added.</p>
+</dd></dl>
 
 </section>
 <section id="torchrec-modules-mc-embedding-modules">
