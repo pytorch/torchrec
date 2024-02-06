@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Dict, Iterator, List, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, TypeVar, Union
 
 import torch
 from torch.autograd.profiler import record_function
@@ -276,3 +276,8 @@ class BaseManagedCollisionEmbeddingCollectionSharder(BaseEmbeddingSharder[M]):
                 set(self._mc_sharder.sharding_types(compute_device_type)),
             )
         )
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        # TODO: to be deprecate after planner get cache_load_factor from ParameterConstraints
+        return self._e_sharder.fused_params
