@@ -125,6 +125,7 @@ class EmbeddingEnumerator(Enumerator):
                     enforce_hbm,
                     stochastic_rounding,
                     bounds_check_mode,
+                    feature_names,
                 ) = _extract_constraints_for_param(self._constraints, name)
 
                 sharding_options_per_table: List[ShardingOption] = []
@@ -172,6 +173,7 @@ class EmbeddingEnumerator(Enumerator):
                                 bounds_check_mode=bounds_check_mode,
                                 dependency=dependency,
                                 is_pooled=is_pooled,
+                                feature_names=feature_names,
                             )
                         )
                 if not sharding_options_per_table:
@@ -265,6 +267,7 @@ def _extract_constraints_for_param(
     Optional[bool],
     Optional[bool],
     Optional[BoundsCheckMode],
+    Optional[List[str]],
 ]:
     input_lengths = [POOLING_FACTOR]
     col_wise_shard_dim = None
@@ -272,6 +275,7 @@ def _extract_constraints_for_param(
     enforce_hbm = None
     stochastic_rounding = None
     bounds_check_mode = None
+    feature_names = None
 
     if constraints and constraints.get(name):
         input_lengths = constraints[name].pooling_factors
@@ -280,6 +284,7 @@ def _extract_constraints_for_param(
         enforce_hbm = constraints[name].enforce_hbm
         stochastic_rounding = constraints[name].stochastic_rounding
         bounds_check_mode = constraints[name].bounds_check_mode
+        feature_names = constraints[name].feature_names
 
     return (
         input_lengths,
@@ -288,6 +293,7 @@ def _extract_constraints_for_param(
         enforce_hbm,
         stochastic_rounding,
         bounds_check_mode,
+        feature_names,
     )
 
 
