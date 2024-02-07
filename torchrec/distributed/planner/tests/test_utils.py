@@ -7,7 +7,7 @@
 
 import math
 import unittest
-from typing import Callable, List
+from typing import Callable, List, Optional
 from unittest.mock import MagicMock
 
 import torch
@@ -124,12 +124,17 @@ class TestLuusJaakolaSearch(unittest.TestCase):
     # just getting lucky.
     # Returns a Nx2 tensor of [xs, ys] of discovered minimums.
     @staticmethod
-    def evaluate(x0: float, x1: float, f: Callable[[float], float]) -> torch.Tensor:
+    def evaluate(
+        x0: float,
+        x1: float,
+        f: Callable[[float], float],
+        left_cost: Optional[float] = None,
+    ) -> torch.Tensor:
         xs = []
         ys = []
         iterations = 16
         for i in range(5):
-            search = LuusJaakolaSearch(x0, x1, iterations, seed=i)
+            search = LuusJaakolaSearch(x0, x1, iterations, seed=i, left_cost=left_cost)
             y = search.next(0.0)
             while y is not None:
                 fy = f(y)
@@ -354,6 +359,21 @@ class TestLuusJaakolaSearch(unittest.TestCase):
             [
                 [5.370294e11, 2.314406e02],
                 [5.426136e11, 2.313041e02],
+                [5.908549e11, 2.308194e02],
+                [5.755533e11, 2.309337e02],
+                [6.184178e11, 2.308121e02],
+            ],
+        )
+        torch.testing.assert_close(results, want)
+
+        results = TestLuusJaakolaSearch.evaluate(
+            mem.min().item(), mem.max().item(), f, left_cost=cost[0].item()
+        )
+        want = torch.tensor(
+            [
+                [5.370294e11, 2.314406e02],
+                # 2nd search finds better result given left_cost
+                [5.918126e11, 2.308140e02],
                 [5.908549e11, 2.308194e02],
                 [5.755533e11, 2.309337e02],
                 [6.184178e11, 2.308121e02],
