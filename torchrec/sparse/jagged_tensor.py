@@ -191,6 +191,48 @@ def _arange(*args, **kwargs) -> torch.Tensor:
     return torch.arange(*args, **kwargs)
 
 
+def _permute_variable_stride_values(
+    values: torch.Tensor,
+    length_per_key: torch.Tensor,
+    recat: torch.Tensor,
+    weights: Optional[torch.Tensor],
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """
+    For variable stride tensors we permute across length per key, which reduces the
+    number of permute indices and lengthens each sequence.
+    `keyed_jagged_index_select_dim1` more efficiently parallelizes work for each permute
+    index and sequence across multiple thread blocks.
+
+    NOTE:
+        `keyed_jagged_index_select_dim1` is only supported for CUDA.
+    """
+    if values.device.type == "cuda":
+        output = torch.ops.fbgemm.keyed_jagged_index_select_dim1(
+            values,
+            length_per_key,
+            _to_offsets(length_per_key),
+            recat,
+            len(length_per_key),
+            weights,
+            # TODO: add selected_lengths_sum once landed to prevent D2H sync
+        )
+        permuted_values = output[0]
+        permuted_weights = None if weights is None else output[2]
+    else:
+        (
+            _,
+            permuted_values,
+            permuted_weights,
+        ) = torch.ops.fbgemm.permute_1D_sparse_data(
+            recat,
+            length_per_key,
+            values,
+            weights,
+            None,
+        )
+    return permuted_values, permuted_weights
+
+
 class JaggedTensorMeta(abc.ABCMeta, torch.fx._symbolic_trace.ProxyableClassMeta):
     pass
 
@@ -1638,16 +1680,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 None,
                 None,
             )
-            (
-                _,
-                permuted_values,
-                permuted_weights,
-            ) = torch.ops.fbgemm.permute_1D_sparse_data(
-                indices_tensor,
-                length_per_key_tensor,
+            permuted_values, permuted_weights = _permute_variable_stride_values(
                 self.values(),
+                length_per_key_tensor,
+                indices_tensor,
                 self.weights_or_none(),
-                None,
             )
         else:
             (
@@ -1925,12 +1962,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         None,
                         None,
                     )
-                    (_, values, weights,) = torch.ops.fbgemm.permute_1D_sparse_data(
-                        recat,
-                        length_per_key,
+                    values, weights = _permute_variable_stride_values(
                         values,
+                        length_per_key,
+                        recat,
                         weights,
-                        None,
                     )
             if not stride_per_key_per_rank:
                 stride_per_key_per_rank = [[0]] * len(keys)

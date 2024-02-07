@@ -288,6 +288,7 @@ class ShardingOption:
         bounds_check_mode: Optional[BoundsCheckMode] = None,
         dependency: Optional[str] = None,
         is_pooled: Optional[bool] = None,
+        feature_names: Optional[List[str]] = None,
     ) -> None:
         self.name = name
         self._tensor = tensor
@@ -307,6 +308,7 @@ class ShardingOption:
         self.dependency = dependency
         self._is_pooled = is_pooled
         self.is_weighted: Optional[bool] = None
+        self.feature_names: Optional[List[str]] = feature_names
 
     @property
     def tensor(self) -> torch.Tensor:
@@ -436,6 +438,7 @@ class ParameterConstraints:
     enforce_hbm: Optional[bool] = None
     stochastic_rounding: Optional[bool] = None
     bounds_check_mode: Optional[BoundsCheckMode] = None
+    feature_names: Optional[List[str]] = None
 
 
 class PlannerErrorType(Enum):
