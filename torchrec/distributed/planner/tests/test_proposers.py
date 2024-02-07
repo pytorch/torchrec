@@ -422,20 +422,21 @@ class TestProposers(unittest.TestCase):
         self.assertEqual(increase, budget)
 
     def test_scaleup(self) -> None:
-
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=2_000_000,
-                embedding_dim=10,
+                embedding_dim=10000,
                 name=f"table_{i}",
                 feature_names=[f"feature_{i}"],
             )
-            for i in range(3)
+            for i in range(4)
         ]
 
-        # Place first two tables into cache, 3rd table leave on hbm. table_1 has a
+        # Place first three tables into cache, 4th table leave on hbm. table_1 has a
         # larger cacheability score so budget should be skewed to scaling table_1 more
-        # than table_0.
+        # than table_0. table_2 is a deprecated feature we have no stats for (so
+        # expected_lookups 0), we want to see that left at its original load factor,
+        # i.e. doesn't participate in scaleup.
         constraints = {
             "table_0": ParameterConstraints(
                 compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
@@ -451,13 +452,22 @@ class TestProposers(unittest.TestCase):
                     stats=MockCacheStatistics(expected_lookups=2, cacheability=0.5),
                 ),
             ),
+            "table_2": ParameterConstraints(
+                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
+                cache_params=CacheParams(
+                    load_factor=0.002,
+                    stats=MockCacheStatistics(expected_lookups=0, cacheability=0.5),
+                ),
+            ),
         }
 
-        MB = 1024 * 1024
+        GB = 1024 * 1024 * 1024
         storage_constraint = Topology(
-            world_size=2, compute_device="cuda", hbm_cap=100 * MB, ddr_cap=1000 * MB
+            world_size=2, compute_device="cuda", hbm_cap=100 * GB, ddr_cap=1000 * GB
         )
-
+        # Ignoring table_2, the remainder require 224GB if all placed on HBM. We only
+        # have 200GB, so we can't promote both uvm tables. Initial plan needs uses 90GB,
+        # with 110GB of available budget.
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
         enumerator = EmbeddingEnumerator(
             topology=storage_constraint, batch_size=BATCH_SIZE, constraints=constraints
@@ -471,11 +481,18 @@ class TestProposers(unittest.TestCase):
         proposer = EmbeddingOffloadScaleupProposer()
         proposer.load(search_space, enumerator=enumerator)
 
-        output = []
         proposal = proposer.propose()
+        best_plan = None
+        best_perf = 1e99
+        proposals = -1
         while proposal is not None:
-            output.append(
-                [
+            proposals += 1
+            mem = sum(so.total_storage.hbm for so in proposal)
+            # simple perf model, assume partitioner gives a lowest score around 150GB of memory.
+            perf = abs(mem - (150 * GB))
+            plan = {
+                "mem": mem,
+                "proposal": [
                     (
                         candidate.name,
                         candidate.compute_kernel,
@@ -484,149 +501,36 @@ class TestProposers(unittest.TestCase):
                         else None,
                     )
                     for candidate in proposal
-                ]
-            )
+                ],
+            }
+            if perf < best_perf:
+                best_plan = plan
+                best_perf = perf
             proposer.feedback(
                 partitionable=True,
                 plan=proposal,
+                perf_rating=perf,
                 storage_constraint=storage_constraint,
             )
             proposal = proposer.propose()
 
-        # Expected output (name, kernel clf).
-        # First attempt uses the mins supplied, then as we apply increasing budget
-        # clfs increase, with the later attempts enough to promote table_3 into hbm.
-        expected_output = [
-            [
-                ("table_0", "fused_uvm_caching", 0.1),
-                ("table_1", "fused_uvm_caching", 0.1),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused_uvm_caching", 0.3025801181793213),
-                ("table_1", "fused_uvm_caching", 0.6064502596855164),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused_uvm_caching", 0.403870165348053),
-                ("table_1", "fused_uvm_caching", 0.859675407409668),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused_uvm_caching", 0.4545151889324188),
-                ("table_1", "fused_uvm_caching", 0.9862880110740662),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused_uvm_caching", 0.5294319987297058),
-                ("table_1", "fused", None),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused_uvm_caching", 0.573746383190155),
-                ("table_1", "fused", None),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused_uvm_caching", 0.5959035754203796),
-                ("table_1", "fused", None),
-                ("table_2", "fused", None),
-            ],
-        ]
-
-        self.assertEqual(output, expected_output)
-
-    def test_scaleup_ample_budget_and_deprecated_feature(self) -> None:
-        tables = [
-            EmbeddingBagConfig(
-                num_embeddings=2_000_000,
-                embedding_dim=10,
-                name=f"table_{i}",
-                feature_names=[f"feature_{i}"],
-            )
-            for i in range(3)
-        ]
-
-        # Place first two tables into cache, 3rd table leave on hbm. table_1 has an
-        # expected lookup of 0 (deprecated feature).
-        constraints = {
-            "table_0": ParameterConstraints(
-                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
-                cache_params=CacheParams(
-                    load_factor=0.1,
-                    stats=MockCacheStatistics(expected_lookups=2, cacheability=0.2),
-                ),
-            ),
-            "table_1": ParameterConstraints(
-                compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
-                cache_params=CacheParams(
-                    load_factor=0.1,
-                    stats=MockCacheStatistics(expected_lookups=0, cacheability=0),
-                ),
-            ),
-        }
-
-        MB = 1024 * 1024
-        storage_constraint = Topology(
-            world_size=2, compute_device="cuda", hbm_cap=100 * MB, ddr_cap=1000 * MB
+        self.assertEqual(proposals, 16)
+        self.assertEqual(
+            best_plan,
+            {
+                # 146GB, close to target of 150GB
+                "mem": 157178896800,
+                # table 1 has been scaled up 2.5x more than table 0 (vs original 0.1)
+                # which aligns with their different cacheability scores
+                # table_2 has been left alone (deprecated feature, expected zero lookups in stats)
+                "proposal": [
+                    ("table_0", "fused_uvm_caching", 0.3173336386680603),
+                    ("table_1", "fused_uvm_caching", 0.6433340907096863),
+                    ("table_2", "fused_uvm_caching", 0.002),
+                    ("table_3", "fused", None),
+                ],
+            },
         )
-
-        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
-        enumerator = EmbeddingEnumerator(
-            topology=storage_constraint, batch_size=BATCH_SIZE, constraints=constraints
-        )
-        search_space = enumerator.enumerate(
-            module=model,
-            sharders=[
-                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
-            ],
-        )
-        proposer = EmbeddingOffloadScaleupProposer()
-        proposer.load(search_space, enumerator=enumerator)
-
-        output = []
-        proposal = proposer.propose()
-        while proposal is not None:
-            output.append(
-                [
-                    (
-                        candidate.name,
-                        candidate.compute_kernel,
-                        candidate.cache_params.load_factor
-                        if candidate.cache_params
-                        else None,
-                    )
-                    for candidate in proposal
-                ]
-            )
-            proposer.feedback(
-                partitionable=True,
-                plan=proposal,
-                storage_constraint=storage_constraint,
-            )
-            proposal = proposer.propose()
-
-        # Expected output (name, kernel clf).
-        # First attempt uses the mins supplied, then as we apply increasing budget
-        # clfs increase, table 0 gets promoted, table 1 left as original minimum.
-        expected_output = [
-            [
-                ("table_0", "fused_uvm_caching", 0.1),
-                ("table_1", "fused_uvm_caching", 0.1),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused_uvm_caching", 0.8090304136276245),
-                ("table_1", "fused_uvm_caching", 0.1),
-                ("table_2", "fused", None),
-            ],
-            [
-                ("table_0", "fused", None),
-                ("table_1", "fused_uvm_caching", 0.1),
-                ("table_2", "fused", None),
-            ],
-        ]
-        self.assertEqual(output[0:3], expected_output)
 
     def test_proposers_to_proposals_list(self) -> None:
         def make_mock_proposal(name: str) -> List[ShardingOption]:

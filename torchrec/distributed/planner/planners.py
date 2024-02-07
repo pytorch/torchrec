@@ -283,9 +283,11 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     )
                     if current_storage < lowest_storage:
                         lowest_storage = current_storage
-                    proposal_cache[proposal_key] = (False, None, None)
+                    proposal_cache[proposal_key] = (False, proposal, None)
                     proposer.feedback(
-                        partitionable=False, storage_constraint=storage_constraint
+                        partitionable=False,
+                        plan=proposal,
+                        storage_constraint=storage_constraint,
                     )
 
                 # clear shard.rank for each sharding_option
