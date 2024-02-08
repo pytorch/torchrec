@@ -136,6 +136,7 @@ class EmbeddingEnumerator(Enumerator):
                     for compute_kernel in self._filter_compute_kernels(
                         name,
                         sharder.compute_kernels(sharding_type, self._compute_device),
+                        sharding_type,
                     ):
                         (
                             shard_sizes,
@@ -179,7 +180,9 @@ class EmbeddingEnumerator(Enumerator):
                 if not sharding_options_per_table:
                     raise RuntimeError(
                         "No available sharding type and compute kernel combination "
-                        f"after applying user provided constraints for {name}"
+                        f"after applying user provided constraints for {name}. "
+                        f"Module: {sharder_key}, sharder: {sharder.__class__.__name__}, compute device: {self._compute_device}. "
+                        f"To debug, search above for warning logs about no available sharding types/compute kernels for table: {name}"
                     )
 
                 sharding_options.extend(sharding_options_per_table)
@@ -222,6 +225,7 @@ class EmbeddingEnumerator(Enumerator):
         self,
         name: str,
         allowed_compute_kernels: List[str],
+        sharding_type: str,
     ) -> List[str]:
         # for the log message only
         constrained_compute_kernels: List[str] = [
@@ -251,7 +255,7 @@ class EmbeddingEnumerator(Enumerator):
                 f"constraints for {name}. Constrained compute kernels: "
                 f"{constrained_compute_kernels}, allowed compute kernels: "
                 f"{allowed_compute_kernels}, filtered compute kernels: "
-                f"{filtered_compute_kernels}. Please check if the constrained "
+                f"{filtered_compute_kernels}, sharding type: {sharding_type}. Please check if the constrained "
                 "compute kernels are too restrictive, if the sharder allows the "
                 "compute kernels, or if non-strings are passed in."
             )
