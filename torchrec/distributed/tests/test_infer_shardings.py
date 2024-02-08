@@ -1025,8 +1025,8 @@ class InferShardingsTest(unittest.TestCase):
 
         gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
         gm_script = torch.jit.script(gm)
-        _ = gm_script(*inputs[0])
-        # TODO (drqiangzhang): Add comparison between scripted and nonscripted model outputs
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
@@ -1169,8 +1169,7 @@ class InferShardingsTest(unittest.TestCase):
         assert count_registered_fp == world_size
 
         sharded_output = sharded_model(*inputs[0])
-        # TODO(ivankobzarev): check the correctness of non_sharded vs sharded
-        # assert_close(non_sharded_output, sharded_output)
+        assert_close(non_sharded_output, sharded_output)
 
         gm: torch.fx.GraphModule = symbolic_trace(
             sharded_model,
@@ -1197,5 +1196,3 @@ class InferShardingsTest(unittest.TestCase):
         print(f"gm_script:\n{gm_script}")
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
-        _ = gm_script(*inputs[0])
-        # TODO (drqiangzhang): Add comparison between scripted and nonscripted model outputs
