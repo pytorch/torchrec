@@ -338,7 +338,9 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             logger.info(
                 f"EmbeddingOffloadScaleupProposer - cache scale up budget={round(bytes_to_gb(hbm_available), 2)} GB, exploring [{round(bytes_to_gb(hbm_used_previously), 2)}, {round(bytes_to_gb(hbm_used_previously + hbm_available), 2)}] GB"
             )
-            self.search = LuusJaakolaSearch(0, hbm_available, max_iterations=16)
+            self.search = LuusJaakolaSearch(
+                0, hbm_available, max_iterations=16, left_cost=perf_rating
+            )
 
         logger.info(
             f"EmbeddingOffloadScaleupProposer - proposed size={round(bytes_to_gb(hbm_used_previously), 2)} GB, score={perf_rating}"

@@ -172,7 +172,14 @@ class LuusJaakolaSearch:
     See https://en.wikipedia.org/wiki/Luus-Jaakola.
     """
 
-    def __init__(self, A: float, B: float, max_iterations: int, seed: int = 42) -> None:
+    def __init__(
+        self,
+        A: float,
+        B: float,
+        max_iterations: int,
+        seed: int = 42,
+        left_cost: Optional[float] = None,
+    ) -> None:
         self.left = A
         self.right = B
         self.iteration = -1
@@ -184,7 +191,7 @@ class LuusJaakolaSearch:
         self.x: float = self.uniform(self.left, self.right)
         self.fx: float = 0.0
         self.y: float = math.nan
-        self.fleft: Optional[float] = None
+        self.fleft: Optional[float] = left_cost
         self.fright: Optional[float] = None
         self.d: float = self.right - self.left
 
