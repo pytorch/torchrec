@@ -499,7 +499,7 @@ class ShardedEmbeddingBagCollection(
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
                     device_ids=[device]
-                    if self._device and (self._device.type in {"gpu", "mtia"})
+                    if self._device and (self._device.type in {"cuda", "mtia"})
                     else None,
                     process_group=env.process_group,
                     gradient_as_bucket_view=True,

@@ -409,7 +409,7 @@ class ShardedEmbeddingCollection(
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
                     device_ids=[device]
-                    if self._device and self._device.type == "gpu"
+                    if self._device and self._device.type == "cuda"
                     else None,
                     process_group=env.process_group,
                     gradient_as_bucket_view=True,
