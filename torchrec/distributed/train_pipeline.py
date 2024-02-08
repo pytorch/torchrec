@@ -16,6 +16,7 @@ import itertools
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from threading import Event, Thread
 from typing import (
     Any,
     cast,
@@ -51,6 +52,82 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 In = TypeVar("In", bound=Pipelineable)
 Out = TypeVar("Out")
+
+
+class DataLoadingThread(Thread, Generic[In]):
+    def __init__(
+        self,
+        device: torch.device,
+        dataloader_iter: Iterator[In],
+        to_device_non_blocking: bool,
+        memcpy_stream_priority: int = 0,
+    ) -> None:
+        super().__init__()
+        self._stop: bool = False
+        self._dataloader_iter = dataloader_iter
+        self._buffer_empty_event: Event = Event()
+        self._buffer_filled_event: Event = Event()
+        self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
+            torch.cuda.Stream(priority=memcpy_stream_priority)
+            if device.type == "cuda"
+            else None
+        )
+        self._device = device
+        self._to_device_non_blocking = to_device_non_blocking
+        self._buffered: Optional[In] = None
+        self._buffer_empty_event.set()
+
+    def run(self) -> None:
+        while not self._stop:
+            self._buffer_empty_event.wait()
+            # Set the filled event to unblock progress() and return.
+            if self._stop:
+                self._buffer_filled_event.set()
+                return
+            with record_function("## load_batch ##"):
+                try:
+                    batch = next(self._dataloader_iter)
+                except StopIteration:
+                    self._stop = True
+                    self._buffer_filled_event.set()
+                    return
+            with record_function("## copy_batch_to_gpu ##"):
+                with torch.cuda.stream(self._memcpy_stream):
+                    self._buffered = cast(
+                        In,
+                        batch.to(
+                            self._device, non_blocking=self._to_device_non_blocking
+                        ),
+                    )
+                self._buffer_empty_event.clear()
+                self._buffer_filled_event.set()
+
+    def stop(self) -> None:
+        logger.info("Stopping data loading thread...")
+        self._stop = True
+        # Unblock any thread that are waiting for these events.
+        self._buffer_filled_event.set()
+        self._buffer_empty_event.set()
+        logger.info("Data loading thread stopped.")
+
+    def get_next_batch(self, none_throws: bool = False) -> Optional[In]:
+        """
+        Get the next batch from the buffer if threading is enabled, otherwise
+        call load_next_batch directly.
+
+        This function is not thread safe. We assume this is only invoked from
+        the main thread in the training loop.
+        """
+        self._buffer_filled_event.wait()
+        batch = self._buffered
+        if batch is None:
+            if none_throws:
+                raise StopIteration
+            return None
+        self._buffered = None
+        self._buffer_filled_event.clear()
+        self._buffer_empty_event.set()
+        return batch
 
 
 class TrainPipeline(abc.ABC, Generic[In, Out]):
@@ -1051,6 +1128,91 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 for names, awaitable in self._context.fused_splits_awaitables:
                     for name, request in zip(names, awaitable.wait()):
                         self._context.input_dist_tensors_requests[name] = request
+
+
+class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
+    """
+    This pipeline overlaps device transfer, and `ShardedModule.input_dist()` with
+    forward. This helps hide the all2all latency. We use a background thread to
+    perform device transfer to further reduce latency.
+
+    stage 2: forward- uses default CUDA stream
+    stage 1: ShardedModule.input_dist() - uses data_dist CUDA stream
+    background: device transfer - uses memcpy CUDA stream
+
+    `ShardedModule.input_dist()` is only done for top-level modules in the call graph.
+    To be considered a top-level module, a module can only depend on 'getattr' calls on
+    input.
+
+    Input model must be symbolically traceable with the exception of `ShardedModule` and
+    `DistributedDataParallel` modules.
+
+    Args:
+        model (torch.nn.Module): model to pipeline.
+        optimizer (torch.optim.Optimizer): optimizer to use.
+        device (torch.device): device where device transfer, sparse data dist, and
+            forward/backward pass will happen.
+        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        apply_jit: bool = False,
+    ) -> None:
+        super().__init__(model, optimizer, device, True, apply_jit)
+        self._batch_loader: Optional[DataLoadingThread[In]] = None
+
+    def __del__(self) -> None:
+        if self._batch_loader is not None:
+            self._batch_loader.stop()
+
+    def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        if not self._batch_loader:
+            self._batch_loader = DataLoadingThread(
+                device=self._device,
+                dataloader_iter=dataloader_iter,
+                to_device_non_blocking=True,
+                memcpy_stream_priority=-1,
+            )
+            self._batch_loader.start()
+
+            batch_loader = self._batch_loader
+            assert batch_loader is not None
+
+            # batch 1
+            self._batch_i = batch_loader.get_next_batch()
+            assert self._batch_i is not None
+
+            self._init_pipelined_modules(self._batch_i)
+            self._start_sparse_data_dist(self._batch_i)
+            self._wait_sparse_data_dist()
+
+            # batch 2
+            self._batch_ip1 = batch_loader.get_next_batch()
+
+        if self._batch_i is None:
+            raise StopIteration
+
+        batch_loader = self._batch_loader
+        assert batch_loader is not None
+        with record_function("## wait_for_batch ##"):
+            _wait_for_batch(cast(In, self._batch_i), self._data_dist_stream)
+
+        self._start_sparse_data_dist(self._batch_ip1)
+
+        # forward
+        with record_function("## forward ##"):
+            losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
+
+        self._wait_sparse_data_dist()
+
+        self._batch_i = self._batch_ip1
+        self._batch_ip1 = batch_loader.get_next_batch()
+
+        return output
 
 
 class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
