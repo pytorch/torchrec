@@ -10,6 +10,7 @@ import os
 import unittest
 from dataclasses import dataclass
 from typing import cast, Dict, List, Optional, Tuple
+from unittest.mock import MagicMock
 
 import torch
 import torch.distributed as dist
@@ -38,6 +39,8 @@ from torchrec.distributed.test_utils.test_model import (
 )
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.train_pipeline import (
+    DataLoadingThread,
+    EvalPipelineSparseDist,
     TrainPipelineBase,
     TrainPipelineSparseDist,
 )
@@ -569,3 +572,60 @@ class TrainPipelineSparseDistTest(unittest.TestCase):
                 for cpu_pred, gpu_pred in zip(cpu_preds, gpu_preds)
             )
         )
+
+
+class DataLoadingThreadTest(unittest.TestCase):
+    def test_fetch_data(self) -> None:
+        data = []
+        for i in range(7):
+            data.append(torch.tensor([i]))
+        data_iter = iter(data)
+        data_loader = DataLoadingThread(torch.device("cpu"), data_iter, True)
+        data_loader.start()
+        for i in range(7):
+            item = data_loader.get_next_batch()
+            self.assertEqual(item.item(), i)
+
+        self.assertIsNone(data_loader.get_next_batch(False))
+        with self.assertRaises(StopIteration):
+            data_loader.get_next_batch(True)
+        data_loader.stop()
+
+
+class EvalPipelineSparseDistTest(unittest.TestCase):
+    def test_processing(self) -> None:
+        mock_model = MagicMock()
+
+        def model_side_effect(
+            item: Pipelineable,
+        ) -> Tuple[Optional[Pipelineable], Pipelineable]:
+            return (None, item)
+
+        mock_model.side_effect = model_side_effect
+        mock_optimizer = MagicMock()
+
+        class MockPipeline(EvalPipelineSparseDist):
+            def __init__(self, model, optimizer, device: torch.device) -> None:
+                super().__init__(model, optimizer, device)
+
+            def _init_pipelined_modules(self, item: Pipelineable) -> None:
+                pass
+
+            def _start_sparse_data_dist(self, item: Pipelineable) -> None:
+                pass
+
+            def _wait_sparse_data_dist(self) -> None:
+                pass
+
+        pipeline = MockPipeline(mock_model, mock_optimizer, torch.device("cpu"))
+
+        data = []
+        for i in range(7):
+            data.append(torch.tensor([i]))
+        data_iter = iter(data)
+
+        for i in range(7):
+            item = pipeline.progress(data_iter)
+            self.assertEqual(item.item(), i)
+
+        self.assertRaises(StopIteration, pipeline.progress, data_iter)

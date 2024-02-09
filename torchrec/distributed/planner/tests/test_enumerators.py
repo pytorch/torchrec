@@ -746,8 +746,9 @@ class TestEnumerators(unittest.TestCase):
         )
 
         sharder = EmbeddingBagCollectionSharder()
+        sharding_type = ShardingType.ROW_WISE.value
         allowed_compute_kernels = enumerator._filter_compute_kernels(
-            "table_0", sharder.compute_kernels(ShardingType.ROW_WISE.value, "cuda")
+            "table_0", sharder.compute_kernels(sharding_type, "cuda"), sharding_type
         )
 
         self.assertEqual(
@@ -774,8 +775,9 @@ class TestEnumerators(unittest.TestCase):
         )
 
         sharder = ManagedCollisionEmbeddingBagCollectionSharder()
+        sharding_type = ShardingType.ROW_WISE.value
         allowed_compute_kernels = enumerator._filter_compute_kernels(
-            "table_0", sharder.compute_kernels(ShardingType.ROW_WISE.value, "cuda")
+            "table_0", sharder.compute_kernels(sharding_type, "cuda"), sharding_type
         )
 
         self.assertEqual(
@@ -797,9 +799,10 @@ class TestEnumerators(unittest.TestCase):
         )
 
         sharder = ManagedCollisionEmbeddingBagCollectionSharder()
+        sharding_type = ShardingType.ROW_WISE.value
         with self.assertWarns(Warning):
             allowed_compute_kernels = enumerator._filter_compute_kernels(
-                "table_0", sharder.compute_kernels(ShardingType.ROW_WISE.value, "cuda")
+                "table_0", sharder.compute_kernels(sharding_type, "cuda"), sharding_type
             )
 
         self.assertEqual(allowed_compute_kernels, [])
@@ -900,7 +903,9 @@ class TestEnumerators(unittest.TestCase):
         with self.assertRaises(Exception) as context:
             _ = enumerator.enumerate(self.model, [sharder])
 
-        self.assertTrue(
-            "No available sharding type and compute kernel combination after applying user provided constraints for table_1"
-            in str(context.exception)
+        self.assertEqual(
+            str(context.exception),
+            "No available sharding type and compute kernel combination after applying user provided constraints for table_1. "
+            "Module: torchrec.modules.embedding_modules.EmbeddingBagCollection, sharder: CWSharder, compute device: cuda. "
+            "To debug, search above for warning logs about no available sharding types/compute kernels for table: table_1",
         )

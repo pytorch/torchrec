@@ -22,7 +22,7 @@ from torchrec.distributed.planner.types import (
     ShardingOption,
     Topology,
 )
-from torchrec.distributed.planner.utils import BinarySearchPredicate, bytes_to_gb, prod
+from torchrec.distributed.planner.utils import bytes_to_gb, LuusJaakolaSearch, prod
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -283,8 +283,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         self.enumerator: Optional[Enumerator] = None
         self.starting_proposal: List[ShardingOption] = []
         self.proposal: Optional[List[ShardingOption]] = None
-        self.search: Optional[BinarySearchPredicate] = None
-        self.previous_plan_perf_rating: float = 0.0
+        self.search: Optional[LuusJaakolaSearch] = None
 
     def load(
         self,
@@ -320,7 +319,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         perf_rating: Optional[float] = None,
         storage_constraint: Optional[Topology] = None,
     ) -> None:
-        if not self.enumerator or not plan or not storage_constraint:
+        if not self.enumerator or plan is None:
             self.proposal = None
             return
 
@@ -329,47 +328,28 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         )
 
         if self.search is None:
-            # Determine how much extra HBM memory is available for scaling our caches
-            # beyond the baseline-min-working-set plan. We may not be able to find a
-            # partitionable plan that uses all this budget, or we may find a plan that
-            # uses only a portion of this budget enables a layout that reduces overall
-            # cost at the expense of larger prefetch delay. So we perform a binary
-            # search to sample plans with different budgets to discover a good
-            # configuration.
+            if not partitionable or storage_constraint is None:
+                self.proposal = None
+                return
+
             hbm_available = EmbeddingOffloadScaleupProposer.get_budget(
                 plan, storage_constraint
             )
             logger.info(
                 f"EmbeddingOffloadScaleupProposer - cache scale up budget={round(bytes_to_gb(hbm_available), 2)} GB, exploring [{round(bytes_to_gb(hbm_used_previously), 2)}, {round(bytes_to_gb(hbm_used_previously + hbm_available), 2)}] GB"
             )
-            # Partitioning proposals is quite expensive when there are a lot of tables,
-            # so we reduce the number probes the binary search uses to find the max
-            # cache sizes that fit inside the budget by specifying a tolerance. Once
-            # we've less than tolerance bytes left of unused budget we stop searching.
-            # We set tolerance to try to waste less than 3% of budget. For 100TB budget,
-            # this reduces number of proposals from 47 to 6.
-            tolerance = round(hbm_available * 0.03)
-            self.search = BinarySearchPredicate(0, hbm_available, tolerance)
+            self.search = LuusJaakolaSearch(
+                0, hbm_available, max_iterations=16, left_cost=perf_rating
+            )
 
         logger.info(
             f"EmbeddingOffloadScaleupProposer - proposed size={round(bytes_to_gb(hbm_used_previously), 2)} GB, score={perf_rating}"
         )
 
-        # Guide the binary search. We assume the partitioned perf model cost is
-        # monotonic with respect to CLF, so if the feedback from our prior attempt was
-        # worse than previous one, we reduce the memory for our next proposal, else we
-        # try using more. This allows us to focus the budget allocation search into the
-        # productive region where plans are still getting better.
-        warmer = partitionable and (
-            self.previous_plan_perf_rating == 0.0
-            or (
-                perf_rating is not None and perf_rating < self.previous_plan_perf_rating
-            )
-        )
-        self.previous_plan_perf_rating = perf_rating or 0.0
-
         assert self.search is not None  # keep pyre happy
-        budget = self.search.next(warmer)
+        budget = self.search.next(perf_rating or 1e99)
+        if budget is not None:
+            budget = int(budget)
         self.proposal = EmbeddingOffloadScaleupProposer.next_plan(
             self.starting_proposal, budget, self.enumerator
         )
