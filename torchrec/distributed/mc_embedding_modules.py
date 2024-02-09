@@ -267,6 +267,7 @@ class BaseManagedCollisionEmbeddingCollectionSharder(BaseEmbeddingSharder[M]):
         return [
             EmbeddingComputeKernel.FUSED.value,
             EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            EmbeddingComputeKernel.FUSED_UVM.value,
         ]
 
     def sharding_types(self, compute_device_type: str) -> List[str]:

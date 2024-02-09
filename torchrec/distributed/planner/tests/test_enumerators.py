@@ -782,7 +782,10 @@ class TestEnumerators(unittest.TestCase):
 
         self.assertEqual(
             set(allowed_compute_kernels),
-            {EmbeddingComputeKernel.FUSED.value},
+            {
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            },
         )
 
     def test_filter_compute_kernels_mch_ebc_no_available(self) -> None:
