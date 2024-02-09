@@ -34,6 +34,7 @@ class DenseArchTest(unittest.TestCase):
         # check tracer compatibility
         gm = torch.fx.GraphModule(dense_arch, Tracer().trace(dense_arch))
         script = torch.jit.script(gm)
+        # pyre-fixme[29]: `Never` is not a function.
         script(dense_arch_input)
 
 

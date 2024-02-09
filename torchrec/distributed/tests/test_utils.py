@@ -290,6 +290,7 @@ class KJTBucketizeTest(unittest.TestCase):
         keys_list = [f"feature_{i}" for i in range(num_features)]
         # for each feature, generate unrepeated row indices
         indices_lists = [
+            # pyre-fixme[20]: Argument `k` expected.
             random.sample(
                 range(MAX_ROW_COUNT),
                 # number of indices needed is the length sum of all batches for a feature
@@ -374,6 +375,7 @@ class KJTBucketizeTest(unittest.TestCase):
         keys_list = [f"feature_{i}" for i in range(num_features)]
         # for each feature, generate unrepeated row indices
         indices_lists = [
+            # pyre-fixme[20]: Argument `k` expected.
             random.sample(
                 range(MAX_ROW_COUNT),
                 # number of indices needed is the length sum of all batches for a feature

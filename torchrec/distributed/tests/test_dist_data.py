@@ -538,6 +538,7 @@ class PooledEmbeddingsAllToAllTest(MultiProcessTestBase):
     ) -> None:
         world_size = 2
         keys = [f"F{feature}" for feature in range(features)]
+        # pyre-fixme[20]: Argument `k` expected.
         dims = random.sample([8, 16, 32] * features, features)
         rank0_split = random.randint(1, features - 1)
         splits = [rank0_split, features - rank0_split]
@@ -1262,6 +1263,7 @@ class VariableBatchPooledEmbeddingsAllToAllTest(MultiProcessTestBase):
     ) -> None:
         world_size = 2
         keys = [f"F{feature}" for feature in range(features)]
+        # pyre-fixme[20]: Argument `k` expected.
         dims = random.sample([8, 16, 32] * features, features)
         rank0_split = random.randint(1, features - 1)
         splits = [rank0_split, features - rank0_split]

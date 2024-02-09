@@ -301,6 +301,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
             tables=[config],
             device=torch.device("meta"),
         )
+        # pyre-fixme[16]: `EmbeddingCollectionTest` has no attribute `assertEquals`.
         self.assertEquals(torch.device("meta"), ec.embeddings["t1"].weight.device)
 
     def test_duplicate_config_name_fails(self) -> None:
