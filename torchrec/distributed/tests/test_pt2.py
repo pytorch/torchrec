@@ -12,7 +12,6 @@ import unittest
 from typing import List, Tuple
 
 import torch
-import torch._dynamo.skipfiles
 
 try:
     # pyre-ignore

@@ -15,7 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 
-import torch._dynamo.skipfiles
 import torchrec
 from fbgemm_gpu import sparse_ops  # noqa: F401, E402
 from fbgemm_gpu.split_embedding_configs import SparseType
@@ -27,7 +26,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn, quantization as quant, Tensor
-from torch._dynamo import skipfiles
+from torch._dynamo import trace_rules
 from torch.distributed._shard.sharding_spec import ShardingSpec
 from torch.utils import _pytree as pytree
 from torchrec import (
@@ -798,16 +797,18 @@ def assert_weight_spec(
 @contextmanager
 # pyre-ignore
 def dynamo_skipfiles_allow(exclude_from_skipfiles_pattern: str):
-    original_FBCODE_SKIP_DIRS_RE = copy.deepcopy(skipfiles.FBCODE_SKIP_DIRS_RE)
+    original_FBCODE_SKIP_DIRS_RE = copy.deepcopy(trace_rules.FBCODE_SKIP_DIRS_RE)
     new_FBCODE_SKIP_DIRS = {
-        s for s in skipfiles.FBCODE_SKIP_DIRS if exclude_from_skipfiles_pattern not in s
+        s
+        for s in trace_rules.FBCODE_SKIP_DIRS
+        if exclude_from_skipfiles_pattern not in s
     }
-    skipfiles.FBCODE_SKIP_DIRS_RE = re.compile(
+    trace_rules.FBCODE_SKIP_DIRS_RE = re.compile(
         # pyre-ignore
         f".*({'|'.join(map(re.escape, new_FBCODE_SKIP_DIRS))})"
     )
     yield
-    skipfiles.FBCODE_SKIP_DIRS_RE = original_FBCODE_SKIP_DIRS_RE
+    trace_rules.FBCODE_SKIP_DIRS_RE = original_FBCODE_SKIP_DIRS_RE
 
 
 class MockTBE(nn.Module):
