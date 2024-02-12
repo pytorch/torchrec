@@ -118,15 +118,18 @@ def _regroup_keyed_tensors(
         if match:
             return [kt.values() for kt in keyed_tensors]
 
-    embedding_dicts = [keyed_tensor.to_dict() for keyed_tensor in keyed_tensors]
-    lengths = [keyed_tensor.length_per_key() for keyed_tensor in keyed_tensors]
-    indices = [keyed_tensor._key_indices() for keyed_tensor in keyed_tensors]
-    key_dim = keyed_tensors[0].key_dim()
+    # Generate mapping of embeddings
+    # We are flattening all tenstor, even the total group size can be smaller than the number of keys
+    # Potential optimization:
+    #   - Convert on demand
+    embedding_dict: dict[str, torch.Tensor] = {}
+    length_dict: dict[str, int] = {}
+    for keyed_tensor in keyed_tensors:
+        embedding_dict.update(keyed_tensor.to_dict())
+        for key, key_len in zip(keyed_tensor.keys(), keyed_tensor.length_per_key()):
+            length_dict[key] = key_len
 
-    key_to_idx: dict[str, int] = {}
-    for (i, keyed_tensor) in enumerate(keyed_tensors):
-        for key in keyed_tensor.keys():
-            key_to_idx[key] = i
+    key_dim = keyed_tensors[0].key_dim()
 
     # Rearrange values based on groups with a single torch.cat operation.
     split_lengths: List[int] = []
@@ -134,8 +137,8 @@ def _regroup_keyed_tensors(
     for group in groups:
         group_length = 0
         for name in group:
-            cat_input.append(embedding_dicts[key_to_idx[name]][name])
-            group_length += lengths[key_to_idx[name]][indices[key_to_idx[name]][name]]
+            cat_input.append(embedding_dict[name])
+            group_length += length_dict[name]
         split_lengths.append(group_length)
     rearranged_values = torch.cat(cat_input, key_dim)
 
