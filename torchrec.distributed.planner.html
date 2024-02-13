@@ -1595,6 +1595,41 @@ entire range explored or threshold reached.</p>
 
 </dd></dl>
 
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.utils.LuusJaakolaSearch">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.utils.</span></span><span class="sig-name descname"><span class="pre">LuusJaakolaSearch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left_cost</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.utils.LuusJaakolaSearch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Implements a clamped variant of Luus Jaakola search.</p>
+<p>See <a class="reference external" href="https://en.wikipedia.org/wiki/Luus-Jaakola">https://en.wikipedia.org/wiki/Luus-Jaakola</a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.utils.LuusJaakolaSearch.best">
+<span class="sig-name descname"><span class="pre">best</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.utils.LuusJaakolaSearch.best" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the best position so far, and its associated cost.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.utils.LuusJaakolaSearch.clamp">
+<span class="sig-name descname"><span class="pre">clamp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.utils.LuusJaakolaSearch.clamp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clamp x into range [left, right]</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.utils.LuusJaakolaSearch.next">
+<span class="sig-name descname"><span class="pre">next</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.utils.LuusJaakolaSearch.next" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return the next probe point ‘y’ to evaluate, given the previous result.</p>
+<p>The first time around fy is ignored. Subsequent invocations should provide the
+result of evaluating the function being minimized, i.e. f(y).</p>
+<p>Returns None when the maximum number of iterations has been reached.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.utils.LuusJaakolaSearch.uniform">
+<span class="sig-name descname"><span class="pre">uniform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.utils.LuusJaakolaSearch.uniform" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a random uniform position in range [A,B].</p>
+</dd></dl>
+
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.utils.bytes_to_gb">
 <span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.utils.</span></span><span class="sig-name descname"><span class="pre">bytes_to_gb</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.utils.bytes_to_gb" title="Permalink to this definition">¶</a></dt>

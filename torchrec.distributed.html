@@ -6395,6 +6395,69 @@ positional arg.</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.DataLoadingThread">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.train_pipeline.</span></span><span class="sig-name descname"><span class="pre">DataLoadingThread</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataloader_iter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">In</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">to_device_non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memcpy_stream_priority</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.train_pipeline.DataLoadingThread" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Thread</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">In</span></code>]</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.DataLoadingThread.get_next_batch">
+<span class="sig-name descname"><span class="pre">get_next_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">none_throws</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">In</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.DataLoadingThread.get_next_batch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the next batch from the buffer if threading is enabled, otherwise
+call load_next_batch directly.</p>
+<p>This function is not thread safe. We assume this is only invoked from
+the main thread in the training loop.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.DataLoadingThread.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.DataLoadingThread.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Method representing the thread’s activity.</p>
+<p>You may override this method in a subclass. The standard run() method
+invokes the callable object passed to the object’s constructor as the
+target argument, if any, with sequential and keyword arguments taken
+from the args and kwargs arguments, respectively.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.DataLoadingThread.stop">
+<span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.DataLoadingThread.stop" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.EvalPipelineSparseDist">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.train_pipeline.</span></span><span class="sig-name descname"><span class="pre">EvalPipelineSparseDist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optimizer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">apply_jit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.train_pipeline.EvalPipelineSparseDist" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.train_pipeline.TrainPipelineSparseDist" title="torchrec.distributed.train_pipeline.TrainPipelineSparseDist"><code class="xref py py-class docutils literal notranslate"><span class="pre">TrainPipelineSparseDist</span></code></a>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">In</span></code>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">Out</span></code>]</p>
+<p>This pipeline overlaps device transfer, and <cite>ShardedModule.input_dist()</cite> with
+forward. This helps hide the all2all latency. We use a background thread to
+perform device transfer to further reduce latency.</p>
+<p>stage 2: forward- uses default CUDA stream
+stage 1: ShardedModule.input_dist() - uses data_dist CUDA stream
+background: device transfer - uses memcpy CUDA stream</p>
+<p><cite>ShardedModule.input_dist()</cite> is only done for top-level modules in the call graph.
+To be considered a top-level module, a module can only depend on ‘getattr’ calls on
+input.</p>
+<p>Input model must be symbolically traceable with the exception of <cite>ShardedModule</cite> and
+<cite>DistributedDataParallel</cite> modules.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>torch.nn.Module</em>) – model to pipeline.</p></li>
+<li><p><strong>optimizer</strong> (<em>torch.optim.Optimizer</em>) – optimizer to use.</p></li>
+<li><p><strong>device</strong> (<em>torch.device</em>) – device where device transfer, sparse data dist, and
+forward/backward pass will happen.</p></li>
+<li><p><strong>apply_jit</strong> (<em>bool</em>) – apply torch.jit.script to non-pipelined (unsharded) modules.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.EvalPipelineSparseDist.progress">
+<span class="sig-name descname"><span class="pre">progress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader_iter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">In</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Out</span></span></span><a class="headerlink" href="#torchrec.distributed.train_pipeline.EvalPipelineSparseDist.progress" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.train_pipeline.FusedKJTListSplitsAwaitable">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.train_pipeline.</span></span><span class="sig-name descname"><span class="pre">FusedKJTListSplitsAwaitable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">requests</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.embedding_sharding.KJTListSplitsAwaitable" title="torchrec.distributed.embedding_sharding.KJTListSplitsAwaitable"><span class="pre">KJTListSplitsAwaitable</span></a><span class="p"><span class="pre">[</span></span><span class="pre">C</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contexts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">C</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.train_pipeline.FusedKJTListSplitsAwaitable" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Awaitable</span></code></a>[<code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code>[<a class="reference internal" href="#torchrec.distributed.embedding_sharding.KJTListAwaitable" title="torchrec.distributed.embedding_sharding.KJTListAwaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">KJTListAwaitable</span></code></a>]]</p>
