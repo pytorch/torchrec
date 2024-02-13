@@ -226,13 +226,11 @@ class GreedyPerfPartitioner(Partitioner):
 
         _topology: Topology = copy.deepcopy(storage_constraint)
         minheap_devices: Optional[List[OrderedDeviceHardware]] = None
-        _host_level_devices = GreedyPerfPartitioner._get_host_level_devices(_topology)
+        _host_level_devices = self._get_host_level_devices(_topology)
 
         # first partition the uniform sharding options (RW & DP)
         uniform_sharding_options = _get_uniform_sharding_options(proposal)
-        GreedyPerfPartitioner._uniform_partition(
-            uniform_sharding_options, _topology.devices
-        )
+        self._uniform_partition(uniform_sharding_options, _topology.devices)
 
         # group the rest sharding options by colocation type (co-host, co-device, none)
         # and sort the groups by storage in reverse order
@@ -245,9 +243,7 @@ class GreedyPerfPartitioner(Partitioner):
                 sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.HOST.value
             ):
-                GreedyPerfPartitioner._cohost_partition(
-                    sharding_option_group, _host_level_devices
-                )
+                self._cohost_partition(sharding_option_group, _host_level_devices)
                 # _cohost_partition invalidates minheap_devices, force rebuild before using
                 minheap_devices = None
             elif (
@@ -255,13 +251,13 @@ class GreedyPerfPartitioner(Partitioner):
                 == PartitionByType.DEVICE.value
             ):
                 if minheap_devices is None:
-                    minheap_devices = GreedyPerfPartitioner._establish_minheap(
+                    minheap_devices = self._establish_minheap(
                         _topology.devices, _topology.local_world_size
                     )
                 assert (
                     len(sharding_option_group.sharding_options) == 1
                 ), f"Unexpected length for sharding options: {len(sharding_option_group.sharding_options)}"
-                GreedyPerfPartitioner._device_partition(
+                self._device_partition(
                     sharding_option_group.sharding_options[0],
                     minheap_devices,
                 )
@@ -273,9 +269,9 @@ class GreedyPerfPartitioner(Partitioner):
         self._topology: Topology = _topology
         return proposal
 
-    @staticmethod
+    @classmethod
     def _establish_minheap(
-        devices: List[DeviceHardware], local_world_size: int
+        cls, devices: List[DeviceHardware], local_world_size: int
     ) -> List[OrderedDeviceHardware]:
         minheap_devices = [
             OrderedDeviceHardware(device, local_world_size) for device in devices
@@ -283,8 +279,9 @@ class GreedyPerfPartitioner(Partitioner):
         heapq.heapify(minheap_devices)
         return minheap_devices
 
-    @staticmethod
+    @classmethod
     def _device_partition(
+        cls,
         sharding_option: ShardingOption,
         minheap_devices: List[OrderedDeviceHardware],
         bulk_heapify_threshold: float = 0.25,
@@ -322,8 +319,9 @@ class GreedyPerfPartitioner(Partitioner):
                     minheap_devices.extend(tmp_heap)
                     heapq.heapify(minheap_devices)
 
-    @staticmethod
+    @classmethod
     def _cohost_partition(
+        cls,
         sharding_option_group: ShardingOptionGroup,
         _host_level_devices: List[List[DeviceHardware]],
     ) -> None:
@@ -344,9 +342,7 @@ class GreedyPerfPartitioner(Partitioner):
                         sharding_option.sharding_type
                         == ShardingType.TABLE_ROW_WISE.value
                     ):
-                        GreedyPerfPartitioner._uniform_partition(
-                            [sharding_option], host_devices
-                        )
+                        cls._uniform_partition([sharding_option], host_devices)
                         # _uniform_partition invalidates minheap_devices, force rebuild
                         # before using
                         minheap_devices = None
@@ -355,12 +351,10 @@ class GreedyPerfPartitioner(Partitioner):
                         == ShardingType.TABLE_COLUMN_WISE.value
                     ):
                         if minheap_devices is None:
-                            minheap_devices = GreedyPerfPartitioner._establish_minheap(
+                            minheap_devices = cls._establish_minheap(
                                 host_devices, len(host_devices)
                             )
-                        GreedyPerfPartitioner._device_partition(
-                            sharding_option, minheap_devices
-                        )
+                        cls._device_partition(sharding_option, minheap_devices)
                     else:
                         raise RuntimeError(
                             f"unexpected cohost sharding type: {sharding_option.sharding_type}"
@@ -382,8 +376,8 @@ class GreedyPerfPartitioner(Partitioner):
             message=f"can't find a host for sharding option group {sharding_option_group}",
         )
 
-    @staticmethod
-    def _get_host_level_devices(_topology: Topology) -> List[List[DeviceHardware]]:
+    @classmethod
+    def _get_host_level_devices(cls, _topology: Topology) -> List[List[DeviceHardware]]:
         num_hosts: int = _topology.world_size // _topology.local_world_size
         host_level_devices: List[List[DeviceHardware]] = []
         for i in range(num_hosts):
@@ -393,9 +387,9 @@ class GreedyPerfPartitioner(Partitioner):
             host_level_devices.append(devices_in_host)
         return host_level_devices
 
-    @staticmethod
+    @classmethod
     def _uniform_partition(
-        sharding_options: List[ShardingOption], devices: List[DeviceHardware]
+        cls, sharding_options: List[ShardingOption], devices: List[DeviceHardware]
     ) -> None:
         for sharding_option in sharding_options:
             if sharding_option.num_shards != len(devices):
