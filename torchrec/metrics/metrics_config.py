@@ -33,6 +33,7 @@ class RecMetricEnum(RecMetricEnumBase):
     ACCURACY = "accuracy"
     NDCG = "ndcg"
     XAUC = "xauc"
+    SCALAR = "scalar"
 
 
 @dataclass(unsafe_hash=True, eq=True)

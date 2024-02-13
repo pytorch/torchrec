@@ -41,6 +41,7 @@ from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.recall_session import RecallSessionMetric
+from torchrec.metrics.scalar import ScalarMetric
 from torchrec.metrics.segmented_ne import SegmentedNEMetric
 from torchrec.metrics.throughput import ThroughputMetric
 from torchrec.metrics.tower_qps import TowerQPSMetric
@@ -66,6 +67,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.ACCURACY: AccuracyMetric,
     RecMetricEnum.NDCG: NDCGMetric,
     RecMetricEnum.XAUC: XAUCMetric,
+    RecMetricEnum.SCALAR: ScalarMetric,
 }
 
 
