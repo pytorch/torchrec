@@ -1645,7 +1645,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return split_list
 
     def permute(
-        self, indices: List[int], indices_tensor: Optional[torch.Tensor] = None
+        self,
+        indices: List[int],
+        indices_tensor: Optional[torch.Tensor] = None,
+        include_inverse_indices: bool = False,
     ) -> "KeyedJaggedTensor":
 
         if indices_tensor is None:
@@ -1715,7 +1718,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offset_per_key=None,
             index_per_key=None,
             jt_dict=None,
-            inverse_indices=None,
+            inverse_indices=self.inverse_indices_or_none()
+            if include_inverse_indices
+            else None,
         )
         return kjt
 
