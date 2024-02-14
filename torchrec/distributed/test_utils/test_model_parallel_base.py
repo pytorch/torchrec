@@ -11,7 +11,6 @@ from collections import defaultdict
 from typing import Any, Callable, cast, Dict, List, Optional, OrderedDict, Tuple
 
 import numpy as np
-
 import torch
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
@@ -23,10 +22,7 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     EmbeddingTableConfig,
 )
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionSharder,
-    ShardedEmbeddingBagCollection,
-)
+from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
 from torchrec.distributed.fused_embeddingbag import ShardedFusedEmbeddingBagCollection
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import (
@@ -469,19 +465,29 @@ class ModelParallelStateDictBase(unittest.TestCase):
         ),
         sharding_type=st.sampled_from(
             [
+                ShardingType.TABLE_WISE.value,
                 ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
             ]
         ),
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.FUSED.value,
                 EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
             ]
         ),
+        is_training=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_load_state_dict(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        is_training: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -506,11 +512,20 @@ class ModelParallelStateDictBase(unittest.TestCase):
         m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
 
         # validate the models are equivalent
-        with torch.no_grad():
-            loss1, pred1 = m1(batch)
-            loss2, pred2 = m2(batch)
-            self.assertTrue(torch.equal(loss1, loss2))
-            self.assertTrue(torch.equal(pred1, pred2))
+        if is_training:
+            for _ in range(2):
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                loss1.backward()
+                loss2.backward()
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
+        else:
+            with torch.no_grad():
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
             v2 = sd1[key]
@@ -543,10 +558,11 @@ class ModelParallelStateDictBase(unittest.TestCase):
                 EmbeddingComputeKernel.DENSE.value,
             ]
         ),
+        is_training=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_load_state_dict_dp(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self, sharder_type: str, sharding_type: str, kernel_type: str, is_training: bool
     ) -> None:
         sharders = [
             cast(
@@ -565,11 +581,20 @@ class ModelParallelStateDictBase(unittest.TestCase):
         m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
 
         # validate the models are equivalent
-        with torch.no_grad():
-            loss1, pred1 = m1(batch)
-            loss2, pred2 = m2(batch)
-            self.assertTrue(torch.equal(loss1, loss2))
-            self.assertTrue(torch.equal(pred1, pred2))
+        if is_training:
+            for _ in range(2):
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                loss1.backward()
+                loss2.backward()
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
+        else:
+            with torch.no_grad():
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
             v2 = sd1[key]
@@ -587,17 +612,45 @@ class ModelParallelStateDictBase(unittest.TestCase):
 
     # pyre-ignore[56]
     @given(
-        sharders=st.sampled_from(
+        sharder_type=st.sampled_from(
             [
-                [EmbeddingBagCollectionSharder()],
-                # [EmbeddingBagSharder()],
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ]
+        ),
+        is_training=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_load_state_dict_prefix(
-        self, sharders: List[ModuleSharder[nn.Module]]
+        self, sharder_type: str, sharding_type: str, kernel_type: str, is_training: bool
     ) -> None:
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(sharder_type, sharding_type, kernel_type),
+            ),
+        ]
         (m1, m2), batch = self._generate_dmps_and_batch(sharders)
 
         # load the second's (m2's) with the first (m1's) state_dict
@@ -607,6 +660,21 @@ class ModelParallelStateDictBase(unittest.TestCase):
         )
 
         # validate the models are equivalent
+        if is_training:
+            for _ in range(2):
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                loss1.backward()
+                loss2.backward()
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
+        else:
+            with torch.no_grad():
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
+
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
             v2 = sd1[key]
@@ -632,19 +700,31 @@ class ModelParallelStateDictBase(unittest.TestCase):
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
             ]
         ),
         kernel_type=st.sampled_from(
             [
                 # EmbeddingComputeKernel.DENSE.value,
                 EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_params_and_buffers(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
         sharders = [
             create_test_sharder(sharder_type, sharding_type, kernel_type),
         ]
@@ -671,13 +751,22 @@ class ModelParallelStateDictBase(unittest.TestCase):
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
             ]
         ),
+        is_training=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_load_state_dict_cw_multiple_shards(
-        self, sharder_type: str, sharding_type: str, kernel_type: str
+        self, sharder_type: str, sharding_type: str, kernel_type: str, is_training: bool
     ) -> None:
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
         sharders = [
             cast(
                 ModuleSharder[nn.Module],
@@ -717,10 +806,20 @@ class ModelParallelStateDictBase(unittest.TestCase):
         m2.fused_optimizer.load_state_dict(src_optimizer_state_dict)
 
         # validate the models are equivalent
-        loss1, pred1 = m1(batch)
-        loss2, pred2 = m2(batch)
-        self.assertTrue(torch.equal(loss1, loss2))
-        self.assertTrue(torch.equal(pred1, pred2))
+        if is_training:
+            for _ in range(2):
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                loss1.backward()
+                loss2.backward()
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
+        else:
+            with torch.no_grad():
+                loss1, pred1 = m1(batch)
+                loss2, pred2 = m2(batch)
+                self.assertTrue(torch.equal(loss1, loss2))
+                self.assertTrue(torch.equal(pred1, pred2))
 
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
