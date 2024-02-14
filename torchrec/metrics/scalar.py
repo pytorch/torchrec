@@ -29,14 +29,14 @@ class ScalarMetricComputation(RecMetricComputation):
             torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="mean",
-            persistent=True,
+            persistent=False,
         )
         self._add_state(
             "window_count",
             torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="mean",
-            persistent=True,
+            persistent=False,
         )
 
     def update(
