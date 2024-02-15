@@ -693,12 +693,39 @@ def _maybe_compute_stride_kjt_scripted(
     return torch.tensor([_maybe_compute_stride_kjt(keys, stride, lengths, offsets)])
 
 
+def _use_segment_sum_csr(stride_per_key: List[int]) -> bool:
+    """
+    `segment_sum_csr` performs poorly for small number of segments and many elements
+    in each segment to sum. This function uses an empirically calculated equation,
+    derived from fitting a quadratic regression to an interval of elements and elements
+    per segment that match performance between the kernel and PyTorch solution, to
+    determine the threshold of when to use `segment_sum_csr`.
+    """
+    elements_per_segment = sum(stride_per_key) / len(stride_per_key)
+    segment_threshold = int(
+        1.39771
+        + 0.0000312222 * elements_per_segment
+        + 1.63949e-10 * elements_per_segment**2
+    )
+    return len(stride_per_key) >= segment_threshold
+
+
 def _length_per_key_from_stride_per_key(
     lengths: torch.Tensor, stride_per_key: List[int]
 ) -> List[int]:
-    return torch.cat(
-        [torch.sum(chunk).view(1) for chunk in torch.split(lengths, stride_per_key)]
-    ).tolist()
+    if _use_segment_sum_csr(stride_per_key):
+        stride_per_key_offsets = _to_offsets(
+            _pin_and_move(
+                torch.tensor(stride_per_key, dtype=torch.int32), lengths.device
+            )
+        )
+        return torch.ops.fbgemm.segment_sum_csr(
+            1, stride_per_key_offsets, lengths
+        ).tolist()
+    else:
+        return torch.cat(
+            [torch.sum(chunk).view(1) for chunk in torch.split(lengths, stride_per_key)]
+        ).tolist()
 
 
 def _maybe_compute_length_per_key(
