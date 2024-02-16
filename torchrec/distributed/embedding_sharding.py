@@ -140,10 +140,15 @@ def bucketize_kjt_before_all2all(
         block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
     )
 
+    # Syntax for dynamo (instead of generator kjt.keys() * num_buckets)
+    keys: List[str] = []
+    for _ in range(num_buckets):
+        keys.extend(kjt.keys())
+
     return (
         KeyedJaggedTensor(
             # duplicate keys will be resolved by AllToAll
-            keys=kjt.keys() * num_buckets,
+            keys=keys,
             values=bucketized_indices,
             weights=pos if bucketize_pos else bucketized_weights,
             lengths=bucketized_lengths.view(-1),
@@ -371,7 +376,12 @@ class KJTListAwaitable(Awaitable[KJTList]):
         Returns:
             KJTList: synced `KJTList`.
         """
-        kjts = [w.wait() for w in self.awaitables]
+
+        # Syntax: no list comprehension usage for dynamo
+        kjts = []
+        for w in self.awaitables:
+            kjts.append(w.wait())
+
         _set_sharding_context_post_a2a(kjts, self.ctx)
         return KJTList(kjts)
 
