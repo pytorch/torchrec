@@ -2098,6 +2098,32 @@ register_pytree_node(
 register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 
+def flatten_kjt_list(
+    kjt_arr: List[KeyedJaggedTensor],
+) -> Tuple[List[Optional[torch.Tensor]], List[List[str]]]:
+    _flattened_data = []
+    _flattened_context = []
+    for t in kjt_arr:
+        _values, _context = _kjt_flatten(t)
+        _flattened_data.extend(_values)
+        _flattened_context.append(_context)
+    return _flattened_data, _flattened_context
+
+
+def unflatten_kjt_list(
+    values: List[Optional[torch.Tensor]], contexts: List[List[str]]
+) -> List[KeyedJaggedTensor]:
+    num_kjt_fields = len(KeyedJaggedTensor._fields)
+    length = len(values)
+    return [
+        _kjt_unflatten(
+            values[j * num_kjt_fields : (j + 1) * num_kjt_fields],
+            contexts[j],
+        )
+        for j in range(length // num_kjt_fields)
+    ]
+
+
 def _maybe_compute_offset_per_key_kt(
     length_per_key: List[int],
     offset_per_key: Optional[List[int]],
