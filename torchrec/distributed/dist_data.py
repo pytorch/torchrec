@@ -81,17 +81,20 @@ def _get_recat(
         if local_split == 0:
             return None
 
-        recat: List[int] = []
+        feature_order: List[int] = []
+        for x in range(num_splits // stagger):
+            for y in range(stagger):
+                feature_order.append(x + num_splits // stagger * y)
 
-        feature_order: List[int] = [
-            x + num_splits // stagger * y
-            for x in range(num_splits // stagger)
-            for y in range(stagger)
-        ]
+        recat: torch.Tensor = torch.empty(
+            local_split * len(feature_order), device=device, dtype=torch.int32
+        )
 
+        _i = 0
         for i in range(local_split):
             for j in feature_order:  # range(num_splits):
-                recat.append(i + j * local_split)
+                recat[_i] = i + j * local_split
+                _i += 1
 
         # variable batch size
         if batch_size_per_rank is not None and any(
