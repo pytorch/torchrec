@@ -636,7 +636,11 @@ def _jt_flatten_spec(t: JaggedTensor, spec: TreeSpec) -> List[Optional[torch.Ten
 
 
 register_pytree_node(
-    JaggedTensor, _jt_flatten, _jt_unflatten, flatten_with_keys_fn=_jt_flatten_with_keys
+    JaggedTensor,
+    _jt_flatten,
+    _jt_unflatten,
+    flatten_with_keys_fn=_jt_flatten_with_keys,
+    serialized_type_name="torchrec.sparse.jagged_tensor.JaggedTensor",
 )
 register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 
@@ -2093,6 +2097,7 @@ register_pytree_node(
     _kjt_flatten,
     _kjt_unflatten,
     flatten_with_keys_fn=_kjt_flatten_with_keys,
+    serialized_type_name="torchrec.sparse.jagged_tensor.KeyedJaggedTensor",
 )
 register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
