@@ -191,6 +191,25 @@ def _arange(*args, **kwargs) -> torch.Tensor:
     return torch.arange(*args, **kwargs)
 
 
+def _is_valid_permutation(recat: torch.Tensor, segment_sizes: torch.Tensor) -> bool:
+    """
+    Checks if the recat tensor is a valid permutation, meaning the tensor size after
+    permutation will be the same as before.
+
+    The output size will be the same as the input size if the recat tensor only contains
+    the sequence (0 ... n-1) where n is the number of segments.
+    """
+    n = recat.numel()
+    if n != segment_sizes.numel():
+        return False
+    unique = torch.unique(recat)
+    if unique.numel() != n:
+        return False
+    if torch.min(unique) != 0 or torch.max(unique) != n - 1:
+        return False
+    return True
+
+
 def _permute_tensor_by_segments(
     tensor: torch.Tensor,
     segment_sizes: torch.Tensor,
@@ -209,13 +228,17 @@ def _permute_tensor_by_segments(
         `keyed_jagged_index_select_dim1` is only supported for CUDA.
     """
     if tensor.device.type == "cuda":
+        output_size = (
+            tensor.numel() if _is_valid_permutation(recat, segment_sizes) else None
+        )
         output = torch.ops.fbgemm.keyed_jagged_index_select_dim1(
-            tensor,
-            segment_sizes,
-            _to_offsets(segment_sizes),
-            recat,
-            segment_sizes.numel(),
-            weights,
+            values=tensor,
+            lengths=segment_sizes,
+            offsets=_to_offsets(segment_sizes),
+            indices=recat,
+            batch_size=segment_sizes.numel(),
+            weights=weights,
+            selected_lengths_sum=output_size,
         )
         permuted_tensor = output[0]
         permuted_weights = None if weights is None else output[2]
