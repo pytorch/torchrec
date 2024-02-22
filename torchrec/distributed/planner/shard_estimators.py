@@ -174,7 +174,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 # But for data-parallel, we need the calculate the cardinality of the local
                 # input batch.  For now, we don't use cache stats with data parallel.
 
-            shard_perfs = perf_func_emb_wall_time(
+            shard_perfs = self.perf_func_emb_wall_time(
                 shard_sizes=[shard.size for shard in sharding_option.shards],
                 compute_kernel=sharding_option.compute_kernel,
                 compute_device=self._topology.compute_device,
@@ -206,529 +206,546 @@ class EmbeddingPerfEstimator(ShardEstimator):
             for shard, perf in zip(sharding_option.shards, shard_perfs):
                 shard.perf = perf
 
+    @classmethod
+    def perf_func_emb_wall_time(
+        cls,
+        shard_sizes: List[List[int]],
+        compute_kernel: str,
+        compute_device: str,
+        sharding_type: str,
+        batch_sizes: List[int],
+        world_size: int,
+        local_world_size: int,
+        input_lengths: List[float],
+        input_data_type_size: float,
+        table_data_type_size: float,
+        fwd_a2a_comm_data_type_size: float,
+        bwd_a2a_comm_data_type_size: float,
+        fwd_sr_comm_data_type_size: float,
+        bwd_sr_comm_data_type_size: float,
+        num_poolings: List[float],
+        hbm_mem_bw: float,
+        ddr_mem_bw: float,
+        intra_host_bw: float,
+        inter_host_bw: float,
+        bwd_compute_multiplier: float,
+        is_pooled: bool,
+        is_weighted: bool = False,
+        caching_ratio: Optional[float] = None,
+        is_inference: bool = False,
+        prefetch_pipeline: bool = False,
+        expected_cache_fetches: float = 0,
+    ) -> List[Perf]:
+        """
+        Attempts to model perfs as a function of relative wall times.
 
-def perf_func_emb_wall_time(
-    shard_sizes: List[List[int]],
-    compute_kernel: str,
-    compute_device: str,
-    sharding_type: str,
-    batch_sizes: List[int],
-    world_size: int,
-    local_world_size: int,
-    input_lengths: List[float],
-    input_data_type_size: float,
-    table_data_type_size: float,
-    fwd_a2a_comm_data_type_size: float,
-    bwd_a2a_comm_data_type_size: float,
-    fwd_sr_comm_data_type_size: float,
-    bwd_sr_comm_data_type_size: float,
-    num_poolings: List[float],
-    hbm_mem_bw: float,
-    ddr_mem_bw: float,
-    intra_host_bw: float,
-    inter_host_bw: float,
-    bwd_compute_multiplier: float,
-    is_pooled: bool,
-    is_weighted: bool = False,
-    caching_ratio: Optional[float] = None,
-    is_inference: bool = False,
-    prefetch_pipeline: bool = False,
-    expected_cache_fetches: float = 0,
-) -> List[Perf]:
-    """
-    Attempts to model perfs as a function of relative wall times.
+        Args:
+            shard_sizes (List[List[int]]): the list of (local_rows, local_cols) of each
+                shard.
+            compute_kernel (str): compute kernel.
+            compute_device (str): compute device.
+            sharding_type (str): tw, rw, cw, twrw, dp.
+            batch_sizes (List[int]): batch size for each input feature.
+            world_size (int): the number of devices for all hosts.
+            local_world_size (int): the number of the device for each host.
+            input_lengths (List[float]): the list of the average number of lookups of each
+                input query feature.
+            input_data_type_size (float): the data type size of the distributed
+                data_parallel input.
+            table_data_type_size (float): the data type size of the table.
+            fwd_comm_data_type_size (float): the data type size of the distributed
+                data_parallel input during forward communication.
+            bwd_comm_data_type_size (float): the data type size of the distributed
+                data_parallel input during backward communication.
+            num_poolings (List[float]): number of poolings per sample, typically 1.0.
+            hbm_mem_bw (float): the bandwidth of the device HBM.
+            ddr_mem_bw (float): the bandwidth of the system DDR memory.
+            intra_host_bw (float): the bandwidth within a single host like multiple threads.
+            inter_host_bw (float): the bandwidth between two hosts like multiple machines.
+            is_pooled (bool): True if embedding output is pooled (ie. `EmbeddingBag`), False
+                if unpooled/sequential (ie. `Embedding`).
+            is_weighted (bool = False): if the module is an EBC and is weighted, typically
+                signifying an id score list feature.
+            is_inference (bool = False): if planning for inference.
+            caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
+                of device.
+            prefetch_pipeline (bool = False): whether prefetch pipeline is enabled.
+            expected_cache_fetches (float): number of expected cache fetches across global batch
 
-    Args:
-        shard_sizes (List[List[int]]): the list of (local_rows, local_cols) of each
-            shard.
-        compute_kernel (str): compute kernel.
-        compute_device (str): compute device.
-        sharding_type (str): tw, rw, cw, twrw, dp.
-        batch_sizes (List[int]): batch size for each input feature.
-        world_size (int): the number of devices for all hosts.
-        local_world_size (int): the number of the device for each host.
-        input_lengths (List[float]): the list of the average number of lookups of each
-            input query feature.
-        input_data_type_size (float): the data type size of the distributed
-            data_parallel input.
-        table_data_type_size (float): the data type size of the table.
-        fwd_comm_data_type_size (float): the data type size of the distributed
-            data_parallel input during forward communication.
-        bwd_comm_data_type_size (float): the data type size of the distributed
-            data_parallel input during backward communication.
-        num_poolings (List[float]): number of poolings per sample, typically 1.0.
-        hbm_mem_bw (float): the bandwidth of the device HBM.
-        ddr_mem_bw (float): the bandwidth of the system DDR memory.
-        intra_host_bw (float): the bandwidth within a single host like multiple threads.
-        inter_host_bw (float): the bandwidth between two hosts like multiple machines.
-        is_pooled (bool): True if embedding output is pooled (ie. `EmbeddingBag`), False
-            if unpooled/sequential (ie. `Embedding`).
-        is_weighted (bool = False): if the module is an EBC and is weighted, typically
-            signifying an id score list feature.
-        is_inference (bool = False): if planning for inference.
-        caching_ratio (Optional[float] = None): cache ratio to determine the bandwidth
-            of device.
-        prefetch_pipeline (bool = False): whether prefetch pipeline is enabled.
-        expected_cache_fetches (float): number of expected cache fetches across global batch
+        Returns:
+            List[float]: the list of perf for each shard.
+        """
 
-    Returns:
-        List[float]: the list of perf for each shard.
-    """
+        shard_perfs = []
+        device_bw = kernel_bw_lookup(
+            compute_device,
+            compute_kernel,
+            hbm_mem_bw,
+            ddr_mem_bw,
+            caching_ratio,
+            prefetch_pipeline,
+        )
+        if device_bw is None:
+            raise PlannerError(
+                f"No kernel bandwidth exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
+            )
 
-    shard_perfs = []
-    device_bw = kernel_bw_lookup(
-        compute_device,
-        compute_kernel,
-        hbm_mem_bw,
-        ddr_mem_bw,
-        caching_ratio,
-        prefetch_pipeline,
-    )
-    if device_bw is None:
-        raise PlannerError(
-            f"No kernel bandwidth exists for this combo of compute device: {compute_device}, compute kernel: {compute_kernel}"
+        for hash_size, emb_dim in shard_sizes:
+            if (
+                sharding_type == ShardingType.TABLE_WISE.value
+                or sharding_type == ShardingType.COLUMN_WISE.value
+                or sharding_type == ShardingType.TABLE_COLUMN_WISE.value
+            ):
+                shard_perf = cls._get_tw_sharding_perf(
+                    batch_sizes=batch_sizes,
+                    world_size=world_size,
+                    local_world_size=local_world_size,
+                    input_lengths=input_lengths,
+                    emb_dim=emb_dim,
+                    input_data_type_size=input_data_type_size,
+                    table_data_type_size=table_data_type_size,
+                    fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
+                    bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
+                    num_poolings=num_poolings,
+                    ddr_mem_bw=ddr_mem_bw,
+                    device_bw=device_bw,
+                    inter_host_bw=inter_host_bw,
+                    intra_host_bw=intra_host_bw,
+                    bwd_compute_multiplier=bwd_compute_multiplier,
+                    is_pooled=is_pooled,
+                    is_weighted=is_weighted,
+                    is_inference=is_inference,
+                    expected_cache_fetches=expected_cache_fetches,
+                )
+            elif sharding_type == ShardingType.ROW_WISE.value:
+                shard_perf = cls._get_rw_sharding_perf(
+                    batch_sizes=batch_sizes,
+                    world_size=world_size,
+                    local_world_size=local_world_size,
+                    input_lengths=input_lengths,
+                    emb_dim=emb_dim,
+                    input_data_type_size=input_data_type_size,
+                    table_data_type_size=table_data_type_size,
+                    fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
+                    bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
+                    fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
+                    bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
+                    num_poolings=num_poolings,
+                    ddr_mem_bw=ddr_mem_bw,
+                    device_bw=device_bw,
+                    inter_host_bw=inter_host_bw,
+                    intra_host_bw=intra_host_bw,
+                    bwd_compute_multiplier=bwd_compute_multiplier,
+                    is_pooled=is_pooled,
+                    is_weighted=is_weighted,
+                    expected_cache_fetches=expected_cache_fetches,
+                )
+            elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+                shard_perf = cls._get_twrw_sharding_perf(
+                    batch_sizes=batch_sizes,
+                    world_size=world_size,
+                    local_world_size=local_world_size,
+                    input_lengths=input_lengths,
+                    emb_dim=emb_dim,
+                    input_data_type_size=input_data_type_size,
+                    table_data_type_size=table_data_type_size,
+                    fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
+                    bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
+                    fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
+                    bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
+                    num_poolings=num_poolings,
+                    ddr_mem_bw=ddr_mem_bw,
+                    device_bw=device_bw,
+                    inter_host_bw=inter_host_bw,
+                    intra_host_bw=intra_host_bw,
+                    bwd_compute_multiplier=bwd_compute_multiplier,
+                    is_pooled=is_pooled,
+                    is_weighted=is_weighted,
+                    expected_cache_fetches=expected_cache_fetches,
+                )
+            elif sharding_type == ShardingType.DATA_PARALLEL.value:
+                shard_perf = cls._get_dp_sharding_perf(
+                    batch_sizes=batch_sizes,
+                    world_size=world_size,
+                    local_world_size=local_world_size,
+                    input_lengths=input_lengths,
+                    grad_num_elem=hash_size * emb_dim,
+                    emb_dim=emb_dim,
+                    input_data_type_size=input_data_type_size,
+                    table_data_type_size=table_data_type_size,
+                    num_poolings=num_poolings,
+                    device_bw=device_bw,
+                    inter_host_bw=inter_host_bw,
+                    bwd_compute_multiplier=bwd_compute_multiplier,
+                    is_pooled=is_pooled,
+                    is_weighted=is_weighted,
+                )
+            else:
+                raise ValueError(
+                    f"Unrecognized or unsupported sharding type provided: {sharding_type}"
+                )
+            shard_perfs.append(shard_perf)
+
+        return shard_perfs
+
+    @classmethod
+    def _get_expected_cache_prefetch_time(
+        cls,
+        ddr_mem_bw: float,
+        expected_cache_fetches: float,
+        emb_dim: int,
+        table_data_type_size: float,
+    ) -> float:
+        # TODO: validate cost model with empirical test
+        prefetch_bytes = expected_cache_fetches * emb_dim * table_data_type_size
+        return prefetch_bytes / ddr_mem_bw
+
+    @classmethod
+    def _get_tw_sharding_perf(
+        cls,
+        batch_sizes: List[int],
+        world_size: int,
+        local_world_size: int,
+        input_lengths: List[float],
+        emb_dim: int,
+        input_data_type_size: float,
+        table_data_type_size: float,
+        fwd_a2a_comm_data_type_size: float,
+        bwd_a2a_comm_data_type_size: float,
+        num_poolings: List[float],
+        ddr_mem_bw: float,
+        device_bw: float,
+        inter_host_bw: float,
+        intra_host_bw: float,
+        bwd_compute_multiplier: float,
+        is_pooled: bool,
+        is_weighted: bool = False,
+        is_inference: bool = False,
+        expected_cache_fetches: float = 0,
+    ) -> Perf:
+        batch_inputs = sum(
+            [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
+        )
+        batch_outputs = (
+            sum([x * y for x, y in zip(num_poolings, batch_sizes)])
+            if is_pooled
+            else batch_inputs
         )
 
-    for hash_size, emb_dim in shard_sizes:
-        if (
-            sharding_type == ShardingType.TABLE_WISE.value
-            or sharding_type == ShardingType.COLUMN_WISE.value
-            or sharding_type == ShardingType.TABLE_COLUMN_WISE.value
-        ):
-            shard_perf = _get_tw_sharding_perf(
-                batch_sizes=batch_sizes,
-                world_size=world_size,
-                local_world_size=local_world_size,
-                input_lengths=input_lengths,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                table_data_type_size=table_data_type_size,
-                fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
-                bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
-                num_poolings=num_poolings,
-                ddr_mem_bw=ddr_mem_bw,
-                device_bw=device_bw,
-                inter_host_bw=inter_host_bw,
-                intra_host_bw=intra_host_bw,
-                bwd_compute_multiplier=bwd_compute_multiplier,
-                is_pooled=is_pooled,
-                is_weighted=is_weighted,
-                is_inference=is_inference,
-                expected_cache_fetches=expected_cache_fetches,
-            )
-        elif sharding_type == ShardingType.ROW_WISE.value:
-            shard_perf = _get_rw_sharding_perf(
-                batch_sizes=batch_sizes,
-                world_size=world_size,
-                local_world_size=local_world_size,
-                input_lengths=input_lengths,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                table_data_type_size=table_data_type_size,
-                fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
-                bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
-                fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
-                bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
-                num_poolings=num_poolings,
-                ddr_mem_bw=ddr_mem_bw,
-                device_bw=device_bw,
-                inter_host_bw=inter_host_bw,
-                intra_host_bw=intra_host_bw,
-                bwd_compute_multiplier=bwd_compute_multiplier,
-                is_pooled=is_pooled,
-                is_weighted=is_weighted,
-                expected_cache_fetches=expected_cache_fetches,
-            )
-        elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
-            shard_perf = _get_twrw_sharding_perf(
-                batch_sizes=batch_sizes,
-                world_size=world_size,
-                local_world_size=local_world_size,
-                input_lengths=input_lengths,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                table_data_type_size=table_data_type_size,
-                fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
-                bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
-                fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
-                bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
-                num_poolings=num_poolings,
-                ddr_mem_bw=ddr_mem_bw,
-                device_bw=device_bw,
-                inter_host_bw=inter_host_bw,
-                intra_host_bw=intra_host_bw,
-                bwd_compute_multiplier=bwd_compute_multiplier,
-                is_pooled=is_pooled,
-                is_weighted=is_weighted,
-                expected_cache_fetches=expected_cache_fetches,
-            )
-        elif sharding_type == ShardingType.DATA_PARALLEL.value:
-            shard_perf = _get_dp_sharding_perf(
-                batch_sizes=batch_sizes,
-                world_size=world_size,
-                local_world_size=local_world_size,
-                input_lengths=input_lengths,
-                grad_num_elem=hash_size * emb_dim,
-                emb_dim=emb_dim,
-                input_data_type_size=input_data_type_size,
-                table_data_type_size=table_data_type_size,
-                num_poolings=num_poolings,
-                device_bw=device_bw,
-                inter_host_bw=inter_host_bw,
-                bwd_compute_multiplier=bwd_compute_multiplier,
-                is_pooled=is_pooled,
-                is_weighted=is_weighted,
-            )
-        else:
-            raise ValueError(
-                f"Unrecognized or unsupported sharding type provided: {sharding_type}"
-            )
-        shard_perfs.append(shard_perf)
+        input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
+        if is_weighted:
+            input_read_size *= 2
 
-    return shard_perfs
-
-
-def _get_expected_cache_prefetch_time(
-    ddr_mem_bw: float,
-    expected_cache_fetches: float,
-    emb_dim: int,
-    table_data_type_size: float,
-) -> float:
-    # TODO: validate cost model with empirical test
-    prefetch_bytes = expected_cache_fetches * emb_dim * table_data_type_size
-    return prefetch_bytes / ddr_mem_bw
-
-
-def _get_tw_sharding_perf(
-    batch_sizes: List[int],
-    world_size: int,
-    local_world_size: int,
-    input_lengths: List[float],
-    emb_dim: int,
-    input_data_type_size: float,
-    table_data_type_size: float,
-    fwd_a2a_comm_data_type_size: float,
-    bwd_a2a_comm_data_type_size: float,
-    num_poolings: List[float],
-    ddr_mem_bw: float,
-    device_bw: float,
-    inter_host_bw: float,
-    intra_host_bw: float,
-    bwd_compute_multiplier: float,
-    is_pooled: bool,
-    is_weighted: bool = False,
-    is_inference: bool = False,
-    expected_cache_fetches: float = 0,
-) -> Perf:
-    batch_inputs = sum(
-        [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
-    )
-    batch_outputs = (
-        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
-        if is_pooled
-        else batch_inputs
-    )
-
-    input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
-    if is_weighted:
-        input_read_size *= 2
-
-    # minimum embedding dim is set to 32 due to kernel usage
-    embedding_lookup_size = (
-        batch_inputs * world_size * max(emb_dim, 32) * table_data_type_size
-    )
-
-    fwd_output_write_size = (
-        batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
-    )
-    bwd_output_write_size = (
-        batch_outputs * world_size * emb_dim * bwd_a2a_comm_data_type_size
-    )
-
-    # embedding dim below 128 will reduce kernel efficency
-    block_usage_penalty = 1
-    if emb_dim < FULL_BLOCK_EMB_DIM:
-        if emb_dim >= 64:
-            block_usage_penalty = HALF_BLOCK_PENALTY
-        else:  # emb_dim >= 32
-            block_usage_penalty = QUARTER_BLOCK_PENALTY
-
-    comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
-    fwd_comms = fwd_output_write_size / comms_bw
-
-    fwd_compute = (
-        (input_read_size + embedding_lookup_size + fwd_output_write_size)
-        * block_usage_penalty
-        / device_bw
-    )
-    if is_inference:
-        # only consider forward compute and comms for inference
-        return Perf(
-            fwd_compute=fwd_compute, fwd_comms=fwd_comms, bwd_compute=0, bwd_comms=0
+        # minimum embedding dim is set to 32 due to kernel usage
+        embedding_lookup_size = (
+            batch_inputs * world_size * max(emb_dim, 32) * table_data_type_size
         )
 
-    bwd_comms = bwd_output_write_size / comms_bw
-
-    bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
-    )
-
-    # includes fused optimizers
-    bwd_compute = fwd_compute * bwd_compute_multiplier
-
-    prefetch_compute = _get_expected_cache_prefetch_time(
-        ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
-    )
-
-    # in order of model parallel execution, starting with:
-    # BWD DP -> BWD MP ... FWD MP -> FWD DP
-    return Perf(
-        fwd_compute=fwd_compute,
-        fwd_comms=fwd_comms,
-        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
-        bwd_comms=bwd_comms,
-        prefetch_compute=prefetch_compute,
-    )
-
-
-def _get_rw_sharding_perf(
-    batch_sizes: List[int],
-    world_size: int,
-    local_world_size: int,
-    input_lengths: List[float],
-    emb_dim: int,
-    input_data_type_size: float,
-    table_data_type_size: float,
-    fwd_a2a_comm_data_type_size: float,
-    bwd_a2a_comm_data_type_size: float,
-    fwd_sr_comm_data_type_size: float,
-    bwd_sr_comm_data_type_size: float,
-    num_poolings: List[float],
-    ddr_mem_bw: float,
-    device_bw: float,
-    inter_host_bw: float,
-    intra_host_bw: float,
-    bwd_compute_multiplier: float,
-    is_pooled: bool,
-    is_weighted: bool = False,
-    expected_cache_fetches: float = 0,
-) -> Perf:
-    batch_inputs = (
-        sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
-        / world_size
-    )
-    batch_outputs = (
-        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
-        if is_pooled
-        else batch_inputs
-    )
-
-    input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
-    if is_weighted:
-        input_read_size *= 2
-
-    embedding_lookup_size = batch_inputs * world_size * emb_dim * table_data_type_size
-
-    fwd_output_write_size = (
-        batch_outputs * world_size * emb_dim * fwd_sr_comm_data_type_size
-        if is_pooled
-        else batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
-    )
-    bwd_output_write_size = (
-        batch_outputs * world_size * emb_dim * bwd_sr_comm_data_type_size
-        if is_pooled
-        else batch_outputs * world_size * emb_dim * bwd_a2a_comm_data_type_size
-    )
-
-    comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
-    fwd_comms = fwd_output_write_size / comms_bw
-
-    fwd_compute = (
-        input_read_size + embedding_lookup_size + fwd_output_write_size
-    ) / device_bw
-
-    bwd_comms = bwd_output_write_size / comms_bw
-
-    bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
-
-    bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
-    )
-
-    bwd_compute = fwd_compute * bwd_compute_multiplier
-
-    # for row-wise, expected_cache_fetches per shard is / world_size
-    prefetch_compute = _get_expected_cache_prefetch_time(
-        ddr_mem_bw, expected_cache_fetches / world_size, emb_dim, table_data_type_size
-    )
-
-    return Perf(
-        fwd_compute=fwd_compute,
-        fwd_comms=fwd_comms,
-        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
-        bwd_comms=bwd_comms + bwd_batched_copy,
-        prefetch_compute=prefetch_compute,
-    )
-
-
-def _get_twrw_sharding_perf(
-    batch_sizes: List[int],
-    world_size: int,
-    local_world_size: int,
-    input_lengths: List[float],
-    emb_dim: int,
-    input_data_type_size: float,
-    table_data_type_size: float,
-    fwd_a2a_comm_data_type_size: float,
-    bwd_a2a_comm_data_type_size: float,
-    fwd_sr_comm_data_type_size: float,
-    bwd_sr_comm_data_type_size: float,
-    num_poolings: List[float],
-    ddr_mem_bw: float,
-    device_bw: float,
-    inter_host_bw: float,
-    intra_host_bw: float,
-    bwd_compute_multiplier: float,
-    is_pooled: bool,
-    is_weighted: bool = False,
-    expected_cache_fetches: float = 0,
-) -> Perf:
-    batch_inputs = (
-        sum([x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)])
-        / local_world_size
-    )
-    batch_outputs = (
-        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
-        if is_pooled
-        else batch_inputs
-    )
-
-    input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
-    if is_weighted:
-        input_read_size *= 2
-
-    embedding_lookup_size = batch_inputs * world_size * emb_dim * table_data_type_size
-
-    fwd_output_write_size = (
-        batch_outputs * world_size * emb_dim * fwd_sr_comm_data_type_size
-    )
-    bwd_output_write_size = (
-        batch_outputs * world_size * emb_dim * bwd_sr_comm_data_type_size
-    )
-
-    # intra host comm
-    fwd_comms = fwd_output_write_size / intra_host_bw
-
-    # inter host comm
-    if world_size > local_world_size:
-        inter_host_fwd_fwd_output_write_size = (
+        fwd_output_write_size = (
             batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
         )
-        fwd_comms += (
-            inter_host_fwd_fwd_output_write_size
-            * (local_world_size / world_size)
-            / inter_host_bw
+        bwd_output_write_size = (
+            batch_outputs * world_size * emb_dim * bwd_a2a_comm_data_type_size
         )
 
-    fwd_compute = (
-        input_read_size + embedding_lookup_size + fwd_output_write_size
-    ) / device_bw
+        # embedding dim below 128 will reduce kernel efficency
+        block_usage_penalty = 1
+        if emb_dim < FULL_BLOCK_EMB_DIM:
+            if emb_dim >= 64:
+                block_usage_penalty = HALF_BLOCK_PENALTY
+            else:  # emb_dim >= 32
+                block_usage_penalty = QUARTER_BLOCK_PENALTY
 
-    bwd_comms = bwd_output_write_size / intra_host_bw
+        comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
+        fwd_comms = fwd_output_write_size / comms_bw
 
-    bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
-    )
+        fwd_compute = (
+            (input_read_size + embedding_lookup_size + fwd_output_write_size)
+            * block_usage_penalty
+            / device_bw
+        )
+        if is_inference:
+            # only consider forward compute and comms for inference
+            return Perf(
+                fwd_compute=fwd_compute, fwd_comms=fwd_comms, bwd_compute=0, bwd_comms=0
+            )
 
-    bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
+        bwd_comms = bwd_output_write_size / comms_bw
 
-    bwd_compute = fwd_compute * bwd_compute_multiplier
+        bwd_grad_indice_weights_kernel = (
+            fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
+        )
 
-    # for table-wise-row-wise, expected_cache_fetches per shard is / local_world_size
-    prefetch_compute = _get_expected_cache_prefetch_time(
-        ddr_mem_bw,
-        expected_cache_fetches / local_world_size,
-        emb_dim,
-        table_data_type_size,
-    )
+        # includes fused optimizers
+        bwd_compute = fwd_compute * bwd_compute_multiplier
 
-    return Perf(
-        fwd_compute=fwd_compute,
-        fwd_comms=fwd_comms,
-        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
-        bwd_comms=bwd_comms + bwd_batched_copy,
-        prefetch_compute=prefetch_compute,
-    )
+        prefetch_compute = cls._get_expected_cache_prefetch_time(
+            ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
+        )
 
+        # in order of model parallel execution, starting with:
+        # BWD DP -> BWD MP ... FWD MP -> FWD DP
+        return Perf(
+            fwd_compute=fwd_compute,
+            fwd_comms=fwd_comms,
+            bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+            bwd_comms=bwd_comms,
+            prefetch_compute=prefetch_compute,
+        )
 
-def _get_dp_sharding_perf(
-    batch_sizes: List[int],
-    world_size: int,
-    local_world_size: int,
-    input_lengths: List[float],
-    grad_num_elem: int,
-    emb_dim: int,
-    input_data_type_size: float,
-    table_data_type_size: float,
-    num_poolings: List[float],
-    device_bw: float,
-    inter_host_bw: float,
-    bwd_compute_multiplier: float,
-    is_pooled: bool,
-    is_weighted: bool = False,
-) -> Perf:
-    batch_inputs = sum(
-        [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
-    )
-    batch_outputs = (
-        sum([x * y for x, y in zip(num_poolings, batch_sizes)])
-        if is_pooled
-        else batch_inputs
-    )
+    @classmethod
+    def _get_rw_sharding_perf(
+        cls,
+        batch_sizes: List[int],
+        world_size: int,
+        local_world_size: int,
+        input_lengths: List[float],
+        emb_dim: int,
+        input_data_type_size: float,
+        table_data_type_size: float,
+        fwd_a2a_comm_data_type_size: float,
+        bwd_a2a_comm_data_type_size: float,
+        fwd_sr_comm_data_type_size: float,
+        bwd_sr_comm_data_type_size: float,
+        num_poolings: List[float],
+        ddr_mem_bw: float,
+        device_bw: float,
+        inter_host_bw: float,
+        intra_host_bw: float,
+        bwd_compute_multiplier: float,
+        is_pooled: bool,
+        is_weighted: bool = False,
+        expected_cache_fetches: float = 0,
+    ) -> Perf:
+        batch_inputs = (
+            sum(
+                [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
+            )
+            / world_size
+        )
+        batch_outputs = (
+            sum([x * y for x, y in zip(num_poolings, batch_sizes)])
+            if is_pooled
+            else batch_inputs
+        )
 
-    input_read_size = math.ceil(batch_inputs * input_data_type_size)
-    if is_weighted:
-        input_read_size *= 2
+        input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
+        if is_weighted:
+            input_read_size *= 2
 
-    embedding_lookup_size = batch_inputs * emb_dim * table_data_type_size
+        embedding_lookup_size = (
+            batch_inputs * world_size * emb_dim * table_data_type_size
+        )
 
-    output_write_size = batch_outputs * emb_dim * table_data_type_size
-    table_size = grad_num_elem * table_data_type_size
+        fwd_output_write_size = (
+            batch_outputs * world_size * emb_dim * fwd_sr_comm_data_type_size
+            if is_pooled
+            else batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
+        )
+        bwd_output_write_size = (
+            batch_outputs * world_size * emb_dim * bwd_sr_comm_data_type_size
+            if is_pooled
+            else batch_outputs * world_size * emb_dim * bwd_a2a_comm_data_type_size
+        )
 
-    fwd_compute = (
-        input_read_size + embedding_lookup_size + output_write_size
-    ) / device_bw
+        comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
+        fwd_comms = fwd_output_write_size / comms_bw
 
-    num_nodes = min(world_size / local_world_size, 2)
+        fwd_compute = (
+            input_read_size + embedding_lookup_size + fwd_output_write_size
+        ) / device_bw
 
-    # all-reduce data transfer: https://images.nvidia.com/events/sc15/pdfs/NCCL-Woolley.pdf
-    all_reduce = (
-        table_size
-        * (2 * num_nodes - 1)
-        / num_nodes
-        / (inter_host_bw * local_world_size)  # 1 NIC per GPU
-    )
-    # inter host communication constraint
-    if world_size > 2 * local_world_size:
-        all_reduce *= 2
+        bwd_comms = bwd_output_write_size / comms_bw
 
-    # SGD + Fill + BUnary
-    optimizer_kernels = table_size * DP_ELEMENTWISE_KERNELS_PERF_FACTOR / device_bw
+        bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
 
-    bwd_compute = fwd_compute * bwd_compute_multiplier
+        bwd_grad_indice_weights_kernel = (
+            fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
+        )
 
-    bwd_grad_indice_weights_kernel = (
-        fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
-    )
+        bwd_compute = fwd_compute * bwd_compute_multiplier
 
-    # TODO(T170641643): we don't model prefetch_compute for data parallel yet, see
-    # comment in perf_func_emb_wall_time() regarding expected_cache_fetches calculation.
-    return Perf(
-        fwd_compute=fwd_compute,
-        fwd_comms=0,
-        bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
-        bwd_comms=all_reduce + optimizer_kernels,
-    )
+        # for row-wise, expected_cache_fetches per shard is / world_size
+        prefetch_compute = cls._get_expected_cache_prefetch_time(
+            ddr_mem_bw,
+            expected_cache_fetches / world_size,
+            emb_dim,
+            table_data_type_size,
+        )
+
+        return Perf(
+            fwd_compute=fwd_compute,
+            fwd_comms=fwd_comms,
+            bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+            bwd_comms=bwd_comms + bwd_batched_copy,
+            prefetch_compute=prefetch_compute,
+        )
+
+    @classmethod
+    def _get_twrw_sharding_perf(
+        cls,
+        batch_sizes: List[int],
+        world_size: int,
+        local_world_size: int,
+        input_lengths: List[float],
+        emb_dim: int,
+        input_data_type_size: float,
+        table_data_type_size: float,
+        fwd_a2a_comm_data_type_size: float,
+        bwd_a2a_comm_data_type_size: float,
+        fwd_sr_comm_data_type_size: float,
+        bwd_sr_comm_data_type_size: float,
+        num_poolings: List[float],
+        ddr_mem_bw: float,
+        device_bw: float,
+        inter_host_bw: float,
+        intra_host_bw: float,
+        bwd_compute_multiplier: float,
+        is_pooled: bool,
+        is_weighted: bool = False,
+        expected_cache_fetches: float = 0,
+    ) -> Perf:
+        batch_inputs = (
+            sum(
+                [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
+            )
+            / local_world_size
+        )
+        batch_outputs = (
+            sum([x * y for x, y in zip(num_poolings, batch_sizes)])
+            if is_pooled
+            else batch_inputs
+        )
+
+        input_read_size = math.ceil(batch_inputs * world_size * input_data_type_size)
+        if is_weighted:
+            input_read_size *= 2
+
+        embedding_lookup_size = (
+            batch_inputs * world_size * emb_dim * table_data_type_size
+        )
+
+        fwd_output_write_size = (
+            batch_outputs * world_size * emb_dim * fwd_sr_comm_data_type_size
+        )
+        bwd_output_write_size = (
+            batch_outputs * world_size * emb_dim * bwd_sr_comm_data_type_size
+        )
+
+        # intra host comm
+        fwd_comms = fwd_output_write_size / intra_host_bw
+
+        # inter host comm
+        if world_size > local_world_size:
+            inter_host_fwd_fwd_output_write_size = (
+                batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
+            )
+            fwd_comms += (
+                inter_host_fwd_fwd_output_write_size
+                * (local_world_size / world_size)
+                / inter_host_bw
+            )
+
+        fwd_compute = (
+            input_read_size + embedding_lookup_size + fwd_output_write_size
+        ) / device_bw
+
+        bwd_comms = bwd_output_write_size / intra_host_bw
+
+        bwd_grad_indice_weights_kernel = (
+            fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
+        )
+
+        bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
+
+        bwd_compute = fwd_compute * bwd_compute_multiplier
+
+        # for table-wise-row-wise, expected_cache_fetches per shard is / local_world_size
+        prefetch_compute = cls._get_expected_cache_prefetch_time(
+            ddr_mem_bw,
+            expected_cache_fetches / local_world_size,
+            emb_dim,
+            table_data_type_size,
+        )
+
+        return Perf(
+            fwd_compute=fwd_compute,
+            fwd_comms=fwd_comms,
+            bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+            bwd_comms=bwd_comms + bwd_batched_copy,
+            prefetch_compute=prefetch_compute,
+        )
+
+    @classmethod
+    def _get_dp_sharding_perf(
+        cls,
+        batch_sizes: List[int],
+        world_size: int,
+        local_world_size: int,
+        input_lengths: List[float],
+        grad_num_elem: int,
+        emb_dim: int,
+        input_data_type_size: float,
+        table_data_type_size: float,
+        num_poolings: List[float],
+        device_bw: float,
+        inter_host_bw: float,
+        bwd_compute_multiplier: float,
+        is_pooled: bool,
+        is_weighted: bool = False,
+    ) -> Perf:
+        batch_inputs = sum(
+            [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
+        )
+        batch_outputs = (
+            sum([x * y for x, y in zip(num_poolings, batch_sizes)])
+            if is_pooled
+            else batch_inputs
+        )
+
+        input_read_size = math.ceil(batch_inputs * input_data_type_size)
+        if is_weighted:
+            input_read_size *= 2
+
+        embedding_lookup_size = batch_inputs * emb_dim * table_data_type_size
+
+        output_write_size = batch_outputs * emb_dim * table_data_type_size
+        table_size = grad_num_elem * table_data_type_size
+
+        fwd_compute = (
+            input_read_size + embedding_lookup_size + output_write_size
+        ) / device_bw
+
+        num_nodes = min(world_size / local_world_size, 2)
+
+        # all-reduce data transfer: https://images.nvidia.com/events/sc15/pdfs/NCCL-Woolley.pdf
+        all_reduce = (
+            table_size
+            * (2 * num_nodes - 1)
+            / num_nodes
+            / (inter_host_bw * local_world_size)  # 1 NIC per GPU
+        )
+        # inter host communication constraint
+        if world_size > 2 * local_world_size:
+            all_reduce *= 2
+
+        # SGD + Fill + BUnary
+        optimizer_kernels = table_size * DP_ELEMENTWISE_KERNELS_PERF_FACTOR / device_bw
+
+        bwd_compute = fwd_compute * bwd_compute_multiplier
+
+        bwd_grad_indice_weights_kernel = (
+            fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
+        )
+
+        # TODO(T170641643): we don't model prefetch_compute for data parallel yet, see
+        # comment in perf_func_emb_wall_time() regarding expected_cache_fetches calculation.
+        return Perf(
+            fwd_compute=fwd_compute,
+            fwd_comms=0,
+            bwd_compute=bwd_compute + bwd_grad_indice_weights_kernel,
+            bwd_comms=all_reduce + optimizer_kernels,
+        )
 
 
 def _extract_comm_data_type_size(

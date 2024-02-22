@@ -36,6 +36,7 @@ from torchrec.distributed.test_utils.multi_process import (
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
+    get_configs_and_kjt_inputs,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingPlan
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -207,92 +208,6 @@ def _test_sharding_from_meta(  # noqa C901
                 continue
             assert not param.is_meta, f"Parameter {key} is still meta after sharding"
             torch.testing.assert_close(param, torch.ones_like(param))
-
-
-def get_configs_and_kjt_inputs() -> Tuple[
-    List[EmbeddingBagConfig], List[KeyedJaggedTensor]
-]:
-    embedding_bag_config = [
-        EmbeddingBagConfig(
-            name="table_0",
-            feature_names=["feature_0"],
-            embedding_dim=3 * 16,
-            num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_1",
-            feature_names=["feature_1"],
-            embedding_dim=8,
-            num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_2",
-            feature_names=["feature_2"],
-            embedding_dim=8,
-            num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_3",
-            feature_names=["feature_3"],
-            embedding_dim=3 * 16,
-            num_embeddings=16,
-        ),
-    ]
-
-    # Rank 0
-    #             instance 0   instance 1  instance 2
-    # "feature_0"   [0, 1]       None        [2]
-    # "feature_1"   [0, 1]       None        [2]
-    # "feature_2"   [3, 1]       [4,1]        [5]
-    # "feature_3"   [1]       [6,1,8]        [0,3,3]
-
-    # Rank 1
-
-    #             instance 0   instance 1  instance 2
-    # "feature_0"   [3, 2]       [1,2]       [0,1,2,3]
-    # "feature_1"   [2, 3]       None        [2]
-    # "feature_2"   [2, 7]       [1,8,2]        [8,1]
-    # "feature_3"   [9]       [8]        [7]
-
-    kjt_input_per_rank = [  # noqa
-        KeyedJaggedTensor.from_lengths_sync(
-            keys=["feature_0", "feature_1", "feature_2", "feature_3"],
-            values=torch.LongTensor(
-                [0, 1, 2, 0, 1, 2, 3, 1, 4, 1, 5, 1, 6, 1, 8, 0, 3, 3]
-            ),
-            lengths=torch.LongTensor(
-                [
-                    2,
-                    0,
-                    1,
-                    2,
-                    0,
-                    1,
-                    2,
-                    2,
-                    1,
-                    1,
-                    3,
-                    3,
-                ]
-            ),
-            weights=torch.FloatTensor(
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            ),
-        ),
-        KeyedJaggedTensor.from_lengths_sync(
-            keys=["feature_0", "feature_1", "feature_2", "feature_3"],
-            values=torch.LongTensor(
-                [3, 2, 1, 2, 0, 1, 2, 3, 2, 3, 2, 2, 7, 1, 8, 2, 8, 1, 9, 8, 7]
-            ),
-            lengths=torch.LongTensor([2, 2, 4, 2, 0, 1, 2, 3, 2, 1, 1, 1]),
-            weights=torch.FloatTensor(
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            ),
-        ),
-    ]
-
-    return embedding_bag_config, kjt_input_per_rank
 
 
 @skip_if_asan_class
