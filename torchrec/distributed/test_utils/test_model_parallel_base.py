@@ -13,7 +13,7 @@ from typing import Any, Callable, cast, Dict, List, Optional, OrderedDict, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from fbgemm_gpu.split_embedding_configs import EmbOptimType, SparseType
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import distributed as dist
 from torch.distributed._shard.sharded_tensor import ShardedTensor
@@ -52,6 +52,7 @@ from torchrec.distributed.types import (
 )
 from torchrec.modules.embedding_configs import (
     BaseEmbeddingConfig,
+    DataType,
     EmbeddingBagConfig,
     PoolingType,
 )
@@ -352,6 +353,73 @@ class ModelParallelStateDictBase(unittest.TestCase):
             dmps.append(dmp)
         return (dmps, batch)
 
+    def _train_models(
+        self,
+        m1: DistributedModelParallel,
+        m2: DistributedModelParallel,
+        batch: ModelInput,
+    ) -> None:
+        loss1, pred1 = m1(batch)
+        loss2, pred2 = m2(batch)
+        loss1.backward()
+        loss2.backward()
+
+    def _eval_models(
+        self,
+        m1: DistributedModelParallel,
+        m2: DistributedModelParallel,
+        batch: ModelInput,
+        is_deterministic: bool = True,
+    ) -> None:
+        with torch.no_grad():
+            loss1, pred1 = m1(batch)
+            loss2, pred2 = m2(batch)
+
+        if is_deterministic:
+            self.assertTrue(torch.equal(loss1, loss2))
+            self.assertTrue(torch.equal(pred1, pred2))
+        else:
+            rtol, atol = _get_default_rtol_and_atol(loss1, loss2)
+            torch.testing.assert_close(loss1, loss2, rtol=rtol, atol=atol)
+            rtol, atol = _get_default_rtol_and_atol(pred1, pred2)
+            torch.testing.assert_close(pred1, pred2, rtol=rtol, atol=atol)
+
+    def _compare_models(
+        self,
+        m1: DistributedModelParallel,
+        m2: DistributedModelParallel,
+        is_deterministic: bool = True,
+    ) -> None:
+        sd1 = m1.state_dict()
+        for key, value in m2.state_dict().items():
+            v2 = sd1[key]
+            if isinstance(value, ShardedTensor):
+                assert isinstance(v2, ShardedTensor)
+                self.assertEqual(len(value.local_shards()), len(v2.local_shards()))
+                for dst, src in zip(value.local_shards(), v2.local_shards()):
+                    if is_deterministic:
+                        self.assertTrue(torch.equal(src.tensor, dst.tensor))
+                    else:
+                        rtol, atol = _get_default_rtol_and_atol(src.tensor, dst.tensor)
+                        torch.testing.assert_close(
+                            src.tensor, dst.tensor, rtol=rtol, atol=atol
+                        )
+            else:
+                dst = value
+                src = v2
+                if is_deterministic:
+                    self.assertTrue(torch.equal(src, dst))
+                else:
+                    rtol, atol = _get_default_rtol_and_atol(src, dst)
+                    torch.testing.assert_close(src, dst, rtol=rtol, atol=atol)
+
+    def _set_table_weights_precision(self, dtype: DataType) -> None:
+        for i in range(len(self.tables)):
+            self.tables[i].data_type = dtype
+
+        for i in range(len(self.weighted_tables)):
+            self.weighted_tables[i].data_type = dtype
+
     def test_parameter_init(self) -> None:
         class MyModel(nn.Module):
             def __init__(self, device: str, val: float) -> None:
@@ -513,33 +581,9 @@ class ModelParallelStateDictBase(unittest.TestCase):
 
         # validate the models are equivalent
         if is_training:
-            for _ in range(2):
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                loss1.backward()
-                loss2.backward()
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-        else:
-            with torch.no_grad():
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-        sd1 = m1.state_dict()
-        for key, value in m2.state_dict().items():
-            v2 = sd1[key]
-            if isinstance(value, ShardedTensor):
-                assert len(value.local_shards()) == 1
-                dst = value.local_shards()[0].tensor
-            else:
-                dst = value
-            if isinstance(v2, ShardedTensor):
-                assert len(v2.local_shards()) == 1
-                src = v2.local_shards()[0].tensor
-            else:
-                src = v2
-            self.assertTrue(torch.equal(src, dst))
+            self._train_models(m1, m2, batch)
+        self._eval_models(m1, m2, batch)
+        self._compare_models(m1, m2)
 
     # pyre-ignore[56]
     @given(
@@ -582,33 +626,9 @@ class ModelParallelStateDictBase(unittest.TestCase):
 
         # validate the models are equivalent
         if is_training:
-            for _ in range(2):
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                loss1.backward()
-                loss2.backward()
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-        else:
-            with torch.no_grad():
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-        sd1 = m1.state_dict()
-        for key, value in m2.state_dict().items():
-            v2 = sd1[key]
-            if isinstance(value, ShardedTensor):
-                assert len(value.local_shards()) == 1
-                dst = value.local_shards()[0].tensor
-            else:
-                dst = value
-            if isinstance(v2, ShardedTensor):
-                assert len(v2.local_shards()) == 1
-                src = v2.local_shards()[0].tensor
-            else:
-                src = v2
-            self.assertTrue(torch.equal(src, dst))
+            self._train_models(m1, m2, batch)
+        self._eval_models(m1, m2, batch)
+        self._compare_models(m1, m2)
 
     # pyre-ignore[56]
     @given(
@@ -661,34 +681,9 @@ class ModelParallelStateDictBase(unittest.TestCase):
 
         # validate the models are equivalent
         if is_training:
-            for _ in range(2):
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                loss1.backward()
-                loss2.backward()
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-        else:
-            with torch.no_grad():
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-
-        sd1 = m1.state_dict()
-        for key, value in m2.state_dict().items():
-            v2 = sd1[key]
-            if isinstance(value, ShardedTensor):
-                assert len(value.local_shards()) == 1
-                dst = value.local_shards()[0].tensor
-            else:
-                dst = value
-            if isinstance(v2, ShardedTensor):
-                assert len(v2.local_shards()) == 1
-                src = v2.local_shards()[0].tensor
-            else:
-                src = v2
-            self.assertTrue(torch.equal(src, dst))
+            self._train_models(m1, m2, batch)
+        self._eval_models(m1, m2, batch)
+        self._compare_models(m1, m2)
 
     # pyre-fixme[56]
     @given(
@@ -807,19 +802,8 @@ class ModelParallelStateDictBase(unittest.TestCase):
 
         # validate the models are equivalent
         if is_training:
-            for _ in range(2):
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                loss1.backward()
-                loss2.backward()
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-        else:
-            with torch.no_grad():
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
+            self._train_models(m1, m2, batch)
+        self._eval_models(m1, m2, batch)
 
         sd1 = m1.state_dict()
         for key, value in m2.state_dict().items():
@@ -876,3 +860,93 @@ class ModelParallelStateDictBase(unittest.TestCase):
                         )
                 elif isinstance(dst_opt_state, torch.Tensor):
                     self.assertIsInstance(src_opt_state, torch.Tensor)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ]
+        ),
+        is_training=st.booleans(),
+        stochastic_rounding=st.booleans(),
+        dtype=st.sampled_from([DataType.FP32, DataType.FP16]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_numerical_equivalence_between_kernel_types(
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        is_training: bool,
+        stochastic_rounding: bool,
+        dtype: DataType,
+    ) -> None:
+        fused_params = {
+            "stochastic_rounding": stochastic_rounding,
+        }
+        if dtype == DataType.FP16:
+            self._set_table_weights_precision(dtype)
+            fused_params = {
+                **fused_params,
+                "cache_precision": SparseType.FP16,
+            }
+
+        fused_sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    EmbeddingComputeKernel.FUSED.value,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+        (fused_model, _), _ = self._generate_dmps_and_batch(fused_sharders)
+        (model, _), batch = self._generate_dmps_and_batch(sharders)
+
+        # load the baseline model's (aka TW) state_dict onto the new model
+        model.load_state_dict(
+            cast("OrderedDict[str, torch.Tensor]", fused_model.state_dict())
+        )
+
+        if is_training:
+            for _ in range(10):
+                self._train_models(fused_model, model, batch)
+        self._eval_models(
+            fused_model, model, batch, is_deterministic=not stochastic_rounding
+        )
+        self._compare_models(
+            fused_model, model, is_deterministic=not stochastic_rounding
+        )
