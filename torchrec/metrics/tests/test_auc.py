@@ -20,7 +20,9 @@ from torchrec.metrics.rec_metric import (
 )
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -115,6 +117,27 @@ class AUCMetricTest(unittest.TestCase):
         )
 
 
+class AUCGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = AUCMetric
+    task_name: str = "auc"
+
+    def test_sync_auc(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=AUCMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestAUCMetric,
+            metric_name=AUCGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
+        )
+
+
 class AUCMetricValueTest(unittest.TestCase):
     r"""This set of tests verify the computation logic of AUC in several
     corner cases that we know the computation results. The goal is to
@@ -176,6 +199,89 @@ class AUCMetricValueTest(unittest.TestCase):
         self.auc.update(**self.batches)
         actual_auc = self.auc.compute()["auc-DefaultTask|window_auc"]
         torch.allclose(expected_auc, actual_auc)
+
+    def test_calc_uneven_updates(self) -> None:
+        auc = AUCMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=100,
+            tasks=[DefaultTaskInfo],
+        )
+
+        expected_auc = torch.tensor([0.4464], dtype=torch.float)
+        # first batch
+        self.labels["DefaultTask"] = torch.tensor([1, 0, 0])
+        self.predictions["DefaultTask"] = torch.tensor([0.2, 0.6, 0.8])
+        self.weights["DefaultTask"] = torch.tensor([0.13, 0.2, 0.5])
+
+        auc.update(**self.batches)
+        # second batch
+        self.labels["DefaultTask"] = torch.tensor([1, 1])
+        self.predictions["DefaultTask"] = torch.tensor([0.4, 0.9])
+        self.weights["DefaultTask"] = torch.tensor([0.8, 0.75])
+
+        auc.update(**self.batches)
+        multiple_batch = self.auc.compute()["auc-DefaultTask|window_auc"]
+        torch.allclose(expected_auc, multiple_batch)
+
+    def test_window_size_auc(self) -> None:
+        # for determinisitc batches
+        torch.manual_seed(0)
+
+        auc = AUCMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=5,
+            window_size=100,
+            tasks=[DefaultTaskInfo],
+        )
+
+        # init states, so we expect 3 (state tensors) * 4 bytes (float)
+        self.assertEqual(sum(auc.get_memory_usage().values()), 12)
+
+        # bs = 5
+        self.labels["DefaultTask"] = torch.rand(5)
+        self.predictions["DefaultTask"] = torch.rand(5)
+        self.weights["DefaultTask"] = torch.rand(5)
+
+        for _ in range(1000):
+            auc.update(**self.batches)
+
+        # check memory, window size is 100, so we have upperbound of memory to expect
+        # so with a 100 window size / tensors of size 5 = 20 tensors (per state) * 3 states * 20 bytes per tensor of size 5 = 1200 bytes
+        self.assertEqual(sum(auc.get_memory_usage().values()), 1200)
+        # with bs 5, we expect 20 tensors per state, so 60 tensors
+        self.assertEqual(len(auc.get_memory_usage().values()), 60)
+
+        torch.allclose(
+            auc.compute()["auc-DefaultTask|window_auc"],
+            torch.tensor([0.4859], dtype=torch.float),
+        )
+
+        # test auc memory usage with window size equal to incoming batch
+        auc = AUCMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=100,
+            window_size=100,
+            tasks=[DefaultTaskInfo],
+        )
+
+        self.labels["DefaultTask"] = torch.rand(100)
+        self.predictions["DefaultTask"] = torch.rand(100)
+        self.weights["DefaultTask"] = torch.rand(100)
+
+        for _ in range(10):
+            auc.update(**self.batches)
+
+        # passing in batch size == window size, we expect for each state just one tensor of size 400, sum to 1200 as previous
+        self.assertEqual(sum(auc.get_memory_usage().values()), 1200)
+        self.assertEqual(len(auc.get_memory_usage().values()), 3)
+
+        torch.allclose(
+            auc.compute()["auc-DefaultTask|window_auc"],
+            torch.tensor([0.4859], dtype=torch.float),
+        )
 
 
 def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
