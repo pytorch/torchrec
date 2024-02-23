@@ -87,7 +87,7 @@ def _get_recat(
                 feature_order.append(x + num_splits // stagger * y)
 
         recat: torch.Tensor = torch.empty(
-            local_split * len(feature_order), device=device, dtype=torch.int32
+            local_split * len(feature_order), dtype=torch.int32
         )
 
         _i = 0
