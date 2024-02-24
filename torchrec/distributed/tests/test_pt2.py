@@ -103,17 +103,20 @@ class TestPt2(unittest.TestCase):
         kjt_keys: List[str],
         # pyre-ignore
         inputs,
+        test_dynamo: bool = True,
         test_aot_inductor: bool = True,
+        test_pt2_ir_export: bool = False,
     ) -> None:
         with dynamo_skipfiles_allow("torchrec"):
             EM: torch.nn.Module = KJTInputExportWrapper(kjt_input_module, kjt_keys)
             eager_output = EM(*inputs)
-            x = torch._dynamo.export(EM, same_signature=True)(*inputs)
+            if test_dynamo:
+                x = torch._dynamo.export(EM, same_signature=True)(*inputs)
 
-            export_gm = x.graph_module
-            export_gm_output = export_gm(*inputs)
+                export_gm = x.graph_module
+                export_gm_output = export_gm(*inputs)
 
-            assert_close(eager_output, export_gm_output)
+                assert_close(eager_output, export_gm_output)
 
             if test_aot_inductor:
                 # pyre-ignore
@@ -126,6 +129,11 @@ class TestPt2(unittest.TestCase):
                 aot_inductor_module = AOTIRunnerUtil.load(device, so_path)
                 aot_actual_output = aot_inductor_module(*inputs)
                 assert_close(eager_output, aot_actual_output)
+
+            if test_pt2_ir_export:
+                pt2_ir = torch.export.export(EM, inputs, {}, strict=False)
+                pt2_ir_output = pt2_ir(*inputs)
+                assert_close(eager_output, pt2_ir_output)
 
     def test_kjt_split(self) -> None:
         class M(torch.nn.Module):
@@ -153,6 +161,21 @@ class TestPt2(unittest.TestCase):
             kjt.keys(),
             (kjt._values, kjt._lengths, indices),
             test_aot_inductor=False,
+        )
+
+    def test_kjt_length_per_key(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor):
+                return kjt.length_per_key()
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+
+        self._test_kjt_input_module(
+            M(),
+            kjt.keys(),
+            (kjt._values, kjt._lengths),
+            test_aot_inductor=False,
+            test_pt2_ir_export=True,
         )
 
     # pyre-ignore
