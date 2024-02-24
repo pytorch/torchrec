@@ -41,7 +41,10 @@ def gen_test_batch(
     weight_value: Optional[torch.Tensor] = None,
     mask: Optional[torch.Tensor] = None,
     n_classes: Optional[int] = None,
+    seed: Optional[int] = None,
 ) -> Dict[str, torch.Tensor]:
+    if seed is not None:
+        torch.manual_seed(seed)
     if label_value is not None:
         label = label_value
     else:
@@ -338,6 +341,151 @@ def get_launch_config(world_size: int, rdzv_endpoint: str) -> pet.LaunchConfig:
         monitor_interval=1,
         max_restarts=0,
     )
+
+
+def rec_metric_gpu_sync_test_launcher(
+    target_clazz: Type[RecMetric],
+    target_compute_mode: RecComputeMode,
+    test_clazz: Optional[Type[TestMetric]],
+    metric_name: str,
+    task_names: List[str],
+    fused_update_limit: int,
+    compute_on_all_ranks: bool,
+    should_validate_update: bool,
+    world_size: int,
+    entry_point: Callable[..., None],
+    batch_size: int = BATCH_SIZE,
+    batch_window_size: int = BATCH_WINDOW_SIZE,
+    **kwargs: Any,
+) -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        lc = get_launch_config(
+            world_size=world_size, rdzv_endpoint=os.path.join(tmpdir, "rdzv")
+        )
+
+        # launch using torch elastic, launches for each rank
+        pet.elastic_launch(lc, entrypoint=entry_point)(
+            target_clazz,
+            target_compute_mode,
+            test_clazz,
+            task_names,
+            metric_name,
+            world_size,
+            fused_update_limit,
+            compute_on_all_ranks,
+            should_validate_update,
+            batch_size,
+            batch_window_size,
+        )
+
+
+def sync_test_helper(
+    target_clazz: Type[RecMetric],
+    target_compute_mode: RecComputeMode,
+    test_clazz: Optional[Type[TestMetric]],
+    task_names: List[str],
+    metric_name: str,
+    world_size: int,
+    fused_update_limit: int = 0,
+    compute_on_all_ranks: bool = False,
+    should_validate_update: bool = False,
+    batch_size: int = BATCH_SIZE,
+    batch_window_size: int = BATCH_WINDOW_SIZE,
+    n_classes: Optional[int] = None,
+    zero_weights: bool = False,
+) -> None:
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    dist.init_process_group(
+        backend="gloo",
+        world_size=world_size,
+        rank=rank,
+    )
+
+    tasks = gen_test_tasks(task_names)
+
+    auc = target_clazz(
+        world_size=world_size,
+        batch_size=batch_size,
+        my_rank=rank,
+        compute_on_all_ranks=compute_on_all_ranks,
+        tasks=tasks,
+        window_size=batch_window_size * world_size,
+    )
+
+    weight_value: Optional[torch.Tensor] = None
+
+    _model_outs = [
+        gen_test_batch(
+            label_name=task.label_name,
+            prediction_name=task.prediction_name,
+            weight_name=task.weight_name,
+            batch_size=batch_size,
+            n_classes=n_classes,
+            weight_value=weight_value,
+            seed=42,  # we set seed because of how test metric places tensors on ranks
+        )
+        for task in tasks
+    ]
+    model_outs = []
+    model_outs.append({k: v for d in _model_outs for k, v in d.items()})
+
+    # we send an uneven number of tensors to each rank to test that GPU sync works
+    if rank == 0:
+        for _ in range(3):
+            labels, predictions, weights, _ = parse_task_model_outputs(
+                tasks, model_outs[0]
+            )
+            auc.update(predictions=predictions, labels=labels, weights=weights)
+    elif rank == 1:
+        for _ in range(1):
+            labels, predictions, weights, _ = parse_task_model_outputs(
+                tasks, model_outs[0]
+            )
+            auc.update(predictions=predictions, labels=labels, weights=weights)
+
+    # check against test metric
+    test_metrics: TestRecMetricOutput = ({}, {}, {}, {})
+    if test_clazz is not None:
+        # pyre-ignore[45]: Cannot instantiate abstract class `TestMetric`.
+        test_metric_obj = test_clazz(world_size, tasks)
+        # with how testmetric is setup we cannot do asymmertrical updates across ranks
+        # so we duplicate model_outs twice to match number of updates in aggregate
+        model_outs = model_outs * 2
+        test_metrics = test_metric_obj.compute(model_outs, 2, batch_window_size, None)
+
+    res = auc.compute()
+
+    if rank == 0:
+        assert torch.allclose(
+            test_metrics[1][task_names[0]],
+            res[f"auc-{task_names[0]}|window_auc"],
+        )
+
+    # we also test the case where other rank has more tensors than rank 0
+    auc.reset()
+    if rank == 0:
+        for _ in range(1):
+            labels, predictions, weights, _ = parse_task_model_outputs(
+                tasks, model_outs[0]
+            )
+            auc.update(predictions=predictions, labels=labels, weights=weights)
+    elif rank == 1:
+        for _ in range(3):
+            labels, predictions, weights, _ = parse_task_model_outputs(
+                tasks, model_outs[0]
+            )
+            auc.update(predictions=predictions, labels=labels, weights=weights)
+
+    res = auc.compute()
+
+    if rank == 0:
+        assert torch.allclose(
+            test_metrics[1][task_names[0]],
+            res[f"auc-{task_names[0]}|window_auc"],
+        )
+
+    dist.destroy_process_group()
 
 
 def rec_metric_value_test_launcher(
