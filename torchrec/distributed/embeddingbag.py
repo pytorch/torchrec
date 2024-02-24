@@ -856,13 +856,12 @@ class ShardedEmbeddingBagCollection(
     ) -> LazyAwaitable[KeyedTensor]:
         batch_size_per_feature_pre_a2a = []
         awaitables = []
-
-        # No usage of zip for dynamo
-        for i in range(len(self._lookups)):
-            lookup = self._lookups[i]
-            dist = self._output_dists[i]
-            sharding_context = ctx.sharding_contexts[i]
-            features = input[i]
+        for lookup, dist, sharding_context, features in zip(
+            self._lookups,
+            self._output_dists,
+            ctx.sharding_contexts,
+            input,
+        ):
             awaitables.append(dist(lookup(features), sharding_context))
             if sharding_context:
                 batch_size_per_feature_pre_a2a.extend(
