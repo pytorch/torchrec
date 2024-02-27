@@ -43,6 +43,15 @@ try:
 except ImportError:
     pass
 
+
+try:
+    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+except Exception:
+
+    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
+        return False
+
+
 logger: logging.Logger = logging.getLogger()
 
 
@@ -161,11 +170,14 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
                 output=self._output_tensor,
                 input=input_tensor,
                 group=pg,
-                async_op=True,
+                async_op=not is_torchdynamo_compiling(),
             )
 
     def _wait_impl(self) -> List[List[int]]:
-        self._splits_awaitable.wait()
+        # handling sync torch dynamo trace case, where awaitable will be a Tensor
+        if isinstance(self._splits_awaitable, dist.Work):
+            self._splits_awaitable.wait()
+
         return self._output_tensor.view(self.num_workers, -1).T.tolist()
 
 
@@ -247,7 +259,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
                     output_split_sizes=output_split,
                     input_split_sizes=input_split,
                     group=self._pg,
-                    async_op=True,
+                    async_op=not is_torchdynamo_compiling(),
                 )
 
             self._output_tensors.append(output_tensor)
@@ -266,7 +278,9 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
             return self._input
 
         for awaitable in self._awaitables:
-            awaitable.wait()
+            # handling sync torch dynamo trace case where awaitable will be a Tensor
+            if isinstance(awaitable, dist.Work):
+                awaitable.wait()
 
         return type(self._input).dist_init(
             keys=self._keys,
