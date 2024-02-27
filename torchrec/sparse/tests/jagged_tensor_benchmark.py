@@ -46,7 +46,9 @@ def bench(
     results = timeit.repeat(
         lambda: fn(input_data[0], input_data[1]), number=10, repeat=10
     )
-    print(f"{name} {np.median(results)*1000:.1f}us")
+
+    p_50 = np.percentile(np.asarray(results), 50)
+    print(f"{name} {p_50*1000:.1f}us")
 
 
 @click.command()
