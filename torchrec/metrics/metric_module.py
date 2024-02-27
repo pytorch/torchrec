@@ -39,6 +39,7 @@ from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
 from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
+from torchrec.metrics.rauc import RAUCMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.recall_session import RecallSessionMetric
 from torchrec.metrics.scalar import ScalarMetric
@@ -58,6 +59,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.CALIBRATION: CalibrationMetric,
     RecMetricEnum.AUC: AUCMetric,
     RecMetricEnum.AUPRC: AUPRCMetric,
+    RecMetricEnum.RAUC: RAUCMetric,
     RecMetricEnum.MSE: MSEMetric,
     RecMetricEnum.MAE: MAEMetric,
     RecMetricEnum.MULTICLASS_RECALL: MulticlassRecallMetric,

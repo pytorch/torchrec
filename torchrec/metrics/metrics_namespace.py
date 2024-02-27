@@ -49,8 +49,10 @@ class MetricName(MetricNameBase):
     RMSE = "rmse"
     AUC = "auc"
     AUPRC = "auprc"
+    RAUC = "rauc"
     GROUPED_AUC = "grouped_auc"
     GROUPED_AUPRC = "grouped_auprc"
+    GROUPED_RAUC = "grouped_rauc"
     RECALL_SESSION_LEVEL = "recall_session_level"
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
@@ -76,6 +78,7 @@ class MetricNamespace(MetricNamespaceBase):
     MSE = "mse"
     AUC = "auc"
     AUPRC = "auprc"
+    RAUC = "rauc"
     MAE = "mae"
     ACCURACY = "accuracy"
 
