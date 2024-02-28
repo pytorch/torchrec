@@ -7,7 +7,7 @@
 
 import abc
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -614,12 +614,33 @@ T = TypeVar("T")
 W = TypeVar("W")
 
 
-@dataclass
 class EmbeddingShardingContext(Multistreamable):
-    batch_size_per_rank: List[int] = field(default_factory=list)
-    batch_size_per_rank_per_feature: List[List[int]] = field(default_factory=list)
-    batch_size_per_feature_pre_a2a: List[int] = field(default_factory=list)
-    variable_batch_per_feature: bool = False
+    # Torch Dynamo does not support default_factory=list:
+    # https://github.com/pytorch/pytorch/issues/120108
+    # TODO(ivankobzarev) Make this a dataclass once supported
+
+    def __init__(
+        self,
+        batch_size_per_rank: Optional[List[int]] = None,
+        batch_size_per_rank_per_feature: Optional[List[List[int]]] = None,
+        batch_size_per_feature_pre_a2a: Optional[List[int]] = None,
+        variable_batch_per_feature: bool = False,
+    ) -> None:
+        super().__init__()
+        self.batch_size_per_rank: List[int] = (
+            batch_size_per_rank if batch_size_per_rank is not None else []
+        )
+        self.batch_size_per_rank_per_feature: List[List[int]] = (
+            batch_size_per_rank_per_feature
+            if batch_size_per_rank_per_feature is not None
+            else []
+        )
+        self.batch_size_per_feature_pre_a2a: List[int] = (
+            batch_size_per_feature_pre_a2a
+            if batch_size_per_feature_pre_a2a is not None
+            else []
+        )
+        self.variable_batch_per_feature: bool = variable_batch_per_feature
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass
