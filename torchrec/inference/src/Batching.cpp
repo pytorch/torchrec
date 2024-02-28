@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/Batching.h"
+#include "torchrec/inference/Batching.h" // @manual
 
 #include <c10/core/ScalarType.h>
 #include <folly/Range.h>
