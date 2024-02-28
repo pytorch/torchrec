@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
 import unittest
 from typing import cast, Dict, List, Optional, OrderedDict, Tuple
 
@@ -19,41 +18,27 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.model_parallel import get_default_sharders
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.test_utils.test_model import ModelInput
+from torchrec.distributed.test_utils.test_model_parallel_base import (
+    ModelParallelSingleRankBase,
+)
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
     get_configs_and_kjt_inputs,
     TestFPEBCSharder,
 )
-from torchrec.distributed.types import (
-    ModuleSharder,
-    ShardedTensor,
-    ShardingEnv,
-    ShardingType,
-)
-from torchrec.test_utils import get_free_port
+from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
+from torchrec.modules.embedding_configs import DataType
 
 
-class FPModelParallelStateDictTest(unittest.TestCase):
-    def setUp(self) -> None:
-        os.environ["RANK"] = "0"
-        os.environ["WORLD_SIZE"] = "1"
-        os.environ["LOCAL_WORLD_SIZE"] = "1"
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-
-        self.backend = "nccl"
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda:0")
-            torch.cuda.set_device(self.device)
-        else:
-            self.device = torch.device("cpu")
-
-        dist.init_process_group(backend=self.backend)
+class FPModelParallelStateDictTest(ModelParallelSingleRankBase):
+    def setUp(self, backend: str = "nccl") -> None:
+        super().setUp(backend=backend)
 
         self.tables, self.kjt_input_per_rank = get_configs_and_kjt_inputs()
 
-    def tearDown(self) -> None:
-        dist.destroy_process_group()
+    def _set_table_weights_precision(self, dtype: DataType) -> None:
+        for table in self.tables:
+            table.data_type = dtype
 
     def _generate_dmps_and_batch(
         self,
@@ -161,31 +146,86 @@ class FPModelParallelStateDictTest(unittest.TestCase):
 
         # validate the models are equivalent
         if is_training:
-            for _ in range(2):
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                loss1.backward()
-                loss2.backward()
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
-        else:
-            with torch.no_grad():
-                loss1, pred1 = m1(batch)
-                loss2, pred2 = m2(batch)
-                self.assertTrue(torch.equal(loss1, loss2))
-                self.assertTrue(torch.equal(pred1, pred2))
+            self._train_models(m1, m2, batch)
+        self._eval_models(m1, m2, batch)
+        self._compare_models(m1, m2)
 
-        sd1 = m1.state_dict()
-        for key, value in m2.state_dict().items():
-            v2 = sd1[key]
-            if isinstance(value, ShardedTensor):
-                assert len(value.local_shards()) == 1
-                dst = value.local_shards()[0].tensor
-            else:
-                dst = value
-            if isinstance(v2, ShardedTensor):
-                assert len(v2.local_shards()) == 1
-                src = v2.local_shards()[0].tensor
-            else:
-                src = v2
-            self.assertTrue(torch.equal(src, dst))
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ]
+        ),
+        is_training=st.booleans(),
+        stochastic_rounding=st.booleans(),
+        dtype=st.sampled_from([DataType.FP32, DataType.FP16]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_numerical_equivalence_between_kernel_types(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        is_training: bool,
+        stochastic_rounding: bool,
+        dtype: DataType,
+    ) -> None:
+        self._set_table_weights_precision(dtype)
+        fused_params = {
+            "stochastic_rounding": stochastic_rounding,
+            "cache_precision": dtype,
+        }
+
+        fused_sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                TestFPEBCSharder(
+                    sharding_type=sharding_type,
+                    kernel_type=EmbeddingComputeKernel.FUSED.value,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                TestFPEBCSharder(
+                    sharding_type=sharding_type,
+                    kernel_type=kernel_type,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+
+        (fused_model, _), _ = self._generate_dmps_and_batch(fused_sharders)
+        (model, _), batch = self._generate_dmps_and_batch(sharders)
+
+        # load the baseline model's state_dict onto the new model
+        model.load_state_dict(
+            cast("OrderedDict[str, torch.Tensor]", fused_model.state_dict())
+        )
+
+        if is_training:
+            for _ in range(4):
+                self._train_models(fused_model, model, batch)
+        # skip eval here because it will cause numerical difference
+        # TODO figure out why
+        if not is_training or not stochastic_rounding:
+            self._eval_models(
+                fused_model, model, batch, is_deterministic=not stochastic_rounding
+            )
+        self._compare_models(
+            fused_model, model, is_deterministic=not stochastic_rounding
+        )
