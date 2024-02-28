@@ -5,7 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import cast, Dict, List, Optional, Tuple, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -302,6 +302,7 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
         sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
@@ -310,7 +311,11 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
         if qcomms_config is not None:
             qcomm_codecs_registry = get_qcomm_codecs_registry(qcomms_config)
 
-        fused_params = {"learning_rate": 0.1}
+        if fused_params is None:
+            fused_params = {}
+        if "learning_rate" not in fused_params:
+            fused_params["learning_rate"] = 0.1
+
         super().__init__(
             fused_params=fused_params,
             qcomm_codecs_registry=qcomm_codecs_registry,

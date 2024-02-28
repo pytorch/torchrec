@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/BatchingQueue.h"
+#include "torchrec/inference/BatchingQueue.h" // @manual
 
 #include <chrono>
 #include <memory>

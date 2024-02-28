@@ -23,6 +23,7 @@ class RecMetricEnum(RecMetricEnumBase):
     CTR = "ctr"
     AUC = "auc"
     AUPRC = "auprc"
+    RAUC = "rauc"
     CALIBRATION = "calibration"
     MSE = "mse"
     MAE = "mae"

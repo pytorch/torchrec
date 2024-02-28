@@ -19,6 +19,7 @@ import torch.distributed.launcher as pet
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.auprc import AUPRCMetric
 from torchrec.metrics.model_utils import parse_task_model_outputs
+from torchrec.metrics.rauc import RAUCMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
 
 TestRecMetricOutput = Tuple[
@@ -459,7 +460,7 @@ def sync_test_helper(
     if rank == 0:
         assert torch.allclose(
             test_metrics[1][task_names[0]],
-            res[f"auc-{task_names[0]}|window_auc"],
+            res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
         )
 
     # we also test the case where other rank has more tensors than rank 0
@@ -482,7 +483,7 @@ def sync_test_helper(
     if rank == 0:
         assert torch.allclose(
             test_metrics[1][task_names[0]],
-            res[f"auc-{task_names[0]}|window_auc"],
+            res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
         )
 
     dist.destroy_process_group()
@@ -603,7 +604,11 @@ def metric_test_helper(
     if rank == 0:
         for name in task_names:
             # we don't have lifetime metric for AUC due to OOM.
-            if target_clazz != AUCMetric and target_clazz != AUPRCMetric:
+            if (
+                target_clazz != AUCMetric
+                and target_clazz != AUPRCMetric
+                and target_clazz != RAUCMetric
+            ):
                 assert torch.allclose(
                     target_metrics[
                         f"{str(target_clazz._namespace)}-{name}|lifetime_{metric_name}"
