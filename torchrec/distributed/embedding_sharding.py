@@ -87,6 +87,15 @@ def _fx_wrap_stride_per_key_per_rank(
     )
 
 
+@torch.fx.wrap
+def _fx_wrap_gen_list_n_times(ls: List[str], n: int) -> List[str]:
+    # Syntax for dynamo (instead of generator kjt.keys() * num_buckets)
+    ret: List[str] = []
+    for _ in range(n):
+        ret.extend(ls)
+    return ret
+
+
 def bucketize_kjt_before_all2all(
     kjt: KeyedJaggedTensor,
     num_buckets: int,
@@ -143,7 +152,7 @@ def bucketize_kjt_before_all2all(
     return (
         KeyedJaggedTensor(
             # duplicate keys will be resolved by AllToAll
-            keys=kjt.keys() * num_buckets,
+            keys=_fx_wrap_gen_list_n_times(kjt.keys(), num_buckets),
             values=bucketized_indices,
             weights=pos if bucketize_pos else bucketized_weights,
             lengths=bucketized_lengths.view(-1),
@@ -371,7 +380,12 @@ class KJTListAwaitable(Awaitable[KJTList]):
         Returns:
             KJTList: synced `KJTList`.
         """
-        kjts = [w.wait() for w in self.awaitables]
+
+        # Syntax: no list comprehension usage for dynamo
+        kjts = []
+        for w in self.awaitables:
+            kjts.append(w.wait())
+
         _set_sharding_context_post_a2a(kjts, self.ctx)
         return KJTList(kjts)
 
