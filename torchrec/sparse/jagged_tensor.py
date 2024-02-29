@@ -358,8 +358,13 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
             # j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]
         """
-        lengths = torch.IntTensor([value.size(0) for value in values])
+
         values_tensor = torch.cat(values, dim=0)
+        lengths = torch.tensor(
+            [value.size(0) for value in values],
+            dtype=torch.int32,
+            device=values_tensor.device,
+        )
         weights_tensor = torch.cat(weights, dim=0) if weights is not None else None
 
         return JaggedTensor(
