@@ -616,7 +616,7 @@ class ShardedQuantEmbeddingCollection(
                 ctx.sharding_contexts.append(
                     InferSequenceShardingContext(
                         features=input_dist_result,
-                        features_before_input_dist=features,
+                        features_before_input_dist=features_by_sharding[i],
                         unbucketize_permute_tensor=input_dist.unbucketize_permute_tensor
                         if isinstance(input_dist, InferRwSparseFeaturesDist)
                         else None,

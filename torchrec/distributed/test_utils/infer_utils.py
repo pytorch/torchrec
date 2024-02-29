@@ -696,32 +696,37 @@ def shard_qec(
     mi: TestModelInfo,
     sharding_type: ShardingType,
     device: torch.device,
-    expected_shards: List[List[Tuple[Tuple[int, int, int, int], str]]],
+    expected_shards: Optional[List[List[Tuple[Tuple[int, int, int, int], str]]]],
+    plan: Optional[ShardingPlan] = None,
 ) -> torch.nn.Module:
     sharder = TestQuantECSharder(
         sharding_type=sharding_type.value,
         kernel_type=EmbeddingComputeKernel.QUANT.value,
     )
-    # pyre-ignore
-    plan = mi.planner.plan(
-        mi.quant_model,
-        [sharder],
-    )
-    msp: ModuleShardingPlan = plan.plan["_module_kjt_input.0"]  # TODO: hardcoded
-    for i in range(mi.num_features):
+
+    if not plan:
         # pyre-ignore
-        ps: ParameterSharding = msp[f"table_{i}"]
-        assert ps.sharding_type == sharding_type.value
-        assert ps.sharding_spec is not None
-        sharding_spec: ShardingSpec = ps.sharding_spec
-        # pyre-ignore
-        assert len(sharding_spec.shards) == len(expected_shards[i])
-        for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
-            sharding_spec.shards, expected_shards[i]
-        ):
-            assert shard.shard_offsets == [offset_r, offset_c]
-            assert shard.shard_sizes == [size_r, size_c]
-            assert str(shard.placement) == placement
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+    if expected_shards is not None:
+        msp: ModuleShardingPlan = plan.plan["_module_kjt_input.0"]  # TODO: hardcoded
+        for i in range(mi.num_features):
+            # pyre-ignore
+            ps: ParameterSharding = msp[f"table_{i}"]
+            assert ps.sharding_type == sharding_type.value
+            assert ps.sharding_spec is not None
+            sharding_spec: ShardingSpec = ps.sharding_spec
+            # pyre-ignore
+            assert len(sharding_spec.shards) == len(expected_shards[i])
+            for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
+                sharding_spec.shards, expected_shards[i]
+            ):
+                assert shard.shard_offsets == [offset_r, offset_c]
+                assert shard.shard_sizes == [size_r, size_c]
+                assert str(shard.placement) == placement
 
     # We want to leave quant_model unchanged to compare the results with it
     quant_model_copy = copy.deepcopy(mi.quant_model)
