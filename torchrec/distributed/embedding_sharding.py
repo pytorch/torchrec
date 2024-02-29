@@ -7,7 +7,7 @@
 
 import abc
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -87,6 +87,15 @@ def _fx_wrap_stride_per_key_per_rank(
     )
 
 
+@torch.fx.wrap
+def _fx_wrap_gen_list_n_times(ls: List[str], n: int) -> List[str]:
+    # Syntax for dynamo (instead of generator kjt.keys() * num_buckets)
+    ret: List[str] = []
+    for _ in range(n):
+        ret.extend(ls)
+    return ret
+
+
 def bucketize_kjt_before_all2all(
     kjt: KeyedJaggedTensor,
     num_buckets: int,
@@ -143,7 +152,7 @@ def bucketize_kjt_before_all2all(
     return (
         KeyedJaggedTensor(
             # duplicate keys will be resolved by AllToAll
-            keys=kjt.keys() * num_buckets,
+            keys=_fx_wrap_gen_list_n_times(kjt.keys(), num_buckets),
             values=bucketized_indices,
             weights=pos if bucketize_pos else bucketized_weights,
             lengths=bucketized_lengths.view(-1),
@@ -371,7 +380,12 @@ class KJTListAwaitable(Awaitable[KJTList]):
         Returns:
             KJTList: synced `KJTList`.
         """
-        kjts = [w.wait() for w in self.awaitables]
+
+        # Syntax: no list comprehension usage for dynamo
+        kjts = []
+        for w in self.awaitables:
+            kjts.append(w.wait())
+
         _set_sharding_context_post_a2a(kjts, self.ctx)
         return KJTList(kjts)
 
@@ -614,12 +628,33 @@ T = TypeVar("T")
 W = TypeVar("W")
 
 
-@dataclass
 class EmbeddingShardingContext(Multistreamable):
-    batch_size_per_rank: List[int] = field(default_factory=list)
-    batch_size_per_rank_per_feature: List[List[int]] = field(default_factory=list)
-    batch_size_per_feature_pre_a2a: List[int] = field(default_factory=list)
-    variable_batch_per_feature: bool = False
+    # Torch Dynamo does not support default_factory=list:
+    # https://github.com/pytorch/pytorch/issues/120108
+    # TODO(ivankobzarev) Make this a dataclass once supported
+
+    def __init__(
+        self,
+        batch_size_per_rank: Optional[List[int]] = None,
+        batch_size_per_rank_per_feature: Optional[List[List[int]]] = None,
+        batch_size_per_feature_pre_a2a: Optional[List[int]] = None,
+        variable_batch_per_feature: bool = False,
+    ) -> None:
+        super().__init__()
+        self.batch_size_per_rank: List[int] = (
+            batch_size_per_rank if batch_size_per_rank is not None else []
+        )
+        self.batch_size_per_rank_per_feature: List[List[int]] = (
+            batch_size_per_rank_per_feature
+            if batch_size_per_rank_per_feature is not None
+            else []
+        )
+        self.batch_size_per_feature_pre_a2a: List[int] = (
+            batch_size_per_feature_pre_a2a
+            if batch_size_per_feature_pre_a2a is not None
+            else []
+        )
+        self.variable_batch_per_feature: bool = variable_batch_per_feature
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         pass
