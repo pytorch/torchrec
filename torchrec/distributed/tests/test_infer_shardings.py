@@ -28,8 +28,12 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
+from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import (
+    QuantEmbeddingBagCollection,
+    QuantEmbeddingBagCollectionSharder,
     QuantFeatureProcessedEmbeddingBagCollectionSharder,
+    ShardedQuantEmbeddingBagCollection,
 )
 from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
 from torchrec.distributed.shard import _shard_modules
@@ -38,6 +42,7 @@ from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     placement,
     row_wise,
+    table_wise,
 )
 from torchrec.distributed.test_utils.infer_utils import (
     assert_close,
@@ -772,6 +777,114 @@ class InferShardingsTest(unittest.TestCase):
         )
 
     @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_mix_tw_rw_sequence(self, weight_dtype: torch.dtype) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        world_size = 2
+        local_size = 2
+        batch_size = 2
+        local_device = torch.device("cuda:0")
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        mi = TestModelInfo(
+            dense_device=local_device,
+            sparse_device=local_device,
+            num_features=3,
+            num_float_features=10,
+            num_weighted_features=0,
+            topology=topology,
+        )
+
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+
+        mi.tables = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(mi.num_features)
+        ]
+
+        mi.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(
+                    tables=mi.tables,
+                    device=mi.sparse_device,
+                )
+            )
+        )
+
+        mi.model.training = False
+        mi.quant_model = quantize(
+            mi.model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+        )
+        non_sharded_model = mi.quant_model
+
+        sharder = QuantEmbeddingCollectionSharder()
+
+        module_plan = construct_module_sharding_plan(
+            non_sharded_model._module_kjt_input[0],
+            per_param_sharding={
+                "table_0": row_wise(),
+                "table_1": table_wise(rank=0),
+                "table_2": table_wise(rank=1),
+            },
+            # pyre-ignore
+            sharder=sharder,
+            local_size=local_size,
+            world_size=world_size,
+        )
+
+        plan = ShardingPlan(plan={"_module_kjt_input.0": module_plan})
+
+        sharded_model = shard_qec(
+            mi,
+            sharding_type=ShardingType.ROW_WISE,
+            device=local_device,
+            plan=plan,
+            expected_shards=None,
+        )
+
+        inputs = [
+            model_input_to_forward_args_kjt(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    @unittest.skipIf(
         torch.cuda.device_count() <= 2,
         "Not enough GPUs available",
     )
@@ -1010,6 +1123,84 @@ class InferShardingsTest(unittest.TestCase):
             sharding_type=ShardingType.ROW_WISE,
             device=local_device,
             expected_shards=expected_shards,
+            plan=plan,
+        )
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+
+        # We need this first inference to make all lazy init in forward
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device=st.sampled_from(["cuda"]),  # TODO: add cpu test when it's fixed
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_mix_sharding_mutiple_table(
+        self,
+        weight_dtype: torch.dtype,
+        device: str,
+    ) -> None:
+        num_embeddings = 512
+        emb_dim = 64
+        local_size = 4
+        world_size = 4
+        batch_size = 1
+        local_device = torch.device("cuda:0" if device == "cuda" else device)
+        mi = create_test_model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+            num_features=4,
+        )
+
+        non_sharded_model = mi.quant_model
+
+        sharder = QuantEmbeddingBagCollectionSharder()
+
+        module_plan = construct_module_sharding_plan(
+            non_sharded_model._module.sparse.ebc,
+            per_param_sharding={
+                "table_0": row_wise(
+                    ([256, 128, 64, 64], device),
+                ),
+                "table_1": row_wise(([128, 128, 128, 128], device)),
+                "table_2": column_wise(ranks=[0, 1]),
+                "table_3": table_wise(rank=0),
+            },
+            # pyre-ignore
+            sharder=sharder,
+            local_size=local_size,
+            world_size=world_size,
+        )
+
+        plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
+
+        sharded_model = shard_qebc(
+            mi=mi,
+            sharding_type=ShardingType.ROW_WISE,
+            device=local_device,
+            expected_shards=None,  # expected_shards,
             plan=plan,
         )
         inputs = [

@@ -257,6 +257,26 @@ class TestJaggedTensor(unittest.TestCase):
             torch.equal(j1.weights(), torch.Tensor([1.0, 7.0, 8.0, 10.0, 11.0, 12.0]))
         )
 
+    # pyre-ignore[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 0,
+        "CUDA is not available",
+    )
+    def test_from_dense_device(self) -> None:
+        device = torch.device("cuda", index=0)
+        values = [
+            torch.tensor([1.0], device=device),
+            torch.tensor([7.0, 8.0], device=device),
+            torch.tensor([10.0, 11.0, 12.0], device=device),
+        ]
+
+        j0 = JaggedTensor.from_dense(
+            values=values,
+        )
+        self.assertEqual(j0.values().device, device)
+        self.assertEqual(j0.lengths().device, device)
+        self.assertEqual(j0.offsets().device, device)
+
     def test_to_dense(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])

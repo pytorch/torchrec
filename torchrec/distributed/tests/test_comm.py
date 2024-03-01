@@ -5,17 +5,36 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import functools
 import itertools
 import multiprocessing
 import os
 import unittest
-from typing import Callable
+from typing import Callable, List, Optional, Tuple
+
+import hypothesis.strategies as st
 
 import torch
 import torch.distributed as dist
 import torchrec.distributed.comm_ops as comm_ops
+from hypothesis import given, settings
+from torch.distributed.distributed_c10d import GroupMember
+from torchrec.distributed.test_utils.infer_utils import dynamo_skipfiles_allow
 from torchrec.distributed.utils import none_throws
 from torchrec.test_utils import get_free_port, seed_and_log
+
+
+def torch_compile_args_to_fn_transform(
+    torch_compile_args: Optional[Tuple[str, bool]]
+    # pyre-ignore
+) -> Callable:
+    if torch_compile_args is None:
+        return lambda x: x
+
+    backend, fullgraph = torch_compile_args
+    return functools.partial(
+        torch.compile, backend=backend, fullgraph=fullgraph, dynamic=True
+    )
 
 
 class TestAllToAll(unittest.TestCase):
@@ -37,6 +56,10 @@ class TestAllToAll(unittest.TestCase):
         world_size: int,
         backend: str,
         callable: Callable[[], None],
+        # pyre-ignore
+        *args,
+        # pyre-ignore
+        **kwargs,
     ) -> None:
         processes = []
         ctx = multiprocessing.get_context("spawn")
@@ -47,7 +70,9 @@ class TestAllToAll(unittest.TestCase):
                     rank,
                     world_size,
                     backend,
+                    *args,
                 ),
+                kwargs=kwargs,
             )
             p.start()
             processes.append(p)
@@ -62,8 +87,13 @@ class TestAllToAll(unittest.TestCase):
         rank: int,
         world_size: int,
         backend: str,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
     ) -> None:
         dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+        pg = GroupMember.WORLD
+        assert pg is not None
+
         device = torch.device(f"cuda:{rank}")
 
         torch.cuda.set_device(device)
@@ -86,23 +116,42 @@ class TestAllToAll(unittest.TestCase):
         input_embeddings = [input_embedding0, input_embedding1]
         out_split = [17, 17]
 
-        a2a_req = comm_ops.alltoallv(input_embeddings, out_split)
-        v_embs_out = a2a_req.wait()
+        # pyre-ignore
+        def fn(*args, **kwargs) -> List[torch.Tensor]:
+            return comm_ops.alltoallv(*args, **kwargs).wait()
+
+        fn_transform = torch_compile_args_to_fn_transform(torch_compile_args)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            v_embs_out = fn_transform(fn)(
+                input_embeddings, out_split=out_split, group=pg if specify_pg else None
+            )
+
         res = torch.cat(v_embs_out, dim=1).cpu()
         assert tuple(res.size()) == (5, 34)
         dist.destroy_process_group()
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
-    #  `torch.cuda.device_count() = 0` to decorator factory `unittest.skipIf`.
     @unittest.skipIf(
         torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
     )
-    def test_alltoallv(self) -> None:
+    # pyre-ignore
+    @given(
+        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        specify_pg=st.sampled_from([True]),
+    )
+    @settings(deadline=None)
+    def test_alltoallv(
+        self,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
         self._run_multi_process_test(
             world_size=self.WORLD_SIZE,
             backend="nccl",
             # pyre-ignore [6]
             callable=self._test_alltoallv,
+            torch_compile_args=torch_compile_args,
+            specify_pg=specify_pg,
         )
 
     @classmethod
@@ -111,8 +160,16 @@ class TestAllToAll(unittest.TestCase):
         rank: int,
         world_size: int,
         backend: str,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+        skip_dynamo_backwards: bool = False,
     ) -> None:
         dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
         device = torch.device(f"cuda:{rank}")
         torch.cuda.set_device(device)
 
@@ -170,36 +227,58 @@ class TestAllToAll(unittest.TestCase):
             requires_grad=True,
         )
         lengths_after_sparse_data_all2all = torch.IntTensor(lengths_mp[rank])
-        a2a_req = comm_ops.alltoall_sequence(
-            a2a_sequence_embs_tensor=input_embeddings.cuda(),
-            forward_recat_tensor=seq_all2all_forward_recat_tensor.cuda(),
-            backward_recat_tensor=seq_all2all_backward_recat_tensor.cuda(),
-            lengths_after_sparse_data_all2all=lengths_after_sparse_data_all2all.cuda(),
-            input_splits=input_splits[rank],
-            output_splits=output_splits[rank],
-        )
-        seq_embs_out = a2a_req.wait()
-        seq_embs_out.backward(seq_embs_out)
-        grad = input_embeddings.grad
-        assert torch.equal(
-            input_embeddings.cpu().detach(),
-            # pyre-fixme[16]: Optional type has no attribute `cpu`.
-            grad.cpu().detach() * world_size,
-        )
+
+        # pyre-ignore
+        def fn(*args, **kwargs) -> torch.Tensor:
+            return comm_ops.alltoall_sequence(*args, **kwargs).wait()
+
+        fn_transform = torch_compile_args_to_fn_transform(torch_compile_args)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            seq_embs_out = fn_transform(fn)(
+                a2a_sequence_embs_tensor=input_embeddings.cuda(),
+                forward_recat_tensor=seq_all2all_forward_recat_tensor.cuda(),
+                backward_recat_tensor=seq_all2all_backward_recat_tensor.cuda(),
+                lengths_after_sparse_data_all2all=lengths_after_sparse_data_all2all.cuda(),
+                input_splits=input_splits[rank],
+                output_splits=output_splits[rank],
+                group=pg if specify_pg else None,
+            )
+
+        if torch_compile_args is not None and not skip_dynamo_backwards:
+            seq_embs_out.backward(seq_embs_out)
+            grad = input_embeddings.grad
+            assert torch.equal(
+                input_embeddings.cpu().detach(),
+                # pyre-fixme[16]: Optional type has no attribute `cpu`.
+                grad.cpu().detach() * world_size,
+            )
 
         dist.destroy_process_group()
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
-    #  `torch.cuda.device_count() = 0` to decorator factory `unittest.skipIf`.
     @unittest.skipIf(
         torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
     )
-    def test_alltoall_sequence(self) -> None:
+    # pyre-ignore
+    @given(
+        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        specify_pg=st.sampled_from([True]),
+    )
+    @settings(deadline=None)
+    def test_alltoall_sequence(
+        self,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
         self._run_multi_process_test(
             world_size=self.WORLD_SIZE,
             backend="nccl",
             # pyre-ignore [6]
             callable=self._test_alltoall_sequence,
+            torch_compile_args=torch_compile_args,
+            # TODO(ivankobzarev): Add backwards formula for fbgemm::permute_2D_sparse_data
+            skip_dynamo_backwards=True,
+            specify_pg=specify_pg,
         )
 
     @classmethod
@@ -208,17 +287,28 @@ class TestAllToAll(unittest.TestCase):
         rank: int,
         world_size: int,
         backend: str,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
     ) -> None:
-        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
         device = torch.device(f"cuda:{rank}")
         torch.cuda.set_device(device)
 
+        pg = dist.distributed_c10d._get_default_group()
+
         # Each rank's local batch size
-        batch_size_per_rank = [4, 4]
+
+        batch_size_per_rank = [4] * world_size
+
         # Global batch size is the sum of all rank's local batch size
         B_global = sum(batch_size_per_rank)
         # sum of dimensions of the embedding tables hosted on each rank
-        dim_sum_per_rank = [8, 8]
+        dim_sum_per_rank = [8] * world_size
+
         D_local_sum = dim_sum_per_rank[rank]
 
         # Construct pooled embeddings
@@ -236,17 +326,35 @@ class TestAllToAll(unittest.TestCase):
 
         # Run alltoall_pooled with gradient division disabled
         comm_ops.set_gradient_division(False)
-        a2a_embedding = comm_ops.alltoall_pooled(
-            pooled_embeddings, batch_size_per_rank, dim_sum_per_rank
-        ).wait()
+
+        # pyre-ignore
+        def fn(*args, **kwargs) -> torch.Tensor:
+            return comm_ops.alltoall_pooled(*args, **kwargs).wait()
+
+        fn_transform = torch_compile_args_to_fn_transform(torch_compile_args)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            a2a_embedding = fn_transform(fn)(
+                pooled_embeddings,
+                batch_size_per_rank,
+                dim_sum_per_rank,
+                group=pg if specify_pg else None,
+            )
+
         a2a_embedding.retain_grad()
         a2a_embedding.backward(a2a_embedding)
 
         # Run alltoall_pooled with gradient division enabled
         comm_ops.set_gradient_division(True)
-        a2a_embedding_gradient_division = comm_ops.alltoall_pooled(
-            pooled_embeddings_gradient_division, batch_size_per_rank, dim_sum_per_rank
-        ).wait()
+
+        with dynamo_skipfiles_allow("torchrec"):
+            a2a_embedding_gradient_division = fn_transform(fn)(
+                pooled_embeddings_gradient_division,
+                batch_size_per_rank,
+                dim_sum_per_rank,
+                group=pg if specify_pg else None,
+            )
+
         a2a_embedding_gradient_division.retain_grad()
         a2a_embedding_gradient_division.backward(a2a_embedding_gradient_division)
 
@@ -258,15 +366,253 @@ class TestAllToAll(unittest.TestCase):
         )
         dist.destroy_process_group()
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument
-    #  `torch.cuda.device_count() = 0` to decorator factory `unittest.skipIf`.
     @unittest.skipIf(
         torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
     )
-    def test_alltoall_pooled(self) -> None:
+    # pyre-ignore
+    @given(
+        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        specify_pg=st.sampled_from([True]),
+    )
+    @settings(max_examples=1, deadline=None)
+    def test_alltoall_pooled(
+        self,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
         self._run_multi_process_test(
             world_size=self.WORLD_SIZE,
             backend="nccl",
             # pyre-ignore [6]
             callable=self._test_alltoall_pooled,
+            torch_compile_args=torch_compile_args,
+            specify_pg=specify_pg,
+        )
+
+    @classmethod
+    def _test_reduce_scatter_pooled(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
+        device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
+
+        pg = dist.distributed_c10d._get_default_group()
+
+        batch_size_per_rank = [4] * world_size
+        B_global = sum(batch_size_per_rank)
+        dim_sum_per_rank = [8] * world_size
+
+        D_local_sum = dim_sum_per_rank[rank]
+
+        inputs: List[torch.Tensor] = []
+        for _ in range(world_size):
+            input = torch.randn([B_global, D_local_sum], requires_grad=True).to(device)
+            input.retain_grad()
+            inputs.append(input)
+        gradient_division: bool = False
+        comm_ops.set_gradient_division(gradient_division)
+
+        # pyre-ignore
+        def fn(*args, **kwargs) -> torch.Tensor:
+            return comm_ops.reduce_scatter_pooled(*args, **kwargs).wait()
+
+        fn_transform = torch_compile_args_to_fn_transform(torch_compile_args)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            output = fn_transform(fn)(
+                inputs,
+                group=pg if specify_pg else None,
+            )
+
+        output.retain_grad()
+        output.backward(output)
+
+        for input in inputs:
+            assert input.grad is not None
+
+        dist.destroy_process_group()
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
+    )
+    # pyre-ignore
+    @given(
+        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        specify_pg=st.sampled_from([True]),
+    )
+    @settings(max_examples=1, deadline=None)
+    def test_reduce_scatter_pooled(
+        self,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="nccl",
+            # pyre-ignore [6]
+            callable=self._test_reduce_scatter_pooled,
+            torch_compile_args=torch_compile_args,
+            specify_pg=specify_pg,
+        )
+
+    @classmethod
+    def _test_reduce_scatter_v_pooled(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
+        device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
+
+        pg = dist.distributed_c10d._get_default_group()
+
+        src: List[int] = [1, 2, 3] * world_size
+        input_splits: List[int] = src[:world_size]
+        inputs_dim: int = sum(input_splits)
+
+        input: torch.Tensor = torch.randn(inputs_dim, 2, requires_grad=True).to(device)
+        input.retain_grad()
+
+        gradient_division: bool = False
+        comm_ops.set_gradient_division(gradient_division)
+
+        # pyre-ignore
+        def fn(*args, **kwargs) -> torch.Tensor:
+            return comm_ops.reduce_scatter_v_pooled(*args, **kwargs).wait()
+
+        fn_transform = torch_compile_args_to_fn_transform(torch_compile_args)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            output = fn_transform(fn)(
+                input,
+                input_splits=input_splits,
+                group=pg if specify_pg else None,
+            )
+
+        output.retain_grad()
+        output.backward(output)
+
+        input_splits_cumsum: List[int] = [0]
+        cumsum = 0
+        for s in input_splits:
+            cumsum += s
+            input_splits_cumsum.append(cumsum)
+
+        from_idx = input_splits_cumsum[rank]
+        to_idx = input_splits_cumsum[rank + 1]
+
+        assert input.grad is not None
+        input_grad_rank = input.grad[from_idx:to_idx]
+
+        torch.testing.assert_close(
+            input_grad_rank.cpu(),
+            output.cpu(),
+        )
+
+        dist.destroy_process_group()
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
+    )
+    # pyre-ignore
+    @given(
+        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        specify_pg=st.sampled_from([True]),
+    )
+    @settings(max_examples=1, deadline=None)
+    def test_reduce_scatter_v_pooled(
+        self,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="nccl",
+            # pyre-ignore [6]
+            callable=self._test_reduce_scatter_v_pooled,
+            torch_compile_args=torch_compile_args,
+            specify_pg=specify_pg,
+        )
+
+    @classmethod
+    def _test_all_gather_base_pooled(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
+        device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
+
+        pg = dist.distributed_c10d._get_default_group()
+
+        input = torch.randn([4, 4], requires_grad=True).to(device)
+        input.retain_grad()
+
+        # pyre-ignore
+        def fn(*args, **kwargs) -> torch.Tensor:
+            return comm_ops.all_gather_base_pooled(*args, **kwargs).wait()
+
+        fn_transform = torch_compile_args_to_fn_transform(torch_compile_args)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            output = fn_transform(fn)(
+                input,
+                group=pg if specify_pg else None,
+            )
+
+        output.retain_grad()
+        output.backward(output)
+
+        assert input.grad is not None
+        torch.equal(none_throws(input.grad), output[4 * rank :])
+
+        dist.destroy_process_group()
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
+    )
+    # pyre-ignore
+    @given(
+        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        specify_pg=st.sampled_from([True]),
+    )
+    @settings(max_examples=1, deadline=None)
+    def test_all_gather_base_pooled(
+        self,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="nccl",
+            # pyre-ignore [6]
+            callable=self._test_all_gather_base_pooled,
+            torch_compile_args=torch_compile_args,
+            specify_pg=specify_pg,
         )

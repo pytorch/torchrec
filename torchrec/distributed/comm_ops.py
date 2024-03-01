@@ -31,6 +31,14 @@ except ImportError:
     pass
 
 
+try:
+    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+except Exception:
+
+    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
+        return False
+
+
 W = TypeVar("W")
 
 # TODO: T96382816, NE Parity Backward compatibility
@@ -287,12 +295,17 @@ class All2AllDenseInfo(object):
 def _get_split_lengths_by_len(
     world_size: int, my_rank: int, n: int
 ) -> Tuple[int, List[int]]:
-    k, m = divmod(n, world_size)
+    k = n // world_size
+    m = n % world_size
+    splits = []
     if m == 0:
-        splits = [k] * world_size
+        for _ in range(world_size):
+            splits.append(k)
+
         my_len = k
     else:
-        splits = [(k + 1) if i < m else k for i in range(world_size)]
+        for i in range(world_size):
+            splits.append((k + 1) if i < m else k)
         my_len = splits[my_rank]
     return (my_len, splits)
 
@@ -339,10 +352,9 @@ def alltoall_pooled(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
-    if dist.get_world_size(group) <= 1:
+    if group.size() <= 1:
         return NoWait(a2a_pooled_embs_tensor)
 
-    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
     a2ai = All2AllPooledInfo(
         batch_size_per_rank=batch_size_per_rank,
         dim_sum_per_rank=dim_sum_per_rank,
@@ -350,8 +362,73 @@ def alltoall_pooled(
         cumsum_dim_sum_per_rank_tensor=cumsum_dim_sum_per_rank_tensor,
         codecs=codecs,
     )
+
+    if is_torchdynamo_compiling():
+        return NoWait(all2all_pooled_sync(group, a2ai, a2a_pooled_embs_tensor))
+
+    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
     All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
     return myreq
+
+
+def all2all_pooled_sync(
+    pg: dist.ProcessGroup, a2ai: All2AllPooledInfo, input_embeddings: Tensor
+) -> Tensor:
+    my_rank = pg.rank()
+
+    (B_global, D_local_sum) = input_embeddings.shape
+
+    dim_sum_per_rank = a2ai.dim_sum_per_rank
+    batch_size_per_rank = a2ai.batch_size_per_rank
+    B_local = batch_size_per_rank[my_rank]
+
+    assert B_global == sum(batch_size_per_rank)
+
+    sharded_input_embeddings = input_embeddings.view(-1)
+
+    if a2ai.codecs is not None:
+        codecs = none_throws(a2ai.codecs)
+        qcomm_ctx = codecs.forward.create_context()
+        sharded_input_embeddings = codecs.forward.encode(
+            sharded_input_embeddings,
+            qcomm_ctx,
+        )
+        output_split_sizes = [
+            codecs.forward.calc_quantized_size(
+                B_local * D_rank_sum,
+                qcomm_ctx,
+            )
+            for D_rank_sum in dim_sum_per_rank
+        ]
+        input_split_sizes = [
+            codecs.forward.calc_quantized_size(
+                D_local_sum * B_rank,
+                qcomm_ctx,
+            )
+            for B_rank in batch_size_per_rank
+        ]
+    else:
+        output_split_sizes = [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+        input_split_sizes = [D_local_sum * B_rank for B_rank in batch_size_per_rank]
+        qcomm_ctx = None
+
+    with record_function("## alltoall_fwd_single ##"):
+        sharded_output_embeddings = dist._functional_collectives.all_to_all_single(
+            sharded_input_embeddings,
+            output_split_sizes,
+            input_split_sizes,
+            pg,
+        )
+
+    if a2ai.codecs is not None:
+        codecs = none_throws(a2ai.codecs)
+        sharded_output_embeddings = codecs.forward.decode(
+            sharded_output_embeddings,
+            qcomm_ctx,
+        )
+
+    outputs_by_rank = sharded_output_embeddings.split(output_split_sizes)
+    return torch.cat([output.view(B_local, -1) for output in outputs_by_rank], dim=1)
 
 
 def variable_batch_alltoall_pooled(
@@ -369,15 +446,95 @@ def variable_batch_alltoall_pooled(
     if dist.get_world_size(group) <= 1:
         return NoWait(a2a_pooled_embs_tensor)
 
-    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
     a2ai = VariableBatchAll2AllPooledInfo(
         batch_size_per_rank_per_feature=batch_size_per_rank_per_feature,
         batch_size_per_feature_pre_a2a=batch_size_per_feature_pre_a2a,
         emb_dim_per_rank_per_feature=emb_dim_per_rank_per_feature,
         codecs=codecs,
     )
+
+    if is_torchdynamo_compiling():
+        return NoWait(
+            variable_batch_all2all_pooled_sync(group, a2ai, a2a_pooled_embs_tensor)
+        )
+
+    myreq = Request(group, device=a2a_pooled_embs_tensor.device)
     Variable_Batch_All2All_Pooled_Req.apply(group, myreq, a2ai, a2a_pooled_embs_tensor)
     return myreq
+
+
+def variable_batch_all2all_pooled_sync(
+    pg: dist.ProcessGroup,
+    a2ai: VariableBatchAll2AllPooledInfo,
+    input_embeddings: Tensor,
+) -> Tensor:
+    my_rank = pg.rank()
+
+    # get input splits
+    world_size = dist.get_world_size(pg)
+    input_split_sizes = [0 for _ in range(world_size)]
+    if a2ai.batch_size_per_rank_per_feature:
+        for i in range(world_size):
+            curr_size = 0
+            for batch_size, emb_dim in zip(
+                a2ai.batch_size_per_rank_per_feature[i],
+                a2ai.emb_dim_per_rank_per_feature[my_rank],
+            ):
+                curr_size += batch_size * emb_dim
+            input_split_sizes[i] = curr_size
+    a2ai.input_splits = input_split_sizes
+
+    # get output splits
+    output_split_sizes = [0 for _ in range(world_size)]
+    ind = 0
+    for i in range(world_size):
+        curr_size = 0
+        for emb_dim in a2ai.emb_dim_per_rank_per_feature[i]:
+            curr_size += a2ai.batch_size_per_feature_pre_a2a[ind] * emb_dim
+            ind += 1
+        output_split_sizes[i] = curr_size
+    a2ai.output_splits = output_split_sizes
+
+    sharded_input_embeddings = input_embeddings.view(-1)
+    qcomm_ctx = None
+
+    if a2ai.codecs is not None:
+        codecs = none_throws(a2ai.codecs)
+        qcomm_ctx = codecs.forward.create_context()
+        sharded_input_embeddings = codecs.forward.encode(
+            sharded_input_embeddings,
+            qcomm_ctx,
+        )
+        output_split_sizes = [
+            codecs.forward.calc_quantized_size(
+                split,
+                qcomm_ctx,
+            )
+            for split in output_split_sizes
+        ]
+        input_split_sizes = [
+            codecs.forward.calc_quantized_size(
+                split,
+                qcomm_ctx,
+            )
+            for split in input_split_sizes
+        ]
+
+    with record_function("## alltoall_fwd_single ##"):
+        sharded_output_embeddings = dist._functional_collectives.all_to_all_single(
+            sharded_input_embeddings,
+            output_split_sizes=output_split_sizes,
+            input_split_sizes=input_split_sizes,
+            group=pg,
+        )
+
+    if a2ai.codecs is not None:
+        codecs = none_throws(a2ai.codecs)
+        sharded_output_embeddings = codecs.forward.decode(
+            sharded_output_embeddings,
+            qcomm_ctx,
+        )
+    return sharded_output_embeddings
 
 
 def alltoall_sequence(
@@ -428,7 +585,6 @@ def alltoall_sequence(
     if dist.get_world_size(group) <= 1:
         return NoWait(a2a_sequence_embs_tensor)
 
-    myreq = Request(group, device=a2a_sequence_embs_tensor.device)
     a2ai = All2AllSequenceInfo(
         embedding_dim=a2a_sequence_embs_tensor.shape[1],
         lengths_after_sparse_data_all2all=lengths_after_sparse_data_all2all,
@@ -441,8 +597,91 @@ def alltoall_sequence(
     )
     # sequence of embeddings, bags are definitely non-uniform
 
+    if is_torchdynamo_compiling():
+        return NoWait(all2all_sequence_sync(group, a2ai, a2a_sequence_embs_tensor))
+
+    myreq = Request(group, device=a2a_sequence_embs_tensor.device)
     All2All_Seq_Req.apply(group, myreq, a2ai, a2a_sequence_embs_tensor)
     return myreq
+
+
+def all2all_sequence_sync(
+    pg: dist.ProcessGroup,
+    a2ai: All2AllSequenceInfo,
+    sharded_input_embeddings: Tensor,
+) -> Tensor:
+    world_size = pg.size()
+    D = a2ai.embedding_dim
+    forward_recat_tensor = a2ai.forward_recat_tensor
+    variable_batch_size = a2ai.variable_batch_size
+    lengths_after_sparse_data_all2all = a2ai.lengths_after_sparse_data_all2all * D
+    input_splits = [i * D for i in a2ai.output_splits]
+    output_splits = [i * D for i in a2ai.input_splits]
+
+    a2ai.input_splits = input_splits
+    a2ai.output_splits = output_splits
+
+    local_T = lengths_after_sparse_data_all2all.shape[0]
+    if local_T > 0:
+        with record_function("## alltoall_seq_embedding_fwd_permute ##"):
+            if not variable_batch_size:
+                (
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_input_embeddings,
+                    _,
+                ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                    forward_recat_tensor,
+                    lengths_after_sparse_data_all2all.view(local_T * world_size, -1),
+                    sharded_input_embeddings.view(-1),
+                    None,
+                    sharded_input_embeddings.numel(),
+                )
+            else:
+                (
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_input_embeddings,
+                    _,
+                ) = torch.ops.fbgemm.permute_1D_sparse_data(
+                    forward_recat_tensor,
+                    lengths_after_sparse_data_all2all.view(-1),
+                    sharded_input_embeddings.view(-1),
+                    None,
+                    sharded_input_embeddings.numel(),
+                )
+    else:
+        # Variable is not used in sync mode, left for conformity with async path
+        permuted_lengths_after_sparse_data_all2all = None  # noqa: F841
+
+    if a2ai.codecs is not None:
+        codecs = none_throws(a2ai.codecs)
+        qcomm_ctx = codecs.forward.create_context()
+        # pyre-ignore [16]
+        sharded_input_embeddings = a2ai.codecs.forward.encode(
+            sharded_input_embeddings, qcomm_ctx
+        )
+        output_splits = [
+            a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx) for x in output_splits
+        ]
+        input_splits = [
+            a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx) for x in input_splits
+        ]
+    else:
+        qcomm_ctx = None
+
+    with record_function("## alltoall_seq_embedding_fwd_single ##"):
+        sharded_output_embeddings = dist._functional_collectives.all_to_all_single(
+            sharded_input_embeddings,
+            output_split_sizes=output_splits,
+            input_split_sizes=input_splits,
+            group=pg,
+        )
+
+    if a2ai.codecs is not None:
+        codecs = none_throws(a2ai.codecs)
+        sharded_output_embeddings = codecs.forward.decode(
+            sharded_output_embeddings, qcomm_ctx
+        )
+    return sharded_output_embeddings.view(-1, D)
 
 
 def alltoallv(
@@ -478,19 +717,24 @@ def alltoallv(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
-    world_size = dist.get_world_size(group)
-    my_rank = dist.get_rank(group)
+    world_size: int = group.size()
+    my_rank: int = group.rank()
 
-    myreq = Request(group, device=inputs[0].device)
-    B_global, _ = inputs[0].size()
-    D_local_list = [e.size()[1] for e in inputs]
+    B_global = inputs[0].size(0)
+
+    D_local_list = []
+    for e in inputs:
+        D_local_list.append(e.size()[1])
+
     B_local, B_local_list = _get_split_lengths_by_len(world_size, my_rank, B_global)
 
     if out_split is not None:
         dims_sum_per_rank = out_split
     elif per_rank_split_lengths is not None:
         # all the embs have the same dimension
-        dims_sum_per_rank = [s * D_local_list[0] for s in per_rank_split_lengths]
+        dims_sum_per_rank = []
+        for s in per_rank_split_lengths:
+            dims_sum_per_rank.append(s * D_local_list[0])
     else:
         raise RuntimeError("Need to specify either out_split or per_rank_split_lengths")
 
@@ -503,9 +747,48 @@ def alltoallv(
         codecs=codecs,
     )
 
+    if is_torchdynamo_compiling():
+        return NoWait(all2allv_sync(group, a2ai, inputs))
+
+    myreq = Request(group, device=inputs[0].device)
     All2Allv_Req.apply(group, myreq, a2ai, inputs)
 
     return myreq
+
+
+def all2allv_sync(
+    pg: dist.ProcessGroup,
+    a2ai: All2AllVInfo,
+    inputs: List[Tensor],
+) -> List[Tensor]:
+    input_split_sizes = []
+    sum_D_local_list = sum(a2ai.D_local_list)
+    for m in a2ai.B_local_list:
+        input_split_sizes.append(m * sum_D_local_list)
+
+    output_split_sizes = []
+    for e in a2ai.dims_sum_per_rank:
+        output_split_sizes.append(a2ai.B_local * e)
+
+    input = torch.cat(inputs, dim=1).view([-1])
+    if a2ai.codecs is not None:
+        input = a2ai.codecs.forward.encode(input)
+
+    with record_function("## alltoallv_bwd_single ##"):
+        output = dist._functional_collectives.all_to_all_single(
+            input,
+            output_split_sizes=output_split_sizes,
+            input_split_sizes=input_split_sizes,
+            group=pg,
+        )
+
+    if a2ai.codecs is not None:
+        output = a2ai.codecs.forward.decode(output)
+
+    outputs = []
+    for out in output.split(output_split_sizes):
+        outputs.append(out.view([a2ai.B_local, -1]))
+    return outputs
 
 
 def reduce_scatter_pooled(
@@ -534,15 +817,40 @@ def reduce_scatter_pooled(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
-    if dist.get_world_size(group) <= 1:
-        return NoWait(inputs[dist.get_rank(group)])
+    if group.size() <= 1:
+        return NoWait(inputs[group.rank()])
 
-    myreq = Request(group, device=inputs[0].device)
     rsi = ReduceScatterInfo(
         input_sizes=[tensor.size() for tensor in inputs], codecs=codecs
     )
+
+    if is_torchdynamo_compiling():
+        return NoWait(reduce_scatter_sync(group, rsi, *inputs))
+
+    myreq = Request(group, device=inputs[0].device)
     ReduceScatter_Req.apply(group, myreq, rsi, *inputs)
     return myreq
+
+
+def reduce_scatter_sync(
+    pg: dist.ProcessGroup,
+    rsi: ReduceScatterInfo,
+    *inputs: Any,
+) -> Tensor:
+    if rsi.codecs is not None:
+        # pyre-ignore
+        inputs = [rsi.codecs.forward.encode(input) for input in inputs]
+
+    with record_function("## reduce_scatter ##"):
+        output = dist._functional_collectives.reduce_scatter_tensor(
+            torch.cat(inputs),
+            reduceOp="sum",
+            scatter_dim=0,
+            group=pg,
+        )
+    if rsi.codecs is not None:
+        output = rsi.codecs.forward.decode(output)
+    return output
 
 
 def reduce_scatter_base_pooled(
@@ -574,10 +882,36 @@ def reduce_scatter_base_pooled(
     if dist.get_world_size(group) <= 1:
         return NoWait(input)
 
-    myreq = Request(group, device=input.device)
     rsi = ReduceScatterBaseInfo(input_sizes=input.size(), codecs=codecs)
+
+    if is_torchdynamo_compiling():
+        return NoWait(reduce_scatter_base_sync(group, rsi, input))
+
+    myreq = Request(group, device=input.device)
     ReduceScatterBase_Req.apply(group, myreq, rsi, input)
     return myreq
+
+
+def reduce_scatter_base_sync(
+    pg: dist.ProcessGroup,
+    rsi: ReduceScatterBaseInfo,
+    inputs: Tensor,
+) -> Tensor:
+    my_size = pg.size()
+    assert inputs.size(0) % my_size == 0
+    if rsi.codecs is not None:
+        inputs = rsi.codecs.forward.encode(inputs)
+
+    with record_function("## reduce_scatter_base ##"):
+        output = dist._functional_collectives.reduce_scatter_tensor(
+            inputs,
+            reduceOp="sum",
+            scatter_dim=0,
+            group=pg,
+        )
+    if rsi.codecs is not None:
+        output = rsi.codecs.forward.decode(output)
+    return output
 
 
 def all_gather_base_pooled(
@@ -605,13 +939,35 @@ def all_gather_base_pooled(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
+    agi = AllGatherBaseInfo(input_size=input.size(), codecs=codecs)
     if dist.get_world_size(group) <= 1:
         return NoWait(input)
 
+    if is_torchdynamo_compiling():
+        return NoWait(all_gather_base_sync(group, agi, input))
+
     myreq = Request(group, device=input.device)
-    agi = AllGatherBaseInfo(input_size=input.size(), codecs=codecs)
     AllGatherBase_Req.apply(group, myreq, agi, input)
     return myreq
+
+
+def all_gather_base_sync(
+    pg: dist.ProcessGroup,
+    agi: AllGatherBaseInfo,
+    input: Tensor,
+) -> Tensor:
+    if agi.codecs is not None:
+        input = agi.codecs.forward.encode(input)
+
+    with record_function("## all_gather_base ##"):
+        outputs = dist._functional_collectives.all_gather_tensor(
+            input,
+            gather_dim=0,
+            group=pg,
+        )
+    if agi.codecs is not None:
+        outputs = agi.codecs.forward.decode(outputs)
+    return outputs
 
 
 def reduce_scatter_v_pooled(
@@ -644,7 +1000,6 @@ def reduce_scatter_v_pooled(
     if dist.get_world_size(group) <= 1:
         return NoWait(input)
 
-    myreq = Request(group, device=input.device)
     input_size = list(input.size())
     input_sizes = [
         torch.Size(
@@ -661,8 +1016,53 @@ def reduce_scatter_v_pooled(
         total_input_size=input_size,
         codecs=codecs,
     )
+
+    if is_torchdynamo_compiling():
+        return NoWait(reduce_scatter_v_sync(group, rsvi, input))
+
+    myreq = Request(group, device=input.device)
     ReduceScatterV_Req.apply(group, myreq, rsvi, input)
     return myreq
+
+
+def reduce_scatter_v_sync(
+    pg: dist.ProcessGroup,
+    rsi: ReduceScatterVInfo,
+    input: Tensor,
+) -> Tensor:
+    world_size = pg.size()
+    rank = pg.rank()
+
+    if rsi.codecs is not None:
+        input = rsi.codecs.forward.encode(input)
+
+    if rsi.equal_splits:
+        with record_function("## reduce_scatter_base ##"):
+            output = dist._functional_collectives.reduce_scatter_tensor(
+                input,
+                reduceOp="sum",
+                scatter_dim=0,
+                group=pg,
+            )
+    else:
+        with record_function("## reduce_scatter_v_via_all_to_all_single ##"):
+            input_splits = rsi.input_splits
+            output_splits = [rsi.input_splits[rank]] * world_size
+            # TODO(ivankobzarev): Replace with _functional_collectives.reduce_scatter_v when it is added
+            a2a_output = dist._functional_collectives.all_to_all_single(
+                input,
+                output_splits,
+                input_splits,
+                pg,
+            )
+            output = torch.sum(
+                torch.stack(torch.split(a2a_output, output_splits)), dim=0
+            )
+
+    if rsi.codecs is not None:
+        output = rsi.codecs.forward.decode(output)
+
+    return output
 
 
 def reduce_scatter_v_per_feature_pooled(
@@ -1081,6 +1481,9 @@ class Variable_Batch_All2All_Pooled_Req(Function):
         a2ai = myreq.a2ai
         assert myreq.req is not None
         myreq.req.wait()
+        if isinstance(myreq.req, dist.Work):
+            myreq.req.wait()
+
         myreq.req = None
         grad_output = myreq.tensor
 
@@ -1109,7 +1512,8 @@ class Variable_Batch_All2All_Pooled_Wait(Function):
         a2ai = myreq.a2ai
         ctx.a2ai = a2ai
         assert myreq.req is not None
-        myreq.req.wait()
+        if isinstance(myreq.req, dist.Work):
+            myreq.req.wait()
         sharded_output_embeddings = myreq.tensor
         myreq.req = None
         myreq.tensor = None
@@ -1550,7 +1954,12 @@ class ReduceScatter_Req(Function):
             device=inputs[my_rank].device,
         )
         with record_function("## reduce_scatter ##"):
-            req = dist.reduce_scatter(output, list(inputs), group=pg, async_op=True)
+            req = dist.reduce_scatter(
+                output,
+                list(inputs),
+                group=pg,
+                async_op=True,
+            )
         myreq.req = req
         myreq.tensor = output
         myreq.wait_function = ReduceScatter_Wait
@@ -1652,7 +2061,12 @@ class ReduceScatterBase_Req(Function):
             inputs = rsi.codecs.forward.encode(inputs)
         output = inputs.new_empty((inputs.size(0) // my_size, inputs.size(1)))
         with record_function("## reduce_scatter_base ##"):
-            req = dist._reduce_scatter_base(output, inputs, group=pg, async_op=True)
+            req = dist._reduce_scatter_base(
+                output,
+                inputs,
+                group=pg,
+                async_op=True,
+            )
         myreq.req = req
         myreq.tensor = output
         myreq.wait_function = ReduceScatterBase_Wait
@@ -1744,7 +2158,12 @@ class AllGatherBase_Req(Function):
 
         outputs = input.new_empty((input.size(0) * my_size, input.size(1)))
         with record_function("## all_gather_base ##"):
-            req = dist._all_gather_base(outputs, input, group=pg, async_op=True)
+            req = dist._all_gather_base(
+                outputs,
+                input,
+                group=pg,
+                async_op=True,
+            )
         myreq.req = req
         myreq.tensor = outputs
         myreq.wait_function = AllGatherBase_Wait
@@ -1841,7 +2260,12 @@ class ReduceScatterV_Req(Function):
         # else use dist.reduce_scatter which internally supports vector reduce-scatter
         if rsi.equal_splits:
             with record_function("## reduce_scatter_base ##"):
-                req = dist._reduce_scatter_base(output, input, group=pg, async_op=True)
+                req = dist._reduce_scatter_base(
+                    output,
+                    input,
+                    group=pg,
+                    async_op=True,
+                )
         else:
             with record_function("## reduce_scatter_v ##"):
                 req = dist.reduce_scatter(
@@ -1934,3 +2358,190 @@ class ReduceScatterV_Wait(Function):
         myreq.req = req
         myreq.tensor = grad_input
         return (None, None, myreq.dummy_tensor)
+
+
+"""
+
+
+Torch does not provide Autograd formulas for functional_collectives.
+Registering them here in dynamo compatible way - when functional collective is called below Autograd.
+This will be a leaf in dynamo trace.
+"""
+
+
+class _All2AllSingle(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        input: torch.Tensor,
+        output_split_sizes: List[int],
+        input_split_sizes: List[int],
+        tag: str,
+        ranks: List[int],
+        group_size: int,
+    ) -> torch.Tensor:
+        ctx.input_size = input.size()
+        ctx.output_split_sizes = input_split_sizes
+        ctx.input_split_sizes = output_split_sizes
+        ctx.tag = tag
+        ctx.ranks = ranks
+        ctx.group_size = group_size
+
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops.c10d_functional.all_to_all_single(
+                input, output_split_sizes, input_split_sizes, tag, ranks, group_size
+            )
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        return (
+            torch.ops.c10d_functional.all_to_all_single(
+                grad_output,
+                ctx.output_split_sizes,
+                ctx.input_split_sizes,
+                ctx.tag,
+                ctx.ranks,
+                ctx.group_size,
+            ),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+
+
+def _all_to_all_single_autograd(
+    input: torch.Tensor,
+    output_split_sizes: List[int],
+    input_split_sizes: List[int],
+    tag: str,
+    ranks: List[int],
+    group_size: int,
+) -> torch.Tensor:
+    return _All2AllSingle.apply(
+        input, output_split_sizes, input_split_sizes, tag, ranks, group_size
+    )
+
+
+class _ReduceScatterTensor(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        input: torch.Tensor,
+        reduceOp: str,
+        tag: str,
+        ranks: List[int],
+        group_size: int,
+    ) -> torch.Tensor:
+        input = input.contiguous()
+        ctx.tag = tag
+        ctx.ranks = ranks
+        ctx.group_size = group_size
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops.c10d_functional.reduce_scatter_tensor(
+                input,
+                reduceOp,
+                tag,
+                ranks,
+                group_size,
+            )
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        grad_output = grad_output.contiguous()
+        return (
+            torch.ops.c10d_functional.all_gather_into_tensor(
+                grad_output, ctx.tag, ctx.ranks, ctx.group_size
+            ),
+            None,
+            None,
+            None,
+            None,
+        )
+
+
+# pyre-ignore
+def _reduce_scatter_tensor_autograd(input, reduceOp, tag, ranks, group_size):
+    return _ReduceScatterTensor.apply(input, reduceOp, tag, ranks, group_size)
+
+
+class _AllGatherIntoTensor(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        shard: torch.Tensor,
+        tag: str,
+        ranks: List[int],
+        group_size: int,
+    ) -> torch.Tensor:
+        shard = shard.contiguous()
+        ctx.tag = tag
+        ctx.ranks = ranks
+        ctx.group_size = group_size
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops.c10d_functional.all_gather_into_tensor(
+                shard, tag, ranks, group_size
+            )
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        return (
+            torch.ops.c10d_functional.reduce_scatter_tensor(
+                grad_output, "sum", ctx.tag, ctx.ranks, ctx.group_size
+            ),
+            None,
+            None,
+            None,
+        )
+
+
+# pyre-ignore
+def _all_gather_into_tensor_autograd(shard, tag, ranks, group_size):
+    return _AllGatherIntoTensor.apply(shard, tag, ranks, group_size)
+
+
+class _Wait(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        input: torch.Tensor,
+    ) -> torch.Tensor:
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops.c10d_functional.wait_tensor(input)
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        return (grad_output,)
+
+
+def _wait_autograd(input: torch.Tensor) -> torch.Tensor:
+    return _Wait.apply(input)
+
+
+# pyre-ignore
+c10d_functional_autograd_ops = [
+    ("all_to_all_single", _all_to_all_single_autograd),
+    ("reduce_scatter_tensor", _reduce_scatter_tensor_autograd),
+    ("all_gather_into_tensor", _all_gather_into_tensor_autograd),
+    ("wait_tensor", _wait_autograd),
+]
+
+
+if not torch._running_with_deploy():
+    ns = "c10d_functional"
+    c10_lib_impl = torch.library.Library(ns, "IMPL")
+    backend = "Autograd"
+    for op_name, fn in c10d_functional_autograd_ops:
+        if not torch._C._dispatch_has_kernel_for_dispatch_key(
+            f"{ns}::{op_name}", backend
+        ):
+            c10_lib_impl.impl(op_name, fn, backend)
