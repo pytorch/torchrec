@@ -666,6 +666,8 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding[torch.Tensor]):
         super().__init__(config, pg, device)
 
         weights_precision = data_type_to_sparse_type(config.data_type)
+        fused_params = config.fused_params or {}
+        output_dtype = fused_params.get("output_dtype", SparseType.FP32)
         self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
             DenseTableBatchedEmbeddingBagsCodegen(
                 list(zip(self._local_rows, self._local_cols)),
@@ -675,6 +677,7 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding[torch.Tensor]):
                 or device.type == "cpu"
                 or not torch.cuda.is_available(),
                 weights_precision=weights_precision,
+                output_dtype=output_dtype,
             )
         )
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
@@ -958,6 +961,8 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
         super().__init__(config, pg, device)
 
         weights_precision = data_type_to_sparse_type(config.data_type)
+        fused_params = config.fused_params or {}
+        output_dtype = fused_params.get("output_dtype", SparseType.FP32)
         self._emb_module: DenseTableBatchedEmbeddingBagsCodegen = (
             DenseTableBatchedEmbeddingBagsCodegen(
                 list(zip(self._local_rows, self._local_cols)),
@@ -967,6 +972,7 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
                 or device.type == "cpu"
                 or not torch.cuda.is_available(),
                 weights_precision=weights_precision,
+                output_dtype=output_dtype,
             )
         )
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
