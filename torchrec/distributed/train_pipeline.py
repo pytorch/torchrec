@@ -78,6 +78,10 @@ class DataLoadingThread(Thread, Generic[In]):
         self._buffer_empty_event.set()
 
     def run(self) -> None:
+        if self._device.type == "cuda" and torch.cuda.is_available():
+            # set the current device the same as the one used in the main thread
+            torch.cuda.set_device(self._device)
+
         while not self._stop:
             self._buffer_empty_event.wait()
             # Set the filled event to unblock progress() and return.
