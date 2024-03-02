@@ -485,7 +485,6 @@ class KJTSplitsAllToAllMeta:
     keys: List[str]
     device: torch.device
     stagger: int
-    splits_cumsum: List[int]
 
 
 class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
