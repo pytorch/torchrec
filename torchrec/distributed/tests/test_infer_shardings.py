@@ -108,9 +108,9 @@ class TimeGapPoolingCollectionModule(FeatureProcessorsCollection):
         return KeyedJaggedTensor(
             keys=features.keys(),
             values=features.values(),
-            weights=torch.cat(scores_list)
-            if scores_list
-            else features.weights_or_none(),
+            weights=(
+                torch.cat(scores_list) if scores_list else features.weights_or_none()
+            ),
             lengths=features.lengths(),
             stride=features.stride(),
         )

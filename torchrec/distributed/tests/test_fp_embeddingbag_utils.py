@@ -43,23 +43,25 @@ class SparseArch(nn.Module):
                     device=device,
                     is_weighted=True,
                 ),
-                cast(
-                    Dict[str, FeatureProcessor],
-                    {
-                        "feature_0": PositionWeightedModule(max_feature_length=10),
-                        "feature_1": PositionWeightedModule(max_feature_length=10),
-                        "feature_2": PositionWeightedModule(max_feature_length=12),
-                        "feature_3": PositionWeightedModule(max_feature_length=12),
-                    },
-                )
-                if not use_fp_collection
-                else PositionWeightedModuleCollection(
-                    max_feature_lengths={
-                        "feature_0": 10,
-                        "feature_1": 10,
-                        "feature_2": 12,
-                        "feature_3": 12,
-                    }
+                (
+                    cast(
+                        Dict[str, FeatureProcessor],
+                        {
+                            "feature_0": PositionWeightedModule(max_feature_length=10),
+                            "feature_1": PositionWeightedModule(max_feature_length=10),
+                            "feature_2": PositionWeightedModule(max_feature_length=12),
+                            "feature_3": PositionWeightedModule(max_feature_length=12),
+                        },
+                    )
+                    if not use_fp_collection
+                    else PositionWeightedModuleCollection(
+                        max_feature_lengths={
+                            "feature_0": 10,
+                            "feature_1": 10,
+                            "feature_2": 12,
+                            "feature_3": 12,
+                        }
+                    )
                 ),
             ).to(device)
         )
@@ -135,9 +137,9 @@ class TestFPEBCSharder(FeatureProcessedEmbeddingBagCollectionSharder):
         return [self._kernel_type]
 
 
-def get_configs_and_kjt_inputs() -> Tuple[
-    List[EmbeddingBagConfig], List[KeyedJaggedTensor]
-]:
+def get_configs_and_kjt_inputs() -> (
+    Tuple[List[EmbeddingBagConfig], List[KeyedJaggedTensor]]
+):
     embedding_bag_config = [
         EmbeddingBagConfig(
             name="table_0",

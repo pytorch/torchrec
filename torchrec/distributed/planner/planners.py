@@ -76,19 +76,21 @@ def _to_sharding_plan(
 
         module_plan = plan.get(sharding_option.path, EmbeddingModuleShardingPlan())
         module_plan[sharding_option.name] = ParameterSharding(
-            sharding_spec=None
-            if sharding_type == ShardingType.DATA_PARALLEL.value
-            else EnumerableShardingSpec(
-                [
-                    ShardMetadata(
-                        shard_sizes=shard.size,
-                        shard_offsets=shard.offset,
-                        placement=placement(
-                            compute_device, cast(int, shard.rank), local_size
-                        ),
-                    )
-                    for shard in shards
-                ]
+            sharding_spec=(
+                None
+                if sharding_type == ShardingType.DATA_PARALLEL.value
+                else EnumerableShardingSpec(
+                    [
+                        ShardMetadata(
+                            shard_sizes=shard.size,
+                            shard_offsets=shard.offset,
+                            placement=placement(
+                                compute_device, cast(int, shard.rank), local_size
+                            ),
+                        )
+                        for shard in shards
+                    ]
+                )
             ),
             sharding_type=sharding_type,
             compute_kernel=sharding_option.compute_kernel,

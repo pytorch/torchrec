@@ -197,7 +197,7 @@ class _BatchedFusedEmbeddingLookups(nn.Module, FusedOptimizerModule):
         assert len(self._num_embeddings) == len(
             self._emb_module.split_embedding_weights()
         )
-        for (rows, emb_dim, weight_init_min, weight_init_max, param) in zip(
+        for rows, emb_dim, weight_init_min, weight_init_max, param in zip(
             self._rows,
             self._cols,
             self._weight_init_mins,

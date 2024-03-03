@@ -306,9 +306,11 @@ def output_jt_dict(
                 embedding_names_per_rank=embedding_names_per_rank,
                 features_before_input_dist=features_before_input_dist,
                 need_indices=need_indices,
-                rw_unbucketize_tensor=unbucketize_tensors[unbucketize_tensor_idx]
-                if unbucketize_tensor_idx != -1
-                else None,
+                rw_unbucketize_tensor=(
+                    unbucketize_tensors[unbucketize_tensor_idx]
+                    if unbucketize_tensor_idx != -1
+                    else None
+                ),
                 cw_features_to_permute_indices=features_to_permute_indices,
                 key_to_feature_permuted_coordinates=key_to_feature_permuted_coordinates,
             )
@@ -405,9 +407,9 @@ class ShardedQuantEmbeddingCollection(
 
         self._fused_params = fused_params
 
-        tbes: Dict[
-            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
-        ] = get_tbes_to_register_from_iterable(self._lookups)
+        tbes: Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig] = (
+            get_tbes_to_register_from_iterable(self._lookups)
+        )
 
         self._tbes_configs: Dict[
             IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
@@ -529,9 +531,9 @@ class ShardedQuantEmbeddingCollection(
                     ].tolist()
                     for i, permute_idx in enumerate(permute_indices):
                         permuted_coordinates[i] = coordinates[permute_idx]
-                self._key_to_feature_permuted_coordinates_per_sharding[idx][
-                    key
-                ] = torch.tensor(permuted_coordinates)
+                self._key_to_feature_permuted_coordinates_per_sharding[idx][key] = (
+                    torch.tensor(permuted_coordinates)
+                )
 
     def _create_input_dist(
         self,
@@ -617,9 +619,11 @@ class ShardedQuantEmbeddingCollection(
                     InferSequenceShardingContext(
                         features=input_dist_result,
                         features_before_input_dist=features_by_sharding[i],
-                        unbucketize_permute_tensor=input_dist.unbucketize_permute_tensor
-                        if isinstance(input_dist, InferRwSparseFeaturesDist)
-                        else None,
+                        unbucketize_permute_tensor=(
+                            input_dist.unbucketize_permute_tensor
+                            if isinstance(input_dist, InferRwSparseFeaturesDist)
+                            else None
+                        ),
                     )
                 )
         return ListOfKJTList(ret)

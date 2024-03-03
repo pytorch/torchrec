@@ -71,12 +71,12 @@ class TwoTower(nn.Module):
         embedding_dim: int = embedding_bag_collection.embedding_bag_configs()[
             0
         ].embedding_dim
-        self._feature_names_query: List[
-            str
-        ] = embedding_bag_collection.embedding_bag_configs()[0].feature_names
-        self._candidate_feature_names: List[
-            str
-        ] = embedding_bag_collection.embedding_bag_configs()[1].feature_names
+        self._feature_names_query: List[str] = (
+            embedding_bag_collection.embedding_bag_configs()[0].feature_names
+        )
+        self._candidate_feature_names: List[str] = (
+            embedding_bag_collection.embedding_bag_configs()[1].feature_names
+        )
         self.ebc = embedding_bag_collection
         self.query_proj = MLP(
             in_size=embedding_dim, layer_sizes=layer_sizes, device=device

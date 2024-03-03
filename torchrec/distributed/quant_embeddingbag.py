@@ -117,9 +117,9 @@ class ShardedQuantEmbeddingBagCollection(
         device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        self._embedding_bag_configs: List[
-            EmbeddingBagConfig
-        ] = module.embedding_bag_configs()
+        self._embedding_bag_configs: List[EmbeddingBagConfig] = (
+            module.embedding_bag_configs()
+        )
         self._sharding_type_to_sharding_infos: Dict[
             str, List[EmbeddingShardingInfo]
         ] = create_sharding_infos_by_sharding(
@@ -158,9 +158,9 @@ class ShardedQuantEmbeddingBagCollection(
         self._has_uninitialized_output_dist: bool = True
         self._has_features_permute: bool = True
 
-        tbes: Dict[
-            IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
-        ] = get_tbes_to_register_from_iterable(self._lookups)
+        tbes: Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig] = (
+            get_tbes_to_register_from_iterable(self._lookups)
+        )
 
         self._tbes_configs: Dict[
             IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig

@@ -496,9 +496,11 @@ class TestProposers(unittest.TestCase):
                     (
                         candidate.name,
                         candidate.compute_kernel,
-                        candidate.cache_params.load_factor
-                        if candidate.cache_params
-                        else None,
+                        (
+                            candidate.cache_params.load_factor
+                            if candidate.cache_params
+                            else None
+                        ),
                     )
                     for candidate in proposal
                 ],

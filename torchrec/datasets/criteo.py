@@ -234,11 +234,13 @@ class BinaryCriteoUtils:
             return dense, sparse, label
 
         dense, sparse, labels = [], [], []
-        for (row_dense, row_sparse, row_label) in CriteoIterDataPipe(
+        for row_dense, row_sparse, row_label in CriteoIterDataPipe(
             [in_file],
-            row_mapper=row_mapper
-            if not (dataset_name == "criteo_kaggle" and "test" in in_file)
-            else row_mapper_with_fake_label_constant,
+            row_mapper=(
+                row_mapper
+                if not (dataset_name == "criteo_kaggle" and "test" in in_file)
+                else row_mapper_with_fake_label_constant
+            ),
         ):
             dense.append(row_dense)
             sparse.append(row_sparse)
@@ -261,7 +263,7 @@ class BinaryCriteoUtils:
         labels_np = labels_np.reshape((-1, 1))
 
         path_manager = PathManagerFactory().get(path_manager_key)
-        for (fname, arr) in [
+        for fname, arr in [
             (out_dense_file, dense_np),
             (out_sparse_file, sparse_np),
             (out_labels_file, labels_np),
@@ -665,7 +667,7 @@ class BinaryCriteoUtils:
             curr_first_row = curr_last_row
 
         # Directly copy over the last day's files since they will be used for validation and testing.
-        for (part, input_dir) in [
+        for part, input_dir in [
             ("sparse", input_dir_sparse),
             ("dense", input_dir_labels_and_dense),
             ("labels", input_dir_labels_and_dense),

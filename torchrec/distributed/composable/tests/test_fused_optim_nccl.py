@@ -77,29 +77,38 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
                 0
             ].state_dict()["state"][""]["table_0.momentum1"].gather(
                 dst=0,
-                out=None if ctx.rank != 0
-                # sharded column, each shard will have rowwise state
-                else torch.empty((4 * tables[0].num_embeddings,), device=ctx.device),
+                out=(
+                    None
+                    if ctx.rank != 0
+                    # sharded column, each shard will have rowwise state
+                    else torch.empty((4 * tables[0].num_embeddings,), device=ctx.device)
+                ),
             )
 
             ebc.embedding_bags["table_1"].weight._in_backward_optimizers[
                 0
             ].state_dict()["state"][""]["table_1.momentum1"].gather(
                 dst=0,
-                out=None if ctx.rank != 0
-                # sharded rowwise
-                else torch.empty((tables[1].num_embeddings,), device=ctx.device),
+                out=(
+                    None
+                    if ctx.rank != 0
+                    # sharded rowwise
+                    else torch.empty((tables[1].num_embeddings,), device=ctx.device)
+                ),
             )
 
             ebc.embedding_bags["table_2"].weight._in_backward_optimizers[
                 0
             ].state_dict()["state"][""]["table_2.momentum1"].gather(
                 dst=0,
-                out=None if ctx.rank != 0
-                # Column wise - with partial rowwise adam, first state is point wise
-                else torch.empty(
-                    (tables[2].num_embeddings, tables[2].embedding_dim),
-                    device=ctx.device,
+                out=(
+                    None
+                    if ctx.rank != 0
+                    # Column wise - with partial rowwise adam, first state is point wise
+                    else torch.empty(
+                        (tables[2].num_embeddings, tables[2].embedding_dim),
+                        device=ctx.device,
+                    )
                 ),
             )
 
@@ -107,20 +116,26 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
                 0
             ].state_dict()["state"][""]["table_2.exp_avg_sq"].gather(
                 dst=0,
-                out=None if ctx.rank != 0
-                # Column wise - with partial rowwise adam, first state is point wise
-                else torch.empty((4 * tables[2].num_embeddings,), device=ctx.device),
+                out=(
+                    None
+                    if ctx.rank != 0
+                    # Column wise - with partial rowwise adam, first state is point wise
+                    else torch.empty((4 * tables[2].num_embeddings,), device=ctx.device)
+                ),
             )
 
             ebc.embedding_bags["table_3"].weight._in_backward_optimizers[
                 0
             ].state_dict()["state"][""]["table_3.momentum1"].gather(
                 dst=0,
-                out=None if ctx.rank != 0
-                # Row wise - with partial rowwise adam, first state is point wise
-                else torch.empty(
-                    (tables[3].num_embeddings, tables[3].embedding_dim),
-                    device=ctx.device,
+                out=(
+                    None
+                    if ctx.rank != 0
+                    # Row wise - with partial rowwise adam, first state is point wise
+                    else torch.empty(
+                        (tables[3].num_embeddings, tables[3].embedding_dim),
+                        device=ctx.device,
+                    )
                 ),
             )
 
@@ -128,9 +143,12 @@ class ShardedFusedOptimizerStateDictTest(MultiProcessTestBase):
                 0
             ].state_dict()["state"][""]["table_3.exp_avg_sq"].gather(
                 dst=0,
-                out=None if ctx.rank != 0
-                # Column wise - with partial rowwise adam, first state is point wise
-                else torch.empty((tables[2].num_embeddings,), device=ctx.device),
+                out=(
+                    None
+                    if ctx.rank != 0
+                    # Column wise - with partial rowwise adam, first state is point wise
+                    else torch.empty((tables[2].num_embeddings,), device=ctx.device)
+                ),
             )
 
     # pyre-ignore

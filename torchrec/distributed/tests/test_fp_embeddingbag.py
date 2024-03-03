@@ -165,7 +165,7 @@ def _test_sharding(  # noqa C901
         unsharded_named_parameters = dict(sparse_arch.named_parameters())
         sharded_named_parameters = dict(sharded_sparse_arch.named_parameters())
 
-        for (fqn, param) in unsharded_named_parameters.items():
+        for fqn, param in unsharded_named_parameters.items():
             if "_feature_processors" not in fqn:
                 continue
 
@@ -242,9 +242,11 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             tables=embedding_bag_config,
             kjt_input_per_rank=kjt_input_per_rank,
             sharder=FeatureProcessedEmbeddingBagCollectionSharder(),
-            backend="nccl"
-            if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
-            else "gloo",
+            backend=(
+                "nccl"
+                if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
+                else "gloo"
+            ),
             set_gradient_division=set_gradient_division,
             use_dmp=use_dmp,
             use_fp_collection=use_fp_collection,

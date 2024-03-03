@@ -107,13 +107,15 @@ class BaseShardedManagedCollisionEmbeddingCollection(
         # TODO: This is a hack since _embedding_module doesn't need input
         # dist, so eliminating it so all fused a2a will ignore it.
         self._embedding_module._has_uninitialized_input_dist = False
-        self._managed_collision_collection: ShardedManagedCollisionCollection = mc_sharder.shard(
-            module._managed_collision_collection,
-            table_name_to_parameter_sharding,
-            env=env,
-            device=device,
-            # pyre-ignore
-            sharding_type_to_sharding=self._embedding_module._sharding_type_to_sharding,
+        self._managed_collision_collection: ShardedManagedCollisionCollection = (
+            mc_sharder.shard(
+                module._managed_collision_collection,
+                table_name_to_parameter_sharding,
+                env=env,
+                device=device,
+                # pyre-ignore
+                sharding_type_to_sharding=self._embedding_module._sharding_type_to_sharding,
+            )
         )
         self._return_remapped_features: bool = module._return_remapped_features
 

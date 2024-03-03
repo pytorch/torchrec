@@ -64,9 +64,11 @@ class SequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
 
         self.embedding_groups = {
             "group_0": [
-                f"{feature}@{table.name}"
-                if feature in self.shared_features
-                else feature
+                (
+                    f"{feature}@{table.name}"
+                    if feature in self.shared_features
+                    else feature
+                )
                 for table in self.tables
                 for feature in table.feature_names
             ]

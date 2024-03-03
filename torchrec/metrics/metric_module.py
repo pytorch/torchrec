@@ -423,9 +423,9 @@ def _generate_state_metrics(
 ) -> Dict[str, StateMetric]:
     state_metrics: Dict[str, StateMetric] = {}
     for metric_enum in metrics_config.state_metrics:
-        metric_namespace: Optional[
-            MetricNamespace
-        ] = STATE_METRICS_NAMESPACE_MAPPING.get(metric_enum, None)
+        metric_namespace: Optional[MetricNamespace] = (
+            STATE_METRICS_NAMESPACE_MAPPING.get(metric_enum, None)
+        )
         if metric_namespace is None:
             raise ValueError(f"Unknown StateMetrics {metric_enum}")
         full_namespace = compose_metric_namespace(

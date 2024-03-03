@@ -75,17 +75,17 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._rank: int = self._env.rank
         sharded_tables_per_rank = self._shard(sharding_infos)
 
-        self._sharded_tables_per_rank: List[
-            List[ShardedEmbeddingTable]
-        ] = sharded_tables_per_rank
+        self._sharded_tables_per_rank: List[List[ShardedEmbeddingTable]] = (
+            sharded_tables_per_rank
+        )
 
-        self._grouped_embedding_configs_per_rank: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
+        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
+            []
+        )
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
-        self._grouped_embedding_configs: List[
-            GroupedEmbeddingConfig
-        ] = self._grouped_embedding_configs_per_rank[self._rank]
+        self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
+            self._grouped_embedding_configs_per_rank[self._rank]
+        )
 
     def _shard(
         self,

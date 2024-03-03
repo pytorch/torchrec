@@ -49,9 +49,9 @@ class BaseManagedCollisionEmbeddingCollection(nn.Module):
         super().__init__()
         self._managed_collision_collection = managed_collision_collection
         self._return_remapped_features = return_remapped_features
-        self._embedding_module: Union[
-            EmbeddingBagCollection, EmbeddingCollection
-        ] = embedding_module
+        self._embedding_module: Union[EmbeddingBagCollection, EmbeddingCollection] = (
+            embedding_module
+        )
 
         if isinstance(embedding_module, EmbeddingBagCollection):
             assert (

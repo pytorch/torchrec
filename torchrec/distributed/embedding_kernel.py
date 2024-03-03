@@ -124,12 +124,12 @@ def get_state_dict(
         # Populate the remaining destinations that have a global metadata
         for key in key_to_local_shards:
             global_metadata = key_to_global_metadata[key]
-            destination[
-                key
-            ] = ShardedTensor._init_from_local_shards_and_global_metadata(
-                local_shards=key_to_local_shards[key],
-                sharded_tensor_metadata=global_metadata,
-                process_group=pg,
+            destination[key] = (
+                ShardedTensor._init_from_local_shards_and_global_metadata(
+                    local_shards=key_to_local_shards[key],
+                    sharded_tensor_metadata=global_metadata,
+                    process_group=pg,
+                )
             )
 
     return destination

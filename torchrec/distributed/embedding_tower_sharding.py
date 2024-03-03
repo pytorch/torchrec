@@ -69,7 +69,7 @@ def _replace_sharding_with_intra_node(
             value.ranks = [rank % local_size for rank in value.ranks]
         if value.sharding_spec:
             # pyre-ignore [6, 16]
-            for (shard, rank) in zip(value.sharding_spec.shards, value.ranks):
+            for shard, rank in zip(value.sharding_spec.shards, value.ranks):
                 shard.placement._rank = rank
 
 
@@ -338,11 +338,13 @@ class ShardedEmbeddingTower(
             #  `List[Union[bool, float, int]]`.
             dim_sum_per_rank=dim_sum_per_rank,
             device=self._device,
-            codecs=self.qcomm_codecs_registry.get(
-                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
-            )
-            if self.qcomm_codecs_registry
-            else None,
+            codecs=(
+                self.qcomm_codecs_registry.get(
+                    CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+                )
+                if self.qcomm_codecs_registry
+                else None
+            ),
         )
 
     def output_dist(
@@ -725,11 +727,13 @@ class ShardedEmbeddingTowerCollection(
             # pyre-ignore
             dim_sum_per_rank=dim_sum_per_rank,
             device=self._device,
-            codecs=self.qcomm_codecs_registry.get(
-                CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
-            )
-            if self.qcomm_codecs_registry
-            else None,
+            codecs=(
+                self.qcomm_codecs_registry.get(
+                    CommOp.POOLED_EMBEDDINGS_ALL_TO_ALL.name, None
+                )
+                if self.qcomm_codecs_registry
+                else None
+            ),
         )
 
     def output_dist(

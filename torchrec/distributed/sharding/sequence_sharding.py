@@ -56,17 +56,17 @@ class SequenceShardingContext(EmbeddingShardingContext):
             batch_size_per_feature_pre_a2a,
             variable_batch_per_feature,
         )
-        self.features_before_input_dist: Optional[
-            KeyedJaggedTensor
-        ] = features_before_input_dist
+        self.features_before_input_dist: Optional[KeyedJaggedTensor] = (
+            features_before_input_dist
+        )
         self.input_splits: List[int] = input_splits if input_splits is not None else []
         self.output_splits: List[int] = (
             output_splits if output_splits is not None else []
         )
         self.sparse_features_recat: Optional[torch.Tensor] = sparse_features_recat
-        self.unbucketize_permute_tensor: Optional[
-            torch.Tensor
-        ] = unbucketize_permute_tensor
+        self.unbucketize_permute_tensor: Optional[torch.Tensor] = (
+            unbucketize_permute_tensor
+        )
         self.lengths_after_input_dist: Optional[torch.Tensor] = lengths_after_input_dist
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:

@@ -225,9 +225,11 @@ class ConstructParameterShardingTest(MultiProcessTestBase):
         ]
 
         sharder = EmbeddingBagCollectionSharder(
-            qcomm_codecs_registry=get_qcomm_codecs_registry(qcomms_config)
-            if qcomms_config is not None
-            else None
+            qcomm_codecs_registry=(
+                get_qcomm_codecs_registry(qcomms_config)
+                if qcomms_config is not None
+                else None
+            )
         )
 
         ebc = EmbeddingBagCollection(tables=embedding_bag_config)
@@ -262,9 +264,11 @@ class ConstructParameterShardingTest(MultiProcessTestBase):
                 ),
             },
             kjt_input_per_rank=kjt_input_per_rank,
-            backend="nccl"
-            if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
-            else "gloo",
+            backend=(
+                "nccl"
+                if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
+                else "gloo"
+            ),
             sharder=sharder,
             parameter_sharding_plan=parameter_sharding_plan,
         )

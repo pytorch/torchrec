@@ -37,6 +37,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 T = TypeVar("T", int, float, List[int])
 
+
 # Lightly adapted from Stack Overflow #10823877
 def _flatten(iterable: Iterable[T]) -> Generator[T, None, None]:
     iterator, sentinel, stack = iter(iterable), object(), []
@@ -96,9 +97,11 @@ def _generate_sparse_features_batch(
                 keys=keys,
                 lengths=_to_tensor([lengths[key][i] for key in keys], torch.int),
                 values=_to_tensor([values[key][i] for key in keys], torch.int),
-                weights=_to_tensor([weights[key][i] for key in keys], torch.float)
-                if weights
-                else None,
+                weights=(
+                    _to_tensor([weights[key][i] for key in keys], torch.float)
+                    if weights
+                    else None
+                ),
             )
         )
         key_index = []
@@ -117,12 +120,14 @@ def _generate_sparse_features_batch(
                     [values[key][j] for key, j in key_index],
                     torch.int,
                 ),
-                weights=_to_tensor(
-                    [weights[key][j] for key, j in key_index],
-                    torch.float,
-                )
-                if weights
-                else None,
+                weights=(
+                    _to_tensor(
+                        [weights[key][j] for key, j in key_index],
+                        torch.float,
+                    )
+                    if weights
+                    else None
+                ),
             )
         )
     return in_jagged, out_jagged
@@ -168,9 +173,11 @@ def _generate_variable_batch_sparse_features_batch(
                 stride_per_key_per_rank=batch_size_per_rank_per_feature[i],
                 lengths=_to_tensor([lengths[key][i] for key in keys], torch.int),
                 values=_to_tensor([values[key][i] for key in keys], torch.int),
-                weights=_to_tensor([weights[key][i] for key in keys], torch.float)
-                if weights
-                else None,
+                weights=(
+                    _to_tensor([weights[key][i] for key in keys], torch.float)
+                    if weights
+                    else None
+                ),
             )
         )
         key_index = []
@@ -196,12 +203,14 @@ def _generate_variable_batch_sparse_features_batch(
                     [values[key][j] for key, j in key_index],
                     torch.int,
                 ),
-                weights=_to_tensor(
-                    [weights[key][j] for key, j in key_index],
-                    torch.float,
-                )
-                if weights
-                else None,
+                weights=(
+                    _to_tensor(
+                        [weights[key][j] for key, j in key_index],
+                        torch.float,
+                    )
+                    if weights
+                    else None
+                ),
             )
         )
     return in_jagged, out_jagged
@@ -269,12 +278,16 @@ class KJTAllToAllTest(MultiProcessTestBase):
             expected_output.values().cpu(),
         )
         torch.testing.assert_close(
-            actual_output.weights().cpu()
-            if actual_output.weights_or_none() is not None
-            else [],
-            expected_output.weights().cpu()
-            if expected_output.weights_or_none() is not None
-            else [],
+            (
+                actual_output.weights().cpu()
+                if actual_output.weights_or_none() is not None
+                else []
+            ),
+            (
+                expected_output.weights().cpu()
+                if expected_output.weights_or_none() is not None
+                else []
+            ),
         )
         torch.testing.assert_close(
             actual_output.lengths().cpu(),
@@ -896,9 +909,9 @@ def _generate_sequence_embedding_batch(
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     world_size = len(splits)
 
-    tensor_by_feature: Dict[
-        str, List[torch.Tensor]
-    ] = {}  # Model parallel, key as feature
+    tensor_by_feature: Dict[str, List[torch.Tensor]] = (
+        {}
+    )  # Model parallel, key as feature
     tensor_by_rank: Dict[str, List[torch.Tensor]] = {}  # Data parallel, key as rank
 
     emb_by_rank_feature = {}

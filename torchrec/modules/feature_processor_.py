@@ -77,7 +77,6 @@ class PositionWeightedModule(FeatureProcessor):
         self,
         features: JaggedTensor,
     ) -> JaggedTensor:
-
         """
         Args:
             features (JaggedTensor]): feature representation

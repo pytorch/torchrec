@@ -60,11 +60,13 @@ class RwSequenceEmbeddingDist(
             pg,
             [num_features] * pg.size(),
             device,
-            codecs=qcomm_codecs_registry.get(
-                CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name, None
-            )
-            if qcomm_codecs_registry
-            else None,
+            codecs=(
+                qcomm_codecs_registry.get(
+                    CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name, None
+                )
+                if qcomm_codecs_registry
+                else None
+            ),
         )
 
     def forward(

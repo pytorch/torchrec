@@ -124,13 +124,13 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._device: torch.device = device
         sharded_tables_per_rank = self._shard(sharding_infos)
         self._need_pos = need_pos
-        self._grouped_embedding_configs_per_rank: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
+        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
+            []
+        )
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
-        self._grouped_embedding_configs: List[
-            GroupedEmbeddingConfig
-        ] = self._grouped_embedding_configs_per_rank[self._rank]
+        self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
+            self._grouped_embedding_configs_per_rank[self._rank]
+        )
 
         self._has_feature_processor: bool = False
         for group_config in self._grouped_embedding_configs:
@@ -313,9 +313,11 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             num_buckets=self._world_size,
             block_sizes=self._feature_block_sizes_tensor,
             output_permute=self._is_sequence,
-            bucketize_pos=self._has_feature_processor
-            if sparse_features.weights_or_none() is None
-            else self._need_pos,
+            bucketize_pos=(
+                self._has_feature_processor
+                if sparse_features.weights_or_none() is None
+                else self._need_pos
+            ),
         )
 
         return self._dist(bucketized_features)
@@ -515,16 +517,18 @@ def get_block_sizes_runtime_device(
                 device=runtime_device,
                 dtype=dtype,
             ),
-            []
-            if embedding_shard_metadata is None
-            else [
-                torch.tensor(
-                    row_pos,
-                    device=runtime_device,
-                    dtype=dtype,
-                )
-                for row_pos in embedding_shard_metadata
-            ],
+            (
+                []
+                if embedding_shard_metadata is None
+                else [
+                    torch.tensor(
+                        row_pos,
+                        device=runtime_device,
+                        dtype=dtype,
+                    )
+                    for row_pos in embedding_shard_metadata
+                ]
+            ),
         )
 
     return tensor_cache[cache_key]
@@ -563,9 +567,9 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._need_pos = need_pos
         self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
 
-        self._embedding_shard_metadata: Optional[
-            List[List[int]]
-        ] = embedding_shard_metadata
+        self._embedding_shard_metadata: Optional[List[List[int]]] = (
+            embedding_shard_metadata
+        )
 
     def forward(
         self,
@@ -585,9 +589,11 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             num_buckets=self._world_size,
             block_sizes=block_sizes,
             output_permute=self._is_sequence,
-            bucketize_pos=self._has_feature_processor
-            if sparse_features.weights_or_none() is None
-            else self._need_pos,
+            bucketize_pos=(
+                self._has_feature_processor
+                if sparse_features.weights_or_none() is None
+                else self._need_pos
+            ),
             block_bucketize_row_pos=_fx_wrap_block_bucketize_row_pos(
                 block_bucketize_row_pos
             ),

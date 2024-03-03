@@ -149,9 +149,9 @@ class UniformProposer(Proposer):
     ) -> None:
         self._reset()
         all_fqns = set()
-        sharding_options_by_type_and_fqn: Dict[
-            str, Dict[str, List[ShardingOption]]
-        ] = {}
+        sharding_options_by_type_and_fqn: Dict[str, Dict[str, List[ShardingOption]]] = (
+            {}
+        )
 
         for sharding_option in search_space:
             sharding_type = sharding_option.sharding_type

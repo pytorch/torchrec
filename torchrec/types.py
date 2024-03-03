@@ -14,8 +14,7 @@ from torch import nn
 
 class CopyMixIn:
     @abstractmethod
-    def copy(self, device: torch.device) -> nn.Module:
-        ...
+    def copy(self, device: torch.device) -> nn.Module: ...
 
 
 class ModuleCopyMixin(CopyMixIn):

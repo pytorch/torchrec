@@ -385,9 +385,11 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             },
             kjt_input_per_rank=kjt_input_per_rank,
             sharder=TestEmbeddingBagCollectionSharder(sharding_type=sharding_type),
-            backend="nccl"
-            if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
-            else "gloo",
+            backend=(
+                "nccl"
+                if (torch.cuda.is_available() and torch.cuda.device_count() >= 2)
+                else "gloo"
+            ),
             constraints=constraints,
             is_data_parallel=(sharding_type == ShardingType.DATA_PARALLEL.value),
             use_apply_optimizer_in_backward=use_apply_optimizer_in_backward,

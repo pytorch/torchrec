@@ -103,11 +103,11 @@ class ModelInput(Pipelineable):
             if variable_batch_size:
                 lengths = torch.zeros(batch_size * world_size).int()
                 for r in range(world_size):
-                    lengths[
-                        r * batch_size : r * batch_size + batch_size_by_rank[r]
-                    ] = lengths_[
-                        r * batch_size : r * batch_size + batch_size_by_rank[r]
-                    ]
+                    lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]] = (
+                        lengths_[
+                            r * batch_size : r * batch_size + batch_size_by_rank[r]
+                        ]
+                    )
             else:
                 lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
@@ -132,11 +132,11 @@ class ModelInput(Pipelineable):
             if variable_batch_size:
                 lengths = torch.zeros(batch_size * world_size).int()
                 for r in range(world_size):
-                    lengths[
-                        r * batch_size : r * batch_size + batch_size_by_rank[r]
-                    ] = lengths_[
-                        r * batch_size : r * batch_size + batch_size_by_rank[r]
-                    ]
+                    lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]] = (
+                        lengths_[
+                            r * batch_size : r * batch_size + batch_size_by_rank[r]
+                        ]
+                    )
             else:
                 lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
@@ -382,11 +382,11 @@ class ModelInput(Pipelineable):
             idlist_features=self.idlist_features.to(
                 device=device, non_blocking=non_blocking
             ),
-            idscore_features=self.idscore_features.to(
-                device=device, non_blocking=non_blocking
-            )
-            if self.idscore_features is not None
-            else None,
+            idscore_features=(
+                self.idscore_features.to(device=device, non_blocking=non_blocking)
+                if self.idscore_features is not None
+                else None
+            ),
             label=self.label.to(device=device, non_blocking=non_blocking),
         )
 
@@ -656,9 +656,11 @@ class TestSparseArch(nn.Module):
                 [
                     PositionWeightedProcessor(
                         max_feature_lengths=max_feature_lengths,
-                        device=device
-                        if device != torch.device("meta")
-                        else torch.device("cpu"),
+                        device=(
+                            device
+                            if device != torch.device("meta")
+                            else torch.device("cpu")
+                        ),
                     )
                     for max_feature_lengths in max_feature_lengths_list
                 ]

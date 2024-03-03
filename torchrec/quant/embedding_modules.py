@@ -359,9 +359,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 row_alignment=row_alignment,
                 feature_table_map=feature_table_map,
                 # pyre-ignore
-                index_remapping=index_remappings
-                if index_remappings_non_none_count > 0
-                else None,
+                index_remapping=(
+                    index_remappings if index_remappings_non_none_count > 0 else None
+                ),
             )
             if weight_lists is None:
                 emb_module.initialize_weights()
@@ -761,9 +761,11 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                         table.num_embeddings,
                         table.embedding_dim,
                         data_type_to_sparse_type(data_type),
-                        EmbeddingLocation.HOST
-                        if device.type == "cpu"
-                        else EmbeddingLocation.DEVICE,
+                        (
+                            EmbeddingLocation.HOST
+                            if device.type == "cpu"
+                            else EmbeddingLocation.DEVICE
+                        ),
                     )
                 )
                 if table_name_to_quantized_weights:

@@ -344,7 +344,6 @@ def merge_fused_params(
     fused_params: Optional[Dict[str, Any]] = None,
     param_fused_params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-
     """
     Configure the fused_params including cache_precision if the value is not preset.
 

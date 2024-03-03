@@ -14,6 +14,7 @@ import torch
 from torchrec.distributed.planner.types import Perf, ShardingOption, Storage
 from torchrec.distributed.types import ShardingType
 
+
 # pyre-ignore[2]
 def sharder_name(t: Type[Any]) -> str:
     return t.__module__ + "." + t.__name__
@@ -135,7 +136,8 @@ class BinarySearchPredicate:
     def __init__(self, A: int, B: int, tolerance: int) -> None:
         """A = lower boundary (inclusive)
         B = upper boundary (inclusive)
-        tolerance = stop search early if remaining search range is less than tolerance"""
+        tolerance = stop search early if remaining search range is less than tolerance
+        """
         self.left = A
         self.right = B
         self.tolerance = tolerance
