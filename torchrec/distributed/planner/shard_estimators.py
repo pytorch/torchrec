@@ -971,9 +971,11 @@ def calculate_shard_storages(
         )
     ]
     ddr_sizes: List[int] = [
-        input_size + output_size + ddr_specific_size
-        if compute_device in {"cpu", "mtia"}
-        else ddr_specific_size
+        (
+            input_size + output_size + ddr_specific_size
+            if compute_device in {"cpu", "mtia"}
+            else ddr_specific_size
+        )
         for input_size, output_size, ddr_specific_size in zip(
             input_sizes,
             output_sizes,
@@ -1175,17 +1177,21 @@ def _calculate_rw_shard_io_sizes(
     )
 
     input_sizes = [
-        math.ceil(batch_inputs * world_size * input_data_type_size)
-        if prod(shard) != 0
-        else 0
+        (
+            math.ceil(batch_inputs * world_size * input_data_type_size)
+            if prod(shard) != 0
+            else 0
+        )
         for shard in shard_sizes
     ]
     output_sizes = [
-        math.ceil(
-            batch_outputs * world_size * shard_sizes[i][1] * output_data_type_size
+        (
+            math.ceil(
+                batch_outputs * world_size * shard_sizes[i][1] * output_data_type_size
+            )
+            if prod(shard) != 0
+            else 0
         )
-        if prod(shard) != 0
-        else 0
         for i, shard in enumerate(shard_sizes)
     ]
 
@@ -1214,17 +1220,21 @@ def _calculate_twrw_shard_io_sizes(
     )
 
     input_sizes = [
-        math.ceil(batch_inputs * world_size * input_data_type_size)
-        if prod(shard) != 0
-        else 0
+        (
+            math.ceil(batch_inputs * world_size * input_data_type_size)
+            if prod(shard) != 0
+            else 0
+        )
         for shard in shard_sizes
     ]
     output_sizes = [
-        math.ceil(
-            batch_outputs * world_size * shard_sizes[i][1] * output_data_type_size
+        (
+            math.ceil(
+                batch_outputs * world_size * shard_sizes[i][1] * output_data_type_size
+            )
+            if prod(shard) != 0
+            else 0
         )
-        if prod(shard) != 0
-        else 0
         for i, shard in enumerate(shard_sizes)
     ]
 
@@ -1239,9 +1249,11 @@ def _calculate_storage_specific_sizes(
     optimizer_class: Optional[Type[torch.optim.Optimizer]] = None,
 ) -> List[int]:
     tensor_sizes: List[int] = [
-        math.ceil(storage * prod(size) / prod(shape))
-        if sharding_type != ShardingType.DATA_PARALLEL.value
-        else storage
+        (
+            math.ceil(storage * prod(size) / prod(shape))
+            if sharding_type != ShardingType.DATA_PARALLEL.value
+            else storage
+        )
         for size in shard_sizes
     ]
     optimizer_multipler: float = _get_optimizer_multipler(optimizer_class, shape)

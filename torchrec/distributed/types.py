@@ -170,13 +170,11 @@ class QuantizedCommCodec(Generic[QuantizationContext]):
 
     def encode(
         self, input_tensor: torch.Tensor, ctx: Optional[QuantizationContext] = None
-    ) -> torch.Tensor:
-        ...
+    ) -> torch.Tensor: ...
 
     def decode(
         self, input_grad: torch.Tensor, ctx: Optional[QuantizationContext] = None
-    ) -> torch.Tensor:
-        ...
+    ) -> torch.Tensor: ...
 
     @property
     def quantized_dtype(self) -> torch.dtype:
@@ -295,7 +293,6 @@ class NoWait(Awaitable[W]):
 class _LazyAwaitableMeta(
     GenericMeta, abc.ABCMeta, torch.fx._symbolic_trace.ProxyableClassMeta
 ):
-
     """
     The _LazyAwaitableMeta class that inherits both ABCMeta and ProxyableClassMeta
     This is because ABCMeta/ProxyableClassMeta are both non-trival metaclasses
@@ -430,6 +427,7 @@ for orig_method_name in torch.fx.graph.magic_methods:
 # install reflective magic methods
 for orig_method_name in torch.fx.graph.reflectable_magic_methods:
     as_magic = f"__r{orig_method_name}__"
+
     # pyre-ignore [2, 3]
     def scope(method):
         # pyre-ignore [2, 3, 53]
@@ -812,8 +810,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
 
     @property
     @abc.abstractmethod
-    def module_type(self) -> Type[M]:
-        ...
+    def module_type(self) -> Type[M]: ...
 
     @property
     def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:

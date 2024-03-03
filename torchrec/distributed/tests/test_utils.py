@@ -240,9 +240,11 @@ def block_bucketize_ref(
             values=torch.tensor(
                 translated_indices, dtype=keyed_jagged_tensor.values().dtype
             ).cuda(),
-            weights=torch.tensor(translated_weights).float().cuda()
-            if weights_list
-            else None,
+            weights=(
+                torch.tensor(translated_weights).float().cuda()
+                if weights_list
+                else None
+            ),
         )
     else:
         return KeyedJaggedTensor(
@@ -308,9 +310,11 @@ class KJTBucketizeTest(unittest.TestCase):
         # for each feature, calculate the minimum block size needed to
         # distribute all rows to the available trainers
         block_sizes_list = [
-            math.ceil((max(feature_indices_list) + 1) / world_size)
-            if feature_indices_list
-            else 1
+            (
+                math.ceil((max(feature_indices_list) + 1) / world_size)
+                if feature_indices_list
+                else 1
+            )
             for feature_indices_list in indices_lists
         ]
 
@@ -392,9 +396,11 @@ class KJTBucketizeTest(unittest.TestCase):
         # for each feature, calculate the minimum block size needed to
         # distribute all rows to the available trainers
         block_sizes_list = [
-            math.ceil((max(feature_indices_list) + 1) / world_size)
-            if feature_indices_list
-            else 1
+            (
+                math.ceil((max(feature_indices_list) + 1) / world_size)
+                if feature_indices_list
+                else 1
+            )
             for feature_indices_list in indices_lists
         ]
         block_bucketize_row_pos = [] if variable_bucket_pos else None

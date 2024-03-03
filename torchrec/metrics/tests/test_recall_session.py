@@ -48,9 +48,9 @@ def generate_model_output_test2() -> Dict[str, torch._tensor.Tensor]:
     }
 
 
-def generate_model_output_with_no_positive_examples() -> Dict[
-    str, torch._tensor.Tensor
-]:
+def generate_model_output_with_no_positive_examples() -> (
+    Dict[str, torch._tensor.Tensor]
+):
     return {
         "predictions": torch.tensor(
             [[1.0, 0.0, 0.51, 0.8, 1.0, 0.0, 0.51, 0.8, 1.0, 0.0, 0.51, 0.8]]

@@ -277,9 +277,11 @@ class EmbeddingStats(Stats):
                 ],
             ]
             feat_batch_sizes = [
-                constraints[so.name].batch_sizes
-                if constraints and constraints.get(so.name)
-                else None
+                (
+                    constraints[so.name].batch_sizes
+                    if constraints and constraints.get(so.name)
+                    else None
+                )
                 for so in best_plan
             ]
 

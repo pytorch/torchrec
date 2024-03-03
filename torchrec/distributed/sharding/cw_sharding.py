@@ -87,9 +87,9 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         embedding_names: List[str] = super().embedding_names()
         embedding_dims: List[int] = super().embedding_dims()
 
-        embedding_shard_metadata: List[
-            Optional[ShardMetadata]
-        ] = super().embedding_shard_metadata()
+        embedding_shard_metadata: List[Optional[ShardMetadata]] = (
+            super().embedding_shard_metadata()
+        )
 
         embedding_name_to_index_offset_tuples: Dict[str, List[Tuple[int, int]]] = {}
         for i, (name, metadata) in enumerate(

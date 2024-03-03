@@ -408,9 +408,11 @@ class ShardedEmbeddingCollection(
             if isinstance(sharding, DpSequenceEmbeddingSharding):
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
-                    device_ids=[device]
-                    if self._device and self._device.type == "cuda"
-                    else None,
+                    device_ids=(
+                        [device]
+                        if self._device and self._device.type == "cuda"
+                        else None
+                    ),
                     process_group=env.process_group,
                     gradient_as_bucket_view=True,
                     broadcast_buffers=True,
@@ -510,9 +512,9 @@ class ShardedEmbeddingCollection(
             if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
                 continue
             self._model_parallel_name_to_local_shards[table_name] = []
-            model_parallel_name_to_compute_kernel[
-                table_name
-            ] = parameter_sharding.compute_kernel
+            model_parallel_name_to_compute_kernel[table_name] = (
+                parameter_sharding.compute_kernel
+            )
 
         self._name_to_table_size = {}
         for table in self._embedding_configs:
@@ -556,12 +558,12 @@ class ShardedEmbeddingCollection(
                         EmptyFusedOptimizer()
                     ]
             # created ShardedTensors once in init, use in post_state_dict_hook
-            self._model_parallel_name_to_sharded_tensor[
-                table_name
-            ] = ShardedTensor._init_from_local_shards(
-                local_shards,
-                self._name_to_table_size[table_name],
-                process_group=self._env.process_group,
+            self._model_parallel_name_to_sharded_tensor[table_name] = (
+                ShardedTensor._init_from_local_shards(
+                    local_shards,
+                    self._name_to_table_size[table_name],
+                    process_group=self._env.process_group,
+                )
             )
 
         def post_state_dict_hook(
@@ -792,9 +794,11 @@ class ShardedEmbeddingCollection(
                 ctx.sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
-                        unbucketize_permute_tensor=input_dist.unbucketize_permute_tensor
-                        if isinstance(input_dist, RwSparseFeaturesDist)
-                        else None,
+                        unbucketize_permute_tensor=(
+                            input_dist.unbucketize_permute_tensor
+                            if isinstance(input_dist, RwSparseFeaturesDist)
+                            else None
+                        ),
                     )
                 )
         return KJTListSplitsAwaitable(awaitables, ctx)

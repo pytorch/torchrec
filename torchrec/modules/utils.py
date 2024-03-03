@@ -156,9 +156,11 @@ def construct_jagged_tensors(
             )
             ret[key] = JaggedTensor(
                 lengths=lengths_tuple[indices[0]],
-                values=embeddings_list[indices[0]]
-                if len(indices) == 1
-                else torch.cat([embeddings_list[i] for i in indices], dim=1),
+                values=(
+                    embeddings_list[indices[0]]
+                    if len(indices) == 1
+                    else torch.cat([embeddings_list[i] for i in indices], dim=1)
+                ),
                 # pyre-ignore
                 weights=values_list[indices[0]] if need_indices else None,
             )

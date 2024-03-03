@@ -70,7 +70,7 @@ class CriteoDataLoaderTest(CriteoTest):
     ) -> None:
         unbatched_samples = [{} for _ in range(self._sample_len(sample))]
         for k, batched_values in sample.items():
-            for (idx, value) in enumerate(batched_values):
+            for idx, value in enumerate(batched_values):
                 unbatched_samples[idx][k] = value
         for sample in unbatched_samples:
             self._validate_sample(sample, train=train)

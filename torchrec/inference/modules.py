@@ -34,10 +34,12 @@ def quantize_feature(
 ) -> Tuple[torch.Tensor, ...]:
     return tuple(
         [
-            input.half()
-            if isinstance(input, torch.Tensor)
-            and input.dtype in [torch.float32, torch.float64]
-            else input
+            (
+                input.half()
+                if isinstance(input, torch.Tensor)
+                and input.dtype in [torch.float32, torch.float64]
+                else input
+            )
             for input in inputs
         ]
     )

@@ -183,7 +183,11 @@ class ShardedQuantEmbeddingModuleState(
                         )
                     # end of weight_qscale & weight_qbias section
             if table.pruning_indices_remapping is not None:
-                for (qparam, table_name_to_local_shards, _,) in [
+                for (
+                    qparam,
+                    table_name_to_local_shards,
+                    _,
+                ) in [
                     (
                         table.pruning_indices_remapping,
                         self._table_name_to_local_shards_pruning_index_remappings,
@@ -250,11 +254,11 @@ class ShardedQuantEmbeddingModuleState(
                     shards_metadata=[ls.metadata for ls in local_shards],
                     size=torch.Size([global_rows, global_cols]),
                 )
-                table_name_to_sharded_tensor[
-                    table_name
-                ] = ShardedTensorBase._init_from_local_shards_and_global_metadata(
-                    local_shards=local_shards,
-                    sharded_tensor_metadata=global_metadata,
+                table_name_to_sharded_tensor[table_name] = (
+                    ShardedTensorBase._init_from_local_shards_and_global_metadata(
+                        local_shards=local_shards,
+                        sharded_tensor_metadata=global_metadata,
+                    )
                 )
 
         for table_name_to_local_shards, table_name_to_sharded_tensor in [
@@ -279,9 +283,9 @@ class ShardedQuantEmbeddingModuleState(
                 table_name,
                 sharded_t,
             ) in module._table_name_to_sharded_tensor.items():
-                destination[
-                    f"{prefix}{tables_weights_prefix}.{table_name}.weight"
-                ] = sharded_t
+                destination[f"{prefix}{tables_weights_prefix}.{table_name}.weight"] = (
+                    sharded_t
+                )
 
             for sfx, dict_sharded_t, dict_t_list in [
                 (
@@ -439,9 +443,9 @@ def sharded_tbes_weights_spec(
             tbes_configs: Dict[
                 IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
             ] = module.tbes_configs()
-            sharding_type_to_sharding_infos: Dict[
-                str, List[EmbeddingShardingInfo]
-            ] = module.sharding_type_to_sharding_infos()
+            sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = (
+                module.sharding_type_to_sharding_infos()
+            )
 
             table_shardings: Dict[str, str] = {}
             for (

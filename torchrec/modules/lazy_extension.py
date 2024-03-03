@@ -89,8 +89,7 @@ def lazy_apply(
 
 class _LazyExtensionProtocol(_LazyProtocol):
     # pyre-ignore[2,3]
-    def _call_impl(self, *input, **kwargs):
-        ...
+    def _call_impl(self, *input, **kwargs): ...
 
 
 class LazyModuleExtensionMixin(LazyModuleMixin):

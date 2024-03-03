@@ -54,9 +54,9 @@ class RecTaskInfo:
     label_name: str = "label"
     prediction_name: str = "prediction"
     weight_name: str = "weight"
-    session_metric_def: Optional[
-        SessionMetricDef
-    ] = None  # used for session level metrics
+    session_metric_def: Optional[SessionMetricDef] = (
+        None  # used for session level metrics
+    )
 
 
 class RecComputeMode(Enum):

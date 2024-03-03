@@ -50,9 +50,11 @@ class DLRMPredictSingleGPUFactory(PredictFactory):
             EmbeddingBagConfig(
                 name=f"t_{feature_name}",
                 embedding_dim=self.model_config.embedding_dim,
-                num_embeddings=self.model_config.num_embeddings_per_feature[feature_idx]
-                if self.model_config.num_embeddings is None
-                else self.model_config.num_embeddings,
+                num_embeddings=(
+                    self.model_config.num_embeddings_per_feature[feature_idx]
+                    if self.model_config.num_embeddings is None
+                    else self.model_config.num_embeddings
+                ),
                 feature_names=[feature_name],
             )
             for feature_idx, feature_name in enumerate(

@@ -98,9 +98,11 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                 ),
                 loss_scale=qcomms_config.forward_loss_scale,
                 is_fwd=True,
-                row_dim=qcomms_config.fp8_quantize_dim
-                if qcomms_config.forward_precision == CommType.FP8
-                else None,
+                row_dim=(
+                    qcomms_config.fp8_quantize_dim
+                    if qcomms_config.forward_precision == CommType.FP8
+                    else None
+                ),
             ),
         )
         codecs.backward = cast(
@@ -110,13 +112,15 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                     qcomms_config.backward_precision
                 ),
                 loss_scale=qcomms_config.backward_loss_scale,
-                is_fwd=True
-                if qcomms_config.fp8_bwd_uses_143
-                else False,  # if fp8_bwd_uses_143 is True, bwd will use 1-4-3
+                is_fwd=(
+                    True if qcomms_config.fp8_bwd_uses_143 else False
+                ),  # if fp8_bwd_uses_143 is True, bwd will use 1-4-3
                 # if fp8_bwd_uses_143 is False/None, bwd will use 1-5-2
-                row_dim=qcomms_config.fp8_quantize_dim_bwd
-                if qcomms_config.backward_precision == CommType.FP8
-                else None,
+                row_dim=(
+                    qcomms_config.fp8_quantize_dim_bwd
+                    if qcomms_config.backward_precision == CommType.FP8
+                    else None
+                ),
             ),
         )
     return codecs

@@ -57,9 +57,11 @@ class SparseArch(nn.Module):
 
         mc_modules = {}
         mc_modules["table_0"] = MCHManagedCollisionModule(
-            zch_size=tables[0].num_embeddings - mch_size
-            if mch_size
-            else tables[0].num_embeddings,
+            zch_size=(
+                tables[0].num_embeddings - mch_size
+                if mch_size
+                else tables[0].num_embeddings
+            ),
             mch_size=mch_size,
             mch_hash_func=mch_hash_func if mch_size else None,
             input_hash_size=4000,
@@ -69,9 +71,11 @@ class SparseArch(nn.Module):
         )
 
         mc_modules["table_1"] = MCHManagedCollisionModule(
-            zch_size=tables[1].num_embeddings - mch_size
-            if mch_size
-            else tables[1].num_embeddings,
+            zch_size=(
+                tables[1].num_embeddings - mch_size
+                if mch_size
+                else tables[1].num_embeddings
+            ),
             mch_size=mch_size,
             mch_hash_func=mch_hash_func if mch_size else None,
             device=device,
@@ -80,17 +84,19 @@ class SparseArch(nn.Module):
             eviction_policy=DistanceLFU_EvictionPolicy(),
         )
 
-        self._mc_ec: ManagedCollisionEmbeddingCollection = ManagedCollisionEmbeddingCollection(
-            EmbeddingCollection(
-                tables=tables,
-                device=device,
-            ),
-            ManagedCollisionCollection(
-                managed_collision_modules=mc_modules,
-                # pyre-ignore
-                embedding_configs=tables,
-            ),
-            return_remapped_features=self._return_remapped,
+        self._mc_ec: ManagedCollisionEmbeddingCollection = (
+            ManagedCollisionEmbeddingCollection(
+                EmbeddingCollection(
+                    tables=tables,
+                    device=device,
+                ),
+                ManagedCollisionCollection(
+                    managed_collision_modules=mc_modules,
+                    # pyre-ignore
+                    embedding_configs=tables,
+                ),
+                return_remapped_features=self._return_remapped,
+            )
         )
 
     def forward(

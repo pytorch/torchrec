@@ -562,11 +562,11 @@ class LRU_EvictionPolicy(MCHEvictionPolicy):
         ]
 
         # update metadata for matching ids
-        mch_last_access_iter[
-            coalesced_history_mch_matching_indices
-        ] = coalesced_history_sorted_uniq_ids_last_access_iter[
-            coalesced_history_mch_matching_elements_mask
-        ]
+        mch_last_access_iter[coalesced_history_mch_matching_indices] = (
+            coalesced_history_sorted_uniq_ids_last_access_iter[
+                coalesced_history_mch_matching_elements_mask
+            ]
+        )
 
         # incoming non-matching ids
         new_sorted_uniq_ids_last_access = (
@@ -708,11 +708,11 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
         ] += coalesced_history_sorted_unique_ids_counts[
             coalesced_history_mch_matching_elements_mask
         ]
-        mch_last_access_iter[
-            coalesced_history_mch_matching_indices
-        ] = coalesced_history_sorted_uniq_ids_last_access_iter[
-            coalesced_history_mch_matching_elements_mask
-        ]
+        mch_last_access_iter[coalesced_history_mch_matching_indices] = (
+            coalesced_history_sorted_uniq_ids_last_access_iter[
+                coalesced_history_mch_matching_elements_mask
+            ]
+        )
 
         # incoming non-matching ids
         new_sorted_uniq_ids_counts = coalesced_history_sorted_unique_ids_counts[

@@ -196,7 +196,9 @@ def main() -> None:
             mb = int(float(num * dim) / 1024 / 1024)
             tables_info += f"\nTABLE[{i}][{num:9}, {dim:4}] u8: {mb:6}Mb"
 
-        report: str = f"REPORT BENCHMARK {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
+        report: str = (
+            f"REPORT BENCHMARK {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
+        )
         report += f"Module: {module_name}\n"
         report += tables_info
         report += "\n"

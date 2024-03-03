@@ -125,7 +125,7 @@ def compute_auc_per_group(
     # get unique group indices
     group_indices = torch.unique(grouping_keys)
 
-    for (predictions_i, labels_i, weights_i) in zip(preds_t, labels_t, weights_t):
+    for predictions_i, labels_i, weights_i in zip(preds_t, labels_t, weights_t):
         # Loop over each group
         auc_groups_sum = torch.tensor([0], dtype=torch.float32)
         for group_idx in group_indices:

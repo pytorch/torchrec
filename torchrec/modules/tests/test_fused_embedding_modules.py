@@ -572,6 +572,7 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         ).to(device)
 
         opt = optimizer_type(ebc.parameters(), **optimizer_kwargs)
+
         # pyre-ignore
         def run_one_training_step() -> None:
             fused_pooled_embeddings = fused_ebc(features)
@@ -963,6 +964,7 @@ class FusedEmbeddingCollectionTest(unittest.TestCase):
         ).to(device)
 
         opt = optimizer_type(ec.parameters(), **optimizer_kwargs)
+
         # pyre-ignore
         def run_one_training_step() -> None:
             fused_embeddings = fused_ec(features)

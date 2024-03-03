@@ -162,9 +162,11 @@ def _calculate_cw_shard_sizes_and_offsets(
     col_wise_shard_dim: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
     block_size: int = min(
-        _find_base_dim(col_wise_shard_dim, columns)
-        if col_wise_shard_dim
-        else _find_base_dim(MIN_CW_DIM, columns),
+        (
+            _find_base_dim(col_wise_shard_dim, columns)
+            if col_wise_shard_dim
+            else _find_base_dim(MIN_CW_DIM, columns)
+        ),
         columns,
     )
 
@@ -192,7 +194,10 @@ def _get_parameter_size_offsets(
     world_size: int,
     col_wise_shard_dim: Optional[int] = None,
 ) -> List[Tuple[List[int], List[int]]]:
-    (shard_sizes, shard_offsets,) = calculate_shard_sizes_and_offsets(
+    (
+        shard_sizes,
+        shard_offsets,
+    ) = calculate_shard_sizes_and_offsets(
         tensor=none_throws(param),
         world_size=world_size,
         local_world_size=local_size,
@@ -252,31 +257,37 @@ def _get_parameter_sharding(
     compute_kernel: Optional[str] = None,
 ) -> ParameterSharding:
     return ParameterSharding(
-        sharding_spec=None
-        if sharding_type == ShardingType.DATA_PARALLEL.value
-        else EnumerableShardingSpec(
-            [
-                ShardMetadata(
-                    shard_sizes=size,
-                    shard_offsets=offset,
-                    placement=placement(
-                        device_type,
-                        none_throws(rank),
-                        none_throws(local_size),
+        sharding_spec=(
+            None
+            if sharding_type == ShardingType.DATA_PARALLEL.value
+            else EnumerableShardingSpec(
+                [
+                    ShardMetadata(
+                        shard_sizes=size,
+                        shard_offsets=offset,
+                        placement=(
+                            placement(
+                                device_type,
+                                none_throws(rank),
+                                none_throws(local_size),
+                            )
+                            if not device_placement
+                            else device_placement
+                        ),
                     )
-                    if not device_placement
-                    else device_placement,
-                )
-                for (size, offset, rank), device_placement in zip(
-                    size_offset_ranks,
-                    placements if placements else [None] * len(size_offset_ranks),
-                )
-            ]
+                    for (size, offset, rank), device_placement in zip(
+                        size_offset_ranks,
+                        placements if placements else [None] * len(size_offset_ranks),
+                    )
+                ]
+            )
         ),
         sharding_type=sharding_type,
-        compute_kernel=compute_kernel
-        if compute_kernel
-        else _get_compute_kernel(sharder, param, sharding_type, device_type),
+        compute_kernel=(
+            compute_kernel
+            if compute_kernel
+            else _get_compute_kernel(sharder, param, sharding_type, device_type)
+        ),
         ranks=[rank for (_, _, rank) in size_offset_ranks],
     )
 
@@ -459,15 +470,17 @@ def row_wise(
             local_size,
             device_type,
             sharder,
-            placements=[
-                placement_helper(sizes_placement[1], i)
-                for i in range(len(sizes_placement[0]))
-            ]
-            if sizes_placement
-            else None,
-            compute_kernel=EmbeddingComputeKernel.QUANT.value
-            if sizes_placement
-            else None,
+            placements=(
+                [
+                    placement_helper(sizes_placement[1], i)
+                    for i in range(len(sizes_placement[0]))
+                ]
+                if sizes_placement
+                else None
+            ),
+            compute_kernel=(
+                EmbeddingComputeKernel.QUANT.value if sizes_placement else None
+            ),
         )
 
     return _parameter_sharding_generator

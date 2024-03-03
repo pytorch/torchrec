@@ -343,22 +343,30 @@ class TestGroupTablesPerRank(unittest.TestCase):
         tables = [
             ShardedEmbeddingTable(
                 name=f"table_{i}",
-                data_type=data_types[i]
-                if distinct_key == "data_type"
-                else data_types[0],
-                pooling=pooling_types[i]
-                if distinct_key == "pooling_type"
-                else pooling_types[0],
-                has_feature_processor=has_feature_processors[i]
-                if distinct_key == "has_feature_processor"
-                else has_feature_processors[0],
+                data_type=(
+                    data_types[i] if distinct_key == "data_type" else data_types[0]
+                ),
+                pooling=(
+                    pooling_types[i]
+                    if distinct_key == "pooling_type"
+                    else pooling_types[0]
+                ),
+                has_feature_processor=(
+                    has_feature_processors[i]
+                    if distinct_key == "has_feature_processor"
+                    else has_feature_processors[0]
+                ),
                 fused_params=fused_params_group,  # can't hash dicts
-                compute_kernel=compute_kernels[i]
-                if distinct_key == "compute_kernel"
-                else compute_kernels[0],
-                embedding_dim=embedding_dims[i]
-                if distinct_key == "embedding_dim"
-                else embedding_dims[0],
+                compute_kernel=(
+                    compute_kernels[i]
+                    if distinct_key == "compute_kernel"
+                    else compute_kernels[0]
+                ),
+                embedding_dim=(
+                    embedding_dims[i]
+                    if distinct_key == "embedding_dim"
+                    else embedding_dims[0]
+                ),
                 num_embeddings=10000,
             )
             for i in range(2)

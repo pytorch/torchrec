@@ -779,7 +779,9 @@ def assert_weight_spec(
             tbe_idx: int = 0
             if "rank:1/cuda:1" == placement:
                 tbe_idx = 1
-            sharded_weight_fqn: str = f"{ebc_fqn}.tbes.{tbe_idx}.{tbe_table_idxs[tbe_idx]}.{table_name}.weight"
+            sharded_weight_fqn: str = (
+                f"{ebc_fqn}.tbes.{tbe_idx}.{tbe_table_idxs[tbe_idx]}.{table_name}.weight"
+            )
             tbe_table_idxs[tbe_idx] += 1
             assert sharded_weight_fqn in weights_spec
             wspec = weights_spec[sharded_weight_fqn]

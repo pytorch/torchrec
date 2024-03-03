@@ -231,7 +231,7 @@ class ModelTraceScriptTest(unittest.TestCase):
         world_size: int,
         sharding_type: str,
         quant_state_dict_split_scale_bias: bool,
-        unwrap_dmp: bool
+        unwrap_dmp: bool,
         # pyre-ignore
     ) -> Tuple[torch.nn.Module, torch.nn.Module, List[Tuple]]:
         model_info = self._set_up_qebc(sharding_type, quant_state_dict_split_scale_bias)

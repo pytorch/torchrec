@@ -16,6 +16,7 @@ from torchrec.modules.crossnet import (
     VectorCrossNet,
 )
 
+
 # unit test for Full Rank CrossNet: CrossNet
 class TestCrossNet(unittest.TestCase):
     def test_cross_net_numercial_forward(self) -> None:

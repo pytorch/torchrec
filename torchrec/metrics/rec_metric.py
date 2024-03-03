@@ -120,6 +120,7 @@ class RecMetricComputation(Metric, abc.ABC):
         process_group (Optional[ProcessGroup]): the process group used for the
             communication. Will use the default process group if not specified.
     """
+
     _batch_window_buffers: Optional[Dict[str, WindowBuffer]]
 
     def __init__(
@@ -300,6 +301,7 @@ class RecMetric(nn.Module, abc.ABC):
             tasks=DefaultTaskInfo,
         )
     """
+
     _computation_class: Type[RecMetricComputation]
     _namespace: MetricNamespaceBase
     _metrics_computations: nn.ModuleList
@@ -417,10 +419,10 @@ class RecMetric(nn.Module, abc.ABC):
             for task, metric_value, has_valid_update in zip(
                 self._tasks,
                 metric_report.value,
-                self._metrics_computations[0].has_valid_update
-                if self._should_validate_update
-                else itertools.repeat(
-                    1
+                (
+                    self._metrics_computations[0].has_valid_update
+                    if self._should_validate_update
+                    else itertools.repeat(1)
                 ),  # has_valid_update > 0 means the update is valid
             ):
                 # The attribute has_valid_update is a tensor whose length equals to the

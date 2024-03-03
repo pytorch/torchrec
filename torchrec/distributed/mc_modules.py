@@ -147,9 +147,9 @@ class ShardedManagedCollisionCollection(
 
         self._device = device
         self._env = env
-        self._table_name_to_parameter_sharding: Dict[
-            str, ParameterSharding
-        ] = copy.deepcopy(table_name_to_parameter_sharding)
+        self._table_name_to_parameter_sharding: Dict[str, ParameterSharding] = (
+            copy.deepcopy(table_name_to_parameter_sharding)
+        )
         # TODO: create a MCSharding type instead of leveraging EmbeddingSharding
         self._sharding_type_to_sharding = sharding_type_to_sharding
 
@@ -192,27 +192,27 @@ class ShardedManagedCollisionCollection(
                 if name not in shardable_buffers:
                     continue
 
-                self._model_parallel_mc_buffer_name_to_sharded_tensor[
-                    name
-                ] = ShardedTensor._init_from_local_shards(
-                    [
-                        Shard(
-                            tensor=tensor,
-                            metadata=ShardMetadata(
-                                # pyre-ignore [6]
-                                shard_offsets=[shard_offset],
-                                # pyre-ignore [6]
-                                shard_sizes=[shard_size],
-                                placement=(
-                                    f"rank:{self._env.rank}/cuda:"
-                                    f"{get_local_rank(self._env.world_size, self._env.rank)}"
+                self._model_parallel_mc_buffer_name_to_sharded_tensor[name] = (
+                    ShardedTensor._init_from_local_shards(
+                        [
+                            Shard(
+                                tensor=tensor,
+                                metadata=ShardMetadata(
+                                    # pyre-ignore [6]
+                                    shard_offsets=[shard_offset],
+                                    # pyre-ignore [6]
+                                    shard_sizes=[shard_size],
+                                    placement=(
+                                        f"rank:{self._env.rank}/cuda:"
+                                        f"{get_local_rank(self._env.world_size, self._env.rank)}"
+                                    ),
                                 ),
-                            ),
-                        )
-                    ],
-                    # pyre-ignore [6]
-                    torch.Size([global_size]),
-                    process_group=self._env.process_group,
+                            )
+                        ],
+                        # pyre-ignore [6]
+                        torch.Size([global_size]),
+                        process_group=self._env.process_group,
+                    )
                 )
 
         def _post_state_dict_hook(
@@ -266,9 +266,9 @@ class ShardedManagedCollisionCollection(
             if sharding_type == ShardingType.ROW_WISE.value:
                 assert isinstance(sharding, BaseRwEmbeddingSharding)
 
-                grouped_embedding_configs: List[
-                    GroupedEmbeddingConfig
-                ] = sharding._grouped_embedding_configs
+                grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
+                    sharding._grouped_embedding_configs
+                )
                 for group_config in grouped_embedding_configs:
                     for table in group_config.embedding_tables:
                         # pyre-ignore [16]
@@ -282,14 +282,14 @@ class ShardedManagedCollisionCollection(
                         #  1) need to make TBE accept global indices for now force to local indices
                         #  2) MCH is particularly nasty with a portion of each shard; ideally dont do this
                         #  3) now create a feature_to_offset and pass into awaitable callbacks to act as raw id adder
-                        self._managed_collision_modules[
-                            table.name
-                        ] = mc_module.rebuild_with_output_id_range(
-                            output_id_range=(
-                                0,  # new_min_output_id,
-                                new_range_size,  # new_min_output_id + new_range_size,
-                            ),
-                            device=self._device,
+                        self._managed_collision_modules[table.name] = (
+                            mc_module.rebuild_with_output_id_range(
+                                output_id_range=(
+                                    0,  # new_min_output_id,
+                                    new_range_size,  # new_min_output_id + new_range_size,
+                                ),
+                                device=self._device,
+                            )
                         )
                         zch_size = self._managed_collision_modules[table.name]._zch_size
 
@@ -424,9 +424,11 @@ class ShardedManagedCollisionCollection(
                 ctx.sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
-                        unbucketize_permute_tensor=input_dist.unbucketize_permute_tensor
-                        if isinstance(input_dist, RwSparseFeaturesDist)
-                        else None,
+                        unbucketize_permute_tensor=(
+                            input_dist.unbucketize_permute_tensor
+                            if isinstance(input_dist, RwSparseFeaturesDist)
+                            else None
+                        ),
                     )
                 )
 

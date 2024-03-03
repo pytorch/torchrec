@@ -539,9 +539,13 @@ class KJTOneToAll(nn.Module):
         fx_marker("KJT_ONE_TO_ALL_FORWARD_BEGIN", kjt)
         kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
         dist_kjts = [
-            kjts[rank]
-            if self._device_type == "meta"
-            else kjts[rank].to(torch.device(self._device_type, rank), non_blocking=True)
+            (
+                kjts[rank]
+                if self._device_type == "meta"
+                else kjts[rank].to(
+                    torch.device(self._device_type, rank), non_blocking=True
+                )
+            )
             for rank in range(self._world_size)
         ]
         ret = KJTList(dist_kjts)

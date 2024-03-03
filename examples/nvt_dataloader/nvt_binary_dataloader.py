@@ -94,7 +94,8 @@ class ParametricDataset(Dataset):
         """Numerical features are returned in the order they appear in the channel spec section
         For performance reasons, this is required to be the order they are saved in, as specified
         by the relevant chunk in source spec.
-        Categorical features are returned in the order they appear in the channel spec section"""
+        Categorical features are returned in the order they appear in the channel spec section
+        """
 
         if idx >= self._num_entries:
             raise IndexError()

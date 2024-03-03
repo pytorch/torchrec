@@ -208,9 +208,11 @@ def main(argv: List[str]):
         EmbeddingBagConfig(
             name=f"t_{feature_name}",
             embedding_dim=args.embedding_dim,
-            num_embeddings=none_throws(num_embeddings_per_feature)[feature_idx]
-            if num_embeddings_per_feature is not None
-            else args.num_embeddings,
+            num_embeddings=(
+                none_throws(num_embeddings_per_feature)[feature_idx]
+                if num_embeddings_per_feature is not None
+                else args.num_embeddings
+            ),
             feature_names=[feature_name],
         )
         for feature_idx, feature_name in enumerate(DEFAULT_CAT_NAMES)
@@ -232,9 +234,9 @@ def main(argv: List[str]):
 
     train_model = fuse_embedding_optimizer(
         train_model,
-        optimizer_type=torchrec.optim.RowWiseAdagrad
-        if args.adagrad
-        else torch.optim.SGD,
+        optimizer_type=(
+            torchrec.optim.RowWiseAdagrad if args.adagrad else torch.optim.SGD
+        ),
         optimizer_kwargs={"learning_rate": args.learning_rate},
         device=torch.device("meta"),
     )
@@ -270,9 +272,11 @@ def main(argv: List[str]):
 
     non_fused_optimizer = KeyedOptimizerWrapper(
         dict(in_backward_optimizer_filter(model.named_parameters())),
-        lambda params: torch.optim.Adagrad(params, lr=args.learning_rate)
-        if args.adagrad
-        else torch.optim.SGD(params, lr=args.learning_rate),
+        lambda params: (
+            torch.optim.Adagrad(params, lr=args.learning_rate)
+            if args.adagrad
+            else torch.optim.SGD(params, lr=args.learning_rate)
+        ),
     )
 
     opt = trec_optim.keyed.CombinedOptimizer(

@@ -52,13 +52,13 @@ class BaseDpEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._rank: int = self._env.rank
         self._world_size: int = self._env.world_size
         sharded_tables_per_rank = self._shard(sharding_infos)
-        self._grouped_embedding_configs_per_rank: List[
-            List[GroupedEmbeddingConfig]
-        ] = []
+        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
+            []
+        )
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
-        self._grouped_embedding_configs: List[
-            GroupedEmbeddingConfig
-        ] = self._grouped_embedding_configs_per_rank[env.rank]
+        self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
+            self._grouped_embedding_configs_per_rank[env.rank]
+        )
 
     def _shard(
         self,

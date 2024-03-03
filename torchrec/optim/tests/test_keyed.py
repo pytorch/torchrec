@@ -161,13 +161,13 @@ class TestKeyedOptimizer(unittest.TestCase):
             fill_value=10.0,
         )
         # pyre-ignore [6]
-        expected_state_dict["state"]["param_1"]["nested_dictionary"][
-            "tensor"
-        ] = torch.tensor([70.0, 80.0])
+        expected_state_dict["state"]["param_1"]["nested_dictionary"]["tensor"] = (
+            torch.tensor([70.0, 80.0])
+        )
         # pyre-ignore [6]
-        expected_state_dict["state"]["param_1"]["optimizer_module"][
-            "tensor"
-        ] = torch.tensor([90.0, 100.0])
+        expected_state_dict["state"]["param_1"]["optimizer_module"]["tensor"] = (
+            torch.tensor([90.0, 100.0])
+        )
         # pyre-ignore [6]
         expected_state_dict["param_groups"][0]["param_group_val_0"] = 8.0
         # pyre-ignore [6]

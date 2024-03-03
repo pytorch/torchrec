@@ -20,12 +20,10 @@ class FusedOptimizer(KeyedOptimizer, abc.ABC):
 
     @abc.abstractmethod
     # pyre-ignore [2]
-    def step(self, closure: Any = None) -> None:
-        ...
+    def step(self, closure: Any = None) -> None: ...
 
     @abc.abstractmethod
-    def zero_grad(self, set_to_none: bool = False) -> None:
-        ...
+    def zero_grad(self, set_to_none: bool = False) -> None: ...
 
     def __repr__(self) -> str:
         return optim.Optimizer.__repr__(self)
@@ -54,5 +52,4 @@ class FusedOptimizerModule(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def fused_optimizer(self) -> KeyedOptimizer:
-        ...
+    def fused_optimizer(self) -> KeyedOptimizer: ...

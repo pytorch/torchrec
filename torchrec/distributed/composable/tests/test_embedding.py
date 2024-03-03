@@ -127,9 +127,9 @@ def _test_sharding(  # noqa C901
             kjt_input_per_rank[ctx.rank]
         )
 
-        unsharded_model_pred_jt_dict_this_rank: Dict[
-            str, JaggedTensor
-        ] = unsharded_model_pred_jt_dict[ctx.rank]
+        unsharded_model_pred_jt_dict_this_rank: Dict[str, JaggedTensor] = (
+            unsharded_model_pred_jt_dict[ctx.rank]
+        )
 
         embedding_names = unsharded_model_pred_jt_dict_this_rank.keys()
         assert set(unsharded_model_pred_jt_dict_this_rank.keys()) == set(

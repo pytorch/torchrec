@@ -201,7 +201,7 @@ def _single_tensor_adagrad(
     maximize: bool,
 ) -> None:
 
-    for (param, grad, state_sum, step_t) in zip(params, grads, state_sums, state_steps):
+    for param, grad, state_sum, step_t in zip(params, grads, state_sums, state_steps):
         if grad.is_sparse:
             raise RuntimeError("RowWise adagrad cannot be used with sparse gradients")
         # update step

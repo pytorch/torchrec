@@ -478,14 +478,12 @@ class StorageReservation(abc.ABC):
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
-    ) -> Topology:
-        ...
+    ) -> Topology: ...
 
 
 class PerfModel(abc.ABC):
     @abc.abstractmethod
-    def rate(self, plan: List[ShardingOption]) -> float:
-        ...
+    def rate(self, plan: List[ShardingOption]) -> float: ...
 
 
 class ShardEstimator(abc.ABC):
@@ -498,8 +496,7 @@ class ShardEstimator(abc.ABC):
         self,
         topology: Topology,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abc.abstractmethod
     def estimate(
@@ -524,8 +521,7 @@ class Enumerator(abc.ABC):
         batch_size: int = BATCH_SIZE,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abc.abstractmethod
     def enumerate(
@@ -557,8 +553,7 @@ class Proposer(abc.ABC):
         self,
         search_space: List[ShardingOption],
         enumerator: Optional[Enumerator] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abc.abstractmethod
     def feedback(
@@ -567,12 +562,10 @@ class Proposer(abc.ABC):
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
         storage_constraint: Optional[Topology] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abc.abstractmethod
-    def propose(self) -> Optional[List[ShardingOption]]:
-        ...
+    def propose(self) -> Optional[List[ShardingOption]]: ...
 
 
 class Partitioner(abc.ABC):

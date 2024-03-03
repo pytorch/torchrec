@@ -359,9 +359,11 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
             len(request.awaitables) for request in requests
         ]
         self._lengths: List[int] = [
-            len(awaitable.splits_tensors)
-            if isinstance(awaitable, KJTSplitsAllToAllMeta)
-            else 0
+            (
+                len(awaitable.splits_tensors)
+                if isinstance(awaitable, KJTSplitsAllToAllMeta)
+                else 0
+            )
             for awaitable in self._awaitables
         ]
         splits_tensors = [
@@ -451,9 +453,9 @@ class TrainPipelineContext:
     input_dist_tensors_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
     module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
     module_contexts_next_batch: Dict[str, Multistreamable] = field(default_factory=dict)
-    fused_splits_awaitables: List[
-        Tuple[List[str], FusedKJTListSplitsAwaitable]
-    ] = field(default_factory=list)
+    fused_splits_awaitables: List[Tuple[List[str], FusedKJTListSplitsAwaitable]] = (
+        field(default_factory=list)
+    )
 
 
 @dataclass
@@ -1002,12 +1004,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._apply_jit = apply_jit
         # use two data streams to support two concurrent batches
         if device.type == "cuda":
-            self._memcpy_stream: Optional[
-                torch.cuda.streams.Stream
-            ] = torch.cuda.Stream(priority=-1)
-            self._data_dist_stream: Optional[
-                torch.cuda.streams.Stream
-            ] = torch.cuda.Stream(priority=-1)
+            self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
+                torch.cuda.Stream(priority=-1)
+            )
+            self._data_dist_stream: Optional[torch.cuda.streams.Stream] = (
+                torch.cuda.Stream(priority=-1)
+            )
         else:
             self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
             self._data_dist_stream: Optional[torch.cuda.streams.Stream] = None
@@ -1264,12 +1266,12 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         )
         self._context = PrefetchTrainPipelineContext()
         if self._device.type == "cuda":
-            self._prefetch_stream: Optional[
-                torch.cuda.streams.Stream
-            ] = torch.cuda.Stream()
-            self._default_stream: Optional[
-                torch.cuda.streams.Stream
-            ] = torch.cuda.current_stream()
+            self._prefetch_stream: Optional[torch.cuda.streams.Stream] = (
+                torch.cuda.Stream()
+            )
+            self._default_stream: Optional[torch.cuda.streams.Stream] = (
+                torch.cuda.current_stream()
+            )
         else:
             self._prefetch_stream: Optional[torch.cuda.streams.Stream] = None
             self._default_stream: Optional[torch.cuda.streams.Stream] = None
@@ -1404,6 +1406,6 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                         dist_input=data, forward_stream=self._default_stream
                     )
                     self._context.module_input_post_prefetch[forward._name] = data
-                    self._context.module_contexts_post_prefetch[
-                        forward._name
-                    ] = self._context.module_contexts[forward._name]
+                    self._context.module_contexts_post_prefetch[forward._name] = (
+                        self._context.module_contexts[forward._name]
+                    )

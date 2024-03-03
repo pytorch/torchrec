@@ -108,8 +108,7 @@ class ModelInputCallable(Protocol):
         ] = None,
         variable_batch_size: bool = False,
         long_indices: bool = True,
-    ) -> Tuple["ModelInput", List["ModelInput"]]:
-        ...
+    ) -> Tuple["ModelInput", List["ModelInput"]]: ...
 
 
 class VariableBatchModelInputCallable(Protocol):
@@ -121,8 +120,7 @@ class VariableBatchModelInputCallable(Protocol):
         tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         pooling_avg: int = 10,
         global_constant_batch: bool = False,
-    ) -> Tuple["ModelInput", List["ModelInput"]]:
-        ...
+    ) -> Tuple["ModelInput", List["ModelInput"]]: ...
 
 
 def gen_model_and_input(
@@ -174,23 +172,25 @@ def gen_model_and_input(
             feature_processor_modules=feature_processor_modules,
         )
     inputs = [
-        cast(VariableBatchModelInputCallable, generate)(
-            average_batch_size=batch_size,
-            world_size=world_size,
-            num_float_features=num_float_features,
-            tables=tables,
-            global_constant_batch=global_constant_batch,
-        )
-        if generate == ModelInput.generate_variable_batch_input
-        else cast(ModelInputCallable, generate)(
-            world_size=world_size,
-            tables=tables,
-            dedup_tables=dedup_tables,
-            weighted_tables=weighted_tables or [],
-            num_float_features=num_float_features,
-            variable_batch_size=variable_batch_size,
-            batch_size=batch_size,
-            long_indices=long_indices,
+        (
+            cast(VariableBatchModelInputCallable, generate)(
+                average_batch_size=batch_size,
+                world_size=world_size,
+                num_float_features=num_float_features,
+                tables=tables,
+                global_constant_batch=global_constant_batch,
+            )
+            if generate == ModelInput.generate_variable_batch_input
+            else cast(ModelInputCallable, generate)(
+                world_size=world_size,
+                tables=tables,
+                dedup_tables=dedup_tables,
+                weighted_tables=weighted_tables or [],
+                num_float_features=num_float_features,
+                variable_batch_size=variable_batch_size,
+                batch_size=batch_size,
+                long_indices=long_indices,
+            )
         )
     ]
     return (model, inputs)
@@ -261,12 +261,14 @@ def sharding_single_rank_test(
         (global_model, inputs) = gen_model_and_input(
             model_class=model_class,
             tables=tables,
-            generate=cast(
-                VariableBatchModelInputCallable,
-                ModelInput.generate_variable_batch_input,
-            )
-            if variable_batch_per_feature
-            else ModelInput.generate,
+            generate=(
+                cast(
+                    VariableBatchModelInputCallable,
+                    ModelInput.generate_variable_batch_input,
+                )
+                if variable_batch_per_feature
+                else ModelInput.generate
+            ),
             weighted_tables=weighted_tables,
             embedding_groups=embedding_groups,
             world_size=world_size,
