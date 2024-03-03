@@ -5,6 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 import unittest
 
 from ..bert4rec_movielens_datasets import Bert4RecPreprocsser, get_raw_dataframe

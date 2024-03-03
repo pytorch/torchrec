@@ -5,6 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 # This script preprocesses the sparse feature files (binary npy) to such that
 # the IDs become contiguous (with frequency thresholding applied).
 # The results are saved in new binary (npy) files.
