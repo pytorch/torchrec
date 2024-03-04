@@ -95,9 +95,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             sharding_dim: int,
         ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
 
-            table_global_shards_metadata: List[
-                ShardMetadata
-            ] = table_global_metadata.shards_metadata
+            table_global_shards_metadata: List[ShardMetadata] = (
+                table_global_metadata.shards_metadata
+            )
 
             # column-wise sharding
             # sort the metadata based on column offset and
@@ -153,9 +153,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             table_global_metadata: ShardedTensorMetadata,
             optimizer_state: torch.Tensor,
         ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
-            table_global_shards_metadata: List[
-                ShardMetadata
-            ] = table_global_metadata.shards_metadata
+            table_global_shards_metadata: List[ShardMetadata] = (
+                table_global_metadata.shards_metadata
+            )
 
             table_shard_metadata_to_optimizer_shard_metadata = {}
 
@@ -203,7 +203,11 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         all_optimizer_states = emb_module.get_optimizer_state()
         optimizer_states_keys_by_table: Dict[str, List[torch.Tensor]] = {}
 
-        for (table_config, optimizer_states, weight,) in itertools.zip_longest(
+        for (
+            table_config,
+            optimizer_states,
+            weight,
+        ) in itertools.zip_longest(
             config.embedding_tables,
             all_optimizer_states,
             embedding_weights_by_table,
@@ -240,9 +244,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             if table_config.name in seen_tables:
                 continue
             seen_tables.add(table_config.name)
-            table_config_global_metadata: Optional[
-                ShardedTensorMetadata
-            ] = copy.deepcopy(table_config.global_metadata)
+            table_config_global_metadata: Optional[ShardedTensorMetadata] = (
+                copy.deepcopy(table_config.global_metadata)
+            )
 
             shard_params: ShardParams = table_to_shard_params[table_config.name]
 
@@ -315,7 +319,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                             shard_params.optimizer_states[0][momentum_idx - 1],
                         )
 
-                    for (optimizer_state, table_shard_local_metadata) in zip(
+                    for optimizer_state, table_shard_local_metadata in zip(
                         shard_params.optimizer_states, shard_params.local_metadata
                     ):
                         local_optimizer_shard_metadata = (
@@ -353,9 +357,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                     else:
                         cur_state_key = optimizer_state_keys[cur_state_idx]
 
-                    state[weight][
-                        f"{table_config.name}.{cur_state_key}"
-                    ] = get_sharded_optim_state(cur_state_idx + 1)
+                    state[weight][f"{table_config.name}.{cur_state_key}"] = (
+                        get_sharded_optim_state(cur_state_idx + 1)
+                    )
 
         super().__init__(params, state, [param_group])
 
@@ -472,7 +476,7 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
     def init_parameters(self) -> None:
         # initialize embedding weights
         assert len(self._num_embeddings) == len(self.split_embedding_weights())
-        for (rows, emb_dim, weight_init_min, weight_init_max, param) in zip(
+        for rows, emb_dim, weight_init_min, weight_init_max, param in zip(
             self._local_rows,
             self._local_cols,
             self._weight_init_mins,
@@ -519,8 +523,7 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
         DenseTableBatchedEmbeddingBagsCodegen,
         SplitTableBatchedEmbeddingBagsCodegen,
         IntNBitTableBatchedEmbeddingBagsCodegen,
-    ]:
-        ...
+    ]: ...
 
     @property
     def config(self) -> GroupedEmbeddingConfig:
@@ -748,7 +751,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
     def init_parameters(self) -> None:
         # initialize embedding weights
         assert len(self._num_embeddings) == len(self.split_embedding_weights())
-        for (rows, emb_dim, weight_init_min, weight_init_max, param) in zip(
+        for rows, emb_dim, weight_init_min, weight_init_max, param in zip(
             self._local_rows,
             self._local_cols,
             self._weight_init_mins,
@@ -809,8 +812,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         DenseTableBatchedEmbeddingBagsCodegen,
         SplitTableBatchedEmbeddingBagsCodegen,
         IntNBitTableBatchedEmbeddingBagsCodegen,
-    ]:
-        ...
+    ]: ...
 
     @property
     def config(self) -> GroupedEmbeddingConfig:
