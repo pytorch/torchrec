@@ -240,3 +240,18 @@ class TestPt2(unittest.TestCase):
             # TODO: turn on AOT Inductor test once the support is ready
             test_aot_inductor=False,
         )
+
+    def test_tensor_tolist(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor):
+                return kjt.values().tolist()
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+        self._test_kjt_input_module(
+            M(),
+            kjt.keys(),
+            (kjt._values, kjt._lengths),
+            test_dynamo=False,
+            test_aot_inductor=False,
+            test_pt2_ir_export=True,
+        )
