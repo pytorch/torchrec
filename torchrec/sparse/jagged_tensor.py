@@ -756,9 +756,15 @@ def _maybe_compute_length_per_key(
     length_per_key: Optional[List[int]],
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
+    values: Optional[torch.Tensor],
 ) -> List[int]:
     if length_per_key is None:
-        if len(keys) and offsets is not None and len(offsets) > 0:
+        if values is not None and values.is_meta:
+            # create dummy lengths per key when on meta device
+            total_length = values.numel()
+            _length = [total_length // len(keys)] * len(keys)
+            _length[0] += total_length % len(keys)
+        elif len(keys) and offsets is not None and len(offsets) > 0:
             _length: List[int] = (
                 _length_per_key_from_stride_per_key(torch.diff(offsets), stride_per_key)
                 if variable_stride_per_key
@@ -789,6 +795,7 @@ def _maybe_compute_offset_per_key(
     offset_per_key: Optional[List[int]],
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
+    values: Optional[torch.Tensor],
 ) -> Tuple[List[int], List[int]]:
     if length_per_key is None:
         _length_per_key: List[int] = _maybe_compute_length_per_key(
@@ -799,6 +806,7 @@ def _maybe_compute_offset_per_key(
             length_per_key=length_per_key,
             lengths=lengths,
             offsets=offsets,
+            values=values,
         )
         return _length_per_key, _cumsum(_length_per_key)
     elif offset_per_key is None:
@@ -1562,6 +1570,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             length_per_key=self._length_per_key,
             lengths=self._lengths,
             offsets=self._offsets,
+            values=self._values,
         )
         self._length_per_key = _length_per_key
         return _length_per_key
@@ -1579,6 +1588,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offset_per_key=self._offset_per_key,
             lengths=self._lengths,
             offsets=self._offsets,
+            values=self._values,
         )
         self._length_per_key = _length_per_key
         self._offset_per_key = _offset_per_key
