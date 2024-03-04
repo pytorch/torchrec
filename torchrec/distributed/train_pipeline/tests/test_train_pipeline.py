@@ -9,6 +9,7 @@ import copy
 import os
 import unittest
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, cast, Dict, List, Optional, Tuple
 from unittest.mock import MagicMock
 
@@ -39,12 +40,22 @@ from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
 )
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
-from torchrec.distributed.train_pipeline import (
-    DataLoadingThread,
+from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
+    create_module_and_freeze,
+)
+from torchrec.distributed.train_pipeline.train_pipeline import (
     EvalPipelineSparseDist,
     PrefetchTrainPipelineSparseDist,
+    StagedTrainPipeline,
     TrainPipelineBase,
     TrainPipelineSparseDist,
+)
+from torchrec.distributed.train_pipeline.utils import (
+    DataLoadingThread,
+    get_h2d_func,
+    PipelineStage,
+    SparseDataDistUtil,
+    StageOut,
 )
 from torchrec.distributed.types import (
     Awaitable,
@@ -62,8 +73,6 @@ from torchrec.optim.optimizers import in_backward_optimizer_filter
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Pipelineable
 from torchrec.test_utils import get_free_port, init_distributed_single_host
-
-from .test_fp_embeddingbag_utils import create_module_and_freeze
 
 
 class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
@@ -565,7 +574,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
 
 
 class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
-    def generate_sharded_model_and_optimizer(
+    def _generate_sharded_model_and_optimizer(
         self,
         model: nn.Module,
         sharding_type: str,
@@ -668,14 +677,14 @@ class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             dense_device=self.device,
             sparse_device=torch.device("meta"),
         )
-        sharded_model, optim = self.generate_sharded_model_and_optimizer(
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
             model, sharding_type, kernel_type, fused_params
         )
 
         (
             sharded_model_pipelined,
             optim_pipelined,
-        ) = self.generate_sharded_model_and_optimizer(
+        ) = self._generate_sharded_model_and_optimizer(
             model, sharding_type, kernel_type, fused_params_pipelined
         )
         copy_state_dict(
@@ -765,3 +774,116 @@ class EvalPipelineSparseDistTest(unittest.TestCase):
             self.assertEqual(item.item(), i)
 
         self.assertRaises(StopIteration, pipeline.progress, data_iter)
+
+
+class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
+    def _generate_sharded_model_and_optimizer(
+        self, model: nn.Module
+    ) -> Tuple[nn.Module, Optimizer]:
+        sharder = TestEBCSharder(
+            sharding_type=ShardingType.TABLE_WISE.value,
+            kernel_type=EmbeddingComputeKernel.FUSED.value,
+        )
+        sharded_model = DistributedModelParallel(
+            module=copy.deepcopy(model),
+            env=ShardingEnv.from_process_group(self.pg),
+            init_data_parallel=False,
+            device=self.device,
+            sharders=[
+                cast(
+                    ModuleSharder[nn.Module],
+                    sharder,
+                )
+            ],
+        )
+        optimizer = optim.SGD(sharded_model.parameters(), lr=0.1)
+        return sharded_model, optimizer
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipelining(self) -> None:
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            dense_device=self.device,
+            sparse_device=torch.device("meta"),
+        )
+
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(model)
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(model)
+
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
+        )
+
+        non_pipelined_outputs = []
+        for batch in data:
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+            non_pipelined_outputs.append(pred)
+
+        def gpu_preproc(x: StageOut) -> StageOut:
+            return x
+
+        sdd = SparseDataDistUtil[ModelInput](
+            model=sharded_model_pipelined,
+            stream=torch.cuda.Stream(),
+            apply_jit=False,
+        )
+
+        pipeline_stages = [
+            PipelineStage(
+                name="data_copy",
+                runnable=partial(get_h2d_func, device=self.device),
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="gpu_preproc",
+                runnable=gpu_preproc,
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="gpu_preproc_1",
+                runnable=gpu_preproc,
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="gpu_preproc_2",
+                runnable=gpu_preproc,
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="start_sparse_data_dist",
+                runnable=sdd.start_sparse_data_dist,
+                stream=sdd.stream,
+                fill_callback=sdd.wait_sparse_data_dist,
+            ),
+        ]
+        pipeline = StagedTrainPipeline(pipeline_stages=pipeline_stages)
+        dataloader = iter(data)
+
+        pipelined_out = []
+        while model_in := pipeline.progress(dataloader):
+            optim_pipelined.zero_grad()
+            loss, pred = sharded_model_pipelined(model_in)
+            loss.backward()
+            optim_pipelined.step()
+            pipelined_out.append(pred)
+
+        self.assertEqual(len(pipelined_out), len(non_pipelined_outputs))
+        for out, ref_out in zip(pipelined_out, non_pipelined_outputs):
+            torch.testing.assert_close(out, ref_out)

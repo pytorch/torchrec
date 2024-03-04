@@ -5,12 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-NOTE: Due to an internal packaging issue, `train_pipeline.py` must be compatible with
-older versions of TorchRec. Importing new modules from other files may break model
-publishing flows.
-"""
-import abc
+#!/usr/bin/env python3
 import copy
 import itertools
 import logging
@@ -19,6 +14,7 @@ from dataclasses import dataclass, field
 from threading import Event, Thread
 from typing import (
     Any,
+    Callable,
     cast,
     Dict,
     Generic,
@@ -32,211 +28,33 @@ from typing import (
     Union,
 )
 
-import torch
 from torch import distributed as dist
-from torch.autograd.profiler import record_function
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.fx.node import Node
+from torch.profiler import record_function
 from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
 from torchrec.distributed.embedding_sharding import (
     KJTListAwaitable,
     KJTListSplitsAwaitable,
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
+
 from torchrec.distributed.types import Awaitable
+
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
+
 logger: logging.Logger = logging.getLogger(__name__)
 
+import torch
 
 In = TypeVar("In", bound=Pipelineable)
+StageOut = TypeVar("StageOut", bound=Pipelineable)
 Out = TypeVar("Out")
 
-
-class DataLoadingThread(Thread, Generic[In]):
-    def __init__(
-        self,
-        device: torch.device,
-        dataloader_iter: Iterator[In],
-        to_device_non_blocking: bool,
-        memcpy_stream_priority: int = 0,
-    ) -> None:
-        super().__init__()
-        self._stop: bool = False
-        self._dataloader_iter = dataloader_iter
-        self._buffer_empty_event: Event = Event()
-        self._buffer_filled_event: Event = Event()
-        self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
-            torch.cuda.Stream(priority=memcpy_stream_priority)
-            if device.type == "cuda"
-            else None
-        )
-        self._device = device
-        self._to_device_non_blocking = to_device_non_blocking
-        self._buffered: Optional[In] = None
-        self._buffer_empty_event.set()
-
-    def run(self) -> None:
-        if self._device.type == "cuda" and torch.cuda.is_available():
-            # set the current device the same as the one used in the main thread
-            torch.cuda.set_device(self._device)
-
-        while not self._stop:
-            self._buffer_empty_event.wait()
-            # Set the filled event to unblock progress() and return.
-            if self._stop:
-                self._buffer_filled_event.set()
-                return
-            with record_function("## load_batch ##"):
-                try:
-                    batch = next(self._dataloader_iter)
-                except StopIteration:
-                    self._stop = True
-                    self._buffer_filled_event.set()
-                    return
-            with record_function("## copy_batch_to_gpu ##"):
-                with torch.cuda.stream(self._memcpy_stream):
-                    self._buffered = cast(
-                        In,
-                        batch.to(
-                            self._device, non_blocking=self._to_device_non_blocking
-                        ),
-                    )
-                self._buffer_empty_event.clear()
-                self._buffer_filled_event.set()
-
-    def stop(self) -> None:
-        logger.info("Stopping data loading thread...")
-        self._stop = True
-        # Unblock any thread that are waiting for these events.
-        self._buffer_filled_event.set()
-        self._buffer_empty_event.set()
-        logger.info("Data loading thread stopped.")
-
-    def get_next_batch(self, none_throws: bool = False) -> Optional[In]:
-        """
-        Get the next batch from the buffer if threading is enabled, otherwise
-        call load_next_batch directly.
-
-        This function is not thread safe. We assume this is only invoked from
-        the main thread in the training loop.
-        """
-        self._buffer_filled_event.wait()
-        batch = self._buffered
-        if batch is None:
-            if none_throws:
-                raise StopIteration
-            return None
-        self._buffered = None
-        self._buffer_filled_event.clear()
-        self._buffer_empty_event.set()
-        return batch
-
-
-class TrainPipeline(abc.ABC, Generic[In, Out]):
-    @abc.abstractmethod
-    def progress(self, dataloader_iter: Iterator[In]) -> Out:
-        pass
-
-
-def _to_device(batch: In, device: torch.device, non_blocking: bool) -> In:
-    assert isinstance(
-        batch, (torch.Tensor, Pipelineable)
-    ), f"{type(batch)} must implement Pipelineable interface"
-    return cast(In, batch.to(device=device, non_blocking=non_blocking))
-
-
-def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> None:
-    if stream is None:
-        return
-    torch.cuda.current_stream().wait_stream(stream)
-    """
-    As mentioned in
-    https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html, PyTorch
-    uses the "caching allocator" for memory allocation for tensors. When a tensor is
-    freed, its memory is likely to be reused by newly constructed tenosrs. By default,
-    this allocator traces whether a tensor is still in use by only the CUDA stream where
-    it was created. When a tensor is used by additional CUDA streams, we need to call
-    `record_stream` to tell the allocator about these streams. Otherwise, the allocator
-    might free the underlying memory of the tensor once it is no longer used by the
-    creator stream. This is a notable programming trick when we write programs using
-    multiple CUDA streams.
-    """
-
-    cur_stream = torch.cuda.current_stream()
-    assert isinstance(
-        batch, (torch.Tensor, Multistreamable)
-    ), f"{type(batch)} must implement Multistreamable interface"
-    batch.record_stream(cur_stream)
-
-
-class TrainPipelineBase(TrainPipeline[In, Out]):
-    """
-    This class runs training iterations using a pipeline of two stages, each as a CUDA
-    stream, namely, the current (default) stream and `self._memcpy_stream`. For each
-    iteration, `self._memcpy_stream` moves the input from host (CPU) memory to GPU
-    memory, and the default stream runs forward, backward, and optimization.
-    """
-
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        device: torch.device,
-    ) -> None:
-        self._model = model
-        self._optimizer = optimizer
-        self._device = device
-        self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
-            torch.cuda.Stream() if device.type == "cuda" else None
-        )
-        self._cur_batch: Optional[In] = None
-        self._connected = False
-
-    def _connect(self, dataloader_iter: Iterator[In]) -> None:
-        cur_batch = next(dataloader_iter)
-        self._cur_batch = cur_batch
-        with torch.cuda.stream(self._memcpy_stream):
-            self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
-        self._connected = True
-
-    def progress(self, dataloader_iter: Iterator[In]) -> Out:
-        if not self._connected:
-            self._connect(dataloader_iter)
-
-        # Fetch next batch
-        with record_function("## next_batch ##"):
-            next_batch = next(dataloader_iter)
-        cur_batch = self._cur_batch
-        assert cur_batch is not None
-
-        if self._model.training:
-            with record_function("## zero_grad ##"):
-                self._optimizer.zero_grad()
-
-        with record_function("## wait_for_batch ##"):
-            _wait_for_batch(cur_batch, self._memcpy_stream)
-
-        with record_function("## forward ##"):
-            (losses, output) = self._model(cur_batch)
-
-        if self._model.training:
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
-
-        # Copy the next batch to GPU
-        self._cur_batch = cur_batch = next_batch
-        with record_function("## copy_batch_to_gpu ##"):
-            with torch.cuda.stream(self._memcpy_stream):
-                self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
-
-        # Update
-        if self._model.training:
-            with record_function("## optimizer ##"):
-                self._optimizer.step()
-
-        return output
+RunnableType = Callable[..., StageOut]
+StageOutputWithEvent = Tuple[Optional[StageOut], Optional[torch.cuda.Event]]
 
 
 class Tracer(torch.fx.Tracer):
@@ -467,6 +285,28 @@ class PrefetchTrainPipelineContext(TrainPipelineContext):
 
 
 @dataclass
+class PipelineStage:
+    """
+    A pipeline stage represents a transform to an input that is independent of the
+    backwards() of the model. Examples include batch H2D transfer, GPU preproc, or
+    gradient-less model processing.
+
+    Args:
+        name (str): Name of the stage.
+        runnable (Callable[In, Out]): Function that performs a gradient-less
+            transform.
+        stream (torch.cuda.streams.Stream): Stream to run on. Often each stage has a
+            unique stream, but having different pipelines share a stream provides more
+            synchronization semantics.
+    """
+
+    name: str
+    runnable: RunnableType
+    stream: torch.cuda.streams.Stream
+    fill_callback: Optional[Callable[[], None]] = None
+
+
+@dataclass
 class ArgInfo:
     """
     Representation of args from a node.
@@ -618,6 +458,37 @@ class KJTAllToAllForward:
                 device=device,
                 stagger=self._stagger,
             )
+
+
+def _to_device(batch: In, device: torch.device, non_blocking: bool) -> In:
+    assert isinstance(
+        batch, (torch.Tensor, Pipelineable)
+    ), f"{type(batch)} must implement Pipelineable interface"
+    return cast(In, batch.to(device=device, non_blocking=non_blocking))
+
+
+def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> None:
+    if stream is None:
+        return
+    torch.cuda.current_stream().wait_stream(stream)
+    """
+    As mentioned in
+    https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html, PyTorch
+    uses the "caching allocator" for memory allocation for tensors. When a tensor is
+    freed, its memory is likely to be reused by newly constructed tenosrs. By default,
+    this allocator traces whether a tensor is still in use by only the CUDA stream where
+    it was created. When a tensor is used by additional CUDA streams, we need to call
+    `record_stream` to tell the allocator about these streams. Otherwise, the allocator
+    might free the underlying memory of the tensor once it is no longer used by the
+    creator stream. This is a notable programming trick when we write programs using
+    multiple CUDA streams.
+    """
+
+    cur_stream = torch.cuda.current_stream()
+    assert isinstance(
+        batch, (torch.Tensor, Multistreamable)
+    ), f"{type(batch)} must implement Multistreamable interface"
+    batch.record_stream(cur_stream)
 
 
 def _start_data_dist(
@@ -962,450 +833,138 @@ def _override_input_dist_forwards(pipelined_modules: List[ShardedModule]) -> Non
                     )
 
 
-class TrainPipelineSparseDist(TrainPipeline[In, Out]):
-    """
-    This pipeline overlaps device transfer, and `ShardedModule.input_dist()` with
-    forward and backward. This helps hide the all2all latency while preserving the
-    training forward / backward ordering.
+def get_h2d_func(batch: In, device: torch.device) -> Pipelineable:
+    return batch.to(device, non_blocking=True)
 
-    stage 3: forward, backward - uses default CUDA stream
-    stage 2: ShardedModule.input_dist() - uses data_dist CUDA stream
-    stage 1: device transfer - uses memcpy CUDA stream
 
-    `ShardedModule.input_dist()` is only done for top-level modules in the call graph.
-    To be considered a top-level module, a module can only depend on 'getattr' calls on
-    input.
+class DataLoadingThread(Thread, Generic[In]):
+    def __init__(
+        self,
+        device: torch.device,
+        dataloader_iter: Iterator[In],
+        to_device_non_blocking: bool,
+        memcpy_stream_priority: int = 0,
+    ) -> None:
+        super().__init__()
+        self._stop: bool = False
+        self._dataloader_iter = dataloader_iter
+        self._buffer_empty_event: Event = Event()
+        self._buffer_filled_event: Event = Event()
+        self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
+            torch.cuda.Stream(priority=memcpy_stream_priority)
+            if device.type == "cuda"
+            else None
+        )
+        self._device = device
+        self._to_device_non_blocking = to_device_non_blocking
+        self._buffered: Optional[In] = None
+        self._buffer_empty_event.set()
 
-    Input model must be symbolically traceable with the exception of `ShardedModule` and
-    `DistributedDataParallel` modules.
+    def run(self) -> None:
+        if self._device.type == "cuda" and torch.cuda.is_available():
+            # set the current device the same as the one used in the main thread
+            torch.cuda.set_device(self._device)
 
-    Args:
-        model (torch.nn.Module): model to pipeline.
-        optimizer (torch.optim.Optimizer): optimizer to use.
-        device (torch.device): device where device transfer, sparse data dist, and
-            forward/backward pass will happen.
-        execute_all_batches (bool): executes remaining batches in pipeline after
-            exhausting dataloader iterator.
-        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
-    """
+        while not self._stop:
+            self._buffer_empty_event.wait()
+            # Set the filled event to unblock progress() and return.
+            if self._stop:
+                self._buffer_filled_event.set()
+                return
+            with record_function("## load_batch ##"):
+                try:
+                    batch = next(self._dataloader_iter)
+                except StopIteration:
+                    self._stop = True
+                    self._buffer_filled_event.set()
+                    return
+            with record_function("## copy_batch_to_gpu ##"):
+                with torch.cuda.stream(self._memcpy_stream):
+                    self._buffered = cast(
+                        In,
+                        batch.to(
+                            self._device, non_blocking=self._to_device_non_blocking
+                        ),
+                    )
+                self._buffer_empty_event.clear()
+                self._buffer_filled_event.set()
 
+    def stop(self) -> None:
+        logger.info("Stopping data loading thread...")
+        self._stop = True
+        # Unblock any thread that are waiting for these events.
+        self._buffer_filled_event.set()
+        self._buffer_empty_event.set()
+        logger.info("Data loading thread stopped.")
+
+    def get_next_batch(self, none_throws: bool = False) -> Optional[In]:
+        """
+        Get the next batch from the buffer if threading is enabled, otherwise
+        call load_next_batch directly.
+
+        This function is not thread safe. We assume this is only invoked from
+        the main thread in the training loop.
+        """
+        self._buffer_filled_event.wait()
+        batch = self._buffered
+        if batch is None:
+            if none_throws:
+                raise StopIteration
+            return None
+        self._buffered = None
+        self._buffer_filled_event.clear()
+        self._buffer_empty_event.set()
+        return batch
+
+
+class SparseDataDistUtil(Generic[In]):
     def __init__(
         self,
         model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        device: torch.device,
-        execute_all_batches: bool = True,
+        stream: torch.cuda.streams.Stream,
         apply_jit: bool = False,
     ) -> None:
-        self._model = model
-        self._optimizer = optimizer
-        self._device = device
-        self._execute_all_batches = execute_all_batches
-        self._apply_jit = apply_jit
-        # use two data streams to support two concurrent batches
-        if device.type == "cuda":
-            self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
-                torch.cuda.Stream(priority=-1)
-            )
-            self._data_dist_stream: Optional[torch.cuda.streams.Stream] = (
-                torch.cuda.Stream(priority=-1)
-            )
-        else:
-            self._memcpy_stream: Optional[torch.cuda.streams.Stream] = None
-            self._data_dist_stream: Optional[torch.cuda.streams.Stream] = None
-        self._batch_i: Optional[In] = None
-        self._batch_ip1: Optional[In] = None
-        self._batch_ip2: Optional[In] = None
-        self._context = TrainPipelineContext()
+        super().__init__()
+        self.model = model
+        self.stream = stream
+        self.apply_jit = apply_jit
+        self.context = TrainPipelineContext()
+        self.initialized = False
         self._pipelined_modules: List[ShardedModule] = []
 
-    def _fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
-        # pipeline is already filled
-        if self._batch_i and self._batch_ip1:
-            return
-        # executes last batch in pipeline
-        if self._batch_i and self._execute_all_batches:
-            return
+        # pyre-ignore
+        self.original_forward = self.model.forward
 
-        # batch 1
-        self._batch_i = self._copy_batch_to_gpu(dataloader_iter)
-        if self._batch_i is None:
-            raise StopIteration
+        def forward_hook(
+            module: torch.nn.Module,
+            input: Union[torch.Tensor, Tuple[torch.Tensor]],
+            output: Union[torch.Tensor, Tuple[torch.Tensor]],
+        ) -> None:
+            self.wait_sparse_data_dist()
 
-        self._init_pipelined_modules(self._batch_i)
-        self._start_sparse_data_dist(self._batch_i)
-        self._wait_sparse_data_dist()
+        self.model.register_forward_hook(forward_hook)
 
-        # batch 2
-        self._batch_ip1 = self._copy_batch_to_gpu(dataloader_iter)
-
-    def progress(self, dataloader_iter: Iterator[In]) -> Out:
-        self._fill_pipeline(dataloader_iter)
-
-        if self._model.training:
-            with record_function("## zero_grad ##"):
-                self._optimizer.zero_grad()
-
-        with record_function("## wait_for_batch ##"):
-            _wait_for_batch(cast(In, self._batch_i), self._data_dist_stream)
-
-        self._start_sparse_data_dist(self._batch_ip1)
-
-        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
-
-        # forward
-        with record_function("## forward ##"):
-            losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
-
-        self._wait_sparse_data_dist()
-
-        if self._model.training:
-            # backward
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
-
-            # update
-            with record_function("## optimizer ##"):
-                self._optimizer.step()
-
-        self._batch_i = self._batch_ip1
-        self._batch_ip1 = self._batch_ip2
-
-        return output
-
-    def _init_pipelined_modules(self, batch: In) -> None:
-        """
-        Retrieves the pipelined modules after overriding their forwards, initializes the
-        modules' input dists, and overrides the input dist forwards to support fusing
-        the splits collective in the input dist.
-        """
-        if self._pipelined_modules:
-            return
-        self._pipelined_modules, self._model = _rewrite_model(
-            model=self._model,
-            context=self._context,
-            dist_stream=self._data_dist_stream,
-            batch=self._batch_i,
-            apply_jit=self._apply_jit,
-        )
-        # initializes input dist, so we can override input dist forwards
-        self._start_sparse_data_dist(self._batch_i)
-        _override_input_dist_forwards(self._pipelined_modules)
-
-    def _copy_batch_to_gpu(self, dataloader_iter: Iterator[In]) -> Optional[In]:
-        """
-        Retrieves batch from dataloader and moves it to the provided device.
-
-        Raises:
-            StopIteration: if the dataloader iterator is exhausted; unless
-                `self._execute_all_batches=True`, then returns None.
-        """
-        with record_function("## copy_batch_to_gpu ##"):
-            with torch.cuda.stream(self._memcpy_stream):
-                batch = next(dataloader_iter, None)
-                if batch is not None:
-                    batch = _to_device(batch, self._device, non_blocking=True)
-                elif not self._execute_all_batches:
-                    raise StopIteration
-                return batch
-
-    def _start_sparse_data_dist(self, batch: Optional[In]) -> None:
-        """
-        Waits for batch to finish getting copied to GPU, then starts the input dist.
-        """
-        if batch is None:
-            return
-        with record_function("## start_sparse_data_dist ##"):
-            with torch.cuda.stream(self._data_dist_stream):
-                _wait_for_batch(batch, self._memcpy_stream)
-                _start_data_dist(self._pipelined_modules, batch, self._context)
-
-    def _wait_sparse_data_dist(self) -> None:
-        """
-        Waits on the input dist splits requests to get the input dist tensors requests,
-        and populates the context with them.
-        """
-        with record_function("## wait_sparse_data_dist ##"):
-            with torch.cuda.stream(self._data_dist_stream):
-                self._context.module_contexts = (
-                    self._context.module_contexts_next_batch.copy()
-                )
-                self._context.input_dist_tensors_requests.clear()
-                for names, awaitable in self._context.fused_splits_awaitables:
-                    for name, request in zip(names, awaitable.wait()):
-                        self._context.input_dist_tensors_requests[name] = request
-
-
-class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
-    """
-    This pipeline overlaps device transfer, and `ShardedModule.input_dist()` with
-    forward. This helps hide the all2all latency. We use a background thread to
-    perform device transfer to further reduce latency.
-
-    stage 2: forward- uses default CUDA stream
-    stage 1: ShardedModule.input_dist() - uses data_dist CUDA stream
-    background: device transfer - uses memcpy CUDA stream
-
-    `ShardedModule.input_dist()` is only done for top-level modules in the call graph.
-    To be considered a top-level module, a module can only depend on 'getattr' calls on
-    input.
-
-    Input model must be symbolically traceable with the exception of `ShardedModule` and
-    `DistributedDataParallel` modules.
-
-    Args:
-        model (torch.nn.Module): model to pipeline.
-        optimizer (torch.optim.Optimizer): optimizer to use.
-        device (torch.device): device where device transfer, sparse data dist, and
-            forward/backward pass will happen.
-        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
-    """
-
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        device: torch.device,
-        apply_jit: bool = False,
-    ) -> None:
-        super().__init__(model, optimizer, device, True, apply_jit)
-        self._batch_loader: Optional[DataLoadingThread[In]] = None
-
-    def __del__(self) -> None:
-        if self._batch_loader is not None:
-            self._batch_loader.stop()
-
-    def progress(self, dataloader_iter: Iterator[In]) -> Out:
-        if not self._batch_loader:
-            self._batch_loader = DataLoadingThread(
-                device=self._device,
-                dataloader_iter=dataloader_iter,
-                to_device_non_blocking=True,
-                memcpy_stream_priority=-1,
+    def start_sparse_data_dist(self, batch: In) -> In:
+        if not self.initialized:
+            self._pipelined_modules, self.model = _rewrite_model(
+                model=self.model,
+                context=self.context,
+                dist_stream=self.stream,
+                batch=batch,
+                apply_jit=self.apply_jit,
             )
-            self._batch_loader.start()
+            # initializes input dist, so we can override input dist forwards
+            _start_data_dist(self._pipelined_modules, batch, self.context)
+            _override_input_dist_forwards(self._pipelined_modules)
+            self.initialized = True
 
-            batch_loader = self._batch_loader
-            assert batch_loader is not None
+        _start_data_dist(self._pipelined_modules, batch, self.context)
 
-            # batch 1
-            self._batch_i = batch_loader.get_next_batch()
-            assert self._batch_i is not None
+        return batch
 
-            self._init_pipelined_modules(self._batch_i)
-            self._start_sparse_data_dist(self._batch_i)
-            self._wait_sparse_data_dist()
-
-            # batch 2
-            self._batch_ip1 = batch_loader.get_next_batch()
-
-        if self._batch_i is None:
-            raise StopIteration
-
-        batch_loader = self._batch_loader
-        assert batch_loader is not None
-        with record_function("## wait_for_batch ##"):
-            _wait_for_batch(cast(In, self._batch_i), self._data_dist_stream)
-
-        self._start_sparse_data_dist(self._batch_ip1)
-
-        # forward
-        with record_function("## forward ##"):
-            losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
-
-        self._wait_sparse_data_dist()
-
-        self._batch_i = self._batch_ip1
-        self._batch_ip1 = batch_loader.get_next_batch()
-
-        return output
-
-
-class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
-    """
-    This pipeline overlaps device transfer, `ShardedModule.input_dist()`, and cache
-    prefetching with forward and backward. This helps hide the all2all latency while
-    preserving the training forward / backward ordering.
-
-    stage 4: forward, backward - uses default CUDA stream
-    stage 3: prefetch - uses prefetch CUDA stream
-    stage 2: ShardedModule.input_dist() - uses data_dist CUDA stream
-    stage 1: device transfer - uses memcpy CUDA stream
-
-    `ShardedModule.input_dist()` is only done for top-level modules in the call graph.
-    To be considered a top-level module, a module can only depend on 'getattr' calls on
-    input.
-
-    Input model must be symbolically traceable with the exception of `ShardedModule` and
-    `DistributedDataParallel` modules.
-
-    Args:
-        model (torch.nn.Module): model to pipeline.
-        optimizer (torch.optim.Optimizer): optimizer to use.
-        device (torch.device): device where device transfer, sparse data dist, prefetch,
-            and forward/backward pass will happen.
-        execute_all_batches (bool): executes remaining batches in pipeline after
-            exhausting dataloader iterator.
-        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
-    """
-
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        device: torch.device,
-        execute_all_batches: bool = True,
-        apply_jit: bool = False,
-    ) -> None:
-        super().__init__(
-            model=model,
-            optimizer=optimizer,
-            device=device,
-            execute_all_batches=execute_all_batches,
-            apply_jit=apply_jit,
-        )
-        self._context = PrefetchTrainPipelineContext()
-        if self._device.type == "cuda":
-            self._prefetch_stream: Optional[torch.cuda.streams.Stream] = (
-                torch.cuda.Stream()
-            )
-            self._default_stream: Optional[torch.cuda.streams.Stream] = (
-                torch.cuda.current_stream()
-            )
-        else:
-            self._prefetch_stream: Optional[torch.cuda.streams.Stream] = None
-            self._default_stream: Optional[torch.cuda.streams.Stream] = None
-        self._batch_ip3: Optional[In] = None
-
-    def _fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
-        # pipeline is already filled
-        if self._batch_i and self._batch_ip1 and self._batch_ip2:
-            return
-        # executes last batch in pipeline
-        if self._execute_all_batches and (self._batch_i or self._batch_ip1):
-            return
-
-        # batch 1
-        self._batch_i = self._copy_batch_to_gpu(dataloader_iter)
-        if self._batch_i is None:
-            raise StopIteration
-
-        self._init_pipelined_modules(self._batch_i)
-        self._start_sparse_data_dist(self._batch_i)
-        self._wait_sparse_data_dist()
-        self._prefetch(self._batch_i)
-
-        # batch 2
-        self._batch_ip1 = self._copy_batch_to_gpu(dataloader_iter)
-        self._start_sparse_data_dist(self._batch_ip1)
-        self._wait_sparse_data_dist()
-
-        # batch 3
-        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
-
-    def progress(self, dataloader_iter: Iterator[In]) -> Out:
-        self._fill_pipeline(dataloader_iter)
-
-        if self._model.training:
-            with record_function("## zero_grad ##"):
-                self._optimizer.zero_grad()
-
-        with record_function("## wait_for_batch ##"):
-            _wait_for_batch(cast(In, self._batch_i), self._prefetch_stream)
-
-        self._start_sparse_data_dist(self._batch_ip2)
-
-        self._batch_ip3 = self._copy_batch_to_gpu(dataloader_iter)
-
-        # forward
-        with record_function("## forward ##"):
-            losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
-
-        self._prefetch(self._batch_ip1)
-
-        self._wait_sparse_data_dist()
-
-        if self._model.training:
-            # backward
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
-
-            # update
-            with record_function("## optimizer ##"):
-                self._optimizer.step()
-
-        self._batch_i = self._batch_ip1
-        self._batch_ip1 = self._batch_ip2
-        self._batch_ip2 = self._batch_ip3
-
-        return output
-
-    def _init_pipelined_modules(self, batch: In) -> None:
-        """
-        Retrieves the pipelined modules after overriding their forwards, initializes the
-        modules' input dists, and overrides the input dist forwards to support fusing
-        the splits collective in the input dist.
-        """
-        if self._pipelined_modules:
-            return
-        self._pipelined_modules, self._model = _rewrite_model(
-            model=self._model,
-            context=self._context,
-            dist_stream=self._data_dist_stream,
-            batch=self._batch_i,
-            apply_jit=self._apply_jit,
-            pipelined_forward=PrefetchPipelinedForward,
-        )
-
-        # initializes input dist, so we can override input dist forwards
-        self._start_sparse_data_dist(self._batch_i)
-        _override_input_dist_forwards(self._pipelined_modules)
-
-    def _prefetch(self, batch: Optional[In]) -> None:
-        """
-        Waits for input dist to finish, then prefetches data.
-        """
-        if batch is None:
-            return
-        self._context.module_input_post_prefetch.clear()
-        self._context.module_contexts_post_prefetch.clear()
-
-        with record_function("## sharded_module_prefetch ##"):
-            with torch.cuda.stream(self._prefetch_stream):
-                batch.record_stream(torch.cuda.current_stream())
-                for sharded_module in self._pipelined_modules:
-                    forward = sharded_module.forward
-                    assert isinstance(forward, PrefetchPipelinedForward)
-
-                    assert forward._name in self._context.input_dist_tensors_requests
-                    request = self._context.input_dist_tensors_requests[forward._name]
-                    assert isinstance(request, Awaitable)
-                    with record_function("## wait_sparse_data_dist ##"):
-                        # Finish waiting on the dist_stream,
-                        # in case some delayed stream scheduling happens during the wait() call.
-                        with torch.cuda.stream(self._data_dist_stream):
-                            data = request.wait()
-
-                    # Make sure that both result of input_dist and context
-                    # are properly transferred to the current stream.
-                    if self._data_dist_stream is not None:
-                        torch.cuda.current_stream().wait_stream(self._data_dist_stream)
-                        cur_stream = torch.cuda.current_stream()
-
-                        assert isinstance(
-                            data, (torch.Tensor, Multistreamable)
-                        ), f"{type(data)} must implement Multistreamable interface"
-                        data.record_stream(cur_stream)
-                        data.record_stream(self._default_stream)
-
-                        ctx = self._context.module_contexts[forward._name]
-                        ctx.record_stream(cur_stream)
-                        ctx.record_stream(self._default_stream)
-
-                    sharded_module.prefetch(
-                        dist_input=data, forward_stream=self._default_stream
-                    )
-                    self._context.module_input_post_prefetch[forward._name] = data
-                    self._context.module_contexts_post_prefetch[forward._name] = (
-                        self._context.module_contexts[forward._name]
-                    )
+    def wait_sparse_data_dist(self) -> None:
+        self.context.module_contexts = self.context.module_contexts_next_batch.copy()
+        self.context.input_dist_tensors_requests.clear()
+        for names, awaitable in self.context.fused_splits_awaitables:
+            for name, request in zip(names, awaitable.wait()):
+                self.context.input_dist_tensors_requests[name] = request
