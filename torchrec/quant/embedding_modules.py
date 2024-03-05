@@ -75,6 +75,12 @@ MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT: str = (
 DEFAULT_ROW_ALIGNMENT = 16
 
 
+@torch.fx.wrap
+def _get_batching_hinted_output(lengths: Tensor, output: Tensor) -> Tensor:
+    # this is a fx rule to help with batching hinting jagged sequence tensor coalescing.
+    return output
+
+
 def for_each_module_of_type_do(
     module: nn.Module,
     module_types: List[Type[torch.nn.Module]],
@@ -857,12 +863,14 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         ):
             f = kjts_per_key[i]
             indices = f.values()
+            lengths = f.lengths()
             offsets = f.offsets()
             lookup = (
                 emb_module(indices=indices, offsets=offsets)
                 if self.register_tbes
                 else emb_module.forward(indices=indices, offsets=offsets)
             )
+            lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
             embedding_names = self._embedding_names_by_batched_tables[key]
             jt = construct_jagged_tensors(
                 embeddings=lookup,
