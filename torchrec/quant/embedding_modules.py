@@ -43,7 +43,7 @@ from torchrec.modules.fp_embedding_modules import (
     FeatureProcessedEmbeddingBagCollection as OriginalFeatureProcessedEmbeddingBagCollection,
 )
 
-from torchrec.modules.utils import construct_jagged_tensors
+from torchrec.modules.utils import construct_jagged_tensors_inference
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
@@ -865,6 +865,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             indices = f.values()
             lengths = f.lengths()
             offsets = f.offsets()
+            lengths = f.lengths()
             lookup = (
                 emb_module(indices=indices, offsets=offsets)
                 if self.register_tbes
@@ -872,9 +873,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             )
             lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
             embedding_names = self._embedding_names_by_batched_tables[key]
-            jt = construct_jagged_tensors(
+            jt = construct_jagged_tensors_inference(
                 embeddings=lookup,
-                features=f,
+                lengths=lengths,
+                values=indices,
                 embedding_names=embedding_names,
                 need_indices=self.need_indices(),
             )

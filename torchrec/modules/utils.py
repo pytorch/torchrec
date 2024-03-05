@@ -14,6 +14,11 @@ from torch.profiler import record_function
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 
+@torch.fx.wrap
+def _fx_to_list(tensor: torch.Tensor) -> List[int]:
+    return tensor.long().tolist()
+
+
 def extract_module_or_tensor_callable(
     module_or_callable: Union[
         Callable[[], torch.nn.Module],
@@ -141,6 +146,54 @@ def construct_jagged_tensors(
 
         lengths = features.lengths().view(-1, stride)
         lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+        embeddings_list = torch.split(embeddings, length_per_key, dim=0)
+        values_list = torch.split(values, length_per_key) if need_indices else None
+
+        key_indices = defaultdict(list)
+        for i, key in enumerate(embedding_names):
+            key_indices[key].append(i)
+        for key, indices in key_indices.items():
+            # combines outputs in correct order for CW sharding
+            indices = (
+                _permute_indices(indices, features_to_permute_indices[key])
+                if features_to_permute_indices and key in features_to_permute_indices
+                else indices
+            )
+            ret[key] = JaggedTensor(
+                lengths=lengths_tuple[indices[0]],
+                values=(
+                    embeddings_list[indices[0]]
+                    if len(indices) == 1
+                    else torch.cat([embeddings_list[i] for i in indices], dim=1)
+                ),
+                # pyre-ignore
+                weights=values_list[indices[0]] if need_indices else None,
+            )
+        return ret
+
+
+def construct_jagged_tensors_inference(
+    embeddings: torch.Tensor,
+    lengths: torch.Tensor,
+    values: torch.Tensor,
+    embedding_names: List[str],
+    need_indices: bool = False,
+    features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
+    reverse_indices: Optional[torch.Tensor] = None,
+) -> Dict[str, JaggedTensor]:
+    with record_function("## construct_jagged_tensors_inference ##"):
+        if reverse_indices is not None:
+            embeddings = torch.index_select(
+                embeddings, 0, reverse_indices.to(torch.int32)
+            )
+
+        ret: Dict[str, JaggedTensor] = {}
+        length_per_key: List[int] = _fx_to_list(
+            torch.sum(lengths.view(len(embedding_names), -1), dim=1)
+        )
+
+        lengths = lengths.view(len(embedding_names), -1)
+        lengths_tuple = torch.unbind(lengths, dim=0)
         embeddings_list = torch.split(embeddings, length_per_key, dim=0)
         values_list = torch.split(values, length_per_key) if need_indices else None
 
