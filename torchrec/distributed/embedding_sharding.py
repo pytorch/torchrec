@@ -503,9 +503,11 @@ class FusedKJTListSplitsAwaitable(Awaitable[List[KJTListAwaitable]]):
             len(request.awaitables) for request in requests
         ]
         self._lengths: List[int] = [
-            len(awaitable.splits_tensors)
-            if isinstance(awaitable, KJTSplitsAllToAllMeta)
-            else 0
+            (
+                len(awaitable.splits_tensors)
+                if isinstance(awaitable, KJTSplitsAllToAllMeta)
+                else 0
+            )
             for awaitable in self._awaitables
         ]
         splits_tensors = [

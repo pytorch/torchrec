@@ -1795,6 +1795,45 @@ KeyedJaggedTensor({
         non_kjt_input = "not a KeyedJaggedTensor instance"
         self.assertFalse(kjt_is_equal(kt, non_kjt_input))
 
+    def test_meta_device_compatibility(self) -> None:
+        keys = ["index_0", "index_1", "index_2", "index_3"]
+        lengths = torch.tensor(
+            [2, 0, 1, 1, 1, 3, 0, 2],
+            device=torch.device("meta"),
+        )
+        offsets = torch.tensor(
+            [0, 2, 2, 3, 4, 5, 8, 8, 10],
+            device=torch.device("meta"),
+        )
+        values = torch.tensor(
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            device=torch.device("meta"),
+        )
+        weights = torch.tensor(
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            device=torch.device("meta"),
+        )
+        kjt = KeyedJaggedTensor(
+            keys=keys,
+            values=values,
+            weights=weights,
+            lengths=lengths,
+        )
+
+        kjt.sync()
+        kjt.unsync()
+
+        jt_dict = kjt.to_dict()
+        kjt = KeyedJaggedTensor.from_jt_dict(jt_dict)
+
+        kjt = KeyedJaggedTensor.from_lengths_sync(
+            keys=keys, values=values, weights=weights, lengths=lengths
+        )
+
+        kjt = KeyedJaggedTensor.from_offsets_sync(
+            keys=keys, values=values, weights=weights, offsets=offsets
+        )
+
 
 class TestKeyedJaggedTensorScripting(unittest.TestCase):
     def test_scriptable_forward(self) -> None:
