@@ -117,15 +117,21 @@ def _quantize_weight(
 @torch.fx.wrap
 def _unwrap_kjt(
     features: KeyedJaggedTensor,
+    use_gpu: bool,
+    weighted: bool,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    if features.device().type == "cuda":
+    if use_gpu:
         return (
             features.values().int(),
             features.offsets().int(),
-            features.weights_or_none(),
+            features.weights_or_none() if weighted else None,
         )
     else:
-        return features.values(), features.offsets(), features.weights_or_none()
+        return (
+            features.values(),
+            features.offsets(),
+            features.weights_or_none() if weighted else None,
+        )
 
 
 class QuantBatchedEmbeddingBag(
@@ -210,7 +216,9 @@ class QuantBatchedEmbeddingBag(
         return {self._emb_module: self._config}
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        indices, offsets, per_sample_weights = _unwrap_kjt(features)
+        indices, offsets, per_sample_weights = _unwrap_kjt(
+            features, self.emb_module.row_alignment == 16, self._config.is_weighted
+        )
         # Conditional call of .forward function for FX:
         # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
         # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
@@ -372,7 +380,9 @@ class QuantBatchedEmbedding(
         ]
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        values, offsets, _ = _unwrap_kjt(features)
+        values, offsets, _ = _unwrap_kjt(
+            features, self.emb_module.row_alignment == 16, False
+        )
         if self._emb_module_registered:
             return self.emb_module(
                 indices=values,
