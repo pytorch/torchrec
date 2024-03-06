@@ -3610,7 +3610,8 @@ by this module’s <code class="xref py py-meth docutils literal notranslate"><s
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
-the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a>.</p>
+the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
+<code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -3620,13 +3621,11 @@ persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.state_dict" title="torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
-<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to assign items in the state
-dictionary to their corresponding keys in the module instead
-of copying them inplace into the module’s current parameters and buffers.
-When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors in the current
-module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the properties of the
-Tensors in the state dict are preserved.
-Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+properties of the Tensors in the state dict are preserved. The only
+exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
+<span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -3816,7 +3815,8 @@ by this module’s <code class="xref py py-meth docutils literal notranslate"><s
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
-the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a>.</p>
+the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
+<code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -3826,13 +3826,11 @@ persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.state_dict" title="torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
-<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to assign items in the state
-dictionary to their corresponding keys in the module instead
-of copying them inplace into the module’s current parameters and buffers.
-When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors in the current
-module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the properties of the
-Tensors in the state dict are preserved.
-Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+properties of the Tensors in the state dict are preserved. The only
+exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
+<span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -4092,7 +4090,8 @@ by this module’s <code class="xref py py-meth docutils literal notranslate"><s
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
-the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a>.</p>
+the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
+<code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -4102,13 +4101,11 @@ persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.state_dict" title="torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
-<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to assign items in the state
-dictionary to their corresponding keys in the module instead
-of copying them inplace into the module’s current parameters and buffers.
-When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors in the current
-module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the properties of the
-Tensors in the state dict are preserved.
-Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+properties of the Tensors in the state dict are preserved. The only
+exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
+<span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -4292,7 +4289,8 @@ by this module’s <code class="xref py py-meth docutils literal notranslate"><s
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
-the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a>.</p>
+the call to <a class="reference internal" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.load_state_dict" title="torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
+<code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -4302,13 +4300,11 @@ persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.state_dict" title="torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
-<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to assign items in the state
-dictionary to their corresponding keys in the module instead
-of copying them inplace into the module’s current parameters and buffers.
-When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors in the current
-module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the properties of the
-Tensors in the state dict are preserved.
-Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+properties of the Tensors in the state dict are preserved. The only
+exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
+<span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -5402,7 +5398,8 @@ by this module’s <code class="xref py py-meth docutils literal notranslate"><s
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
-the call to <a class="reference internal" href="#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.load_state_dict" title="torchrec.distributed.embeddingbag.ShardedEmbeddingBag.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a>.</p>
+the call to <a class="reference internal" href="#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.load_state_dict" title="torchrec.distributed.embeddingbag.ShardedEmbeddingBag.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
+<code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -5412,13 +5409,11 @@ persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrec.distributed.embeddingbag.ShardedEmbeddingBag.state_dict" title="torchrec.distributed.embeddingbag.ShardedEmbeddingBag.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
-<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to assign items in the state
-dictionary to their corresponding keys in the module instead
-of copying them inplace into the module’s current parameters and buffers.
-When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors in the current
-module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the properties of the
-Tensors in the state dict are preserved.
-Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+properties of the Tensors in the state dict are preserved. The only
+exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
+<span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -5936,7 +5931,8 @@ by this module’s <code class="xref py py-meth docutils literal notranslate"><s
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>If <code class="xref py py-attr docutils literal notranslate"><span class="pre">assign</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> the optimizer must be created after
-the call to <a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel.load_state_dict" title="torchrec.distributed.model_parallel.DistributedModelParallel.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a>.</p>
+the call to <a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel.load_state_dict" title="torchrec.distributed.model_parallel.DistributedModelParallel.load_state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">load_state_dict</span></code></a> unless
+<code class="xref py py-func docutils literal notranslate"><span class="pre">get_swap_module_params_on_conversion()</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -5946,13 +5942,11 @@ persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel.state_dict" title="torchrec.distributed.model_parallel.DistributedModelParallel.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
-<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to assign items in the state
-dictionary to their corresponding keys in the module instead
-of copying them inplace into the module’s current parameters and buffers.
-When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors in the current
-module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the properties of the
-Tensors in the state dict are preserved.
-Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p></li>
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
+properties of the Tensors in the state dict are preserved. The only
+exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
+<span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
