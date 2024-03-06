@@ -57,6 +57,7 @@ class RecTaskInfo:
     session_metric_def: Optional[SessionMetricDef] = (
         None  # used for session level metrics
     )
+    is_negative_task: bool = False
 
 
 class RecComputeMode(Enum):
