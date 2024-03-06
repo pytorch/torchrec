@@ -187,7 +187,7 @@ def shard_modules(
 
 def _shard_modules(  # noqa: C901
     module: nn.Module,
-    env: Optional[ShardingEnv] = None,
+    env: Optional[Union[ShardingEnv, Dict[str, ShardingEnv]]] = None,
     device: Optional[torch.device] = None,
     plan: Optional[ShardingPlan] = None,
     sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
@@ -218,6 +218,7 @@ def _shard_modules(  # noqa: C901
     }
 
     if plan is None:
+        assert isinstance(env, ShardingEnv), "env must be a ShardingEnv"
         planner = EmbeddingShardingPlanner(
             topology=Topology(
                 local_world_size=get_local_size(env.world_size),
