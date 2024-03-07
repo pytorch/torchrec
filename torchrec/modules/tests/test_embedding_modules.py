@@ -176,8 +176,22 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         config = EmbeddingBagConfig(
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
         )
+
+        # test with device from input
         ebc = EmbeddingBagCollection(tables=[config], device=torch.device("meta"))
         self.assertEqual(torch.device("meta"), ebc.embedding_bags["t1"].weight.device)
+        self.assertEqual(torch.device("meta"), ebc.device)
+
+        # test with device from context manager
+        with torch.device("meta"):
+            ebc = EmbeddingBagCollection(tables=[config])
+        self.assertEqual(torch.device("meta"), ebc.embedding_bags["t1"].weight.device)
+        self.assertEqual(torch.device("meta"), ebc.device)
+
+        # test default device is cpu
+        ebc = EmbeddingBagCollection(tables=[config])
+        self.assertEqual(torch.device("cpu"), ebc.embedding_bags["t1"].weight.device)
+        self.assertEqual(torch.device("cpu"), ebc.device)
 
 
 class EmbeddingCollectionTest(unittest.TestCase):

@@ -160,9 +160,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
         self._embedding_bag_configs = tables
         self._lengths_per_embedding: List[int] = []
-        self._device: torch.device = (
-            device if device is not None else torch.device("cpu")
-        )
 
         table_names = set()
         for embedding_config in tables:
@@ -178,10 +175,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 num_embeddings=embedding_config.num_embeddings,
                 embedding_dim=embedding_config.embedding_dim,
                 mode=pooling_type_to_str(embedding_config.pooling),
-                device=self._device,
+                device=device,
                 include_last_offset=True,
                 dtype=dtype,
             )
+            if device is None:
+                device = self.embedding_bags[embedding_config.name].weight.device
 
             if not embedding_config.feature_names:
                 embedding_config.feature_names = [embedding_config.name]
@@ -189,6 +188,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 len(embedding_config.feature_names) * [embedding_config.embedding_dim]
             )
 
+        self._device: torch.device = device or torch.device("cpu")
         self._embedding_names: List[str] = [
             embedding
             for embeddings in get_embedding_names_by_table(tables)
