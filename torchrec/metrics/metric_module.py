@@ -73,6 +73,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
 }
 
 
+
 # Label used for emitting model metrics to the coresponding trainer publishers.
 MODEL_METRIC_LABEL: str = "model"
 
