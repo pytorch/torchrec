@@ -683,7 +683,7 @@ def benchmark_module(
     compile_modes: List[CompileMode],
     tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
     warmup_iters: int = 20,
-    bench_iters: int = 2000,
+    bench_iters: int = 500,
     prof_iters: int = 20,
     batch_size: int = 2048,
     world_size: int = 2,

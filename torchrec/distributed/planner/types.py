@@ -371,7 +371,7 @@ class ShardingOption:
 
         for submodule in module.modules():
             if isinstance(submodule, EmbeddingCollectionInterface) or isinstance(
-                module, ManagedCollisionEmbeddingCollection
+                submodule, ManagedCollisionEmbeddingCollection
             ):
                 for name, _ in submodule.named_parameters():
                     if sharding_option_name in name:

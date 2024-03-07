@@ -895,6 +895,7 @@ class BatchedFusedEmbeddingBag(
                 pooling_mode=self._pooling,
                 weights_precision=weights_precision,
                 device=device,
+                table_names=[t.name for t in config.embedding_tables],
                 **fused_params,
             )
         )
