@@ -81,6 +81,11 @@ def _get_batching_hinted_output(lengths: Tensor, output: Tensor) -> Tensor:
     return output
 
 
+@torch.fx.wrap
+def _get_feature_length(feature: KeyedJaggedTensor) -> Tensor:
+    return feature.lengths()
+
+
 def for_each_module_of_type_do(
     module: nn.Module,
     module_types: List[Type[torch.nn.Module]],
@@ -863,9 +868,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         ):
             f = kjts_per_key[i]
             indices = f.values()
-            lengths = f.lengths()
+            lengths = _get_feature_length(f)
             offsets = f.offsets()
-            lengths = f.lengths()
             lookup = (
                 emb_module(indices=indices, offsets=offsets)
                 if self.register_tbes
