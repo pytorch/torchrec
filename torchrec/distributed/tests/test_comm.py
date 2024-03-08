@@ -343,27 +343,32 @@ class TestAllToAll(unittest.TestCase):
 
         a2a_embedding.retain_grad()
         a2a_embedding.backward(a2a_embedding)
+        assert pooled_embeddings.grad is not None
 
-        # Run alltoall_pooled with gradient division enabled
-        comm_ops.set_gradient_division(True)
+        if torch_compile_args is None:
+            # Do not test gradient division for Dynamo
+            # As it is implemented with custom Autograd Function which is not fully supported by dynamo
 
-        with dynamo_skipfiles_allow("torchrec"):
-            a2a_embedding_gradient_division = fn_transform(fn)(
-                pooled_embeddings_gradient_division,
-                batch_size_per_rank,
-                dim_sum_per_rank,
-                group=pg if specify_pg else None,
+            # Run alltoall_pooled with gradient division enabled
+            comm_ops.set_gradient_division(True)
+
+            with dynamo_skipfiles_allow("torchrec"):
+                a2a_embedding_gradient_division = fn_transform(fn)(
+                    pooled_embeddings_gradient_division,
+                    batch_size_per_rank,
+                    dim_sum_per_rank,
+                    group=pg if specify_pg else None,
+                )
+
+            a2a_embedding_gradient_division.retain_grad()
+            a2a_embedding_gradient_division.backward(a2a_embedding_gradient_division)
+
+            assert torch.equal(
+                none_throws(pooled_embeddings.grad),
+                torch.mul(
+                    none_throws(pooled_embeddings_gradient_division.grad), world_size
+                ),
             )
-
-        a2a_embedding_gradient_division.retain_grad()
-        a2a_embedding_gradient_division.backward(a2a_embedding_gradient_division)
-
-        assert torch.equal(
-            none_throws(pooled_embeddings.grad),
-            torch.mul(
-                none_throws(pooled_embeddings_gradient_division.grad), world_size
-            ),
-        )
         dist.destroy_process_group()
 
     @unittest.skipIf(
@@ -374,7 +379,7 @@ class TestAllToAll(unittest.TestCase):
         torch_compile_args=st.sampled_from([None, ("eager", True)]),
         specify_pg=st.sampled_from([True]),
     )
-    @settings(max_examples=1, deadline=None)
+    @settings(deadline=None)
     def test_alltoall_pooled(
         self,
         torch_compile_args: Optional[Tuple[str, bool]],
@@ -450,7 +455,7 @@ class TestAllToAll(unittest.TestCase):
         torch_compile_args=st.sampled_from([None, ("eager", True)]),
         specify_pg=st.sampled_from([True]),
     )
-    @settings(max_examples=1, deadline=None)
+    @settings(deadline=None)
     def test_reduce_scatter_pooled(
         self,
         torch_compile_args: Optional[Tuple[str, bool]],
@@ -537,7 +542,7 @@ class TestAllToAll(unittest.TestCase):
         torch_compile_args=st.sampled_from([None, ("eager", True)]),
         specify_pg=st.sampled_from([True]),
     )
-    @settings(max_examples=1, deadline=None)
+    @settings(deadline=None)
     def test_reduce_scatter_v_pooled(
         self,
         torch_compile_args: Optional[Tuple[str, bool]],
@@ -548,6 +553,83 @@ class TestAllToAll(unittest.TestCase):
             backend="nccl",
             # pyre-ignore [6]
             callable=self._test_reduce_scatter_v_pooled,
+            torch_compile_args=torch_compile_args,
+            specify_pg=specify_pg,
+        )
+
+    @classmethod
+    def _test_reduce_scatter_v_per_feature_pooled(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
+        device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
+
+        pg = dist.distributed_c10d._get_default_group()
+
+        batch_size_per_feature: List[int] = [2, 4, 4, 7, 2]
+        batch_size_per_rank_per_feature: List[List[int]] = []
+        for _ in range(world_size):
+            batch_size_per_rank_per_feature.append(batch_size_per_feature)
+
+        embedding_dims: List[int] = [12] * len(batch_size_per_feature)
+
+        n = world_size * sum(
+            [b * emb_dim for b, emb_dim in zip(batch_size_per_feature, embedding_dims)]
+        )
+        input: torch.Tensor = torch.randn(n, requires_grad=True).to(device)
+        input.retain_grad()
+
+        gradient_division: bool = False
+        comm_ops.set_gradient_division(gradient_division)
+
+        # pyre-ignore
+        def fn(*args, **kwargs) -> torch.Tensor:
+            return comm_ops.reduce_scatter_v_per_feature_pooled(*args, **kwargs).wait()
+
+        fn_transform = torch_compile_args_to_fn_transform(torch_compile_args)
+
+        with dynamo_skipfiles_allow("torchrec"):
+            output = fn_transform(fn)(
+                input,
+                batch_size_per_rank_per_feature=batch_size_per_rank_per_feature,
+                embedding_dims=embedding_dims,
+                group=pg if specify_pg else None,
+            )
+
+        output.retain_grad()
+        output.backward(output)
+        assert output.grad is not None
+        dist.destroy_process_group()
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
+    )
+    # pyre-ignore
+    @given(
+        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        specify_pg=st.sampled_from([True]),
+    )
+    @settings(deadline=None)
+    def test_reduce_scatter_v_per_feature_pooled(
+        self,
+        torch_compile_args: Optional[Tuple[str, bool]],
+        specify_pg: bool,
+    ) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="nccl",
+            # pyre-ignore [6]
+            callable=self._test_reduce_scatter_v_per_feature_pooled,
             torch_compile_args=torch_compile_args,
             specify_pg=specify_pg,
         )
@@ -602,7 +684,7 @@ class TestAllToAll(unittest.TestCase):
         torch_compile_args=st.sampled_from([None, ("eager", True)]),
         specify_pg=st.sampled_from([True]),
     )
-    @settings(max_examples=1, deadline=None)
+    @settings(deadline=None)
     def test_all_gather_base_pooled(
         self,
         torch_compile_args: Optional[Tuple[str, bool]],
