@@ -9,6 +9,7 @@
 
 import abc
 import copy
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
@@ -262,80 +263,60 @@ def group_tables(
         )
         emb_dim_bucketer = EmbDimBucketer(embedding_tables, emb_dim_bucketer_policy)
 
-        # populate grouping keys
+        # all embedding tables have the same weight status
+        is_weighted = (
+            embedding_tables[0].is_weighted if len(embedding_tables) > 0 else False
+        )
+
+        # Collect groups
+        groups = defaultdict(list)
         grouping_keys = []
         for table in embedding_tables:
-            if table.fused_params is None:
-                table.fused_params = {}
-
+            group_fused_params = _get_grouping_fused_params(table.fused_params) or {}
             grouping_key = (
                 table.data_type,
                 table.pooling,
                 table.has_feature_processor,
-                _get_grouping_fused_params(table.fused_params),
+                tuple(sorted(group_fused_params.items())),
                 _get_compute_kernel_type(table.compute_kernel),
                 emb_dim_bucketer.get_bucket(table.embedding_dim, table.data_type),
             )
-            if grouping_key not in grouping_keys:
+            # micromanage the order of we traverse the groups to ensure backwards compatibility
+            if grouping_key not in groups:
                 grouping_keys.append(grouping_key)
+            groups[grouping_key].append(table)
 
         for grouping_key in grouping_keys:
             (
                 data_type,
                 pooling,
                 has_feature_processor,
-                fused_params_group,
+                fused_params_tuple,
                 compute_kernel_type,
-                dim_bucket,
+                _,
             ) = grouping_key
-            grouped_tables: List[ShardedEmbeddingTable] = []
-            is_weighted = False
-            for table in embedding_tables:
-                is_weighted = table.is_weighted
-                if (
-                    table.data_type == data_type
-                    and table.pooling.value == pooling.value
-                    and table.has_feature_processor == has_feature_processor
-                    and fused_params_group
-                    == _get_grouping_fused_params(table.fused_params)
-                    and compute_kernel_type
-                    == _get_compute_kernel_type(table.compute_kernel)
-                    and (
-                        emb_dim_bucketer.get_bucket(
-                            table.embedding_dim, table.data_type
-                        )
-                        == dim_bucket
-                    )
-                ):
-                    grouped_tables.append(table)
+            grouped_tables = groups[grouping_key]
 
-            if fused_params_group is None:
-                fused_params_group = {}
+            per_tbe_fused_params = {
+                k: v
+                for k, v in fused_params_tuple
+                if k not in ["_batch_key"]  # drop '_batch_key' not a native fused param
+            }
+            cache_load_factor = _get_weighted_avg_cache_load_factor(grouped_tables)
+            if cache_load_factor is not None:
+                per_tbe_fused_params[CACHE_LOAD_FACTOR_STR] = cache_load_factor
 
-            if grouped_tables:
-                cache_load_factor = _get_weighted_avg_cache_load_factor(grouped_tables)
-                per_tbe_fused_params = copy.copy(fused_params_group)
-                if cache_load_factor is not None:
-                    per_tbe_fused_params[CACHE_LOAD_FACTOR_STR] = cache_load_factor
-
-                grouped_embedding_configs.append(
-                    GroupedEmbeddingConfig(
-                        data_type=data_type,
-                        pooling=pooling,
-                        is_weighted=is_weighted,
-                        has_feature_processor=has_feature_processor,
-                        compute_kernel=compute_kernel_type,
-                        embedding_tables=grouped_tables,
-                        fused_params={
-                            k: v
-                            for k, v in per_tbe_fused_params.items()
-                            if k
-                            not in [
-                                "_batch_key"
-                            ]  # drop '_batch_key' not a native fused param
-                        },
-                    )
+            grouped_embedding_configs.append(
+                GroupedEmbeddingConfig(
+                    data_type=data_type,
+                    pooling=pooling,
+                    is_weighted=is_weighted,
+                    has_feature_processor=has_feature_processor,
+                    compute_kernel=compute_kernel_type,
+                    embedding_tables=grouped_tables,
+                    fused_params=per_tbe_fused_params,
                 )
+            )
         return grouped_embedding_configs
 
     table_weightedness = [
