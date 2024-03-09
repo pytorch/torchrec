@@ -399,3 +399,28 @@ class TestGroupTablesPerRank(unittest.TestCase):
             sorted(_get_table_names_by_groups(tables)),
             [["table_0"], ["table_1"]],
         )
+
+    def test_use_one_tbe_per_table(
+        self,
+    ) -> None:
+
+        tables = [
+            ShardedEmbeddingTable(
+                name=f"table_{i}",
+                data_type=DataType.FP16,
+                pooling=PoolingType.SUM,
+                has_feature_processor=False,
+                fused_params={"use_one_tbe_per_table": i % 2 != 0},
+                compute_kernel=EmbeddingComputeKernel.FUSED_UVM_CACHING,
+                embedding_dim=10,
+                num_embeddings=10000,
+            )
+            for i in range(5)
+        ]
+
+        # Even tables should all be grouped in a single TBE, odd tables should be in
+        # their own TBEs.
+        self.assertEqual(
+            _get_table_names_by_groups(tables),
+            [["table_0", "table_2", "table_4"], ["table_1"], ["table_3"]],
+        )

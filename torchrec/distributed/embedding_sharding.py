@@ -9,6 +9,7 @@
 
 import abc
 import copy
+import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
@@ -48,6 +49,7 @@ from torchrec.streamable import Multistreamable
 torch.fx.wrap("len")
 
 CACHE_LOAD_FACTOR_STR: str = "cache_load_factor"
+USE_ONE_TBE_PER_TABLE: str = "use_one_tbe_per_table"
 
 
 # torch.Tensor.to can not be fx symbolic traced as it does not go through __torch_dispatch__ => fx.wrap it
@@ -213,6 +215,10 @@ def _get_grouping_fused_params(
     if CACHE_LOAD_FACTOR_STR in grouping_fused_params:
         del grouping_fused_params[CACHE_LOAD_FACTOR_STR]
 
+    if grouping_fused_params.get(USE_ONE_TBE_PER_TABLE, False):
+        # Replace with unique value to force it into singleton group.
+        grouping_fused_params[USE_ONE_TBE_PER_TABLE] = str(uuid.uuid4())
+
     return grouping_fused_params
 
 
@@ -296,11 +302,11 @@ def group_tables(
                 _,
             ) = grouping_key
             grouped_tables = groups[grouping_key]
-
+            # remove non-native fused params
             per_tbe_fused_params = {
                 k: v
                 for k, v in fused_params_tuple
-                if k not in ["_batch_key"]  # drop '_batch_key' not a native fused param
+                if k not in ["_batch_key", USE_ONE_TBE_PER_TABLE]
             }
             cache_load_factor = _get_weighted_avg_cache_load_factor(grouped_tables)
             if cache_load_factor is not None:
