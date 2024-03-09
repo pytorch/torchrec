@@ -5,6 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple, TypeVar
 
@@ -265,14 +267,16 @@ class ReduceScatterVInfo(object):
     operation.
 
     Attributes:
-        input_sizes (List[torch.Size]): the sizes of the input tensors. This saves the
+        input_sizes (List[List[int]]): the sizes of the input tensors. This saves the
             sizes of the input tensors when running the backward pass and producing the
             gradient.
         input_splits (List[int]): the splits of the input tensors along dim 0.
+        equal_splits (bool): ...
         total_input_size: (List[int]): total input size.
+        codecs (Optional[QuantizedCommCodecs]): ...
     """
 
-    input_sizes: List[torch.Size]
+    input_sizes: List[List[int]]
     input_splits: List[int]
     equal_splits: bool
     total_input_size: List[int]
@@ -1002,9 +1006,7 @@ def reduce_scatter_v_pooled(
 
     input_size = list(input.size())
     input_sizes = [
-        torch.Size(
-            [ip_split if d == 0 else input_size[d] for d in range(len(input_size))]
-        )
+        [ip_split if d == 0 else input_size[d] for d in range(len(input_size))]
         for ip_split in input_splits
     ]
     equal_splits = all(ip_split == input_splits[0] for ip_split in input_splits)
@@ -1097,11 +1099,9 @@ def reduce_scatter_v_per_feature_pooled(
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 
-    world_size = dist.get_world_size(group)
+    world_size = group.size()
     if world_size <= 1:
         return NoWait(input)
-
-    myreq = Request(group, device=input.device)
 
     input_splits = [0 for _ in range(world_size)]
     if batch_size_per_rank_per_feature:
@@ -1112,8 +1112,7 @@ def reduce_scatter_v_per_feature_pooled(
             ):
                 rank_splits += batch_size * emb_dim
             input_splits[rank] = rank_splits
-
-    input_sizes = [torch.Size([s]) for s in input_splits]
+    input_sizes = [[s] for s in input_splits]
 
     rsvi = ReduceScatterVInfo(
         input_sizes=input_sizes,
@@ -1122,6 +1121,11 @@ def reduce_scatter_v_per_feature_pooled(
         total_input_size=list(input.size()),
         codecs=codecs,
     )
+
+    if is_torchdynamo_compiling():
+        return NoWait(reduce_scatter_v_sync(group, rsvi, input))
+
+    myreq = Request(group, device=input.device)
     ReduceScatterV_Req.apply(group, myreq, rsvi, input)
     return myreq
 
@@ -2426,6 +2430,53 @@ def _all_to_all_single_autograd(
     )
 
 
+class _All2AllSingle_native_funcol(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        input: torch.Tensor,
+        output_split_sizes: List[int],
+        input_split_sizes: List[int],
+        group_name: str,
+    ) -> torch.Tensor:
+        ctx.input_size = input.size()
+        ctx.output_split_sizes = input_split_sizes
+        ctx.input_split_sizes = output_split_sizes
+        ctx.group_name = group_name
+
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops._c10d_functional.all_to_all_single(
+                input, output_split_sizes, input_split_sizes, group_name
+            )
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        return (
+            torch.ops._c10d_functional.all_to_all_single(
+                grad_output,
+                ctx.output_split_sizes,
+                ctx.input_split_sizes,
+                ctx.group_name,
+            ),
+            None,
+            None,
+            None,
+        )
+
+
+def _all_to_all_single_autograd_native_funcol(
+    input: torch.Tensor,
+    output_split_sizes: List[int],
+    input_split_sizes: List[int],
+    group_name: str,
+) -> torch.Tensor:
+    return _All2AllSingle_native_funcol.apply(
+        input, output_split_sizes, input_split_sizes, group_name
+    )
+
+
 class _ReduceScatterTensor(torch.autograd.Function):
     @staticmethod
     # pyre-ignore
@@ -2470,6 +2521,57 @@ def _reduce_scatter_tensor_autograd(input, reduceOp, tag, ranks, group_size):
     return _ReduceScatterTensor.apply(input, reduceOp, tag, ranks, group_size)
 
 
+class _ReduceScatterTensor_native_funcol(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        input: torch.Tensor,
+        reduceOp: str,
+        group_size: int,
+        group_name: str,
+    ) -> torch.Tensor:
+        input = input.contiguous()
+        ctx.group_size = group_size
+        ctx.group_name = group_name
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops._c10d_functional.reduce_scatter_tensor(
+                input,
+                reduceOp,
+                group_size,
+                group_name,
+            )
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        grad_output = grad_output.contiguous()
+        return (
+            torch.ops._c10d_functional.all_gather_into_tensor(
+                grad_output, ctx.group_size, ctx.group_name
+            ),
+            None,
+            None,
+            None,
+        )
+
+
+# pyre-ignore
+def _reduce_scatter_tensor_autograd_native_funcol(
+    # pyre-ignore
+    input,
+    # pyre-ignore
+    reduceOp,
+    # pyre-ignore
+    group_size,
+    # pyre-ignore
+    group_name,
+):
+    return _ReduceScatterTensor_native_funcol.apply(
+        input, reduceOp, group_size, group_name
+    )
+
+
 class _AllGatherIntoTensor(torch.autograd.Function):
     @staticmethod
     # pyre-ignore
@@ -2507,6 +2609,40 @@ def _all_gather_into_tensor_autograd(shard, tag, ranks, group_size):
     return _AllGatherIntoTensor.apply(shard, tag, ranks, group_size)
 
 
+class _AllGatherIntoTensor_native_funcols(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        shard: torch.Tensor,
+        group_size: int,
+        group_name: str,
+    ) -> torch.Tensor:
+        shard = shard.contiguous()
+        ctx.group_size = group_size
+        ctx.group_name = group_name
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops._c10d_functional.all_gather_into_tensor(
+                shard, group_size, group_name
+            )
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        return (
+            torch.ops._c10d_functional.reduce_scatter_tensor(
+                grad_output, "sum", ctx.group_size, ctx.group_name
+            ),
+            None,
+            None,
+        )
+
+
+# pyre-ignore
+def _all_gather_into_tensor_autograd_native_funcol(shard, group_size, group_name):
+    return _AllGatherIntoTensor_native_funcols.apply(shard, group_size, group_name)
+
+
 class _Wait(torch.autograd.Function):
     @staticmethod
     # pyre-ignore
@@ -2535,13 +2671,24 @@ c10d_functional_autograd_ops = [
     ("wait_tensor", _wait_autograd),
 ]
 
+# pyre-ignore
+c10d_functional_autograd_ops_native_funcols = [
+    ("all_to_all_single", _all_to_all_single_autograd_native_funcol),
+    ("reduce_scatter_tensor", _reduce_scatter_tensor_autograd_native_funcol),
+    ("all_gather_into_tensor", _all_gather_into_tensor_autograd_native_funcol),
+    ("wait_tensor", _wait_autograd),
+]
+
 
 if not torch._running_with_deploy():
-    ns = "c10d_functional"
-    c10_lib_impl = torch.library.Library(ns, "IMPL")
-    backend = "Autograd"
-    for op_name, fn in c10d_functional_autograd_ops:
-        if not torch._C._dispatch_has_kernel_for_dispatch_key(
-            f"{ns}::{op_name}", backend
-        ):
-            c10_lib_impl.impl(op_name, fn, backend)
+    for ns, op_to_autograd_fn in zip(
+        ["c10d_functional", "_c10d_functional"],
+        [c10d_functional_autograd_ops, c10d_functional_autograd_ops_native_funcols],
+    ):
+        c10_lib_impl = torch.library.Library(ns, "IMPL")
+        backend = "Autograd"
+        for op_name, fn in op_to_autograd_fn:
+            if not torch._C._dispatch_has_kernel_for_dispatch_key(
+                f"{ns}::{op_name}", backend
+            ):
+                c10_lib_impl.impl(op_name, fn, backend)

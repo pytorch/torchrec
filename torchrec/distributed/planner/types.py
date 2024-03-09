@@ -5,6 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 import abc
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -427,7 +429,7 @@ class ParameterConstraints:
 
     sharding_types: Optional[List[str]] = None
     compute_kernels: Optional[List[str]] = None
-    min_partition: Optional[int] = None  # CW sharding
+    min_partition: Optional[int] = None  # CW sharding, min CW dim to shard
     pooling_factors: List[float] = field(
         default_factory=lambda: [POOLING_FACTOR]
     )  # average number of embedding lookups required per sample
