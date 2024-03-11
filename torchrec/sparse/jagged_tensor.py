@@ -10,6 +10,7 @@
 import abc
 import operator
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from warnings import warn
 
 import torch
 from torch.autograd.profiler import record_function
@@ -1844,6 +1845,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
 
     def to_dict(self) -> Dict[str, JaggedTensor]:
+        warn(
+            "to_dict is for debugging purpose only. Please use permute instead for performance sentitive scenario."
+        )
         _jt_dict = _maybe_compute_kjt_to_jt_dict(
             stride=self.stride(),
             stride_per_key=self.stride_per_key(),
