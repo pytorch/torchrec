@@ -34,6 +34,15 @@ from torchrec.distributed.train_pipeline.utils import (
 from torchrec.distributed.types import Awaitable
 from torchrec.streamable import Multistreamable
 
+
+try:
+    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+except Exception:
+
+    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
+        return False
+
+
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -152,7 +161,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._execute_all_batches = execute_all_batches
         self._apply_jit = apply_jit
         # use two data streams to support two concurrent batches
-        if device.type == "cuda":
+        # Dynamo does not support cuda stream specificaiton,
+        # this freedom is left for compiler pipelining optimizations.
+        if device.type == "cuda" and not is_torchdynamo_compiling():
             self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
                 torch.cuda.Stream(priority=-1)
             )
