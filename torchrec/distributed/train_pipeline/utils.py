@@ -802,8 +802,12 @@ class SparseDataDistUtil(Generic[In]):
         return batch
 
     def wait_sparse_data_dist(self) -> None:
-        self.context.module_contexts = self.context.module_contexts_next_batch.copy()
-        self.context.input_dist_tensors_requests.clear()
-        for names, awaitable in self.context.fused_splits_awaitables:
-            for name, request in zip(names, awaitable.wait()):
-                self.context.input_dist_tensors_requests[name] = request
+        with record_function("## wait_sparse_data_dist ##"):
+            with torch.cuda.stream(self.stream):
+                self.context.module_contexts = (
+                    self.context.module_contexts_next_batch.copy()
+                )
+                self.context.input_dist_tensors_requests.clear()
+                for names, awaitable in self.context.fused_splits_awaitables:
+                    for name, request in zip(names, awaitable.wait()):
+                        self.context.input_dist_tensors_requests[name] = request
