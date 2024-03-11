@@ -7,11 +7,6 @@
 
 # pyre-strict
 
-"""
-NOTE: Due to an internal packaging issue, `train_pipeline.py` must be compatible with
-older versions of TorchRec. Importing new modules from other files may break model
-publishing flows.
-"""
 import abc
 import logging
 from typing import cast, Generic, Iterator, List, Optional, Tuple
