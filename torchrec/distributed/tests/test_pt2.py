@@ -132,7 +132,7 @@ class TestPt2(unittest.TestCase):
 
             if test_pt2_ir_export:
                 pt2_ir = torch.export.export(EM, inputs, {}, strict=False)
-                pt2_ir_output = pt2_ir(*inputs)
+                pt2_ir_output = pt2_ir.module()(*inputs)
                 assert_close(eager_output, pt2_ir_output)
 
     def test_kjt_split(self) -> None:
