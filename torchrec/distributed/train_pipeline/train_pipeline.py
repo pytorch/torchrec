@@ -167,6 +167,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_ip2: Optional[In] = None
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
+        self._dataloader_iter: Optional[Iterator[In]] = None
+        self._dataloader_exhausted: bool = False
 
     def _fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
         # pipeline is already filled
@@ -251,12 +253,29 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
-                batch = next(dataloader_iter, None)
+                batch = self._next_batch(dataloader_iter)
                 if batch is not None:
                     batch = _to_device(batch, self._device, non_blocking=True)
                 elif not self._execute_all_batches:
                     raise StopIteration
                 return batch
+
+    def _next_batch(self, dataloader_iter: Iterator[In]) -> Optional[In]:
+        """
+        Retrieves next batch from dataloader and prevents calling `next` on an already
+        exhausted dataloader, which can cause hanging.
+        """
+        if dataloader_iter is not self._dataloader_iter:
+            self._dataloader_iter = dataloader_iter
+            self._dataloader_exhausted = False
+
+        if self._dataloader_exhausted:
+            batch = None
+        else:
+            batch = next(dataloader_iter, None)
+            if batch is None:
+                self._dataloader_exhausted = True
+        return batch
 
     def _start_sparse_data_dist(self, batch: Optional[In]) -> None:
         """
