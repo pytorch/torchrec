@@ -584,6 +584,45 @@ class ConstructParameterShardingTest(unittest.TestCase):
         )
         self.assertDictEqual(expected, module_sharding_plan)
 
+    def test_table_wise_set_device(self) -> None:
+        embedding_bag_config = [
+            EmbeddingBagConfig(
+                name=f"table_{idx}",
+                feature_names=[f"feature_{idx}"],
+                embedding_dim=64,
+                num_embeddings=4096,
+            )
+            for idx in range(2)
+        ]
+        module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding={
+                "table_0": table_wise(rank=0, device="cpu"),
+                "table_1": table_wise(rank=1, device="cpu"),
+            },
+            local_size=2,
+            world_size=2,
+            device_type="cuda",
+        )
+
+        # Make sure per_param_sharding setting override the default device_type
+        self.assertEqual(
+            # pyre-ignore[16]
+            module_sharding_plan["table_0"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cpu",
+        )
+
+        self.assertEqual(
+            module_sharding_plan["table_1"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cpu",
+        )
+
     def test_column_wise(self) -> None:
         embedding_bag_config = [
             EmbeddingBagConfig(
@@ -693,12 +732,12 @@ class ShardingPlanTest(unittest.TestCase):
         expected = """
 module: ebc
 
- param   | sharding type | compute kernel | ranks 
+ param   | sharding type | compute kernel | ranks
 -------- | ------------- | -------------- | ------
-user_id  | table_wise    | dense          | [0]   
+user_id  | table_wise    | dense          | [0]
 movie_id | row_wise      | dense          | [0, 1]
 
- param   | shard offsets | shard sizes |   placement  
+ param   | shard offsets | shard sizes |   placement
 -------- | ------------- | ----------- | -------------
 user_id  | [0, 0]        | [4096, 32]  | rank:0/cuda:0
 movie_id | [0, 0]        | [2048, 32]  | rank:0/cuda:0
