@@ -35,6 +35,7 @@ These include:
 """
 
 from torchrec.distributed.comm import get_local_rank, get_local_size  # noqa
+from torchrec.distributed.infer_utils import get_tbe_specs_from_sqebc  # noqa
 from torchrec.distributed.model_parallel import DistributedModelParallel  # noqa
 from torchrec.distributed.train_pipeline import (  # noqa
     DataLoadingThread,
