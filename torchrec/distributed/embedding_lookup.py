@@ -117,6 +117,22 @@ def embeddings_cat_empty_rank_handle(
         return torch.cat(embeddings, dim=dim)
 
 
+@torch.fx.wrap
+def embeddings_cat_empty_rank_handle_inference(
+    embeddings: List[torch.Tensor],
+    dim: int = 0,
+    device: Optional[torch.device] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> torch.Tensor:
+    if len(embeddings) == 0:
+        # return a dummy empty tensor when grouped_configs is empty
+        return torch.empty([0], dtype=dtype, device=device)
+    elif len(embeddings) == 1:
+        return embeddings[0]
+    else:
+        return torch.cat(embeddings, dim=dim)
+
+
 class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tensor]):
     """
     Lookup modules for Sequence embeddings (i.e Embeddings)
@@ -560,21 +576,13 @@ class MetaInferGroupedEmbeddingsLookup(
             config.num_features() for config in grouped_configs
         ]
 
-        # return a dummy empty tensor when grouped_configs is empty
-        self.register_buffer(
-            "_dummy_embs_tensor",
-            torch.empty(
-                [0],
-                dtype=(
-                    fused_params["output_dtype"].as_dtype()
-                    if fused_params and "output_dtype" in fused_params
-                    else torch.float16
-                ),
-                device=device,
-            ),
-        )
-
         self.grouped_configs = grouped_configs
+        self.device: Optional[torch.device] = device
+        self.output_dtype: torch.dtype = (
+            fused_params["output_dtype"].as_dtype()
+            if fused_params and "output_dtype" in fused_params
+            else torch.float16
+        )
 
     def get_tbes_to_register(
         self,
@@ -598,7 +606,9 @@ class MetaInferGroupedEmbeddingsLookup(
                 self._emb_modules[i].forward(features_by_group[i]).view(-1)
             )
 
-        return embeddings_cat_empty_rank_handle(embeddings, self._dummy_embs_tensor)
+        return embeddings_cat_empty_rank_handle_inference(
+            embeddings, device=self.device, dtype=self.output_dtype
+        )
 
     # pyre-ignore [14]
     def state_dict(
@@ -695,22 +705,14 @@ class MetaInferGroupedPooledEmbeddingsLookup(
             config.num_features() for config in grouped_configs
         ]
 
-        # return a dummy empty tensor when grouped_configs is empty
-        self.register_buffer(
-            "_dummy_embs_tensor",
-            torch.empty(
-                [0],
-                dtype=(
-                    fused_params["output_dtype"].as_dtype()
-                    if fused_params and "output_dtype" in fused_params
-                    else torch.float16
-                ),
-                device=device,
-            ),
-        )
-
         self.grouped_configs = grouped_configs
         self._feature_processor = feature_processor
+        self.device: Optional[torch.device] = device
+        self.output_dtype: torch.dtype = (
+            fused_params["output_dtype"].as_dtype()
+            if fused_params and "output_dtype" in fused_params
+            else torch.float16
+        )
 
     def get_tbes_to_register(
         self,
@@ -722,8 +724,15 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
         if len(self.grouped_configs) == 0:
+            # return a dummy empty tensor when grouped_configs is empty
             return fx_wrap_tensor_view2d(
-                self._dummy_embs_tensor, sparse_features.stride(), 0
+                torch.empty(
+                    [0],
+                    dtype=self.output_dtype,
+                    device=self.device,
+                ),
+                sparse_features.stride(),
+                0,
             )
 
         embeddings: List[torch.Tensor] = []
@@ -747,11 +756,11 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 features = self._feature_processor(features)
             embeddings.append(emb_op.forward(features))
 
-        return embeddings_cat_empty_rank_handle(
+        return embeddings_cat_empty_rank_handle_inference(
             embeddings,
-            # Not used as empty configs case is handled by guard
-            self._dummy_embs_tensor,
             dim=1,
+            device=self.device,
+            dtype=self.output_dtype,
         )
 
     # pyre-ignore [14]
