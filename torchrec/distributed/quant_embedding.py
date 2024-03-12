@@ -10,7 +10,7 @@
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Any, cast, Dict, List, Optional, Tuple, Type
+from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
@@ -78,6 +78,24 @@ class EmbeddingCollectionContext(Multistreamable):
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.sharding_contexts:
             ctx.record_stream(stream)
+
+
+def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
+    # pyre-ignore
+    return ps.sharding_spec.shards[0].placement.device().type
+
+
+def get_device_from_sharding_type(
+    emb_shard_infos: List[EmbeddingShardingInfo],
+) -> str:
+    res = list(
+        {
+            get_device_from_parameter_sharding(ps.param_sharding)
+            for ps in emb_shard_infos
+        }
+    )
+    assert len(res) == 1, "All shards should be on the same type of device"
+    return res[0]
 
 
 def create_infer_embedding_sharding(
@@ -336,7 +354,10 @@ class ShardedQuantEmbeddingCollection(
         self,
         module: QuantEmbeddingCollection,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        # TODO: Consolidate to use Dict[str, ShardingEnv]
+        env: Union[
+            ShardingEnv, Dict[str, ShardingEnv]
+        ],  # Support hybrid sharding for DI
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> None:
@@ -344,11 +365,14 @@ class ShardedQuantEmbeddingCollection(
 
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
 
+        self._is_hybrid_sharding: bool = isinstance(env, Dict)
+
         self._sharding_type_to_sharding_infos: Dict[
             str, List[EmbeddingShardingInfo]
         ] = create_sharding_infos_by_sharding(
             module, table_name_to_parameter_sharding, fused_params
         )
+
         self._sharding_type_to_sharding: Dict[
             str,
             EmbeddingSharding[
@@ -359,7 +383,14 @@ class ShardedQuantEmbeddingCollection(
             ],
         ] = {
             sharding_type: create_infer_embedding_sharding(
-                sharding_type, embedding_confings, env
+                sharding_type,
+                embedding_confings,
+                (
+                    env
+                    if not self._is_hybrid_sharding
+                    # pyre-ignore
+                    else env[get_device_from_sharding_type(embedding_confings)]
+                ),
             )
             for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()
         }
@@ -732,7 +763,7 @@ class QuantEmbeddingCollectionSharder(
         self,
         module: QuantEmbeddingCollection,
         params: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingCollection:
         fused_params = self.fused_params if self.fused_params else {}
