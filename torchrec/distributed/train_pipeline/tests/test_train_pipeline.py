@@ -875,7 +875,9 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 fill_callback=sdd.wait_sparse_data_dist,
             ),
         ]
-        pipeline = StagedTrainPipeline(pipeline_stages=pipeline_stages)
+        pipeline = StagedTrainPipeline(
+            pipeline_stages=pipeline_stages, compute_stream=torch.cuda.current_stream()
+        )
         dataloader = iter(data)
 
         pipelined_out = []
