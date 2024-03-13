@@ -199,6 +199,13 @@ class LuusJaakolaSearch:
         self.fright: Optional[float] = None
         self.d: float = self.right - self.left
 
+    def shrink_right(self, B: float) -> None:
+        "Shrink right boundary given [B,infinity) -> infinity"
+        self.right = B
+        self.fright = math.inf
+        self.d = self.right - self.left
+        self.x = self.clamp(self.x)
+
     def clamp(self, x: float) -> float:
         "Clamp x into range [left, right]"
         if x < self.left:
