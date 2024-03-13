@@ -12,7 +12,7 @@
 
 #include <folly/futures/Future.h>
 #include <folly/io/IOBuf.h>
-#include <folly/json.h>
+#include <folly/json/json.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <grpc++/grpc++.h>

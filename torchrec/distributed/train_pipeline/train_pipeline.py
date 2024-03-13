@@ -178,6 +178,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_ip2: Optional[In] = None
         self._context = TrainPipelineContext()
         self._pipelined_modules: List[ShardedModule] = []
+        self._dataloader_iter: Optional[Iterator[In]] = None
+        self._dataloader_exhausted: bool = False
 
     def _fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
         # pipeline is already filled
@@ -262,12 +264,29 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
         with record_function("## copy_batch_to_gpu ##"):
             with torch.cuda.stream(self._memcpy_stream):
-                batch = next(dataloader_iter, None)
+                batch = self._next_batch(dataloader_iter)
                 if batch is not None:
                     batch = _to_device(batch, self._device, non_blocking=True)
                 elif not self._execute_all_batches:
                     raise StopIteration
                 return batch
+
+    def _next_batch(self, dataloader_iter: Iterator[In]) -> Optional[In]:
+        """
+        Retrieves next batch from dataloader and prevents calling `next` on an already
+        exhausted dataloader, which can cause hanging.
+        """
+        if dataloader_iter is not self._dataloader_iter:
+            self._dataloader_iter = dataloader_iter
+            self._dataloader_exhausted = False
+
+        if self._dataloader_exhausted:
+            batch = None
+        else:
+            batch = next(dataloader_iter, None)
+            if batch is None:
+                self._dataloader_exhausted = True
+        return batch
 
     def _start_sparse_data_dist(self, batch: Optional[In]) -> None:
         """
@@ -591,6 +610,9 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
     Args:
         pipeline_stages (List[PipelineStage]): A list of stages to execute.
         debug_mode (bool): Whether to enable debug mode.
+        compute_stream (Optional[torch.cuda.Stream]): The main compute stream in which
+            model forward is run, usually torch.cuda.default_stream(). Defaults to the
+            current cuda stream.
 
     Example::
         train_pipeline = StagedTrainPipeline(
@@ -619,6 +641,7 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         self,
         pipeline_stages: List[PipelineStage],
         debug_mode: bool = False,
+        compute_stream: Optional[torch.cuda.Stream] = None,
     ) -> None:
         self._pipeline_stages = pipeline_stages
         self._debug_mode = debug_mode
@@ -627,20 +650,23 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         )
         self._initialized = False
         self._num_steps = 0
+        self._dataloader_iter: Optional[Iterator[In]] = None
+        self._dataloader_exhausted: bool = False
+        self._compute_stream: torch.cuda.streams.Stream = (
+            compute_stream or torch.cuda.current_stream()
+        )
 
     @property
     def num_stages(self) -> int:
         return len(self._pipeline_stages)
 
-    def _advance(self) -> Optional[StageOut]:
+    def _advance(self) -> Optional[StageOutputWithEvent]:
         # left shifts all batch results.
         out = self._stage_outputs[0]
         for idx in range(self.num_stages - 1):
             self._stage_outputs[idx] = self._stage_outputs[idx + 1]
         self._stage_outputs[-1] = None
-        if out is None:
-            return out
-        return out[0]
+        return out
 
     def _run_with_event(
         self,
@@ -662,6 +688,23 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
             new_event.record(stream)
             return (output, new_event)
 
+    def _next_batch(self, dataloader_iter: Iterator[In]) -> Optional[In]:
+        """
+        Retrieves next batch from dataloader and prevents calling `next` on an already
+        exhausted dataloader, which can cause hanging.
+        """
+        if dataloader_iter is not self._dataloader_iter:
+            self._dataloader_iter = dataloader_iter
+            self._dataloader_exhausted = False
+
+        if self._dataloader_exhausted:
+            batch = None
+        else:
+            batch = next(dataloader_iter, None)
+            if batch is None:
+                self._dataloader_exhausted = True
+        return batch
+
     def _run_stage(
         self,
         batch_offset: int,
@@ -680,7 +723,7 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
             f"## Pipeline Stage {stage_idx} : {stage.name} for batch {batch_offset + self._num_steps} ##"
         ):
             if stage_idx == 0:
-                batch_to_wait = next(dataloader_iter, None)
+                batch_to_wait = self._next_batch(dataloader_iter)
                 event = None
             else:
                 batch_to_wait_with_event = self._stage_outputs[batch_offset]
@@ -765,7 +808,12 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         if not self._initialized:
             self._fill_pipeline(dataloader_iter)
 
-        output = self._advance()
+        output_with_event = self._advance()
+
+        if output_with_event is None:
+            # All data consumed, exit early
+            return None
+
         self._num_steps += 1
 
         for stage_idx in range(self.num_stages):
@@ -776,4 +824,11 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
                 dataloader_iter=dataloader_iter,
             )
 
-        return output
+        out, event = output_with_event
+        if event is not None:
+            # Since model forward() is expected to run outside the pipeline,
+            # we need to explicitly wait for the last stage to finish
+            event.wait(self._compute_stream)
+            out.record_stream(self._compute_stream)
+
+        return out
