@@ -2078,7 +2078,16 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             with record_function("## all2all_data:recat_values ##"):
                 if recat is not None and recat.numel() > 0:
                     stride = stride_per_rank[0]
-                    if all(s == stride for s in stride_per_rank):
+
+                    # dynamo don't handle generators well
+                    # so had to unroll the original generator into
+                    # this for loop.
+                    single_batch_per_rank = True
+                    for s in stride_per_rank:
+                        if s != stride:
+                            single_batch_per_rank = False
+
+                    if single_batch_per_rank:
                         (
                             lengths,
                             values,
