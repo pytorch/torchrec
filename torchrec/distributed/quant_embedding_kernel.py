@@ -32,6 +32,7 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
 )
 from torchrec.distributed.fused_params import (
+    get_fused_param_tbe_row_alignment,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
     tbe_fused_params,
@@ -318,6 +319,9 @@ class QuantBatchedEmbedding(
         self._quant_state_dict_split_scale_bias: bool = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
+        self._tbe_row_alignment: Optional[int] = get_fused_param_tbe_row_alignment(
+            fused_params
+        )
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
             IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=[
@@ -342,7 +346,11 @@ class QuantBatchedEmbedding(
                 device=device,
                 pooling_mode=PoolingMode.NONE,
                 feature_table_map=self._feature_table_map,
-                row_alignment=16,
+                row_alignment=(
+                    self._tbe_row_alignment
+                    if self._tbe_row_alignment is not None
+                    else 16
+                ),
                 uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
                 **(tbe_fused_params(fused_params) or {}),
             )
