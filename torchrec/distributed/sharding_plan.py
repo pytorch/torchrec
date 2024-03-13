@@ -69,6 +69,14 @@ def placement(
     return f"rank:{rank}/{param_device}"
 
 
+# TODO: Consolidate placement and placement_helper into one function.
+def placement_helper(device_type: str, index: int = 0) -> str:
+    if device_type == "cpu":
+        return f"rank:0/{device_type}"  # cpu only use rank 0
+
+    return f"rank:{index}/{device_type}:{index}"
+
+
 def calculate_shard_sizes_and_offsets(
     tensor: torch.Tensor,
     world_size: int,
@@ -354,12 +362,14 @@ def data_parallel() -> ParameterShardingGenerator:
 
 def table_wise(
     rank: int,
+    device: Optional[str] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::TABLE_WISE` for construct_module_sharding_plan.
 
     Args:
     rank (int): rank to place table when doing table wise
+    device (Optional[str]): device to place table when doing table_wise sharding
 
     Example::
 
@@ -396,6 +406,8 @@ def table_wise(
             local_size,
             device_type,
             sharder,
+            placements=([placement_helper(device, rank)] if device else None),
+            compute_kernel=(EmbeddingComputeKernel.QUANT.value if device else None),
         )
 
     return _parameter_sharding_generator
@@ -458,12 +470,6 @@ def row_wise(
                 raise ValueError(
                     f"Cannot fit tensor of {rows, cols} into sizes_ranks_placements = {sizes_placement}"
                 )
-
-        def placement_helper(device_type: str, index: int = 0) -> str:
-            if device_type == "cpu":
-                return f"rank:0/{device_type}"  # cpu only use rank 0
-
-            return f"rank:{index}/{device_type}:{index}"
 
         return _get_parameter_sharding(
             param,
