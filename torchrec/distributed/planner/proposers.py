@@ -337,11 +337,19 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             hbm_available = EmbeddingOffloadScaleupProposer.get_budget(
                 plan, storage_constraint
             )
+            hbm_ceiling = EmbeddingOffloadScaleupProposer.get_hbm_ceiling(
+                plan, self.enumerator  # pyre-ignore[6]
+            )
+            max_scaleup = max(0, hbm_ceiling - hbm_used_previously)
+            search_budget = min(hbm_available, max_scaleup)
             logger.info(
-                f"EmbeddingOffloadScaleupProposer - cache scale up budget={round(bytes_to_gb(hbm_available), 2)} GB, exploring [{round(bytes_to_gb(hbm_used_previously), 2)}, {round(bytes_to_gb(hbm_used_previously + hbm_available), 2)}] GB"
+                f"EmbeddingOffloadScaleupProposer - cache scale up budget={round(bytes_to_gb(hbm_available), 2)} GB, ceiling={round(bytes_to_gb(hbm_ceiling),2)} GB, exploring [{round(bytes_to_gb(hbm_used_previously), 2)}, {round(bytes_to_gb(hbm_used_previously + search_budget), 2)}] GB"
             )
             self.search = LuusJaakolaSearch(
-                0, hbm_available, max_iterations=16, left_cost=perf_rating
+                0,
+                search_budget,
+                max_iterations=16,
+                left_cost=perf_rating,
             )
 
         logger.info(
@@ -375,6 +383,47 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         )
         return available_hbm - used_hbm
 
+    @staticmethod
+    def get_hbm_ceiling(
+        starting_proposal: List[ShardingOption], enumerator: Enumerator
+    ) -> int:
+        """returns total amount of memory scaleup could use."""
+        proposal = copy.deepcopy(starting_proposal)
+        # Only consider tables will choose to scaleup, and measure memory usage of promoting them to HBM.
+        cache_tables = EmbeddingOffloadScaleupProposer.get_scalable_shards(proposal)
+        for sharding_option in cache_tables:
+            if (
+                sharding_option.compute_kernel
+                == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+            ):
+                sharding_option.compute_kernel = EmbeddingComputeKernel.FUSED.value
+                if sharding_option.cache_params is not None:
+                    sharding_option.cache_params.load_factor = None
+        enumerator.populate_estimates(proposal)
+        return sum(sharding_option.total_storage.hbm for sharding_option in proposal)
+
+    @staticmethod
+    def get_scalable_shards(proposal: List[ShardingOption]) -> List[ShardingOption]:
+        # This is the subset of tables that we can scale
+
+        def none_to_zero(x: Optional[float]) -> float:
+            return x if x is not None else 0.0
+
+        return [
+            sharding_option
+            for sharding_option in proposal
+            if sharding_option.compute_kernel
+            == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+            and none_to_zero(
+                EmbeddingOffloadScaleupProposer.get_cacheability(sharding_option)
+            )
+            * none_to_zero(
+                EmbeddingOffloadScaleupProposer.get_expected_lookups(sharding_option)
+            )
+            * none_to_zero(sharding_option.cache_load_factor)
+            > 0
+        ]
+
     # Given an available budget of additional memory, and a provisional sharding plan,
     # attempt to use the budget wisely to scale up caches that would most benefit from it.
     @staticmethod
@@ -391,20 +440,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
 
         proposal = copy.deepcopy(starting_proposal)
         # This is the subset of tables that we can scale
-        cache_tables = [
-            sharding_option
-            for sharding_option in proposal
-            if sharding_option.compute_kernel
-            == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
-            and none_to_zero(
-                EmbeddingOffloadScaleupProposer.get_cacheability(sharding_option)
-            )
-            * none_to_zero(
-                EmbeddingOffloadScaleupProposer.get_expected_lookups(sharding_option)
-            )
-            * none_to_zero(sharding_option.cache_load_factor)
-            > 0
-        ]
+        cache_tables = EmbeddingOffloadScaleupProposer.get_scalable_shards(proposal)
         # Nothing to scale
         if len(cache_tables) == 0:
             return None

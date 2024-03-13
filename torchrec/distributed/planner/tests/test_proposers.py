@@ -605,7 +605,7 @@ class TestProposers(unittest.TestCase):
         self.assertEqual(proposals, 16)
         self.assertNotEqual(initial_mem, best_plan, "couldn't find a better plan")
         # goal is 7.9, we get very close
-        self.assertEqual(best_plan, 7.960684550926089 * GB)
+        self.assertEqual(best_plan, 7.9028974287211895 * GB)
 
     def test_proposers_to_proposals_list(self) -> None:
         def make_mock_proposal(name: str) -> List[ShardingOption]:
