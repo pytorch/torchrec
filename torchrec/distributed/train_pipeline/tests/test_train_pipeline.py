@@ -45,7 +45,7 @@ from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
 )
-from torchrec.distributed.train_pipeline.train_pipeline import (
+from torchrec.distributed.train_pipeline.train_pipelines import (
     EvalPipelineSparseDist,
     PrefetchTrainPipelineSparseDist,
     StagedTrainPipeline,
