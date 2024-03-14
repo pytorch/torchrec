@@ -458,8 +458,9 @@ def convert_to_fbgemm_types(fused_params: Dict[str, Any]) -> Dict[str, Any]:
 def init_parameters(module: nn.Module, device: torch.device) -> None:
     with torch.no_grad():
         has_meta_param = any(t.is_meta for t in module.parameters())
-        if has_meta_param:
-            module.to_empty(device=device)
+        not_on_target_device = any(t.device != device for t in module.parameters())
+        if not_on_target_device:
+            module.to_empty(device=device) if has_meta_param else module.to(device)
 
             def maybe_reset_parameters(m: nn.Module) -> None:
                 if hasattr(m, "reset_parameters"):
