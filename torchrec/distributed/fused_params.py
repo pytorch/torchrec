@@ -20,6 +20,7 @@ FUSED_PARAM_REGISTER_TBE_BOOL: str = "__register_tbes_in_named_modules"
 FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
     "__register_quant_state_dict_split_scale_bias"
 )
+FUSED_PARAM_TBE_ROW_ALIGNMENT: str = "__register_tbe_row_alignment"
 
 
 class TBEToRegisterMixIn:
@@ -47,6 +48,15 @@ def is_fused_param_register_tbe(fused_params: Optional[Dict[str, Any]]) -> bool:
     )
 
 
+def get_fused_param_tbe_row_alignment(
+    fused_params: Optional[Dict[str, Any]]
+) -> Optional[int]:
+    if fused_params is None or FUSED_PARAM_TBE_ROW_ALIGNMENT not in fused_params:
+        return None
+    else:
+        return fused_params[FUSED_PARAM_TBE_ROW_ALIGNMENT]
+
+
 def is_fused_param_quant_state_dict_split_scale_bias(
     fused_params: Optional[Dict[str, Any]]
 ) -> bool:
@@ -68,5 +78,7 @@ def tbe_fused_params(
         fused_params_for_tbe.pop(FUSED_PARAM_REGISTER_TBE_BOOL)
     if FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS in fused_params_for_tbe:
         fused_params_for_tbe.pop(FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS)
+    if FUSED_PARAM_TBE_ROW_ALIGNMENT in fused_params_for_tbe:
+        fused_params_for_tbe.pop(FUSED_PARAM_TBE_ROW_ALIGNMENT)
 
     return fused_params_for_tbe

@@ -602,9 +602,8 @@ class MetaInferGroupedEmbeddingsLookup(
             )
         )
         for i in range(len(self._emb_modules)):
-            embeddings.append(
-                self._emb_modules[i].forward(features_by_group[i]).view(-1)
-            )
+            # 2d embedding by nature
+            embeddings.append(self._emb_modules[i].forward(features_by_group[i]))
 
         return embeddings_cat_empty_rank_handle_inference(
             embeddings, device=self.device, dtype=self.output_dtype
