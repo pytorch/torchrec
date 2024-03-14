@@ -673,11 +673,8 @@ class ShardedQuantEmbeddingCollection(
     ) -> List[List[torch.Tensor]]:
         ret: List[List[torch.Tensor]] = []
 
-        for lookup, features, sharding_type in zip(
-            self._lookups, dist_input, self._sharding_type_to_sharding.keys()
-        ):
-            embedding_dim = self._embedding_dim_for_sharding_type(sharding_type)
-            ret.append([o.view(-1, embedding_dim) for o in lookup.forward(features)])
+        for lookup, features in zip(self._lookups, dist_input):
+            ret.append(lookup.forward(features))
         return ret
 
     # pyre-ignore
