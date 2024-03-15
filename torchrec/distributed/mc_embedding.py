@@ -9,8 +9,7 @@
 
 #!/usr/bin/env python3
 
-from dataclasses import dataclass
-from typing import Dict, Optional, Type, Union
+from typing import Dict, List, Optional, Type
 
 import torch
 
@@ -26,18 +25,31 @@ from torchrec.distributed.mc_embedding_modules import (
     BaseShardedManagedCollisionEmbeddingCollection,
 )
 from torchrec.distributed.mc_modules import ManagedCollisionCollectionSharder
+from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.types import (
     ParameterSharding,
     QuantizedCommCodecs,
     ShardingEnv,
 )
 from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
-@dataclass
 class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
-    evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = None
-    remapped_kjt: Optional[KJTList] = None
+
+    def __init__(
+        self,
+        sharding_contexts: Optional[List[SequenceShardingContext]] = None,
+        input_features: Optional[List[KeyedJaggedTensor]] = None,
+        reverse_indices: Optional[List[torch.Tensor]] = None,
+        evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = None,
+        remapped_kjt: Optional[KJTList] = None,
+    ) -> None:
+        super().__init__(sharding_contexts, input_features, reverse_indices)
+        self.evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = (
+            evictions_per_table
+        )
+        self.remapped_kjt: Optional[KJTList] = remapped_kjt
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         super().record_stream(stream)

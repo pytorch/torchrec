@@ -226,11 +226,21 @@ def create_sharding_infos_by_sharding(
     return sharding_type_to_sharding_infos
 
 
-@dataclass
 class EmbeddingCollectionContext(Multistreamable):
-    sharding_contexts: List[SequenceShardingContext] = field(default_factory=list)
-    input_features: List[KeyedJaggedTensor] = field(default_factory=list)
-    reverse_indices: List[torch.Tensor] = field(default_factory=list)
+    # Torch Dynamo does not support default_factory=list:
+    # https://github.com/pytorch/pytorch/issues/120108
+    # TODO(ivankobzarev): Make this a dataclass once supported
+
+    def __init__(
+        self,
+        sharding_contexts: Optional[List[SequenceShardingContext]] = None,
+        input_features: Optional[List[KeyedJaggedTensor]] = None,
+        reverse_indices: Optional[List[torch.Tensor]] = None,
+    ) -> None:
+        super().__init__()
+        self.sharding_contexts: List[SequenceShardingContext] = sharding_contexts or []
+        self.input_features: List[KeyedJaggedTensor] = input_features or []
+        self.reverse_indices: List[torch.Tensor] = reverse_indices or []
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.sharding_contexts:
