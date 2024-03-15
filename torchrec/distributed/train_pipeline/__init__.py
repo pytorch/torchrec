@@ -8,7 +8,7 @@
 # pyre-strict
 
 
-from torchrec.distributed.train_pipeline.train_pipeline import (  # noqa
+from torchrec.distributed.train_pipeline.train_pipelines import (  # noqa
     EvalPipelineSparseDist,  # noqa
     PrefetchTrainPipelineSparseDist,  # noqa
     StagedTrainPipeline,  # noqa
