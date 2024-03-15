@@ -614,29 +614,16 @@ def multi_process_benchmark(
     # pyre-ignore
     **kwargs,
 ) -> BenchmarkResult:
+
     def setUp() -> None:
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
-        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+        if "MASTER_ADDR" not in os.environ:
+            os.environ["MASTER_ADDR"] = str("localhost")
+            os.environ["MASTER_PORT"] = str(get_free_port())
 
-        torch.use_deterministic_algorithms(True)
-        if torch.cuda.is_available():
-            torch.backends.cudnn.allow_tf32 = False
-            torch.backends.cuda.matmul.allow_tf32 = False
-            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-
-    def tearDown() -> None:
-        torch.use_deterministic_algorithms(False)
-        del os.environ["GLOO_DEVICE_TRANSPORT"]
-        del os.environ["NCCL_SOCKET_IFNAME"]
-        if torch.cuda.is_available():
-            os.unsetenv("CUBLAS_WORKSPACE_CONFIG")
-
-    setUp()
     assert "world_size" in kwargs
     world_size = kwargs["world_size"]
 
+    setUp()
     benchmark_res_per_rank = []
     ctx = mp.get_context("forkserver")
     qq = ctx.SimpleQueue()
@@ -659,6 +646,10 @@ def multi_process_benchmark(
         benchmark_res_per_rank.append(res)
         assert len(res.max_mem_allocated) == 1
 
+    for p in processes:
+        p.join()
+        assert 0 == p.exitcode
+
     total_benchmark_res = BenchmarkResult(
         benchmark_res_per_rank[0].short_name,
         benchmark_res_per_rank[0].elapsed_time,
@@ -670,11 +661,6 @@ def multi_process_benchmark(
         # Each rank's BenchmarkResult contains 1 memory measurement
         total_benchmark_res.max_mem_allocated[res.rank] = res.max_mem_allocated[0]
 
-    for p in processes:
-        p.join()
-        assert 0 == p.exitcode
-
-    tearDown()
     return total_benchmark_res
 
 
