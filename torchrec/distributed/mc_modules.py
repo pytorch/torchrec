@@ -97,7 +97,6 @@ class ManagedCollisionCollectionAwaitable(LazyAwaitable[KeyedJaggedTensor]):
         return KeyedJaggedTensor.from_jt_dict(jt_dict)
 
 
-@dataclass
 class ManagedCollisionCollectionContext(EmbeddingCollectionContext):
     pass
 
