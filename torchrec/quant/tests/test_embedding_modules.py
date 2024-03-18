@@ -29,6 +29,7 @@ from torchrec.modules.embedding_modules import (
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
+    features_to_dict,
     quant_prep_enable_quant_state_dict_split_scale_bias,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
@@ -445,6 +446,23 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         from torchrec.fx import symbolic_trace
 
         gm = symbolic_trace(qebc)
+
+        non_placeholder_nodes = [
+            node for node in gm.graph.nodes if node.op != "placeholder"
+        ]
+        self.assertTrue(
+            len(non_placeholder_nodes) > 0, "Graph must have non-placeholder nodes"
+        )
+        self.assertEqual(
+            non_placeholder_nodes[0].op,
+            "call_function",
+            f"First non-placeholder node must be call_function, got {non_placeholder_nodes[0].op} instead",
+        )
+        self.assertEqual(
+            non_placeholder_nodes[0].name,
+            features_to_dict.__name__,
+            f"First non-placeholder node must be features_to_dict, got {non_placeholder_nodes[0].name} instead",
+        )
 
         features = KeyedJaggedTensor(
             keys=["f1", "f2"],
