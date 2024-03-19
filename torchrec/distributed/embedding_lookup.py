@@ -425,6 +425,11 @@ class GroupedPooledEmbeddingsLookup(
                         indices=features.values(),
                         offsets=features.offsets(),
                         forward_stream=forward_stream,
+                        batch_size_per_feature_per_rank=(
+                            features.stride_per_key_per_rank()
+                            if features.variable_stride_per_key()
+                            else None
+                        ),
                     )
 
     def forward(
