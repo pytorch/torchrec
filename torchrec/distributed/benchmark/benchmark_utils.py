@@ -506,53 +506,54 @@ def benchmark(
         b = torch.cuda.max_memory_allocated(rank)
         max_mem_allocated.append(b // 1024 // 1024)
 
-    # pyre-ignore[2]
-    def trace_handler(prof) -> None:
-        total_average = prof.profiler.total_average()
-        logger.info(f" TOTAL_AVERAGE:\n{name}\n{total_average}")
-        dir_path: str = output_dir
+    if output_dir != "":
+        # Only do profiling if output_dir is set
 
-        # Don't output trace files if dir_path is empty
-        # or rank != 0, rank=-1 in no pg case, only 1 rank should output
-        # in pg case, so rank=0
-        if dir_path == "" or rank > 0:
-            return
+        # pyre-ignore[2]
+        def trace_handler(prof) -> None:
+            total_average = prof.profiler.total_average()
+            logger.info(f" TOTAL_AVERAGE:\n{name}\n{total_average}")
+            dir_path: str = output_dir
 
-        trace_file: str = f"{dir_path}/trace-{name}.json"
-        stacks_cpu_file = f"{dir_path}/stacks-cpu-{name}.stacks"
-        stacks_cuda_file = f"{dir_path}/stacks-cuda-{name}.stacks"
-        logger.info(f" PROFILE[{name}].chrome_trace:{trace_file}")
+            # only 1 rank should output in pg case, rank = 0
+            if rank > 0:
+                return
 
-        prof.export_chrome_trace(trace_file)
-        prof.export_stacks(stacks_cpu_file, "self_cpu_time_total")
-        prof.export_stacks(stacks_cuda_file, "self_cuda_time_total")
+            trace_file: str = f"{dir_path}/trace-{name}.json"
+            stacks_cpu_file = f"{dir_path}/stacks-cpu-{name}.stacks"
+            stacks_cuda_file = f"{dir_path}/stacks-cuda-{name}.stacks"
+            logger.info(f" PROFILE[{name}].chrome_trace:{trace_file}")
 
-    # - git clone https://github.com/brendangregg/FlameGraph
-    # - cd FlameGraph
-    # - ./flamegraph.pl --title "CPU time" --countname "us." profiler.stacks > perf_viz.svg
+            prof.export_chrome_trace(trace_file)
+            prof.export_stacks(stacks_cpu_file, "self_cpu_time_total")
+            prof.export_stacks(stacks_cuda_file, "self_cuda_time_total")
 
-    with torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True,
-        with_flops=True,
-        with_modules=True,
-        on_trace_ready=trace_handler,
-    ) as p:
-        for _input in prof_inputs:
-            with record_function("## forward ##"):
-                model(_input)
-                p.step()
+        # - git clone https://github.com/brendangregg/FlameGraph
+        # - cd FlameGraph
+        # - ./flamegraph.pl --title "CPU time" --countname "us." profiler.stacks > perf_viz.svg
 
-    if rank == -1:
-        for di in range(world_size):
-            torch.cuda.synchronize(di)
-    else:
-        torch.cuda.synchronize(rank)
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+            with_flops=True,
+            with_modules=True,
+            on_trace_ready=trace_handler,
+        ) as p:
+            for _input in prof_inputs:
+                with record_function("## forward ##"):
+                    model(_input)
+                    p.step()
+
+            if rank == -1:
+                for di in range(torch.cuda.device_count()):
+                    torch.cuda.synchronize(torch.device(f"cuda:{di}"))
+            else:
+                torch.cuda.synchronize()
 
     return BenchmarkResult(
         short_name=name,
@@ -752,6 +753,8 @@ def benchmark_module(
         world_size: World size used in the
         num_benchmarks: How many times to run over benchmark inputs for statistics
         output_dir: Directory to output profiler outputs (traces, stacks)
+        func_to_benchmark: Custom function to benchmark, check out default_func_to_benchmark for default
+        benchmark_func_kwargs: Custom keyword arguments to pass to func_to_benchmark
 
     Returns:
         A list of BenchmarkResults
