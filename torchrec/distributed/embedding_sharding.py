@@ -291,6 +291,9 @@ def group_tables(
             if grouping_key not in groups:
                 grouping_keys.append(grouping_key)
             groups[grouping_key].append(table)
+        grouping_keys.sort(
+            key=lambda x: x[2]
+        )  # put tables without feature processor in the front
 
         for grouping_key in grouping_keys:
             (

@@ -239,6 +239,57 @@ class TestGroupTablesPerRank(unittest.TestCase):
     # pyre-ignore[56]
     @given(
         data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
+        fused_params_group=st.sampled_from(
+            [
+                {
+                    "cache_load_factor": 0.5,
+                    "prefetch_pipeline": False,
+                },
+                {
+                    "cache_load_factor": 0.3,
+                    "prefetch_pipeline": True,
+                },
+            ]
+        ),
+        embedding_dim=st.sampled_from(list(range(160, 320, 40))),
+        pooling_type=st.sampled_from(list(PoolingType)),
+        compute_kernel=st.sampled_from(list(EmbeddingComputeKernel)),
+    )
+    def test_group_keys_sorted_by_fp(
+        self,
+        data_type: DataType,
+        fused_params_group: Dict[str, Any],
+        embedding_dim: int,
+        pooling_type: PoolingType,
+        compute_kernel: EmbeddingComputeKernel,
+    ) -> None:
+        has_feature_processor = [
+            True,
+            False,
+            True,
+        ]  # should be groupped as [False], [True, True]
+        tables = [
+            ShardedEmbeddingTable(
+                name=f"table_{i}",
+                data_type=data_type,
+                pooling=pooling_type,
+                has_feature_processor=has_feature_processor[i],
+                fused_params=fused_params_group,
+                compute_kernel=compute_kernel,
+                embedding_dim=embedding_dim,
+                num_embeddings=10000,
+            )
+            for i in range(3)
+        ]
+        expected_table_names_by_groups = [["table_1"], ["table_0", "table_2"]]
+        self.assertEqual(
+            _get_table_names_by_groups(tables),
+            expected_table_names_by_groups,
+        )
+
+    # pyre-ignore[56]
+    @given(
+        data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
         has_feature_processor=st.sampled_from([False, True]),
         embedding_dim=st.sampled_from(list(range(160, 320, 40))),
         pooling_type=st.sampled_from(list(PoolingType)),
