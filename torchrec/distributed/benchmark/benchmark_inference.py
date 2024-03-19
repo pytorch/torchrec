@@ -58,6 +58,8 @@ TABLE_SIZES: List[Tuple[int, int]] = [
     for num_embeddings in DLRM_NUM_EMBEDDINGS_PER_FEATURE
 ]
 
+IGNORE_ARGNAME = ["output_dir", "embedding_config_json", "max_num_embeddings"]
+
 
 def benchmark_qec(args: argparse.Namespace, output_dir: str) -> List[BenchmarkResult]:
     tables = get_tables(TABLE_SIZES, is_pooled=False)
@@ -78,7 +80,7 @@ def benchmark_qec(args: argparse.Namespace, output_dir: str) -> List[BenchmarkRe
         argname: getattr(args, argname)
         for argname in dir(args)
         # Don't include output_dir since output_dir was modified
-        if not argname.startswith("_") and argname != "output_dir"
+        if not argname.startswith("_") and argname not in IGNORE_ARGNAME
     }
 
     return benchmark_module(
@@ -112,7 +114,7 @@ def benchmark_qebc(args: argparse.Namespace, output_dir: str) -> List[BenchmarkR
         argname: getattr(args, argname)
         for argname in dir(args)
         # Don't include output_dir since output_dir was modified
-        if not argname.startswith("_") and argname != "output_dir"
+        if not argname.startswith("_") and argname not in IGNORE_ARGNAME
     }
 
     return benchmark_module(
