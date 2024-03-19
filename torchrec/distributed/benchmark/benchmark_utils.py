@@ -418,10 +418,10 @@ def benchmark(
 
     if rank == -1:
         # Reset memory for measurement, no process per rank so do all
-        for di in range(torch.cuda.device_count()):
-            torch.cuda.reset_max_memory_allocated(torch.device(f"cuda:{di}"))
+        for di in range(world_size):
+            torch.cuda.reset_peak_memory_stats(di)
     else:
-        torch.cuda.reset_max_memory_allocated(torch.device(f"cuda:{rank}"))
+        torch.cuda.reset_peak_memory_stats(rank)
 
     # Measure time taken for batches in bench_inputs
     start = [torch.cuda.Event(enable_timing=True) for _ in range(num_benchmarks)]
@@ -436,9 +436,11 @@ def benchmark(
         func_to_benchmark(model, bench_inputs, **benchmark_func_kwargs)
         end[i].record()
 
-    # THis should synchronize all the ranks
-    for di in range(torch.cuda.device_count()):
-        torch.cuda.synchronize(torch.device(f"cuda:{di}"))
+    if rank == -1:
+        for di in range(world_size):
+            torch.cuda.synchronize(di)
+    else:
+        torch.cuda.synchronize(rank)
 
     # TODO: First Benchmark Run for Eager Mode produces outlier
     # Start counting after first as workaround for standard deviation
@@ -449,11 +451,11 @@ def benchmark(
     if rank == -1:
         # Add up all memory allocated in inference mode
         for di in range(world_size):
-            b = torch.cuda.max_memory_allocated(torch.device(f"cuda:{di}"))
+            b = torch.cuda.max_memory_allocated(di)
             max_mem_allocated.append(b // 1024 // 1024)
     else:
         # Only add up memory allocated for current rank in training mode
-        b = torch.cuda.max_memory_allocated(torch.device(f"cuda:{rank}"))
+        b = torch.cuda.max_memory_allocated(rank)
         max_mem_allocated.append(b // 1024 // 1024)
 
     # pyre-ignore[2]
@@ -497,8 +499,12 @@ def benchmark(
             with record_function("## forward ##"):
                 model(_input)
                 p.step()
-        for di in range(torch.cuda.device_count()):
-            torch.cuda.synchronize(torch.device(f"cuda:{di}"))
+
+    if rank == -1:
+        for di in range(world_size):
+            torch.cuda.synchronize(di)
+    else:
+        torch.cuda.synchronize(rank)
 
     return BenchmarkResult(
         short_name=name,
@@ -625,7 +631,9 @@ def multi_process_benchmark(
 
     setUp()
     benchmark_res_per_rank = []
-    ctx = mp.get_context("forkserver")
+    # kineto has a known problem with fork-server: it'll hang
+    # when dumping the trace. Workaround with spawn
+    ctx = mp.get_context("spawn")
     qq = ctx.SimpleQueue()
     processes = []
 
@@ -740,8 +748,7 @@ def benchmark_module(
                     callable=init_module_and_run_benchmark,
                     module=wrapped_module,
                     sharder=sharder,
-                    # TODO: GPU hardcode for now, expand if needed for heter hardware
-                    device=torch.device("cuda:0"),
+                    device=torch.device("cuda"),
                     sharding_type=sharding_type,
                     compile_mode=compile_mode,
                     world_size=world_size,
