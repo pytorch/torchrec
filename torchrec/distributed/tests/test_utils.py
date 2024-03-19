@@ -346,7 +346,9 @@ class KJTBucketizeTest(unittest.TestCase):
 
         self.assertTrue(
             keyed_jagged_tensor_equals(
-                block_bucketized_kjt, expected_block_bucketized_kjt
+                block_bucketized_kjt,
+                expected_block_bucketized_kjt,
+                is_pooled_features=True,
             )
         )
 
@@ -439,7 +441,9 @@ class KJTBucketizeTest(unittest.TestCase):
 
         self.assertTrue(
             keyed_jagged_tensor_equals(
-                block_bucketized_kjt, expected_block_bucketized_kjt
+                block_bucketized_kjt,
+                expected_block_bucketized_kjt,
+                is_pooled_features=True,
             )
         )
 

@@ -230,6 +230,13 @@ def _update_embedding_configs(
         )
 
 
+@torch.fx.wrap
+def features_to_dict(
+    features: KeyedJaggedTensor,
+) -> Dict[str, JaggedTensor]:
+    return features.to_dict()
+
+
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
@@ -452,7 +459,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             KeyedTensor
         """
 
-        feature_dict = features.to_dict()
+        feature_dict = features_to_dict(features)
         embeddings = []
 
         # TODO ideally we can accept KJTs with any feature order. However, this will require an order check + permute, which will break torch.script.
