@@ -23,10 +23,9 @@ from torchrec.distributed.benchmark.benchmark_utils import (
     benchmark_module,
     BenchmarkResult,
     CompileMode,
-    DLRM_NUM_EMBEDDINGS_PER_FEATURE,
-    EMBEDDING_DIM,
     get_tables,
     init_argparse_and_args,
+    set_embedding_config,
     write_report,
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
@@ -50,11 +49,6 @@ BENCH_COMPILE_MODES: List[CompileMode] = [
     # CompileMode.FX_SCRIPT,
 ]
 
-TABLE_SIZES: List[Tuple[int, int]] = [
-    (num_embeddings, EMBEDDING_DIM)
-    for num_embeddings in DLRM_NUM_EMBEDDINGS_PER_FEATURE
-]
-
 
 def training_func_to_benchmark(
     model: torch.nn.Module,
@@ -73,7 +67,10 @@ def training_func_to_benchmark(
 
 
 def benchmark_ebc(
-    tables: List[Tuple[int, int]], args: argparse.Namespace, output_dir: str
+    tables: List[Tuple[int, int]],
+    args: argparse.Namespace,
+    output_dir: str,
+    pooling_configs: Optional[List[int]] = None,
 ) -> List[BenchmarkResult]:
     table_configs = get_tables(tables, data_type=DataType.FP32)
     sharder = TestEBCSharder(
@@ -81,20 +78,31 @@ def benchmark_ebc(
         kernel_type=EmbeddingComputeKernel.DENSE.value,
     )
 
+    # we initialize the embedding tables using CUDA, because when the table is large,
+    # CPU initialization will be prohibitively long. We then copy the module back
+    # to CPU because this module will be sent over subprocesses via multiprocessing,
+    # and we don't want to create an extra CUDA context on GPU0 for each subprocess.
+    # we also need to release the memory in the parent process (empty_cache)
     module = EmbeddingBagCollection(
         # pyre-ignore [6]
         tables=table_configs,
         is_weighted=False,
-        device=torch.device("cpu"),
-    )
+        device=torch.device("cuda"),
+    ).cpu()
 
+    torch.cuda.empty_cache()
+
+    IGNORE_ARGNAME = ["output_dir", "embedding_config_json", "max_num_embeddings"]
     optimizer = torch.optim.SGD(module.parameters(), lr=0.02)
     args_kwargs = {
         argname: getattr(args, argname)
         for argname in dir(args)
         # Don't include output_dir since output_dir was modified
-        if not argname.startswith("_") and argname != "output_dir"
+        if not argname.startswith("_") and argname not in IGNORE_ARGNAME
     }
+
+    if pooling_configs:
+        args_kwargs["pooling_configs"] = pooling_configs
 
     return benchmark_module(
         module=module,
@@ -124,11 +132,11 @@ def main() -> None:
     write_report_funcs_per_module = []
     shrunk_table_sizes = []
 
-    for i in range(len(TABLE_SIZES)):
-        if TABLE_SIZES[i][0] > 1000000:
-            shrunk_table_sizes.append((1000000, TABLE_SIZES[i][1]))
-        else:
-            shrunk_table_sizes.append(TABLE_SIZES[i])
+    embedding_configs, pooling_configs = set_embedding_config(
+        args.embedding_config_json
+    )
+    for config in embedding_configs:
+        shrunk_table_sizes.append((min(args.max_num_embeddings, config[0]), config[1]))
 
     for module_name in ["EmbeddingBagCollection"]:
         output_dir = args.output_dir + f"/run_{datetime_sfx}"
@@ -157,7 +165,7 @@ def main() -> None:
 
         # Save results to output them once benchmarking is all done
         benchmark_results_per_module.append(
-            benchmark_func(shrunk_table_sizes, args, output_dir)
+            benchmark_func(shrunk_table_sizes, args, output_dir, pooling_configs)
         )
         write_report_funcs_per_module.append(
             partial(

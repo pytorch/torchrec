@@ -66,6 +66,8 @@ class ModelInput(Pipelineable):
         ] = None,
         variable_batch_size: bool = False,
         long_indices: bool = True,
+        tables_pooling: Optional[List[int]] = None,
+        weighted_tables_pooling: Optional[List[int]] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
@@ -78,10 +80,30 @@ class ModelInput(Pipelineable):
                 for r in range(world_size)
             ]
 
+        def _validate_pooling_factor(
+            tables: Union[
+                List[EmbeddingTableConfig],
+                List[EmbeddingBagConfig],
+                List[EmbeddingConfig],
+            ],
+            pooling_factor: Optional[List[int]],
+        ) -> None:
+            if pooling_factor and len(pooling_factor) != len(tables):
+                raise ValueError(
+                    "tables_pooling and tables must have the same length. "
+                    f"Got {len(pooling_factor)} and {len(tables)}."
+                )
+
+        _validate_pooling_factor(tables, tables_pooling)
+        _validate_pooling_factor(weighted_tables, weighted_tables_pooling)
+
         idlist_features_to_num_embeddings = {}
-        for table in tables:
-            for feature in table.feature_names:
-                idlist_features_to_num_embeddings[feature] = table.num_embeddings
+        idlist_features_to_pooling_factor = {}
+        for idx in range(len(tables)):
+            for feature in tables[idx].feature_names:
+                idlist_features_to_num_embeddings[feature] = tables[idx].num_embeddings
+                if tables_pooling is not None:
+                    idlist_features_to_pooling_factor[feature] = tables_pooling[idx]
 
         idlist_features = list(idlist_features_to_num_embeddings.keys())
         idscore_features = [
@@ -91,6 +113,9 @@ class ModelInput(Pipelineable):
         idlist_ind_ranges = list(idlist_features_to_num_embeddings.values())
         idscore_ind_ranges = [table.num_embeddings for table in weighted_tables]
 
+        idlist_pooling_factor = list(idlist_features_to_pooling_factor.values())
+        idscore_pooling_factor = weighted_tables_pooling
+
         # Generate global batch.
         global_idlist_lengths = []
         global_idlist_indices = []
@@ -98,10 +123,21 @@ class ModelInput(Pipelineable):
         global_idscore_indices = []
         global_idscore_weights = []
 
-        for ind_range in idlist_ind_ranges:
-            lengths_ = torch.abs(
-                torch.randn(batch_size * world_size) + pooling_avg
-            ).int()
+        for idx in range(len(idlist_ind_ranges)):
+            ind_range = idlist_ind_ranges[idx]
+            if idlist_pooling_factor:
+                lengths_ = torch.max(
+                    torch.normal(
+                        idlist_pooling_factor[idx],
+                        idlist_pooling_factor[idx] / 10,
+                        [batch_size * world_size],
+                    ),
+                    torch.tensor(1.0),
+                ).int()
+            else:
+                lengths_ = torch.abs(
+                    torch.randn(batch_size * world_size) + pooling_avg
+                ).int()
             if variable_batch_size:
                 lengths = torch.zeros(batch_size * world_size).int()
                 for r in range(world_size):
@@ -127,9 +163,15 @@ class ModelInput(Pipelineable):
             lengths=torch.cat(global_idlist_lengths),
         )
 
-        for ind_range in idscore_ind_ranges:
+        for idx in range(len(idscore_ind_ranges)):
+            ind_range = idscore_ind_ranges[idx]
             lengths_ = torch.abs(
-                torch.randn(batch_size * world_size) + pooling_avg
+                torch.randn(batch_size * world_size)
+                + (
+                    idscore_pooling_factor[idx]
+                    if idscore_pooling_factor
+                    else pooling_avg
+                )
             ).int()
             if variable_batch_size:
                 lengths = torch.zeros(batch_size * world_size).int()
