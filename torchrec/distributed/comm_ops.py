@@ -2663,6 +2663,26 @@ def _wait_autograd(input: torch.Tensor) -> torch.Tensor:
     return _Wait.apply(input)
 
 
+class _Wait_native_funcol(torch.autograd.Function):
+    @staticmethod
+    # pyre-ignore
+    def forward(
+        ctx,  # pyre-ignore
+        input: torch.Tensor,
+    ) -> torch.Tensor:
+        with torch._C._AutoDispatchBelowAutograd():
+            ret = torch.ops._c10d_functional.wait_tensor(input)
+        return ret
+
+    @staticmethod
+    def backward(ctx, grad_output):  # pyre-ignore
+        return (grad_output,)
+
+
+def _wait_autograd_native_funcol(input: torch.Tensor) -> torch.Tensor:
+    return _Wait_native_funcol.apply(input)
+
+
 # pyre-ignore
 c10d_functional_autograd_ops = [
     ("all_to_all_single", _all_to_all_single_autograd),
@@ -2676,7 +2696,7 @@ c10d_functional_autograd_ops_native_funcols = [
     ("all_to_all_single", _all_to_all_single_autograd_native_funcol),
     ("reduce_scatter_tensor", _reduce_scatter_tensor_autograd_native_funcol),
     ("all_gather_into_tensor", _all_gather_into_tensor_autograd_native_funcol),
-    ("wait_tensor", _wait_autograd),
+    ("wait_tensor", _wait_autograd_native_funcol),
 ]
 
 
