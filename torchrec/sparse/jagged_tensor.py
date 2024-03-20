@@ -1729,39 +1729,82 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             else:
                 split_length_per_key = _length_per_key[start:end]
 
-                if not torch.jit.is_scripting() and is_torchdynamo_compiling():
-                    # Checks for dynamo dynamic shapes tracing
-                    torch._check_is_size(start_offset)
-                    torch._check_is_size(end_offset)
-                    torch._check_is_size(end_offset - start_offset)
-                    torch._check(start_offset <= self._values.size(0))
-                    torch._check(end_offset <= self._values.size(0))
-                    torch._check(end_offset >= start_offset)
+                if is_non_strict_exporting():
+                    sz = sum(split_length_per_key)
 
-                split_list.append(
-                    KeyedJaggedTensor(
-                        keys=keys,
-                        values=self._values[start_offset:end_offset],
-                        weights=(
-                            None
-                            if self.weights_or_none() is None
-                            else self.weights()[start_offset:end_offset]
-                        ),
-                        lengths=self.lengths()[
-                            self.lengths_offset_per_key()[
-                                start
-                            ] : self.lengths_offset_per_key()[end]
-                        ],
-                        offsets=None,
-                        stride=stride,
-                        stride_per_key_per_rank=stride_per_key_per_rank,
-                        length_per_key=split_length_per_key,
-                        offset_per_key=None,
-                        index_per_key=None,
-                        jt_dict=None,
-                        inverse_indices=None,
+                    torch._check_is_size(sz)
+                    torch._check(start_offset <= self._values.size(0))
+                    torch._check(sz <= self._values.size(0))
+                    torch._check_is_size(start_offset)
+
+                    # Why are below 3 needed?
+                    torch._check(sz != 0)
+                    torch._check(sz != -1)
+                    torch._check(sz != 1)
+
+                    torch._check(start_offset + sz <= self._values.size(0))
+                    torch._check(start_offset + sz >= 0)
+
+                    lengths_start = self.lengths_offset_per_key()[start]
+                    lengths_sz = self.lengths_offset_per_key()[end] - lengths_start
+
+                    _lengths = torch.narrow(
+                        self.lengths(), 0, lengths_start, lengths_sz
                     )
-                )
+                    split_list.append(
+                        KeyedJaggedTensor(
+                            keys=keys,
+                            values=torch.narrow(self._values, 0, start_offset, sz),
+                            weights=(
+                                None
+                                if self.weights_or_none() is None
+                                else torch.narrow(self.weights(), 0, start_offset, sz)
+                            ),
+                            lengths=_lengths,
+                            offsets=None,
+                            stride=stride,
+                            stride_per_key_per_rank=stride_per_key_per_rank,
+                            length_per_key=split_length_per_key,
+                            offset_per_key=None,
+                            index_per_key=None,
+                            jt_dict=None,
+                            inverse_indices=None,
+                        )
+                    )
+                else:
+                    if not torch.jit.is_scripting() and is_torchdynamo_compiling():
+                        # Checks for dynamo dynamic shapes tracing
+                        torch._check_is_size(start_offset)
+                        torch._check_is_size(end_offset)
+                        torch._check_is_size(end_offset - start_offset)
+                        torch._check(start_offset <= self._values.size(0))
+                        torch._check(end_offset <= self._values.size(0))
+                        torch._check(end_offset >= start_offset)
+
+                    split_list.append(
+                        KeyedJaggedTensor(
+                            keys=keys,
+                            values=self._values[start_offset:end_offset],
+                            weights=(
+                                None
+                                if self.weights_or_none() is None
+                                else self.weights()[start_offset:end_offset]
+                            ),
+                            lengths=self.lengths()[
+                                self.lengths_offset_per_key()[
+                                    start
+                                ] : self.lengths_offset_per_key()[end]
+                            ],
+                            offsets=None,
+                            stride=stride,
+                            stride_per_key_per_rank=stride_per_key_per_rank,
+                            length_per_key=split_length_per_key,
+                            offset_per_key=None,
+                            index_per_key=None,
+                            jt_dict=None,
+                            inverse_indices=None,
+                        )
+                    )
             start = end
             start_offset = end_offset
         return split_list
