@@ -178,6 +178,21 @@ class TestPt2(unittest.TestCase):
             test_pt2_ir_export=True,
         )
 
+    def test_kjt_offset_per_key(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor):
+                return kjt.offset_per_key()
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+
+        self._test_kjt_input_module(
+            M(),
+            kjt.keys(),
+            (kjt._values, kjt._lengths),
+            test_aot_inductor=False,
+            test_pt2_ir_export=True,
+        )
+
     # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
