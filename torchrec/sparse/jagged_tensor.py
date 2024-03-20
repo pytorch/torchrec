@@ -244,6 +244,10 @@ def _permute_tensor_by_segments(
     return permuted_tensor, permuted_weights
 
 
+def is_non_strict_exporting() -> bool:
+    return not torch.compiler.is_dynamo_compiling() and torch.compiler.is_compiling()
+
+
 class JaggedTensorMeta(abc.ABCMeta, torch.fx._symbolic_trace.ProxyableClassMeta):
     pass
 
@@ -822,9 +826,48 @@ def _maybe_compute_offset_per_key(
             offsets=offsets,
             values=values,
         )
-        return _length_per_key, _cumsum(_length_per_key)
+
+        if is_non_strict_exporting():
+            # only torch.export non-strict case
+            return (
+                _length_per_key,
+                (
+                    torch.ops.fbgemm.asynchronous_complete_cumsum(
+                        torch._refs.tensor(
+                            _length_per_key,
+                            dtype=torch.int32,
+                            device=torch.device("cpu"),
+                            pin_memory=False,
+                            requires_grad=False,
+                        )
+                    ).tolist()
+                    if len(_length_per_key) > 0
+                    else []
+                ),
+            )
+        else:
+            return _length_per_key, _cumsum(_length_per_key)
     elif offset_per_key is None:
-        return length_per_key, _cumsum(length_per_key)
+        if is_non_strict_exporting():
+            # only torch.export non-strict case
+            return (
+                length_per_key,
+                (
+                    torch.ops.fbgemm.asynchronous_complete_cumsum(
+                        torch._refs.tensor(
+                            length_per_key,
+                            dtype=torch.int32,
+                            device=torch.device("cpu"),
+                            pin_memory=False,
+                            requires_grad=False,
+                        )
+                    ).tolist()
+                    if len(length_per_key) > 0
+                    else []
+                ),
+            )
+        else:
+            return length_per_key, _cumsum(length_per_key)
     else:
         return length_per_key, offset_per_key
 
