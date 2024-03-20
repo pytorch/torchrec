@@ -13,6 +13,7 @@ import argparse
 import contextlib
 import copy
 import gc
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -266,6 +267,7 @@ def get_inputs(
     world_size: int,
     num_inputs: int,
     rank: int = -1,
+    pooling_configs: Optional[List[int]] = None,
 ) -> List[KeyedJaggedTensor]:
     inputs: List[KeyedJaggedTensor] = []
 
@@ -277,6 +279,7 @@ def get_inputs(
             tables=tables,
             weighted_tables=[],
             long_indices=False,
+            tables_pooling=pooling_configs,
         )[1][0]
 
         # If ProcessGroup, place input on correct device. Otherwise, place on cuda:0
@@ -314,6 +317,48 @@ def write_report(
     logger.info(f"Report written to {report_file}:\n{report_str}")
 
 
+def set_embedding_config(
+    embedding_config_json: str,
+) -> Tuple[List[Tuple[int, int]], List[int]]:
+    """
+    the config file should follow this pattern: {feature: {num_embeddings: int, embedding_dim: int}}
+    """
+    embedding_configs = []
+    pooling_configs = []
+    has_pooling_config = False
+    try:
+        if os.path.exists(embedding_config_json):
+            with open(embedding_config_json, "r") as f:
+                embedding_config_json = json.load(f)
+
+            for _, config in embedding_config_json.items():
+                embedding_configs.append(
+                    (config["num_embeddings"], config["embedding_dim"])
+                )
+                if "pooling_factor" in config:
+                    pooling_configs.append(config["pooling_factor"])
+                    has_pooling_config = True
+                else:
+                    if has_pooling_config:
+                        raise RuntimeError(
+                            "We cannot handle some features have pooling factor and others don't."
+                        )
+        else:
+            raise RuntimeError(
+                f"Could not find embedding config json at path {embedding_config_json}"
+            )
+    except BaseException as e:
+        logger.warning(
+            f"Failed to load embedding config because {e}, fallback to DLRM config"
+        )
+        embedding_configs = [
+            (num_embeddings, EMBEDDING_DIM)
+            for num_embeddings in DLRM_NUM_EMBEDDINGS_PER_FEATURE
+        ]
+
+    return embedding_configs, pooling_configs
+
+
 def init_argparse_and_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
@@ -322,10 +367,13 @@ def init_argparse_and_args() -> argparse.Namespace:
     parser.add_argument("--prof_iters", type=int, default=20)
     parser.add_argument("--batch_size", type=int, default=2048)
     parser.add_argument("--world_size", type=int, default=2)
+    parser.add_argument("--max_num_embeddings", type=int, default=1000000)
     parser.add_argument("--output_dir", type=str, default="/var/tmp/torchrec-bench")
     parser.add_argument("--num_benchmarks", type=int, default=5)
+    parser.add_argument("--embedding_config_json", type=str, default="")
 
     args = parser.parse_args()
+
     return args
 
 
@@ -418,10 +466,10 @@ def benchmark(
 
     if rank == -1:
         # Reset memory for measurement, no process per rank so do all
-        for di in range(torch.cuda.device_count()):
-            torch.cuda.reset_max_memory_allocated(torch.device(f"cuda:{di}"))
+        for di in range(world_size):
+            torch.cuda.reset_peak_memory_stats(di)
     else:
-        torch.cuda.reset_max_memory_allocated(torch.device(f"cuda:{rank}"))
+        torch.cuda.reset_peak_memory_stats(rank)
 
     # Measure time taken for batches in bench_inputs
     start = [torch.cuda.Event(enable_timing=True) for _ in range(num_benchmarks)]
@@ -436,9 +484,11 @@ def benchmark(
         func_to_benchmark(model, bench_inputs, **benchmark_func_kwargs)
         end[i].record()
 
-    # THis should synchronize all the ranks
-    for di in range(torch.cuda.device_count()):
-        torch.cuda.synchronize(torch.device(f"cuda:{di}"))
+    if rank == -1:
+        for di in range(world_size):
+            torch.cuda.synchronize(di)
+    else:
+        torch.cuda.synchronize(rank)
 
     # TODO: First Benchmark Run for Eager Mode produces outlier
     # Start counting after first as workaround for standard deviation
@@ -449,11 +499,11 @@ def benchmark(
     if rank == -1:
         # Add up all memory allocated in inference mode
         for di in range(world_size):
-            b = torch.cuda.max_memory_allocated(torch.device(f"cuda:{di}"))
+            b = torch.cuda.max_memory_allocated(di)
             max_mem_allocated.append(b // 1024 // 1024)
     else:
         # Only add up memory allocated for current rank in training mode
-        b = torch.cuda.max_memory_allocated(torch.device(f"cuda:{rank}"))
+        b = torch.cuda.max_memory_allocated(rank)
         max_mem_allocated.append(b // 1024 // 1024)
 
     # pyre-ignore[2]
@@ -497,8 +547,12 @@ def benchmark(
             with record_function("## forward ##"):
                 model(_input)
                 p.step()
-        for di in range(torch.cuda.device_count()):
-            torch.cuda.synchronize(torch.device(f"cuda:{di}"))
+
+    if rank == -1:
+        for di in range(world_size):
+            torch.cuda.synchronize(di)
+    else:
+        torch.cuda.synchronize(rank)
 
     return BenchmarkResult(
         short_name=name,
@@ -545,6 +599,7 @@ def init_module_and_run_benchmark(
     benchmark_func_kwargs: Optional[Dict[str, Any]],
     rank: int = -1,
     queue: Optional[mp.Queue] = None,
+    pooling_configs: Optional[List[int]] = None,
 ) -> BenchmarkResult:
     """
     There are a couple of caveats here as to why the module has to be initialized
@@ -560,7 +615,9 @@ def init_module_and_run_benchmark(
     """
 
     num_inputs_to_gen: int = warmup_iters + bench_iters + prof_iters
-    inputs = get_inputs(tables, batch_size, world_size, num_inputs_to_gen, rank)
+    inputs = get_inputs(
+        tables, batch_size, world_size, num_inputs_to_gen, rank, pooling_configs
+    )
 
     warmup_inputs = inputs[:warmup_iters]
     bench_inputs = inputs[warmup_iters : (warmup_iters + bench_iters)]
@@ -625,7 +682,9 @@ def multi_process_benchmark(
 
     setUp()
     benchmark_res_per_rank = []
-    ctx = mp.get_context("forkserver")
+    # kineto has a known problem with fork-server: it'll hang
+    # when dumping the trace. Workaround with spawn
+    ctx = mp.get_context("spawn")
     qq = ctx.SimpleQueue()
     processes = []
 
@@ -679,6 +738,7 @@ def benchmark_module(
     output_dir: str = "",
     func_to_benchmark: Callable[..., None] = default_func_to_benchmark,
     benchmark_func_kwargs: Optional[Dict[str, Any]] = None,
+    pooling_configs: Optional[List[int]] = None,
 ) -> List[BenchmarkResult]:
     """
     Args:
@@ -692,6 +752,8 @@ def benchmark_module(
         world_size: World size used in the
         num_benchmarks: How many times to run over benchmark inputs for statistics
         output_dir: Directory to output profiler outputs (traces, stacks)
+        pooling_configs: The pooling factor for the tables.
+            (Optional; if not set, we'll use 10 as default)
 
     Returns:
         A list of BenchmarkResults
@@ -740,8 +802,7 @@ def benchmark_module(
                     callable=init_module_and_run_benchmark,
                     module=wrapped_module,
                     sharder=sharder,
-                    # TODO: GPU hardcode for now, expand if needed for heter hardware
-                    device=torch.device("cuda:0"),
+                    device=torch.device("cuda"),
                     sharding_type=sharding_type,
                     compile_mode=compile_mode,
                     world_size=world_size,
@@ -754,6 +815,7 @@ def benchmark_module(
                     output_dir=output_dir,
                     func_to_benchmark=func_to_benchmark,
                     benchmark_func_kwargs=benchmark_func_kwargs,
+                    pooling_configs=pooling_configs,
                 )
             else:
                 res = init_module_and_run_benchmark(
@@ -773,6 +835,7 @@ def benchmark_module(
                     output_dir=output_dir,
                     func_to_benchmark=func_to_benchmark,
                     benchmark_func_kwargs=benchmark_func_kwargs,
+                    pooling_configs=pooling_configs,
                 )
 
             gc.collect()
