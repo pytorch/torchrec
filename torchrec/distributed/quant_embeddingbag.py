@@ -143,7 +143,6 @@ class ShardedQuantEmbeddingBagCollection(
         }
         self._device = device
         self._is_weighted: bool = module.is_weighted()
-        self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params, device)
 
@@ -152,13 +151,9 @@ class ShardedQuantEmbeddingBagCollection(
 
         self._embedding_names: List[str] = []
         self._embedding_dims: List[int] = []
-        self._feature_splits: List[int] = []
-        self._features_order: List[int] = []
 
         # forward pass flow control
-        self._has_uninitialized_input_dist: bool = True
         self._has_uninitialized_output_dist: bool = True
-        self._has_features_permute: bool = True
 
         tbes: Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig] = (
             get_tbes_to_register_from_iterable(self._lookups)
@@ -206,6 +201,10 @@ class ShardedQuantEmbeddingBagCollection(
                             "weight", lookup_state_dict[key]
                         )
 
+        self._input_dist_module: ShardedQuantEbcInputDist = ShardedQuantEbcInputDist(
+            self._sharding_type_to_sharding, self._device
+        )
+
     def tbes_configs(
         self,
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
@@ -216,33 +215,6 @@ class ShardedQuantEmbeddingBagCollection(
 
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
         return self._embedding_bag_configs
-
-    def _create_input_dist(
-        self,
-        input_feature_names: List[str],
-        features_device: torch.device,
-        input_dist_device: Optional[torch.device] = None,
-    ) -> None:
-        feature_names: List[str] = []
-        for sharding in self._sharding_type_to_sharding.values():
-            self._input_dists.append(
-                sharding.create_input_dist(device=input_dist_device)
-            )
-            feature_names.extend(sharding.feature_names())
-            self._feature_splits.append(len(sharding.feature_names()))
-
-        if feature_names == input_feature_names:
-            self._has_features_permute = False
-        else:
-            for f in feature_names:
-                self._features_order.append(input_feature_names.index(f))
-            self.register_buffer(
-                "_features_order_tensor",
-                torch.tensor(
-                    self._features_order, device=features_device, dtype=torch.int32
-                ),
-                persistent=False,
-            )
 
     def _create_lookups(
         self,
@@ -268,35 +240,14 @@ class ShardedQuantEmbeddingBagCollection(
     def input_dist(
         self, ctx: NullShardedModuleContext, features: KeyedJaggedTensor
     ) -> ListOfKJTList:
-        if self._has_uninitialized_input_dist:
-            self._create_input_dist(
-                features.keys(),
-                features.device(),
-                self._device,
-            )
-            self._has_uninitialized_input_dist = False
+
+        input_dist_outputs = self._input_dist_module(features)
+
         if self._has_uninitialized_output_dist:
             self._create_output_dist(features.device())
             self._has_uninitialized_output_dist = False
-        with torch.no_grad():
-            if self._has_features_permute:
-                features = features.permute(
-                    self._features_order,
-                    self._features_order_tensor,
-                )
-            else:
-                features = flatten_feature_lengths(features)
-            features_by_shards = (
-                [features]
-                if len(self._feature_splits) == 1
-                else features.split(self._feature_splits)
-            )
-            return ListOfKJTList(
-                [
-                    self._input_dists[i].forward(features_by_shards[i])
-                    for i in range(len(self._input_dists))
-                ]
-            )
+
+        return input_dist_outputs
 
     def compute(
         self,
@@ -487,3 +438,134 @@ class QuantFeatureProcessedEmbeddingBagCollectionSharder(
     @property
     def module_type(self) -> Type[QuantFeatureProcessedEmbeddingBagCollection]:
         return QuantFeatureProcessedEmbeddingBagCollection
+
+
+class ShardedQuantEbcInputDist(torch.nn.Module):
+    """
+    This module implements distributed inputs of a ShardedQuantEmbeddingBagCollection.
+
+    Args:
+        sharding_type_to_sharding (Dict[
+            str,
+            EmbeddingSharding[
+                NullShardingContext,
+                KJTList,
+                List[torch.Tensor],
+                torch.Tensor,
+            ],
+        ]): map from sharding type to EmbeddingSharding.
+        device (Optional[torch.device]): default compute device.
+
+    Example::
+
+        sqebc_input_dist = ShardedQuantEbcInputDist(
+            sharding_type_to_sharding={
+                ShardingType.TABLE_WISE: InferTwSequenceEmbeddingSharding(
+                    [],
+                    ShardingEnv(
+                        world_size=2,
+                        rank=0,
+                        pg=0,
+                    ),
+                    torch.device("cpu")
+                )
+            },
+            device=torch.device("cpu"),
+        )
+
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2"],
+            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+        )
+
+        sqebc_input_dist(features)
+    """
+
+    def __init__(
+        self,
+        sharding_type_to_sharding: Dict[
+            str,
+            EmbeddingSharding[
+                NullShardingContext,
+                KJTList,
+                List[torch.Tensor],
+                torch.Tensor,
+            ],
+        ],
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        self._sharding_type_to_sharding = sharding_type_to_sharding
+        self._device = device
+
+        self._input_dists: List[nn.Module] = []
+
+        self._feature_splits: List[int] = []
+        self._features_order: List[int] = []
+
+        # forward pass flow control
+        self._has_uninitialized_input_dist: bool = True
+        self._has_features_permute: bool = True
+
+    def _create_input_dist(
+        self,
+        input_feature_names: List[str],
+        features_device: torch.device,
+        input_dist_device: Optional[torch.device] = None,
+    ) -> None:
+        feature_names: List[str] = []
+        for sharding in self._sharding_type_to_sharding.values():
+            self._input_dists.append(
+                sharding.create_input_dist(device=input_dist_device)
+            )
+            feature_names.extend(sharding.feature_names())
+            self._feature_splits.append(len(sharding.feature_names()))
+
+        if feature_names == input_feature_names:
+            self._has_features_permute = False
+        else:
+            for f in feature_names:
+                self._features_order.append(input_feature_names.index(f))
+            self.register_buffer(
+                "_features_order_tensor",
+                torch.tensor(
+                    self._features_order, device=features_device, dtype=torch.int32
+                ),
+                persistent=False,
+            )
+
+    def forward(self, features: KeyedJaggedTensor) -> ListOfKJTList:
+        """
+        Args:
+            features (KeyedJaggedTensor): KJT of form [F X B X L].
+
+        Returns:
+            ListOfKJTList
+        """
+        if self._has_uninitialized_input_dist:
+            self._create_input_dist(
+                features.keys(),
+                features.device(),
+                self._device,
+            )
+            self._has_uninitialized_input_dist = False
+        with torch.no_grad():
+            if self._has_features_permute:
+                features = features.permute(
+                    self._features_order,
+                    self._features_order_tensor,
+                )
+            else:
+                features = flatten_feature_lengths(features)
+            features_by_shards = (
+                [features]
+                if len(self._feature_splits) == 1
+                else features.split(self._feature_splits)
+            )
+            return ListOfKJTList(
+                [
+                    self._input_dists[i].forward(features_by_shards[i])
+                    for i in range(len(self._input_dists))
+                ]
+            )
