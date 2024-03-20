@@ -1868,6 +1868,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     def __getitem__(self, key: str) -> JaggedTensor:
         offset_per_key = self.offset_per_key()
+        length_per_key = self.length_per_key()
         index = self._key_indices()[key]
         start_offset = offset_per_key[index]
         end_offset = (
@@ -1875,20 +1876,57 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             if index + 1 < len(offset_per_key)
             else start_offset
         )
-        return JaggedTensor(
-            values=self._values[start_offset:end_offset],
-            weights=(
-                None
-                if self.weights_or_none() is None
-                else self.weights()[start_offset:end_offset]
-            ),
-            lengths=self.lengths()[
-                self.lengths_offset_per_key()[index] : self.lengths_offset_per_key()[
-                    index + 1
-                ]
-            ],
-            offsets=None,
-        )
+
+        if is_non_strict_exporting():
+            _lengths = torch.narrow(
+                self.lengths(),
+                0,
+                self.lengths_offset_per_key()[index],
+                self.lengths_offset_per_key()[index + 1]
+                - self.lengths_offset_per_key()[index],
+            )
+            sz = length_per_key[index]
+
+            torch._check_is_size(start_offset)
+            torch._check_is_size(sz)
+            torch._check(start_offset <= self.values().size(0))
+            torch._check(sz <= self.values().size(0))
+
+            return JaggedTensor(
+                values=torch.narrow(
+                    self.values(),
+                    0,
+                    start_offset,
+                    sz,
+                ),
+                weights=(
+                    None
+                    if self.weights_or_none() is None
+                    else torch.narrow(
+                        self.weights(),
+                        0,
+                        start_offset,
+                        sz,
+                    )
+                ),
+                lengths=_lengths,
+                offsets=None,
+            )
+        else:
+            return JaggedTensor(
+                values=self._values[start_offset:end_offset],
+                weights=(
+                    None
+                    if self.weights_or_none() is None
+                    else self.weights()[start_offset:end_offset]
+                ),
+                lengths=self.lengths()[
+                    self.lengths_offset_per_key()[
+                        index
+                    ] : self.lengths_offset_per_key()[index + 1]
+                ],
+                offsets=None,
+            )
 
     def to_dict(self) -> Dict[str, JaggedTensor]:
         _jt_dict = _maybe_compute_kjt_to_jt_dict(
