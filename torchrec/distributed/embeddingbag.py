@@ -25,6 +25,7 @@ from typing import (
 )
 
 import torch
+from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torch import nn, Tensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
@@ -66,7 +67,6 @@ from torchrec.distributed.utils import (
     convert_to_fbgemm_types,
     merge_fused_params,
     optimizer_type_to_emb_opt_type,
-    PermutePooledEmbeddings,
 )
 from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
