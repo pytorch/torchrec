@@ -628,25 +628,26 @@ def init_module_and_run_benchmark(
 
     if rank >= 0:
         warmup_inputs_cuda = [
-            warmup_input[0].to(torch.device(f"cuda:{rank}"))
-            for warmup_input in warmup_inputs
+            warmup_input.to(torch.device(f"cuda:{rank}"))
+            for warmup_input in warmup_inputs[rank]
         ]
         bench_inputs_cuda = [
-            bench_input[0].to(torch.device(f"cuda:{rank}"))
-            for bench_input in bench_inputs
+            bench_input.to(torch.device(f"cuda:{rank}"))
+            for bench_input in bench_inputs[rank]
         ]
         prof_inputs_cuda = [
-            prof_input[0].to(torch.device(f"cuda:{rank}")) for prof_input in prof_inputs
+            prof_input.to(torch.device(f"cuda:{rank}"))
+            for prof_input in prof_inputs[rank]
         ]
     else:
         warmup_inputs_cuda = [
-            warmup_input[0].to(torch.device("cuda:0")) for warmup_input in warmup_inputs
+            warmup_input.to(torch.device("cuda:0")) for warmup_input in warmup_inputs[0]
         ]
         bench_inputs_cuda = [
-            bench_input[0].to(torch.device("cuda:0")) for bench_input in bench_inputs
+            bench_input.to(torch.device("cuda:0")) for bench_input in bench_inputs[0]
         ]
         prof_inputs_cuda = [
-            prof_input[0].to(torch.device("cuda:0")) for prof_input in prof_inputs
+            prof_input.to(torch.device("cuda:0")) for prof_input in prof_inputs[0]
         ]
 
     with (
