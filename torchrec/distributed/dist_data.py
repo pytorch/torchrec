@@ -104,10 +104,17 @@ def _get_recat(
             for j in feature_order:  # range(num_splits):
                 recat.append(i + j * local_split)
 
+        vb_condition: bool = batch_size_per_rank is not None
+        if not torch.compiler.is_dynamo_compiling():
+            vb_condition = vb_condition and any(
+                # pyre-ignore
+                bs != batch_size_per_rank[0]
+                # pyre-ignore
+                for bs in batch_size_per_rank
+            )
+
         # variable batch size
-        if batch_size_per_rank is not None and any(
-            bs != batch_size_per_rank[0] for bs in batch_size_per_rank
-        ):
+        if vb_condition:
             batch_size_per_feature = list(
                 itertools.chain.from_iterable(
                     itertools.repeat(x, local_split) for x in batch_size_per_rank
@@ -227,6 +234,8 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
         self._device: torch.device = device
         self._input = input
         self._splits = splits
+        self._input_splits_list = input_splits
+        self._output_splits_list = output_splits
         self._input_splits: Dict[str, List[int]] = dict(zip(labels, input_splits))
         self._output_splits: Dict[str, List[int]] = dict(zip(labels, output_splits))
         self._keys = keys
@@ -244,6 +253,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
 
         self._output_tensors: List[torch.Tensor] = []
         self._awaitables: List[dist.Work] = []
+        self._world_size: int = self._pg.size()
 
         for input_split, output_split, input_tensor, label in zip(
             input_splits,
@@ -374,6 +384,20 @@ class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
                 self._output_splits = output_list[:-1]
                 self._stride_per_rank = output_list[-1]
 
+            if torch.compiler.is_dynamo_compiling():
+                rank: int = self._pg.rank()
+                for i in range(len(self._output_splits)):
+                    for j in range(len(self._output_splits[i])):
+                        torch._check_is_size(self._output_splits[i][j])
+                    torch._check(
+                        self._output_splits[i][rank] == self._input_splits[i][rank]
+                    )
+                if self._stride_per_rank is not None:
+                    # pyre-ignore
+                    for i in range(len(self._stride_per_rank)):
+                        # pyre-ignore
+                        torch._check_is_size(self._stride_per_rank[i])
+
         return KJTAllToAllTensorsAwaitable(
             pg=self._pg,
             input=self._input,
@@ -452,7 +476,7 @@ class KJTAllToAll(nn.Module):
         stagger: int = 1,
     ) -> None:
         super().__init__()
-        assert len(splits) == pg.size()
+        torch._check(len(splits) == pg.size())
         self._pg: dist.ProcessGroup = pg
         self._splits = splits
         self._splits_cumsum: List[int] = [0] + list(itertools.accumulate(splits))
@@ -1004,14 +1028,25 @@ class PooledEmbeddingsReduceScatter(nn.Module):
             PooledEmbeddingsAwaitable: awaitable of pooled embeddings of tensor of shape [batch_size, dimension].
         """
 
-        if input_splits and len(set(input_splits)) > 1:
-            tensor_awaitable = reduce_scatter_v_pooled(
-                local_embs, input_splits, self._pg, codecs=self._codecs
-            )
+        # Dynamo can not trace through data dependent condition: len(set(input_splits)) > 1
+        if torch.compiler.is_dynamo_compiling():
+            if input_splits is not None:
+                tensor_awaitable = reduce_scatter_v_pooled(
+                    local_embs, input_splits, self._pg, codecs=self._codecs
+                )
+            else:
+                tensor_awaitable = reduce_scatter_base_pooled(
+                    local_embs, self._pg, codecs=self._codecs
+                )
         else:
-            tensor_awaitable = reduce_scatter_base_pooled(
-                local_embs, self._pg, codecs=self._codecs
-            )
+            if input_splits and len(set(input_splits)) > 1:
+                tensor_awaitable = reduce_scatter_v_pooled(
+                    local_embs, input_splits, self._pg, codecs=self._codecs
+                )
+            else:
+                tensor_awaitable = reduce_scatter_base_pooled(
+                    local_embs, self._pg, codecs=self._codecs
+                )
         return PooledEmbeddingsAwaitable(tensor_awaitable=tensor_awaitable)
 
 
