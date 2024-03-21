@@ -266,13 +266,13 @@ def get_inputs(
     batch_size: int,
     world_size: int,
     num_inputs: int,
-    rank: int = -1,
+    train: bool,
     pooling_configs: Optional[List[int]] = None,
-) -> List[KeyedJaggedTensor]:
-    inputs: List[KeyedJaggedTensor] = []
+) -> List[List[KeyedJaggedTensor]]:
+    inputs_batch: List[List[KeyedJaggedTensor]] = []
 
     for _ in range(num_inputs):
-        model_input = ModelInput.generate(
+        _, model_input_by_rank = ModelInput.generate(
             batch_size=batch_size,
             world_size=world_size,
             num_float_features=0,
@@ -280,13 +280,24 @@ def get_inputs(
             weighted_tables=[],
             long_indices=False,
             tables_pooling=pooling_configs,
-        )[1][0]
+        )
 
-        # If ProcessGroup, place input on correct device. Otherwise, place on cuda:0
-        device = torch.device(f"cuda:{rank}") if rank >= 0 else torch.device("cuda:0")
-        inputs.append(model_input.idlist_features.to(device))
+        if train:
+            sparse_features_by_rank = [
+                model_input.idlist_features for model_input in model_input_by_rank
+            ]
+            inputs_batch.append(sparse_features_by_rank)
+        else:
+            sparse_features = model_input_by_rank[0].idlist_features
+            inputs_batch.append([sparse_features])
 
-    return inputs
+    # Transpose if train, as inputs_by_rank is currently in  [B X R] format
+    inputs_by_rank = [
+        [sparse_features for sparse_features in sparse_features_rank]
+        for sparse_features_rank in zip(*inputs_batch)
+    ]
+
+    return inputs_by_rank
 
 
 def write_report(
@@ -506,53 +517,54 @@ def benchmark(
         b = torch.cuda.max_memory_allocated(rank)
         max_mem_allocated.append(b // 1024 // 1024)
 
-    # pyre-ignore[2]
-    def trace_handler(prof) -> None:
-        total_average = prof.profiler.total_average()
-        logger.info(f" TOTAL_AVERAGE:\n{name}\n{total_average}")
-        dir_path: str = output_dir
+    if output_dir != "":
+        # Only do profiling if output_dir is set
 
-        # Don't output trace files if dir_path is empty
-        # or rank != 0, rank=-1 in no pg case, only 1 rank should output
-        # in pg case, so rank=0
-        if dir_path == "" or rank > 0:
-            return
+        # pyre-ignore[2]
+        def trace_handler(prof) -> None:
+            total_average = prof.profiler.total_average()
+            logger.info(f" TOTAL_AVERAGE:\n{name}\n{total_average}")
+            dir_path: str = output_dir
 
-        trace_file: str = f"{dir_path}/trace-{name}.json"
-        stacks_cpu_file = f"{dir_path}/stacks-cpu-{name}.stacks"
-        stacks_cuda_file = f"{dir_path}/stacks-cuda-{name}.stacks"
-        logger.info(f" PROFILE[{name}].chrome_trace:{trace_file}")
+            # only 1 rank should output in pg case, rank = 0
+            if rank > 0:
+                return
 
-        prof.export_chrome_trace(trace_file)
-        prof.export_stacks(stacks_cpu_file, "self_cpu_time_total")
-        prof.export_stacks(stacks_cuda_file, "self_cuda_time_total")
+            trace_file: str = f"{dir_path}/trace-{name}.json"
+            stacks_cpu_file = f"{dir_path}/stacks-cpu-{name}.stacks"
+            stacks_cuda_file = f"{dir_path}/stacks-cuda-{name}.stacks"
+            logger.info(f" PROFILE[{name}].chrome_trace:{trace_file}")
 
-    # - git clone https://github.com/brendangregg/FlameGraph
-    # - cd FlameGraph
-    # - ./flamegraph.pl --title "CPU time" --countname "us." profiler.stacks > perf_viz.svg
+            prof.export_chrome_trace(trace_file)
+            prof.export_stacks(stacks_cpu_file, "self_cpu_time_total")
+            prof.export_stacks(stacks_cuda_file, "self_cuda_time_total")
 
-    with torch.profiler.profile(
-        activities=[
-            torch.profiler.ProfilerActivity.CPU,
-            torch.profiler.ProfilerActivity.CUDA,
-        ],
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True,
-        with_flops=True,
-        with_modules=True,
-        on_trace_ready=trace_handler,
-    ) as p:
-        for _input in prof_inputs:
-            with record_function("## forward ##"):
-                model(_input)
-                p.step()
+        # - git clone https://github.com/brendangregg/FlameGraph
+        # - cd FlameGraph
+        # - ./flamegraph.pl --title "CPU time" --countname "us." profiler.stacks > perf_viz.svg
 
-    if rank == -1:
-        for di in range(world_size):
-            torch.cuda.synchronize(di)
-    else:
-        torch.cuda.synchronize(rank)
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ],
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+            with_flops=True,
+            with_modules=True,
+            on_trace_ready=trace_handler,
+        ) as p:
+            for _input in prof_inputs:
+                with record_function("## forward ##"):
+                    model(_input)
+                    p.step()
+
+            if rank == -1:
+                for di in range(torch.cuda.device_count()):
+                    torch.cuda.synchronize(torch.device(f"cuda:{di}"))
+            else:
+                torch.cuda.synchronize()
 
     return BenchmarkResult(
         short_name=name,
@@ -588,9 +600,9 @@ def init_module_and_run_benchmark(
     compile_mode: CompileMode,
     world_size: int,
     batch_size: int,
-    warmup_iters: int,
-    bench_iters: int,
-    prof_iters: int,
+    warmup_inputs: List[List[KeyedJaggedTensor]],
+    bench_inputs: List[List[KeyedJaggedTensor]],
+    prof_inputs: List[List[KeyedJaggedTensor]],
     tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
     output_dir: str,
     num_benchmarks: int,
@@ -614,14 +626,28 @@ def init_module_and_run_benchmark(
        existing in the loop
     """
 
-    num_inputs_to_gen: int = warmup_iters + bench_iters + prof_iters
-    inputs = get_inputs(
-        tables, batch_size, world_size, num_inputs_to_gen, rank, pooling_configs
-    )
-
-    warmup_inputs = inputs[:warmup_iters]
-    bench_inputs = inputs[warmup_iters : (warmup_iters + bench_iters)]
-    prof_inputs = inputs[-prof_iters:]
+    if rank >= 0:
+        warmup_inputs_cuda = [
+            warmup_input[0].to(torch.device(f"cuda:{rank}"))
+            for warmup_input in warmup_inputs
+        ]
+        bench_inputs_cuda = [
+            bench_input[0].to(torch.device(f"cuda:{rank}"))
+            for bench_input in bench_inputs
+        ]
+        prof_inputs_cuda = [
+            prof_input[0].to(torch.device(f"cuda:{rank}")) for prof_input in prof_inputs
+        ]
+    else:
+        warmup_inputs_cuda = [
+            warmup_input[0].to(torch.device("cuda:0")) for warmup_input in warmup_inputs
+        ]
+        bench_inputs_cuda = [
+            bench_input[0].to(torch.device("cuda:0")) for bench_input in bench_inputs
+        ]
+        prof_inputs_cuda = [
+            prof_input[0].to(torch.device("cuda:0")) for prof_input in prof_inputs
+        ]
 
     with (
         MultiProcessContext(rank, world_size, "nccl", None)
@@ -631,7 +657,7 @@ def init_module_and_run_benchmark(
         module = transform_module(
             module=module,
             device=device,
-            inputs=warmup_inputs,
+            inputs=warmup_inputs_cuda,
             sharder=sharder,
             sharding_type=sharding_type,
             compile_mode=compile_mode,
@@ -646,9 +672,9 @@ def init_module_and_run_benchmark(
         res = benchmark(
             name,
             module,
-            warmup_inputs,
-            bench_inputs,
-            prof_inputs,
+            warmup_inputs_cuda,
+            bench_inputs_cuda,
+            prof_inputs_cuda,
             world_size=world_size,
             output_dir=output_dir,
             num_benchmarks=num_benchmarks,
@@ -754,6 +780,8 @@ def benchmark_module(
         output_dir: Directory to output profiler outputs (traces, stacks)
         pooling_configs: The pooling factor for the tables.
             (Optional; if not set, we'll use 10 as default)
+        func_to_benchmark: Custom function to benchmark, check out default_func_to_benchmark for default
+        benchmark_func_kwargs: Custom keyword arguments to pass to func_to_benchmark
 
     Returns:
         A list of BenchmarkResults
@@ -785,6 +813,18 @@ def benchmark_module(
     else:
         wrapped_module = ECWrapper(module)
 
+    num_inputs_to_gen: int = warmup_iters + bench_iters + prof_iters
+    inputs = get_inputs(
+        tables, batch_size, world_size, num_inputs_to_gen, train, pooling_configs
+    )
+
+    warmup_inputs = [rank_inputs[:warmup_iters] for rank_inputs in inputs]
+    bench_inputs = [
+        rank_inputs[warmup_iters : (warmup_iters + bench_iters)]
+        for rank_inputs in inputs
+    ]
+    prof_inputs = [rank_inputs[-prof_iters:] for rank_inputs in inputs]
+
     for sharding_type in sharding_types:
         for compile_mode in compile_modes:
             # Test sharders should have a singular sharding_type
@@ -807,9 +847,9 @@ def benchmark_module(
                     compile_mode=compile_mode,
                     world_size=world_size,
                     batch_size=batch_size,
-                    warmup_iters=warmup_iters,
-                    bench_iters=bench_iters,
-                    prof_iters=prof_iters,
+                    warmup_inputs=warmup_inputs,
+                    bench_inputs=bench_inputs,
+                    prof_inputs=prof_inputs,
                     tables=tables,
                     num_benchmarks=num_benchmarks,
                     output_dir=output_dir,
@@ -827,9 +867,9 @@ def benchmark_module(
                     compile_mode=compile_mode,
                     world_size=world_size,
                     batch_size=batch_size,
-                    warmup_iters=warmup_iters,
-                    bench_iters=bench_iters,
-                    prof_iters=prof_iters,
+                    warmup_inputs=warmup_inputs,
+                    bench_inputs=bench_inputs,
+                    prof_inputs=prof_inputs,
                     tables=tables,
                     num_benchmarks=num_benchmarks,
                     output_dir=output_dir,

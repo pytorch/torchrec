@@ -10,6 +10,8 @@
 import itertools
 import unittest
 
+from hypothesis import given, settings, strategies as st
+
 from torchrec.datasets.random import RandomRecDataset
 
 
@@ -73,6 +75,23 @@ class RandomDataLoader(unittest.TestCase):
         self.assertEqual(len(feat2), 16)
         for batch in feat2:
             self.assertEqual(len(batch), 200)
+
+    # pyre-ignore
+    @given(
+        batch_size=st.sampled_from([2048, 4096, 8192]),
+    )
+    @settings(max_examples=3, deadline=5000)  # expected runtime <=500ms
+    def test_large_batch_size_deadline(self, batch_size: int) -> None:
+        dataset = RandomRecDataset(
+            keys=["feat1", "feat2"],
+            batch_size=batch_size,
+            ids_per_features=[10, 20],
+            hash_size=100,
+            num_dense=5,
+        )
+        iterator = iter(dataset)
+        for _ in range(5):
+            next(iterator)
 
     def test_hash_ids(self) -> None:
         dataset = RandomRecDataset(
