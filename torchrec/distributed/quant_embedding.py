@@ -36,15 +36,20 @@ from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
+    is_fused_param_use_cpu_sharding,
 )
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
 from torchrec.distributed.sharding.cw_sequence_sharding import (
     InferCwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.sharding.rw_sequence_sharding import (
+    InferCPURwSequenceEmbeddingSharding,
     InferRwSequenceEmbeddingSharding,
 )
-from torchrec.distributed.sharding.rw_sharding import InferRwSparseFeaturesDist
+from torchrec.distributed.sharding.rw_sharding import (
+    InferCPURwSparseFeaturesDist,
+    InferRwSparseFeaturesDist,
+)
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
@@ -103,6 +108,7 @@ def create_infer_embedding_sharding(
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
+    use_cpu_sharding: Optional[bool] = False,
 ) -> EmbeddingSharding[
     InferSequenceShardingContext,
     KJTList,
@@ -113,6 +119,8 @@ def create_infer_embedding_sharding(
         return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return InferCwSequenceEmbeddingSharding(sharding_infos, env, device)
+    elif sharding_type == ShardingType.ROW_WISE.value and use_cpu_sharding:
+        return InferCPURwSequenceEmbeddingSharding(sharding_infos, env, device)
     elif sharding_type == ShardingType.ROW_WISE.value:
         return InferRwSequenceEmbeddingSharding(sharding_infos, env, device)
     else:
@@ -398,6 +406,8 @@ class ShardedQuantEmbeddingCollection(
 
         self._is_hybrid_sharding: bool = isinstance(env, Dict)
 
+        self._use_cpu_sharding: bool = is_fused_param_use_cpu_sharding(fused_params)
+
         self._sharding_type_to_sharding_infos: Dict[
             str, List[EmbeddingShardingInfo]
         ] = create_sharding_infos_by_sharding(
@@ -422,6 +432,7 @@ class ShardedQuantEmbeddingCollection(
                     # pyre-ignore
                     else env[get_device_from_sharding_type(embedding_confings)]
                 ),
+                use_cpu_sharding=self._use_cpu_sharding,
             )
             for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()
         }
@@ -486,6 +497,10 @@ class ShardedQuantEmbeddingCollection(
         quant_state_dict_split_scale_bias = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
+
+        if self._use_cpu_sharding:
+            # DI currently only support RW sharding where split scale and bias is required
+            assert quant_state_dict_split_scale_bias
 
         if quant_state_dict_split_scale_bias:
             self._initialize_torch_state(
@@ -686,6 +701,7 @@ class ShardedQuantEmbeddingCollection(
                         unbucketize_permute_tensor=(
                             input_dist.unbucketize_permute_tensor
                             if isinstance(input_dist, InferRwSparseFeaturesDist)
+                            or isinstance(input_dist, InferCPURwSparseFeaturesDist)
                             else None
                         ),
                     )
@@ -745,8 +761,12 @@ class ShardedQuantEmbeddingCollection(
             sharding_types=list(self._sharding_type_to_sharding.keys()),
             emb_per_sharding=emb_per_sharding,
             features_per_sharding=features_per_sharding,
-            embedding_names_per_rank_per_sharding=format_embedding_names_per_rank_per_sharding(
-                self._embedding_names_per_rank_per_sharding, output
+            embedding_names_per_rank_per_sharding=(
+                self._embedding_names_per_rank_per_sharding
+                if self._use_cpu_sharding
+                else format_embedding_names_per_rank_per_sharding(
+                    self._embedding_names_per_rank_per_sharding, output
+                )
             ),
             need_indices=self._need_indices,
             features_before_input_dist_per_sharding=features_before_input_dist_per_sharding,

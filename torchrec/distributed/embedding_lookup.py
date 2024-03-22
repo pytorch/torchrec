@@ -951,3 +951,36 @@ class InferGroupedEmbeddingsLookup(
         self,
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return get_tbes_to_register_from_iterable(self._embedding_lookups_per_rank)
+
+
+class InferCPUGroupedEmbeddingsLookup(
+    InferGroupedLookupMixin,
+    BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
+    TBEToRegisterMixIn,
+):
+    def __init__(
+        self,
+        grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
+        world_size: int,
+        fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
+
+        device_type: str = "cuda" if device is None else device.type
+        for rank in range(world_size):
+            self._embedding_lookups_per_rank.append(
+                MetaInferGroupedEmbeddingsLookup(
+                    grouped_configs=grouped_configs_per_rank[rank],
+                    # syntax for torchscript
+                    # pyre-fixme[20]: Argument `index` expected.
+                    device=torch.device(type=device_type),
+                    fused_params=fused_params,
+                )
+            )
+
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return get_tbes_to_register_from_iterable(self._embedding_lookups_per_rank)
