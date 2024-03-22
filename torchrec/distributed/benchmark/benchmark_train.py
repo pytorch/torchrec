@@ -75,7 +75,7 @@ def benchmark_ebc(
     table_configs = get_tables(tables, data_type=DataType.FP32)
     sharder = TestEBCSharder(
         sharding_type="",  # sharding_type gets populated during benchmarking
-        kernel_type=EmbeddingComputeKernel.DENSE.value,
+        kernel_type=EmbeddingComputeKernel.FUSED.value,
     )
 
     # we initialize the embedding tables using CUDA, because when the table is large,
