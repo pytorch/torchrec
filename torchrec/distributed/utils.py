@@ -248,9 +248,15 @@ def copy_to_device(
         for name, buffer in copy_module.named_buffers(recurse=False)
     }
     for name, param in copied_param.items():
-        copy_module.register_parameter(name, param)
+        m = copy_module
+        if "." in name:
+            continue
+        m.register_parameter(name, param)
     for name, buffer in copied_buffer.items():
-        copy_module.register_buffer(name, buffer)
+        m = copy_module
+        if "." in name:
+            continue
+        m.register_buffer(name, buffer)
     for child_name, child in copy_module.named_children():
         if not any([isinstance(submodule, CopyMixIn) for submodule in child.modules()]):
             child_copy = child._apply(_copy_if_device_match)

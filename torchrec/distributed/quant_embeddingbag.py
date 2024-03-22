@@ -84,14 +84,15 @@ def create_infer_embedding_bag_sharding(
     sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
+    device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor]:
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return InferTwEmbeddingSharding(sharding_infos, env, device=None)
+        return InferTwEmbeddingSharding(sharding_infos, env, device=device)
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return InferRwPooledEmbeddingSharding(sharding_infos, env, device=None)
+        return InferRwPooledEmbeddingSharding(sharding_infos, env, device=device)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return InferCwPooledEmbeddingSharding(
-            sharding_infos, env, device=None, permute_embeddings=True
+            sharding_infos, env, device=device, permute_embeddings=True
         )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
@@ -137,7 +138,7 @@ class ShardedQuantEmbeddingBagCollection(
             ],
         ] = {
             sharding_type: create_infer_embedding_bag_sharding(
-                sharding_type, embedding_confings, env
+                sharding_type, embedding_confings, env, device
             )
             for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()
         }

@@ -133,14 +133,15 @@ class InferShardingsTest(unittest.TestCase):
     # pyre-ignore
     @given(
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type=st.sampled_from(["cuda", "cpu"]),
     )
     @settings(max_examples=4, deadline=None)
-    def test_rw(self, weight_dtype: torch.dtype) -> None:
+    def test_rw(self, weight_dtype: torch.dtype, device_type: str) -> None:
         num_embeddings = 256
         emb_dim = 16
         world_size = 2
         batch_size = 4
-        local_device = torch.device("cuda:0")
+        local_device = torch.device(f"{device_type}:0")
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -156,8 +157,11 @@ class InferShardingsTest(unittest.TestCase):
         num_emb_half = num_embeddings // 2
         expected_shards = [
             [
-                ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
-                ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
+                ((0, 0, num_emb_half, emb_dim), placement(device_type, 0, world_size)),
+                (
+                    (num_emb_half, 0, num_emb_half, emb_dim),
+                    placement(device_type, 1, world_size),
+                ),
             ]
         ]
         sharded_model = shard_qebc(
@@ -200,16 +204,19 @@ class InferShardingsTest(unittest.TestCase):
     @given(
         test_permute=st.booleans(),
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type=st.sampled_from(["cuda", "cpu"]),
     )
     @settings(max_examples=4, deadline=None)
-    def test_cw(self, test_permute: bool, weight_dtype: torch.dtype) -> None:
+    def test_cw(
+        self, test_permute: bool, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
         num_embeddings = 64
         emb_dim = 512
         emb_dim_4 = emb_dim // 4
         local_size = 2
         world_size = 2
         batch_size = 4
-        local_device = torch.device("cuda:0")
+        local_device = torch.device(f"{device_type}:0")
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -222,23 +229,24 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         non_sharded_model = mi.quant_model
+        expected_ranks: List[int] = [0, 1, 0, 1] if not test_permute else [1, 0, 1, 0]
         expected_shards = [
             [
                 (
                     (0, 0, num_embeddings, emb_dim_4),
-                    "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
+                    placement(device_type, expected_ranks[0], world_size),
                 ),
                 (
                     (0, 1 * emb_dim_4, num_embeddings, emb_dim_4),
-                    "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
+                    placement(device_type, expected_ranks[1], world_size),
                 ),
                 (
                     (0, 2 * emb_dim_4, num_embeddings, emb_dim_4),
-                    "rank:0/cuda:0" if not test_permute else "rank:1/cuda:1",
+                    placement(device_type, expected_ranks[2], world_size),
                 ),
                 (
                     (0, 3 * emb_dim_4, num_embeddings, emb_dim_4),
-                    "rank:1/cuda:1" if not test_permute else "rank:0/cuda:0",
+                    placement(device_type, expected_ranks[3], world_size),
                 ),
             ]
         ]
@@ -260,6 +268,7 @@ class InferShardingsTest(unittest.TestCase):
                 sharder=sharder,
                 local_size=local_size,
                 world_size=world_size,
+                device_type=device_type,
             )
 
             plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
@@ -307,16 +316,21 @@ class InferShardingsTest(unittest.TestCase):
         emb_dim=st.sampled_from([192, 128]),
         test_permute=st.booleans(),
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type=st.sampled_from(["cuda", "cpu"]),
     )
     @settings(max_examples=4, deadline=None)
     def test_cw_with_smaller_emb_dim(
-        self, emb_dim: int, test_permute: bool, weight_dtype: torch.dtype
+        self,
+        emb_dim: int,
+        test_permute: bool,
+        weight_dtype: torch.dtype,
+        device_type: str,
     ) -> None:
         num_embeddings = 64
         emb_dim_4 = emb_dim // 4
         world_size = 2
         batch_size = 4
-        local_device = torch.device("cuda:0")
+        local_device = torch.device(f"{device_type}:0")
         constraints = create_cw_min_partition_constraints([("table_0", emb_dim_4)])
         mi = create_test_model(
             num_embeddings,
@@ -335,19 +349,19 @@ class InferShardingsTest(unittest.TestCase):
             [
                 (
                     (0, 0, num_embeddings, emb_dim_4),
-                    "rank:0/cuda:0",
+                    placement(device_type, 0, world_size),
                 ),
                 (
                     (0, 1 * emb_dim_4, num_embeddings, emb_dim_4),
-                    "rank:1/cuda:1",
+                    placement(device_type, 1, world_size),
                 ),
                 (
                     (0, 2 * emb_dim_4, num_embeddings, emb_dim_4),
-                    "rank:0/cuda:0",
+                    placement(device_type, 0, world_size),
                 ),
                 (
                     (0, 3 * emb_dim_4, num_embeddings, emb_dim_4),
-                    "rank:1/cuda:1",
+                    placement(device_type, 1, world_size),
                 ),
             ]
         ]
@@ -392,16 +406,19 @@ class InferShardingsTest(unittest.TestCase):
     # pyre-ignore
     @given(
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type=st.sampled_from(["cuda", "cpu"]),
     )
     @settings(max_examples=4, deadline=None)
-    def test_cw_multiple_tables_with_permute(self, weight_dtype: torch.dtype) -> None:
+    def test_cw_multiple_tables_with_permute(
+        self, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
         num_embeddings = 64
         emb_dim = 512
         emb_dim_2 = 512 // 2
         local_size = 2
         world_size = 2
         batch_size = 4
-        local_device = torch.device("cuda:0")
+        local_device = torch.device(f"{device_type}:0")
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -417,12 +434,24 @@ class InferShardingsTest(unittest.TestCase):
         non_sharded_model = mi.quant_model
         expected_shards = [
             [
-                ((0, 0, num_embeddings, emb_dim_2), "rank:1/cuda:1"),
-                ((0, 1 * emb_dim_2, num_embeddings, emb_dim_2), "rank:0/cuda:0"),
+                (
+                    (0, 0, num_embeddings, emb_dim_2),
+                    placement(device_type, 1, world_size),
+                ),
+                (
+                    (0, 1 * emb_dim_2, num_embeddings, emb_dim_2),
+                    placement(device_type, 0, world_size),
+                ),
             ],
             [
-                ((0, 0, num_embeddings, emb_dim_2), "rank:0/cuda:0"),
-                ((0, 1 * emb_dim_2, num_embeddings, emb_dim_2), "rank:1/cuda:1"),
+                (
+                    (0, 0, num_embeddings, emb_dim_2),
+                    placement(device_type, 0, world_size),
+                ),
+                (
+                    (0, 1 * emb_dim_2, num_embeddings, emb_dim_2),
+                    placement(device_type, 1, world_size),
+                ),
             ],
         ]
 
@@ -442,6 +471,7 @@ class InferShardingsTest(unittest.TestCase):
             sharder=sharder,
             local_size=local_size,
             world_size=world_size,
+            device_type=device_type,
         )
 
         plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
@@ -487,9 +517,12 @@ class InferShardingsTest(unittest.TestCase):
     # pyre-ignore
     @given(
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type=st.sampled_from(["cuda", "cpu"]),
     )
     @settings(max_examples=4, deadline=None)
-    def test_cw_irregular_shard_placement(self, weight_dtype: torch.dtype) -> None:
+    def test_cw_irregular_shard_placement(
+        self, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
         num_embeddings = 64
         emb_dim = 384
         emb_dim_2 = emb_dim // 2
@@ -497,7 +530,7 @@ class InferShardingsTest(unittest.TestCase):
         local_size = 4
         world_size = 4
         batch_size = 4
-        local_device = torch.device("cuda:0")
+        local_device = torch.device(f"{device_type}:0")
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -513,17 +546,38 @@ class InferShardingsTest(unittest.TestCase):
         non_sharded_model = mi.quant_model
         expected_shards = [
             [
-                ((0, 0, num_embeddings, emb_dim_2), "rank:2/cuda:2"),
-                ((0, 1 * emb_dim_2, num_embeddings, emb_dim_2), "rank:1/cuda:1"),
+                (
+                    (0, 0, num_embeddings, emb_dim_2),
+                    placement(device_type, 2, world_size),
+                ),
+                (
+                    (0, 1 * emb_dim_2, num_embeddings, emb_dim_2),
+                    placement(device_type, 1, world_size),
+                ),
             ],
             [
-                ((0, 0, num_embeddings, emb_dim_2), "rank:0/cuda:0"),
-                ((0, 1 * emb_dim_2, num_embeddings, emb_dim_2), "rank:3/cuda:3"),
+                (
+                    (0, 0, num_embeddings, emb_dim_2),
+                    placement(device_type, 0, world_size),
+                ),
+                (
+                    (0, 1 * emb_dim_2, num_embeddings, emb_dim_2),
+                    placement(device_type, 3, world_size),
+                ),
             ],
             [
-                ((0, 0, num_embeddings, emb_dim_3), "rank:0/cuda:0"),
-                ((0, 1 * emb_dim_3, num_embeddings, emb_dim_3), "rank:2/cuda:2"),
-                ((0, 2 * emb_dim_3, num_embeddings, emb_dim_3), "rank:3/cuda:3"),
+                (
+                    (0, 0, num_embeddings, emb_dim_3),
+                    placement(device_type, 0, world_size),
+                ),
+                (
+                    (0, 1 * emb_dim_3, num_embeddings, emb_dim_3),
+                    placement(device_type, 2, world_size),
+                ),
+                (
+                    (0, 2 * emb_dim_3, num_embeddings, emb_dim_3),
+                    placement(device_type, 3, world_size),
+                ),
             ],
         ]
 
@@ -544,6 +598,7 @@ class InferShardingsTest(unittest.TestCase):
             sharder=sharder,
             local_size=local_size,
             world_size=world_size,
+            device_type=device_type,
         )
 
         plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
@@ -578,18 +633,28 @@ class InferShardingsTest(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type_weight_dtype=st.sampled_from(
+            [
+                ("cuda", torch.qint8),
+                ("cuda", torch.quint4x2),
+                ("cpu", torch.qint8),
+                # ("cpu", torch.quint4x2) TODO(ivankobzarev): intermittently produces numerically wrong result for assert_close default params
+            ]
+        ),
     )
     @settings(max_examples=4, deadline=None)
-    def test_cw_sequence(self, weight_dtype: torch.dtype) -> None:
+    def test_cw_sequence(
+        self, device_type_weight_dtype: Tuple[str, torch.dtype]
+    ) -> None:
+        device_type, weight_dtype = device_type_weight_dtype
         num_embeddings = 4
         emb_dim = 512
         emb_dim_4 = emb_dim // 4
         world_size = 2
         batch_size = 2
-        local_device = torch.device("cuda:0")
+        local_device = torch.device(f"{device_type}:0")
 
-        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
         mi = TestModelInfo(
             dense_device=local_device,
             sparse_device=local_device,
@@ -641,10 +706,22 @@ class InferShardingsTest(unittest.TestCase):
         non_sharded_model = mi.quant_model
         expected_shards = [
             [
-                ((0, 0, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-                ((0, 1 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
-                ((0, 2 * emb_dim_4, num_embeddings, emb_dim_4), "rank:0/cuda:0"),
-                ((0, 3 * emb_dim_4, num_embeddings, emb_dim_4), "rank:1/cuda:1"),
+                (
+                    (0, 0, num_embeddings, emb_dim_4),
+                    placement(device_type, 0, world_size),
+                ),
+                (
+                    (0, 1 * emb_dim_4, num_embeddings, emb_dim_4),
+                    placement(device_type, 1, world_size),
+                ),
+                (
+                    (0, 2 * emb_dim_4, num_embeddings, emb_dim_4),
+                    placement(device_type, 0, world_size),
+                ),
+                (
+                    (0, 3 * emb_dim_4, num_embeddings, emb_dim_4),
+                    placement(device_type, 1, world_size),
+                ),
             ],
         ] * 2
         sharded_model = shard_qec(
@@ -679,17 +756,27 @@ class InferShardingsTest(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type_weight_dtype=st.sampled_from(
+            [
+                ("cuda", torch.qint8),
+                ("cuda", torch.quint4x2),
+                ("cpu", torch.qint8),
+                # ("cpu", torch.quint4x2) TODO(ivankobzarev): intermittently produces numerically wrong result for assert_close default params
+            ]
+        ),
     )
     @settings(max_examples=4, deadline=None)
-    def test_rw_sequence(self, weight_dtype: torch.dtype) -> None:
+    def test_rw_sequence(
+        self, device_type_weight_dtype: Tuple[str, torch.dtype]
+    ) -> None:
+        device_type, weight_dtype = device_type_weight_dtype
         num_embeddings = 10
         emb_dim = 16
         world_size = 2
         batch_size = 2
-        local_device = torch.device("cuda:0")
+        local_device = torch.device(f"{device_type}:0")
 
-        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
         mi = TestModelInfo(
             dense_device=local_device,
             sparse_device=local_device,
@@ -742,8 +829,11 @@ class InferShardingsTest(unittest.TestCase):
         num_emb_half = num_embeddings // 2
         expected_shards = [
             [
-                ((0, 0, num_emb_half, emb_dim), "rank:0/cuda:0"),
-                ((num_emb_half, 0, num_emb_half, emb_dim), "rank:1/cuda:1"),
+                ((0, 0, num_emb_half, emb_dim), placement(device_type, 0, world_size)),
+                (
+                    (num_emb_half, 0, num_emb_half, emb_dim),
+                    placement(device_type, 1, world_size),
+                ),
             ],
         ] * 2
         sharded_model = shard_qec(

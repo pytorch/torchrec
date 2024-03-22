@@ -25,7 +25,12 @@ from torchrec.distributed.comm_ops import (
     variable_batch_alltoall_pooled,
 )
 from torchrec.distributed.embedding_types import KJTList
-from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
+from torchrec.distributed.types import (
+    Awaitable,
+    DEFAULT_DEVICE_TYPE,
+    QuantizedCommCodecs,
+    rank_device,
+)
 from torchrec.fx.utils import fx_marker
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -541,12 +546,7 @@ class KJTOneToAll(nn.Module):
         super().__init__()
         self._splits = splits
         self._world_size = world_size
-        # If no device is provided, use "cuda".
-        self._device_type: str = (
-            device.type
-            if device is not None and device.type in {"meta", "cuda", "mtia"}
-            else "cuda"
-        )
+        self._device_type: str = DEFAULT_DEVICE_TYPE if device is None else device.type
         assert self._world_size == len(splits)
 
     def forward(self, kjt: KeyedJaggedTensor) -> KJTList:
@@ -566,7 +566,8 @@ class KJTOneToAll(nn.Module):
                 kjts[rank]
                 if self._device_type == "meta"
                 else kjts[rank].to(
-                    torch.device(self._device_type, rank), non_blocking=True
+                    rank_device(self._device_type, rank),
+                    non_blocking=True,
                 )
             )
             for rank in range(self._world_size)
@@ -868,6 +869,13 @@ class EmbeddingsAllToOneReduce(nn.Module):
             Awaitable[torch.Tensor]: awaitable of the reduced embeddings.
         """
         assert len(tensors) == self._world_size
+        # TODO(ivankobzarev): Replace with torch.ops.fbgemm.sum_reduce_to_one when it supports cpu
+        if self._device.type == "cpu":
+            t = tensors[0]
+            for i in range(1, self._world_size):
+                t.add_(tensors[i])
+            return t
+
         return torch.ops.fbgemm.sum_reduce_to_one(
             tensors,
             self._device,
@@ -968,6 +976,9 @@ class SeqEmbeddingsAllToOne(nn.Module):
         """
 
         assert len(tensors) == self._world_size
+        if self._device.type == "cpu":
+            return tensors
+
         return torch.ops.fbgemm.all_to_one_device(
             tensors,
             self._device,

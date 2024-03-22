@@ -52,7 +52,7 @@ from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
     QuantBatchedEmbeddingBag,
 )
-from torchrec.distributed.types import ShardedTensor
+from torchrec.distributed.types import DEFAULT_DEVICE_TYPE, rank_device, ShardedTensor
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -903,14 +903,14 @@ class InferGroupedPooledEmbeddingsLookup(
             MetaInferGroupedPooledEmbeddingsLookup
         ] = []
 
-        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
+        device_type: str = DEFAULT_DEVICE_TYPE if device is None else device.type
+
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 # TODO add position weighted module support
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    # syntax for torchscript
-                    device=torch.device(type=device_type, index=rank),
+                    device=rank_device(device_type, rank),
                     fused_params=fused_params,
                 )
             )
@@ -936,13 +936,45 @@ class InferGroupedEmbeddingsLookup(
         super().__init__()
         self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
 
-        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
+        device_type: str = DEFAULT_DEVICE_TYPE if device is None else device.type
+        for rank in range(world_size):
+            self._embedding_lookups_per_rank.append(
+                MetaInferGroupedEmbeddingsLookup(
+                    grouped_configs=grouped_configs_per_rank[rank],
+                    device=rank_device(device_type, rank),
+                    fused_params=fused_params,
+                )
+            )
+
+    def get_tbes_to_register(
+        self,
+    ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
+        return get_tbes_to_register_from_iterable(self._embedding_lookups_per_rank)
+
+
+class InferCPUGroupedEmbeddingsLookup(
+    InferGroupedLookupMixin,
+    BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
+    TBEToRegisterMixIn,
+):
+    def __init__(
+        self,
+        grouped_configs_per_rank: List[List[GroupedEmbeddingConfig]],
+        world_size: int,
+        fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
+
+        device_type: str = "cuda" if device is None else device.type
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     # syntax for torchscript
-                    device=torch.device(type=device_type, index=rank),
+                    # pyre-fixme[20]: Argument `index` expected.
+                    device=torch.device(type=device_type),
                     fused_params=fused_params,
                 )
             )

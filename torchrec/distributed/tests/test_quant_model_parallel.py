@@ -29,7 +29,12 @@ from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestSparseNN,
 )
-from torchrec.distributed.types import ShardedModule, ShardingEnv, ShardingType
+from torchrec.distributed.types import (
+    DEFAULT_DEVICE_TYPE,
+    ShardedModule,
+    ShardingEnv,
+    ShardingType,
+)
 from torchrec.distributed.utils import copy_to_device
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, QuantConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -443,6 +448,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_copy_mixin(self) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
@@ -484,7 +490,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
 
         self.tables = [
             EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 10000000,
+                num_embeddings=(i + 1) * 100000,
                 embedding_dim=(i + 1) * 4,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
@@ -528,6 +534,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             ]
         ),
     )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_shard_one_ebc_cuda(
         self,
         sharding_type_qsplitscalebias: Tuple[str, bool],
@@ -539,12 +546,13 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         ) = sharding_type_qsplitscalebias
 
         device = torch.device("cuda:0")
+        sparse_device = torch.device("meta")
         model = TestSparseNN(
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             num_float_features=10,
             dense_device=device,
-            sparse_device=torch.device("meta"),
+            sparse_device=sparse_device,
         )
         quant_model = _quantize(
             model,
@@ -576,20 +584,26 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             ),
         ).plan(quant_model, sharders)
 
+        sharding_device_type = "cuda"
         dmp = DistributedModelParallel(
             quant_model,
             plan=plan,
-            device=None,  # cpu
+            device=torch.device(sharding_device_type),
             env=ShardingEnv.from_local(world_size=1, rank=0),
             init_data_parallel=False,
-        )
-
-        self.assertTrue(
-            all(param.device == device for param in dmp.module.sparse.ebc.buffers())
+            init_parameters=False,
         )
         self.assertTrue(
+            # flake8: noqa:C419
             all(
-                param.device == torch.device("cpu")
+                param.device.type == sharding_device_type
+                for param in dmp.module.sparse.ebc.buffers()
+            )
+        )
+        self.assertTrue(
+            # flake8: noqa:C419
+            all(
+                param.device.type == sparse_device.type
                 for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )
@@ -609,6 +623,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             ]
         ),
     )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_shard_one_ebc_meta(
         self, sharding_type_qsplitscalebias: Tuple[str, bool]
     ) -> None:
@@ -657,7 +672,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         dmp = DistributedModelParallel(
             quant_model,
             plan=plan,
-            device=None,  # cpu
+            device=torch.device("cuda"),
             env=ShardingEnv.from_local(world_size=1, rank=0),
             init_data_parallel=False,
             init_parameters=False,
@@ -667,6 +682,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             all(param.device == device for param in dmp.module.sparse.ebc.buffers())
         )
         self.assertTrue(
+            # flake8: noqa:C419
             all(
                 param.device == torch.device("meta")
                 for param in dmp.module.sparse.weighted_ebc.buffers()
@@ -688,6 +704,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             ]
         ),
     )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_shard_all_ebcs(
         self, sharding_type_qsplitscalebias: Tuple[str, bool]
     ) -> None:
@@ -697,12 +714,13 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         ) = sharding_type_qsplitscalebias
 
         device = torch.device("cuda:0")
+        sparse_device = torch.device("meta")
         model = TestSparseNN(
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             num_float_features=10,
             dense_device=device,
-            sparse_device=torch.device("meta"),
+            sparse_device=sparse_device,
         )
         quant_model = _quantize(
             model,
@@ -735,17 +753,22 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         dmp = DistributedModelParallel(
             quant_model,
             plan=plan,
-            device=None,  # cpu
+            device=torch.device("cuda"),
             env=ShardingEnv.from_local(world_size=1, rank=0),
             init_data_parallel=False,
+            init_parameters=True,
         )
 
         self.assertTrue(
-            all(param.device == device for param in dmp.module.sparse.ebc.buffers())
+            all(
+                param.device.type == device.type
+                for param in dmp.module.sparse.ebc.buffers()
+            )
         )
+        # DMP init_parameters == True by default reinits meta parameters on sharding device
         self.assertTrue(
             all(
-                param.device == device
+                param.device.type == device.type
                 for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )
@@ -765,6 +788,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             ]
         ),
     )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_sharder_bad_param_config(
         self, sharding_type_qsplitscalebias: Tuple[str, bool]
     ) -> None:

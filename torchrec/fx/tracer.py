@@ -113,9 +113,6 @@ class Tracer(torch.fx.Tracer):
                 kwargs={},
                 type_expr=NoWait,
             )
-        # jit script has explicit convertions to torch.device from str
-        if isinstance(a, torch.device):
-            return super().create_arg(f"{a.type}:{a.index}")
 
         # Not equivalent to when LazyAwaitable.wait() is called in eager. Here can be called earlier, as attr was not requested and this is not guranteed to be torch function
         # TODO(ivankobzarev): support equivalent timing of LazyAwaitable

@@ -153,6 +153,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
         local_model = DistributedModelParallel(
             module=local_model,
             env=ShardingEnv.from_local(world_size, default_rank),
+            device=cuda_device,
             plan=plan,
             sharders=sharders,
             init_data_parallel=False,
