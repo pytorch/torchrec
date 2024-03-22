@@ -44,7 +44,8 @@ logger: logging.Logger = logging.getLogger()
 BENCH_SHARDING_TYPES: List[ShardingType] = [
     ShardingType.TABLE_WISE,
     ShardingType.ROW_WISE,
-    ShardingType.COLUMN_WISE,
+    # ShardingType.COLUMN_WISE,
+    # TODO: CW with FXJIT takes long time while profiling, doesn't cause an issue with no profiling in automatic benchmark
 ]
 
 BENCH_COMPILE_MODES: List[CompileMode] = [

@@ -8,26 +8,18 @@
 # pyre-strict
 
 import copy
-import os
 import unittest
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, cast, Dict, List, Optional, Tuple
+from typing import cast, List, Optional, Tuple
 from unittest.mock import MagicMock
 
 import torch
-import torch.distributed as dist
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.optim import Optimizer
 from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel, KJTList
-from torchrec.distributed.embeddingbag import (
-    EmbeddingBagCollectionContext,
-    EmbeddingBagCollectionSharder,
-    ShardedEmbeddingBagCollection,
-)
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.fp_embeddingbag import (
     FeatureProcessedEmbeddingBagCollectionSharder,
     ShardedFeatureProcessedEmbeddingBagCollection,
@@ -45,6 +37,9 @@ from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
 )
+from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
+    TrainPipelineSparseDistTestBase,
+)
 from torchrec.distributed.train_pipeline.train_pipelines import (
     EvalPipelineSparseDist,
     PrefetchTrainPipelineSparseDist,
@@ -60,53 +55,16 @@ from torchrec.distributed.train_pipeline.utils import (
     StageOut,
 )
 from torchrec.distributed.types import (
-    Awaitable,
     ModuleSharder,
-    ParameterSharding,
     ShardingEnv,
     ShardingPlan,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.embedding_configs import DataType
 
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Pipelineable
-from torchrec.test_utils import get_free_port, init_distributed_single_host
-
-
-class TestShardedEmbeddingBagCollection(ShardedEmbeddingBagCollection):
-    def input_dist(
-        self,
-        ctx: EmbeddingBagCollectionContext,
-        features: KeyedJaggedTensor,
-    ) -> Awaitable[Awaitable[KJTList]]:
-        return super().input_dist(ctx, features)
-
-
-class TestCustomEBCSharder(EmbeddingBagCollectionSharder):
-    def shard(
-        self,
-        module: EmbeddingBagCollection,
-        params: Dict[str, ParameterSharding],
-        env: ShardingEnv,
-        device: Optional[torch.device] = None,
-    ) -> TestShardedEmbeddingBagCollection:
-        return TestShardedEmbeddingBagCollection(
-            module, params, env, self.fused_params, device
-        )
-
-    def sharding_types(self, compute_device_type: str) -> List[str]:
-        return [
-            ShardingType.ROW_WISE.value,
-        ]
-
-    def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
-    ) -> List[str]:
-        return [EmbeddingComputeKernel.DENSE.value]
 
 
 @dataclass
@@ -195,66 +153,6 @@ class TrainPipelineBaseTest(unittest.TestCase):
             self.assertTrue(torch.isclose(pred_gpu.cpu(), pred))
 
 
-class TrainPipelineSparseDistTestBase(unittest.TestCase):
-    def setUp(self) -> None:
-        os.environ["MASTER_ADDR"] = str("localhost")
-        os.environ["MASTER_PORT"] = str(get_free_port())
-        backend = "gloo"
-        if torch.cuda.is_available():
-            backend = "nccl"
-        self.pg = init_distributed_single_host(backend=backend, rank=0, world_size=1)
-
-        num_features = 4
-        num_weighted_features = 2
-        self.tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 100,
-                embedding_dim=(i + 1) * 4,
-                name="table_" + str(i),
-                feature_names=["feature_" + str(i)],
-            )
-            for i in range(num_features)
-        ]
-        self.weighted_tables = [
-            EmbeddingBagConfig(
-                num_embeddings=(i + 1) * 100,
-                embedding_dim=(i + 1) * 4,
-                name="weighted_table_" + str(i),
-                feature_names=["weighted_feature_" + str(i)],
-            )
-            for i in range(num_weighted_features)
-        ]
-
-        self.device = torch.device("cuda:0")
-
-    def tearDown(self) -> None:
-        super().tearDown()
-        dist.destroy_process_group(self.pg)
-
-    def _generate_data(
-        self,
-        num_batches: int = 5,
-        batch_size: int = 1,
-    ) -> List[ModelInput]:
-        return [
-            ModelInput.generate(
-                tables=self.tables,
-                weighted_tables=self.weighted_tables,
-                batch_size=batch_size,
-                world_size=1,
-                num_float_features=10,
-            )[0]
-            for i in range(num_batches)
-        ]
-
-    def _set_table_weights_precision(self, dtype: DataType) -> None:
-        for i in range(len(self.tables)):
-            self.tables[i].data_type = dtype
-
-        for i in range(len(self.weighted_tables)):
-            self.weighted_tables[i].data_type = dtype
-
-
 class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
@@ -262,32 +160,8 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_feature_processed_ebc(self) -> None:
-        embedding_bag_configs = [
-            EmbeddingBagConfig(
-                name="table_0",
-                feature_names=["feature_0"],
-                embedding_dim=3 * 16,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_1",
-                feature_names=["feature_1"],
-                embedding_dim=8,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_2",
-                feature_names=["feature_2"],
-                embedding_dim=8,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_3",
-                feature_names=["feature_3"],
-                embedding_dim=3 * 16,
-                num_embeddings=16,
-            ),
-        ]
+        # don't need weighted tables here
+        self.weighted_tables = []
 
         sharder = cast(
             ModuleSharder[nn.Module], FeatureProcessedEmbeddingBagCollectionSharder()
@@ -303,7 +177,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
 
         sparse_arch = DummyWrapper(
             create_module_and_freeze(
-                tables=embedding_bag_configs,
+                tables=self.tables,
                 device=self.device,
                 use_fp_collection=False,
             )
@@ -342,17 +216,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_sparse_arch_pipeline.state_dict(),
         )
 
-        data = [
-            ModelInput.generate(
-                tables=embedding_bag_configs,
-                weighted_tables=[],
-                batch_size=1,
-                world_size=1,
-                num_float_features=0,
-                pooling_avg=5,
-            )[0].to(self.device)
-            for i in range(10)
-        ]
+        data = self._generate_data(num_batches=5, batch_size=1)
         dataloader = iter(data)
 
         optimizer_no_pipeline = optim.SGD(
@@ -382,27 +246,6 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             pipeline._pipelined_modules[0],
             ShardedFeatureProcessedEmbeddingBagCollection,
         )
-
-    def _setup_model(
-        self,
-        enable_fsdp: bool = False,
-    ) -> nn.Module:
-        unsharded_model = TestSparseNN(
-            tables=self.tables,
-            weighted_tables=self.weighted_tables,
-            dense_device=self.device,
-            sparse_device=torch.device("meta"),
-        )
-        if enable_fsdp:
-            unsharded_model.over.dhn_arch.linear0 = FSDP(
-                unsharded_model.over.dhn_arch.linear0
-            )
-            unsharded_model.over.dhn_arch.linear1 = FSDP(
-                unsharded_model.over.dhn_arch.linear1
-            )
-            unsharded_model.over.dhn_arch = FSDP(unsharded_model.over.dhn_arch)
-
-        return unsharded_model
 
     def _setup_pipeline(
         self,
@@ -576,33 +419,6 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
 
 
 class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
-    def _generate_sharded_model_and_optimizer(
-        self,
-        model: nn.Module,
-        sharding_type: str,
-        kernel_type: str,
-        fused_params: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[nn.Module, Optimizer]:
-        sharder = TestEBCSharder(
-            sharding_type=sharding_type,
-            kernel_type=kernel_type,
-            fused_params=fused_params,
-        )
-        sharded_model = DistributedModelParallel(
-            module=copy.deepcopy(model),
-            env=ShardingEnv.from_process_group(self.pg),
-            init_data_parallel=False,
-            device=self.device,
-            sharders=[
-                cast(
-                    ModuleSharder[nn.Module],
-                    sharder,
-                )
-            ],
-        )
-        optimizer = optim.SGD(sharded_model.parameters(), lr=0.1)
-        return sharded_model, optimizer
-
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
@@ -673,12 +489,7 @@ class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             "prefetch_pipeline": True,
         }
 
-        model = TestSparseNN(
-            tables=self.tables,
-            weighted_tables=self.weighted_tables,
-            dense_device=self.device,
-            sparse_device=torch.device("meta"),
-        )
+        model = self._setup_model()
         sharded_model, optim = self._generate_sharded_model_and_optimizer(
             model, sharding_type, kernel_type, fused_params
         )
@@ -779,46 +590,26 @@ class EvalPipelineSparseDistTest(unittest.TestCase):
 
 
 class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
-    def _generate_sharded_model_and_optimizer(
-        self, model: nn.Module
-    ) -> Tuple[nn.Module, Optimizer]:
-        sharder = TestEBCSharder(
-            sharding_type=ShardingType.TABLE_WISE.value,
-            kernel_type=EmbeddingComputeKernel.FUSED.value,
-        )
-        sharded_model = DistributedModelParallel(
-            module=copy.deepcopy(model),
-            env=ShardingEnv.from_process_group(self.pg),
-            init_data_parallel=False,
-            device=self.device,
-            sharders=[
-                cast(
-                    ModuleSharder[nn.Module],
-                    sharder,
-                )
-            ],
-        )
-        optimizer = optim.SGD(sharded_model.parameters(), lr=0.1)
-        return sharded_model, optimizer
-
     # pyre-ignore
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_pipelining(self) -> None:
-        model = TestSparseNN(
-            tables=self.tables,
-            weighted_tables=self.weighted_tables,
-            dense_device=self.device,
-            sparse_device=torch.device("meta"),
-        )
+        model = self._setup_model()
 
-        sharded_model, optim = self._generate_sharded_model_and_optimizer(model)
+        sharding_type = ShardingType.TABLE_WISE.value
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type
+        )
         (
             sharded_model_pipelined,
             optim_pipelined,
-        ) = self._generate_sharded_model_and_optimizer(model)
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type
+        )
 
         copy_state_dict(
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()

@@ -14,6 +14,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
+
+# pyre-ignore
+from torch.fx.experimental.symbolic_shapes import guard_size_oblivious
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
 
 from torchrec.streamable import Pipelineable
@@ -669,6 +672,10 @@ register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 def _assert_tensor_has_no_elements_or_has_integers(
     tensor: torch.Tensor, tensor_name: str
 ) -> None:
+    if torch.compiler.is_dynamo_compiling():
+        # Skipping assert on tensor.numel() == 0 for dynamo to avoid DataDependentError
+        return
+
     assert tensor.numel() == 0 or tensor.dtype in [
         torch.long,
         torch.int,
@@ -785,15 +792,27 @@ def _maybe_compute_length_per_key(
                 else torch.sum(torch.diff(offsets).view(-1, stride), dim=1).tolist()
             )
         elif len(keys) and lengths is not None:
-            _length: List[int] = (
-                _length_per_key_from_stride_per_key(lengths, stride_per_key)
-                if variable_stride_per_key
-                else (
-                    torch.sum(lengths.view(-1, stride), dim=1).tolist()
-                    if lengths.numel() != 0
+            _length: List[int] = []
+            if variable_stride_per_key:
+                _length = _length_per_key_from_stride_per_key(lengths, stride_per_key)
+            else:
+                cond: bool = False
+                if (
+                    torch.compiler.is_dynamo_compiling()
+                    and not torch.jit.is_scripting()
+                ):
+                    # pyre-ignore
+                    cond = guard_size_oblivious(lengths.numel() != 0)
+                else:
+                    cond = lengths.numel() != 0
+
+                _length = (
+                    torch.jit.annotate(
+                        List[int], torch.sum(lengths.view(-1, stride), dim=1).tolist()
+                    )
+                    if cond
                     else [0] * len(keys)
                 )
-            )
         else:
             _length: List[int] = []
         length_per_key = _length
@@ -1262,7 +1281,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self._stride_per_key_per_rank = stride_per_key_per_rank
             self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
             self._variable_stride_per_key = True
-            if not stride_per_key_per_rank:
+            if stride_per_key_per_rank is not None:
                 self._stride = 0
             elif all(s == self.stride_per_key()[0] for s in self.stride_per_key()):
                 self._stride = self.stride_per_key()[0]
@@ -2043,17 +2062,20 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 cumsum_lengths[strides_cumsum[1:]] - cumsum_lengths[strides_cumsum[:-1]]
             )
             with record_function("## all2all_data:recat_values ##"):
-                if recat is not None and recat.numel() > 0:
+                recat_cond: bool = recat is not None
+                if recat_cond and not is_torchdynamo_compiling():
+                    recat_cond = torch.jit._unwrap_optional(recat).numel() > 0
+                if recat_cond:
                     lengths, _ = _permute_tensor_by_segments(
                         lengths,
                         stride_per_rank_per_key,
-                        recat,
+                        torch.jit._unwrap_optional(recat),
                         None,
                     )
                     values, weights = _permute_tensor_by_segments(
                         values,
                         length_per_key,
-                        recat,
+                        torch.jit._unwrap_optional(recat),
                         weights,
                     )
             if not stride_per_key_per_rank:
@@ -2080,16 +2102,23 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         else:
             assert stride_per_rank is not None
             with record_function("## all2all_data:recat_values ##"):
-                if recat is not None and recat.numel() > 0:
+                recat_cond: bool = recat is not None
+                if recat_cond and not is_torchdynamo_compiling():
+                    recat_cond = torch.jit._unwrap_optional(recat).numel() > 0
+
+                if recat_cond:
                     stride = stride_per_rank[0]
 
                     # dynamo don't handle generators well
                     # so had to unroll the original generator into
                     # this for loop.
-                    single_batch_per_rank = True
-                    for s in stride_per_rank:
-                        if s != stride:
-                            single_batch_per_rank = False
+                    single_batch_per_rank = False
+                    if not is_torchdynamo_compiling():
+                        # Dynamo symbolic shapes could not pass through s != stride condition without hints => Dynamo always use VB path
+                        single_batch_per_rank = True
+                        for s in stride_per_rank:
+                            if s != stride:
+                                single_batch_per_rank = False
 
                     if single_batch_per_rank:
                         (
@@ -2097,7 +2126,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             values,
                             weights,
                         ) = torch.ops.fbgemm.permute_2D_sparse_data(
-                            recat,
+                            torch.jit._unwrap_optional(recat),
                             lengths.view(-1, stride),
                             values,
                             weights,
@@ -2110,7 +2139,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             values,
                             weights,
                         ) = torch.ops.fbgemm.permute_1D_sparse_data(
-                            recat,
+                            torch.jit._unwrap_optional(recat),
                             lengths.view(-1),
                             values,
                             weights,
