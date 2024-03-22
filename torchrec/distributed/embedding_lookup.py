@@ -121,12 +121,15 @@ def embeddings_cat_empty_rank_handle(
 def embeddings_cat_empty_rank_handle_inference(
     embeddings: List[torch.Tensor],
     dim: int = 0,
-    device: Optional[torch.device] = None,
+    device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> torch.Tensor:
     if len(embeddings) == 0:
         # return a dummy empty tensor when grouped_configs is empty
-        return torch.empty([0], dtype=dtype, device=device)
+        dev: Optional[torch.device] = (
+            torch.device(device) if device is not None else None
+        )
+        return torch.empty([0], dtype=dtype, device=dev)
     elif len(embeddings) == 1:
         return embeddings[0]
     else:
@@ -582,7 +585,7 @@ class MetaInferGroupedEmbeddingsLookup(
         ]
 
         self.grouped_configs = grouped_configs
-        self.device: Optional[torch.device] = device
+        self.device: Optional[str] = str(device) if device is not None else None
         self.output_dtype: torch.dtype = (
             fused_params["output_dtype"].as_dtype()
             if fused_params and "output_dtype" in fused_params
@@ -711,7 +714,7 @@ class MetaInferGroupedPooledEmbeddingsLookup(
 
         self.grouped_configs = grouped_configs
         self._feature_processor = feature_processor
-        self.device: Optional[torch.device] = device
+        self.device: Optional[str] = str(device) if device is not None else None
         self.output_dtype: torch.dtype = (
             fused_params["output_dtype"].as_dtype()
             if fused_params and "output_dtype" in fused_params
