@@ -432,6 +432,7 @@ class ShardedQuantEmbeddingCollection(
                     # pyre-ignore
                     else env[get_device_from_sharding_type(embedding_confings)]
                 ),
+                device,
                 use_cpu_sharding=self._use_cpu_sharding,
             )
             for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()

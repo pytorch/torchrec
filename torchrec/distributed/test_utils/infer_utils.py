@@ -484,7 +484,9 @@ def create_test_model(
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     weight_dtype: torch.dtype = torch.qint8,
 ) -> TestModelInfo:
-    topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+    topology: Topology = Topology(
+        world_size=world_size, compute_device=sparse_device.type
+    )
     mi = TestModelInfo(
         dense_device=dense_device,
         sparse_device=sparse_device,
@@ -779,7 +781,8 @@ def assert_weight_spec(
         unsharded_weight_fqn = f"{ebc_fqn}.{weights_prefix}.{table_name}.weight"
         for (offset_r, offset_c, size_r, size_c), placement in expected_shards:
             tbe_idx: int = 0
-            if "rank:1/cuda:1" == placement:
+            # Assumption of only one TBE per rank
+            if "rank:1" in placement:
                 tbe_idx = 1
             sharded_weight_fqn: str = (
                 f"{ebc_fqn}.tbes.{tbe_idx}.{tbe_table_idxs[tbe_idx]}.{table_name}.weight"
