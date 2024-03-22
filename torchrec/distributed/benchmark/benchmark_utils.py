@@ -16,6 +16,7 @@ import gc
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 
 from enum import Enum
@@ -686,6 +687,9 @@ def init_module_and_run_benchmark(
 
         if queue is not None:
             queue.put(res)
+
+            while not queue.empty():
+                time.sleep(1)
 
     return res
 
