@@ -137,16 +137,18 @@ class TestPt2(unittest.TestCase):
 
     def test_kjt_split(self) -> None:
         class M(torch.nn.Module):
-            def forward(self, kjt: KeyedJaggedTensor, segments: List[int]):
-                return kjt.split(segments)
+            def forward(self, kjt: KeyedJaggedTensor):
+                return kjt.split([1, 2, 1])
 
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
         segments: List[int] = [1, 2, 1]
         self._test_kjt_input_module(
             M(),
             kjt.keys(),
-            (kjt._values, kjt._lengths, segments),
+            (kjt._values, kjt._lengths),
             test_aot_inductor=False,
+            test_dynamo=False,
+            test_pt2_ir_export=True,
         )
 
     def test_kjt_permute(self) -> None:
