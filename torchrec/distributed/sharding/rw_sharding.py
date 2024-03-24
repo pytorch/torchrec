@@ -49,6 +49,8 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+
+from torchrec.fx.utils import fx_marker
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -649,3 +651,79 @@ class InferRwPooledEmbeddingSharding(
             device=device,
             world_size=self._world_size,
         )
+
+
+class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
+    def __init__(
+        self,
+        world_size: int,
+        num_features: int,
+        feature_hash_sizes: List[int],
+        device: Optional[torch.device] = None,
+        is_sequence: bool = False,
+        has_feature_processor: bool = False,
+        need_pos: bool = False,
+        # pyre-fixme[9]: emb_sharding has type `List[List[int]]`; used as `None`.
+        emb_sharding: List[List[int]] = None,
+    ) -> None:
+        super().__init__()
+        self._world_size: int = world_size
+        self._num_features = num_features
+        self.feature_block_sizes: List[int] = [
+            (hash_size + self._world_size - 1) // self._world_size
+            for hash_size in feature_hash_sizes
+        ]
+        self.tensor_cache: Dict[str, Union[torch.Tensor, List[torch.Tensor]]] = {}
+        # pyre-fixme[4]: Attribute must be annotated.
+        self._splits = self._world_size * [self._num_features]
+        self._device_type: str = "cuda" if device is None else device.type
+        self._is_sequence = is_sequence
+        self._has_feature_processor = has_feature_processor
+        self._need_pos = need_pos
+        self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
+        self._embedding_shard_metadata = emb_sharding
+
+    def forward(
+        self,
+        sparse_features: KeyedJaggedTensor,
+    ) -> KJTList:
+        block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
+            self.feature_block_sizes,
+            sparse_features.device(),
+            self.tensor_cache,
+            self._embedding_shard_metadata,
+            sparse_features.values().dtype,
+        )
+
+        (
+            bucketized_features,
+            self.unbucketize_permute_tensor,
+        ) = bucketize_kjt_before_all2all(
+            sparse_features,
+            num_buckets=self._world_size,
+            block_sizes=block_sizes,
+            output_permute=self._is_sequence,
+            bucketize_pos=(
+                self._has_feature_processor
+                if sparse_features.weights_or_none() is None
+                else self._need_pos
+            ),
+            block_bucketize_row_pos=block_bucketize_row_pos,
+        )
+        # KJTOneToAll
+        kjt = bucketized_features
+        fx_marker("KJT_ONE_TO_ALL_FORWARD_BEGIN", kjt)
+        kjts: List[KeyedJaggedTensor] = kjt.split(self._splits)
+        dist_kjts = [
+            (
+                kjts[rank]
+                if self._device_type in {"meta", "cpu"}
+                else kjts[rank].to(
+                    torch.device(self._device_type, rank), non_blocking=True
+                )
+            )
+            for rank in range(self._world_size)
+        ]
+        ret = KJTList(dist_kjts)
+        fx_marker("KJT_ONE_TO_ALL_FORWARD_END", kjt)
+        return ret

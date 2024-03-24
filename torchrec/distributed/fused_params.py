@@ -21,6 +21,7 @@ FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
     "__register_quant_state_dict_split_scale_bias"
 )
 FUSED_PARAM_TBE_ROW_ALIGNMENT: str = "__register_tbe_row_alignment"
+FUSED_PARAM_USE_CPU_SHARDING: str = "__register_use_cpu_sharding"
 
 
 class TBEToRegisterMixIn:
@@ -67,6 +68,14 @@ def is_fused_param_quant_state_dict_split_scale_bias(
     )
 
 
+def is_fused_param_use_cpu_sharding(fused_params: Optional[Dict[str, Any]]) -> bool:
+    return (
+        fused_params
+        and FUSED_PARAM_USE_CPU_SHARDING in fused_params
+        and fused_params[FUSED_PARAM_USE_CPU_SHARDING]
+    )
+
+
 def tbe_fused_params(
     fused_params: Optional[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
@@ -80,5 +89,7 @@ def tbe_fused_params(
         fused_params_for_tbe.pop(FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS)
     if FUSED_PARAM_TBE_ROW_ALIGNMENT in fused_params_for_tbe:
         fused_params_for_tbe.pop(FUSED_PARAM_TBE_ROW_ALIGNMENT)
+    if FUSED_PARAM_USE_CPU_SHARDING in fused_params_for_tbe:
+        fused_params_for_tbe.pop(FUSED_PARAM_USE_CPU_SHARDING)
 
     return fused_params_for_tbe
