@@ -32,6 +32,7 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ShardingPlan,
 )
+from torchrec.modules.embedding_configs import DataType
 from torchrec.modules.embedding_modules import EmbeddingCollectionInterface
 from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
 
@@ -291,6 +292,7 @@ class ShardingOption:
         dependency: Optional[str] = None,
         is_pooled: Optional[bool] = None,
         feature_names: Optional[List[str]] = None,
+        output_dtype: Optional[DataType] = None,
     ) -> None:
         self.name = name
         self._tensor = tensor
@@ -311,6 +313,7 @@ class ShardingOption:
         self._is_pooled = is_pooled
         self.is_weighted: Optional[bool] = None
         self.feature_names: Optional[List[str]] = feature_names
+        self.output_dtype: Optional[DataType] = output_dtype
 
     @property
     def tensor(self) -> torch.Tensor:
@@ -441,6 +444,7 @@ class ParameterConstraints:
     stochastic_rounding: Optional[bool] = None
     bounds_check_mode: Optional[BoundsCheckMode] = None
     feature_names: Optional[List[str]] = None
+    output_dtype: Optional[DataType] = None
 
 
 class PlannerErrorType(Enum):

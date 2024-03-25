@@ -42,6 +42,7 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
 )
+from torchrec.modules.embedding_configs import DATA_TYPE_NUM_BITS
 
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 
@@ -159,6 +160,15 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     else False
                 )
 
+            # hardcoded as 8 bytes
+            # input indices can be of int32, but in TBE they get converted to int64 anyway
+            input_data_type_size = BIGINT_DTYPE
+            output_data_type_size: float = (
+                DATA_TYPE_NUM_BITS[sharding_option.output_dtype] / 8
+                if sharding_option.output_dtype
+                else sharding_option.tensor.element_size()
+            )
+
             expected_cache_fetches = 0
             if (
                 caching_ratio is not None
@@ -185,8 +195,9 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 world_size=self._topology.world_size,
                 local_world_size=self._topology.local_world_size,
                 input_lengths=sharding_option.input_lengths,
-                input_data_type_size=BIGINT_DTYPE,
+                input_data_type_size=input_data_type_size,
                 table_data_type_size=table_data_type_size,
+                output_data_type_size=output_data_type_size,
                 fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
                 bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                 fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
@@ -221,6 +232,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         input_lengths: List[float],
         input_data_type_size: float,
         table_data_type_size: float,
+        output_data_type_size: float,
         fwd_a2a_comm_data_type_size: float,
         bwd_a2a_comm_data_type_size: float,
         fwd_sr_comm_data_type_size: float,
@@ -255,6 +267,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             input_data_type_size (float): the data type size of the distributed
                 data_parallel input.
             table_data_type_size (float): the data type size of the table.
+            output_data_type_size (float): the data type size of the output embeddings.
             fwd_comm_data_type_size (float): the data type size of the distributed
                 data_parallel input during forward communication.
             bwd_comm_data_type_size (float): the data type size of the distributed
@@ -306,6 +319,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     emb_dim=emb_dim,
                     input_data_type_size=input_data_type_size,
                     table_data_type_size=table_data_type_size,
+                    output_data_type_size=output_data_type_size,
                     fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
                     bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                     num_poolings=num_poolings,
@@ -328,6 +342,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     emb_dim=emb_dim,
                     input_data_type_size=input_data_type_size,
                     table_data_type_size=table_data_type_size,
+                    output_data_type_size=output_data_type_size,
                     fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
                     bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                     fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
@@ -351,6 +366,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     emb_dim=emb_dim,
                     input_data_type_size=input_data_type_size,
                     table_data_type_size=table_data_type_size,
+                    output_data_type_size=output_data_type_size,
                     fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
                     bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                     fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
@@ -375,6 +391,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     emb_dim=emb_dim,
                     input_data_type_size=input_data_type_size,
                     table_data_type_size=table_data_type_size,
+                    output_data_type_size=output_data_type_size,
                     num_poolings=num_poolings,
                     device_bw=device_bw,
                     inter_host_bw=inter_host_bw,
@@ -412,6 +429,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         emb_dim: int,
         input_data_type_size: float,
         table_data_type_size: float,
+        output_data_type_size: float,
         fwd_a2a_comm_data_type_size: float,
         bwd_a2a_comm_data_type_size: float,
         num_poolings: List[float],
@@ -505,6 +523,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         emb_dim: int,
         input_data_type_size: float,
         table_data_type_size: float,
+        output_data_type_size: float,
         fwd_a2a_comm_data_type_size: float,
         bwd_a2a_comm_data_type_size: float,
         fwd_sr_comm_data_type_size: float,
@@ -593,6 +612,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         emb_dim: int,
         input_data_type_size: float,
         table_data_type_size: float,
+        output_data_type_size: float,
         fwd_a2a_comm_data_type_size: float,
         bwd_a2a_comm_data_type_size: float,
         fwd_sr_comm_data_type_size: float,
@@ -689,6 +709,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         emb_dim: int,
         input_data_type_size: float,
         table_data_type_size: float,
+        output_data_type_size: float,
         num_poolings: List[float],
         device_bw: float,
         inter_host_bw: float,
@@ -859,6 +880,16 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 else [sharding_option.batch_size] * sharding_option.num_inputs
             )
 
+            # hardcoded as 8 bytes
+            # input indices can be of int32, but in TBE they get converted to int64 anyway
+            input_data_type_size = BIGINT_DTYPE
+
+            output_data_type_size: float = (
+                DATA_TYPE_NUM_BITS[sharding_option.output_dtype] / 8
+                if sharding_option.output_dtype
+                else sharding_option.tensor.element_size()
+            )
+
             shard_storages = calculate_shard_storages(
                 sharder=sharder,
                 sharding_type=sharding_option.sharding_type,
@@ -873,6 +904,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 num_poolings=num_poolings,
                 caching_ratio=caching_ratio if caching_ratio else UVM_CACHING_RATIO,
                 is_pooled=sharding_option.is_pooled,
+                input_data_type_size=input_data_type_size,
+                output_data_type_size=output_data_type_size,
             )
 
             for shard, storage in zip(sharding_option.shards, shard_storages):
@@ -893,6 +926,8 @@ def calculate_shard_storages(
     num_poolings: List[float],
     caching_ratio: float,
     is_pooled: bool,
+    input_data_type_size: float,
+    output_data_type_size: float,
 ) -> List[Storage]:
     """
     Calculates estimated storage sizes for each sharded tensor, comprised of input,
@@ -915,14 +950,12 @@ def calculate_shard_storages(
         caching_ratio (float): ratio of HBM to DDR memory for UVM caching.
         is_pooled (bool): True if embedding output is pooled (ie. `EmbeddingBag`), False
             if unpooled/sequential (ie. `Embedding`).
+        input_data_type_size (int): number of bytes of input data type.
+        output_data_type_size (int): number of bytes of output data type.
 
     Returns:
         List[Storage]: storage object for each device in topology.
     """
-
-    input_data_type_size = BIGINT_DTYPE
-    output_data_type_size = tensor.element_size()
-
     input_sizes, output_sizes = _calculate_shard_io_sizes(
         sharding_type=sharding_type,
         batch_sizes=batch_sizes,
@@ -1002,8 +1035,8 @@ def _calculate_shard_io_sizes(
     input_lengths: List[float],
     emb_dim: int,
     shard_sizes: List[List[int]],
-    input_data_type_size: int,
-    output_data_type_size: int,
+    input_data_type_size: float,
+    output_data_type_size: float,
     num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
@@ -1077,8 +1110,8 @@ def _calculate_dp_shard_io_sizes(
     input_lengths: List[float],
     emb_dim: int,
     num_shards: int,
-    input_data_type_size: int,
-    output_data_type_size: int,
+    input_data_type_size: float,
+    output_data_type_size: float,
     num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
@@ -1104,8 +1137,8 @@ def _calculate_tw_shard_io_sizes(
     world_size: int,
     input_lengths: List[float],
     emb_dim: int,
-    input_data_type_size: int,
-    output_data_type_size: int,
+    input_data_type_size: float,
+    output_data_type_size: float,
     num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
@@ -1131,8 +1164,8 @@ def _calculate_cw_shard_io_sizes(
     world_size: int,
     input_lengths: List[float],
     shard_sizes: List[List[int]],
-    input_data_type_size: int,
-    output_data_type_size: int,
+    input_data_type_size: float,
+    output_data_type_size: float,
     num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
@@ -1163,8 +1196,8 @@ def _calculate_rw_shard_io_sizes(
     world_size: int,
     input_lengths: List[float],
     shard_sizes: List[List[int]],
-    input_data_type_size: int,
-    output_data_type_size: int,
+    input_data_type_size: float,
+    output_data_type_size: float,
     num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:
@@ -1206,8 +1239,8 @@ def _calculate_twrw_shard_io_sizes(
     local_world_size: int,
     input_lengths: List[float],
     shard_sizes: List[List[int]],
-    input_data_type_size: int,
-    output_data_type_size: int,
+    input_data_type_size: float,
+    output_data_type_size: float,
     num_poolings: List[float],
     is_pooled: bool,
 ) -> Tuple[List[int], List[int]]:

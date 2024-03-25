@@ -30,7 +30,7 @@ from torchrec.distributed.planner.shard_estimators import (
 )
 from torchrec.distributed.planner.types import ParameterConstraints, Perf, Topology
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
-from torchrec.distributed.test_utils.test_model import TestSparseNN
+from torchrec.distributed.test_utils.test_model import TestEBCSharder, TestSparseNN
 from torchrec.distributed.tests.test_quant_model_parallel import _quantize
 from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
 from torchrec.distributed.types import (
@@ -39,7 +39,11 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
+from torchrec.modules.embedding_configs import (
+    DataType,
+    EmbeddingBagConfig,
+    EmbeddingConfig,
+)
 
 
 class TestEmbeddingPerfEstimator(unittest.TestCase):
@@ -557,6 +561,59 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
             )
 
             self.assertEqual(estimates, expected_storage)
+
+    def test_default_output_sizes(self) -> None:
+        topology = Topology(world_size=2, compute_device="cuda")
+        constraint_list = [
+            None,
+            {"table_0": ParameterConstraints(output_dtype=DataType.FP32)},
+        ]
+
+        table_list = [
+            [
+                EmbeddingBagConfig(
+                    num_embeddings=50,
+                    embedding_dim=10,
+                    name="table_0",
+                    feature_names=["feature_0"],
+                    data_type=DataType.FP32,
+                )
+            ],
+            [
+                EmbeddingBagConfig(
+                    num_embeddings=100,
+                    embedding_dim=10,
+                    name="table_0",
+                    feature_names=["feature_0"],
+                    data_type=DataType.FP16,
+                )
+            ],
+        ]
+        hbms = []
+
+        for tables, constraints in zip(table_list, constraint_list):
+            enumerator = EmbeddingEnumerator(
+                topology=topology, batch_size=BATCH_SIZE, constraints=constraints
+            )
+            model = TestSparseNN(tables=tables, weighted_tables=[])
+            sharding_options = enumerator.enumerate(
+                module=model,
+                sharders=[
+                    cast(
+                        ModuleSharder[torch.nn.Module],
+                        TestEBCSharder(
+                            sharding_type=ShardingType.TABLE_WISE.value,
+                            kernel_type=EmbeddingComputeKernel.FUSED.value,
+                        ),
+                    )
+                ],
+            )
+            self.assertEqual(len(sharding_options), 1)
+            self.assertEqual(len(sharding_options[0].shards), 1)
+            self.assertIsNotNone(sharding_options[0].shards[0].storage)
+            hbms.append(sharding_options[0].shards[0].storage.hbm)  # pyre-ignore
+
+        self.assertEqual(hbms[0], hbms[1])
 
 
 class TestEmbeddingOffloadStats(unittest.TestCase):

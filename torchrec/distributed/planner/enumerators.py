@@ -34,6 +34,7 @@ from torchrec.distributed.types import (
     ModuleSharder,
     ShardingType,
 )
+from torchrec.modules.embedding_configs import DataType
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 
 
@@ -128,6 +129,7 @@ class EmbeddingEnumerator(Enumerator):
                     stochastic_rounding,
                     bounds_check_mode,
                     feature_names,
+                    output_dtype,
                 ) = _extract_constraints_for_param(self._constraints, name)
 
                 sharding_options_per_table: List[ShardingOption] = []
@@ -177,6 +179,7 @@ class EmbeddingEnumerator(Enumerator):
                                 dependency=dependency,
                                 is_pooled=is_pooled,
                                 feature_names=feature_names,
+                                output_dtype=output_dtype,
                             )
                         )
                 if not sharding_options_per_table:
@@ -274,6 +277,7 @@ def _extract_constraints_for_param(
     Optional[bool],
     Optional[BoundsCheckMode],
     Optional[List[str]],
+    Optional[DataType],
 ]:
     input_lengths = [POOLING_FACTOR]
     col_wise_shard_dim = None
@@ -282,6 +286,7 @@ def _extract_constraints_for_param(
     stochastic_rounding = None
     bounds_check_mode = None
     feature_names = None
+    output_dtype = None
 
     if constraints and constraints.get(name):
         input_lengths = constraints[name].pooling_factors
@@ -291,6 +296,7 @@ def _extract_constraints_for_param(
         stochastic_rounding = constraints[name].stochastic_rounding
         bounds_check_mode = constraints[name].bounds_check_mode
         feature_names = constraints[name].feature_names
+        output_dtype = constraints[name].output_dtype
 
     return (
         input_lengths,
@@ -300,6 +306,7 @@ def _extract_constraints_for_param(
         stochastic_rounding,
         bounds_check_mode,
         feature_names,
+        output_dtype,
     )
 
 
