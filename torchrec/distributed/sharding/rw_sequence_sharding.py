@@ -190,6 +190,19 @@ class InferRwSequenceEmbeddingSharding(
     ) -> BaseSparseFeaturesDist[KJTList]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
+
+        emb_sharding = []
+        for embedding_table_group in self._grouped_embedding_configs_per_rank[0]:
+            for table in embedding_table_group.embedding_tables:
+                shard_split_offsets = [
+                    shard.shard_offsets[0]
+                    # pyre-fixme[16]: `Optional` has no attribute `shards_metadata`.
+                    for shard in table.global_metadata.shards_metadata
+                ]
+                # pyre-fixme[16]: Optional has no attribute size.
+                shard_split_offsets.append(table.global_metadata.size[0])
+                emb_sharding.extend([shard_split_offsets] * len(table.embedding_names))
+
         return InferRwSparseFeaturesDist(
             world_size=self._world_size,
             num_features=num_features,
@@ -198,6 +211,7 @@ class InferRwSequenceEmbeddingSharding(
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
             need_pos=False,
+            embedding_shard_metadata=emb_sharding,
         )
 
     def create_lookup(
