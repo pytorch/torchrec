@@ -511,6 +511,7 @@ class ParameterSharding:
         enforce_hbm (Optional[bool]): whether to use HBM.
         stochastic_rounding (Optional[bool]): whether to use stochastic rounding.
         bounds_check_mode (Optional[BoundsCheckMode]): bounds check mode.
+        output_dtype (Optional[DataType]): output dtype.
 
     NOTE:
       ShardingType.TABLE_WISE - rank where this embedding is placed
@@ -529,6 +530,7 @@ class ParameterSharding:
     enforce_hbm: Optional[bool] = None
     stochastic_rounding: Optional[bool] = None
     bounds_check_mode: Optional[BoundsCheckMode] = None
+    output_dtype: Optional[DataType] = None
 
 
 class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterSharding]):

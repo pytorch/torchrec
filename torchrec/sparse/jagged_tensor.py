@@ -1678,6 +1678,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self._lengths_offset_per_key = _cumsum(self.stride_per_key())
         return self._lengths_offset_per_key
 
+    def index_per_key(self) -> Dict[str, int]:
+        return self._key_indices()
+
     def split(self, segments: List[int]) -> List["KeyedJaggedTensor"]:
         split_list: List[KeyedJaggedTensor] = []
         start = 0

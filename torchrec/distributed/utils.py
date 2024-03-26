@@ -390,6 +390,9 @@ def add_params_from_parameter_sharding(
     if parameter_sharding.bounds_check_mode is not None:
         fused_params["bounds_check_mode"] = parameter_sharding.bounds_check_mode
 
+    if parameter_sharding.output_dtype is not None:
+        fused_params["output_dtype"] = parameter_sharding.output_dtype
+
     # print warning if sharding_type is data_parallel or kernel is dense
     if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
         logger.warning(

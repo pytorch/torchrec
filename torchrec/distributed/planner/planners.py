@@ -101,6 +101,7 @@ def _to_sharding_plan(
             enforce_hbm=sharding_option.enforce_hbm,
             stochastic_rounding=sharding_option.stochastic_rounding,
             bounds_check_mode=sharding_option.bounds_check_mode,
+            output_dtype=sharding_option.output_dtype,
         )
         plan[sharding_option.path] = module_plan
     return ShardingPlan(plan)
