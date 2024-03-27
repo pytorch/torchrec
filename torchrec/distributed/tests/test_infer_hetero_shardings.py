@@ -13,6 +13,9 @@ import unittest
 
 import torch
 from torchrec import EmbeddingCollection, EmbeddingConfig
+from torchrec.distributed.planner import ParameterConstraints
+from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
+from torchrec.distributed.planner.types import Topology
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.sharding_plan import (
@@ -107,3 +110,74 @@ class InferHeteroShardingsTest(unittest.TestCase):
                 )
                 == env.world_size
             )
+
+    def test_cpu_gpu_sharding_autoplanner(self) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(3)
+        ]
+        model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(
+                    tables=tables,
+                    device=torch.device("cpu"),
+                )
+            )
+        )
+        non_sharded_model = quantize(
+            model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=torch.qint8,
+        )
+        sharder = QuantEmbeddingCollectionSharder()
+        topo_cpu = Topology(world_size=3, compute_device="cpu")
+        topo_gpu = Topology(world_size=2, compute_device="cuda")
+        topo_groups = {
+            "cpu": topo_cpu,
+            "cuda": topo_gpu,
+        }
+        constraints = {
+            "table_0": ParameterConstraints(device_group="cpu"),
+            "table_1": ParameterConstraints(device_group="cuda"),
+            "table_2": ParameterConstraints(device_group="cuda"),
+        }
+        planner = HeteroEmbeddingShardingPlanner(
+            topology_groups=topo_groups, constraints=constraints
+        )
+        module_plan = planner.plan(
+            non_sharded_model,
+            # pyre-ignore
+            sharders=[sharder],
+        )
+        print(module_plan)
+
+        self.assertTrue(
+            # pyre-ignore
+            module_plan.plan["_module_kjt_input.0"]["table_0"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cpu",
+        )
+        self.assertTrue(
+            module_plan.plan["_module_kjt_input.0"]["table_1"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cuda",
+        )
+        self.assertTrue(
+            module_plan.plan["_module_kjt_input.0"]["table_2"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cuda",
+        )
