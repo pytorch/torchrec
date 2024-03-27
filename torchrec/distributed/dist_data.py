@@ -168,23 +168,34 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
         super().__init__()
         self.num_workers: int = pg.size()
 
-        with record_function("## all2all_data:kjt splits ##"):
-            self._output_tensor: torch.Tensor = torch.empty(
-                [self.num_workers * len(input_tensors)],
-                device=input_tensors[0].device,
-                dtype=input_tensors[0].dtype,
-            )
-            input_tensor = torch.stack(input_tensors, dim=1).flatten()
-            self._splits_awaitable: dist.Work = dist.all_to_all_single(
-                output=self._output_tensor,
-                input=input_tensor,
-                group=pg,
-                async_op=not is_torchdynamo_compiling(),
-            )
+        if is_torchdynamo_compiling():
+            # TODO(ivankobzarev) Remove this dynamo condition once dynamo functional collectives remapping does not emit copy_
+            # https://github.com/pytorch/pytorch/issues/122788
+            with record_function("## all2all_data:kjt splits ##"):
+                input_tensor = torch.stack(input_tensors, dim=1).flatten()
+                self._output_tensor = dist._functional_collectives.all_to_all_single(
+                    input_tensor,
+                    output_split_sizes=None,
+                    input_split_sizes=None,
+                    group=pg,
+                )
+        else:
+            with record_function("## all2all_data:kjt splits ##"):
+                self._output_tensor: torch.Tensor = torch.empty(
+                    [self.num_workers * len(input_tensors)],
+                    device=input_tensors[0].device,
+                    dtype=input_tensors[0].dtype,
+                )
+                input_tensor = torch.stack(input_tensors, dim=1).flatten()
+                self._splits_awaitable: dist.Work = dist.all_to_all_single(
+                    output=self._output_tensor,
+                    input=input_tensor,
+                    group=pg,
+                    async_op=not is_torchdynamo_compiling(),
+                )
 
     def _wait_impl(self) -> List[List[int]]:
-        # handling sync torch dynamo trace case, where awaitable will be a Tensor
-        if isinstance(self._splits_awaitable, dist.Work):
+        if not is_torchdynamo_compiling():
             self._splits_awaitable.wait()
 
         return self._output_tensor.view(self.num_workers, -1).T.tolist()
@@ -261,21 +272,33 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
             input_tensors,
             labels,
         ):
-            output_tensor = torch.empty(
-                sum(output_split), device=self._device, dtype=input_tensor.dtype
-            )
-            with record_function(f"## all2all_data:kjt {label} ##"):
-                awaitable = dist.all_to_all_single(
-                    output=output_tensor,
-                    input=input_tensor,
-                    output_split_sizes=output_split,
-                    input_split_sizes=input_split,
-                    group=self._pg,
-                    async_op=not is_torchdynamo_compiling(),
+            if is_torchdynamo_compiling():
+                # TODO(ivankobzarev) Remove this dynamo condition once dynamo functional collectives remapping does not emit copy_
+                # https://github.com/pytorch/pytorch/issues/122788
+                with record_function(f"## all2all_data:kjt {label} ##"):
+                    output_tensor = dist._functional_collectives.all_to_all_single(
+                        input_tensor,
+                        output_split,
+                        input_split,
+                        pg,
+                    )
+                    self._output_tensors.append(output_tensor)
+            else:
+                output_tensor = torch.empty(
+                    sum(output_split), device=self._device, dtype=input_tensor.dtype
                 )
+                with record_function(f"## all2all_data:kjt {label} ##"):
+                    awaitable = dist.all_to_all_single(
+                        output=output_tensor,
+                        input=input_tensor,
+                        output_split_sizes=output_split,
+                        input_split_sizes=input_split,
+                        group=self._pg,
+                        async_op=not is_torchdynamo_compiling(),
+                    )
 
-            self._output_tensors.append(output_tensor)
-            self._awaitables.append(awaitable)
+                self._output_tensors.append(output_tensor)
+                self._awaitables.append(awaitable)
 
     def _wait_impl(self) -> KeyedJaggedTensor:
         """
@@ -289,9 +312,8 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
             self._input.sync()
             return self._input
 
-        for awaitable in self._awaitables:
-            # handling sync torch dynamo trace case where awaitable will be a Tensor
-            if isinstance(awaitable, dist.Work):
+        if not is_torchdynamo_compiling():
+            for awaitable in self._awaitables:
                 awaitable.wait()
 
         return type(self._input).dist_init(
