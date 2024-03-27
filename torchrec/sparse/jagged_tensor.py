@@ -41,6 +41,10 @@ except Exception:
         return False
 
 
+def can_use_torch_compiler() -> bool:
+    return not torch.jit.is_scripting() and not torch._running_with_deploy()
+
+
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     if is_torchdynamo_compiling():
         # TODO(ivankobzarev): Dynamo trace with pin_memory once FakeTensor supports it.
@@ -248,7 +252,11 @@ def _permute_tensor_by_segments(
 
 
 def is_non_strict_exporting() -> bool:
-    return not torch.compiler.is_dynamo_compiling() and torch.compiler.is_compiling()
+    return (
+        can_use_torch_compiler()
+        and not torch.compiler.is_dynamo_compiling()
+        and torch.compiler.is_compiling()
+    )
 
 
 class JaggedTensorMeta(abc.ABCMeta, torch.fx._symbolic_trace.ProxyableClassMeta):
@@ -676,7 +684,7 @@ register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 def _assert_tensor_has_no_elements_or_has_integers(
     tensor: torch.Tensor, tensor_name: str
 ) -> None:
-    if torch.compiler.is_dynamo_compiling():
+    if can_use_torch_compiler() and torch.compiler.is_dynamo_compiling():
         # Skipping assert on tensor.numel() == 0 for dynamo to avoid DataDependentError
         return
 
@@ -802,7 +810,8 @@ def _maybe_compute_length_per_key(
             else:
                 cond: bool = False
                 if (
-                    torch.compiler.is_dynamo_compiling()
+                    can_use_torch_compiler()
+                    and torch.compiler.is_dynamo_compiling()
                     and not torch.jit.is_scripting()
                 ):
                     # pyre-ignore

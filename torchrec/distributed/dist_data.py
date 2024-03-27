@@ -27,7 +27,7 @@ from torchrec.distributed.comm_ops import (
 from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
 from torchrec.fx.utils import fx_marker
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import can_use_torch_compiler, KeyedJaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -105,9 +105,9 @@ def _get_recat(
                 recat.append(i + j * local_split)
 
         vb_condition: bool = batch_size_per_rank is not None
-        if not torch.compiler.is_dynamo_compiling():
+        if can_use_torch_compiler() and not torch.compiler.is_dynamo_compiling():
             vb_condition = vb_condition and any(
-                # pyre-ignore
+                # pyre-ignor
                 bs != batch_size_per_rank[0]
                 # pyre-ignore
                 for bs in batch_size_per_rank
@@ -384,7 +384,7 @@ class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
                 self._output_splits = output_list[:-1]
                 self._stride_per_rank = output_list[-1]
 
-            if torch.compiler.is_dynamo_compiling():
+            if can_use_torch_compiler() and torch.compiler.is_dynamo_compiling():
                 rank: int = self._pg.rank()
                 for i in range(len(self._output_splits)):
                     for j in range(len(self._output_splits[i])):
@@ -1029,7 +1029,7 @@ class PooledEmbeddingsReduceScatter(nn.Module):
         """
 
         # Dynamo can not trace through data dependent condition: len(set(input_splits)) > 1
-        if torch.compiler.is_dynamo_compiling():
+        if can_use_torch_compiler() and torch.compiler.is_dynamo_compiling():
             if input_splits is not None:
                 tensor_awaitable = reduce_scatter_v_pooled(
                     local_embs, input_splits, self._pg, codecs=self._codecs

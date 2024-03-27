@@ -18,6 +18,7 @@ from torch.autograd import Function
 from torch.autograd.profiler import record_function
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.distributed.utils import none_throws
+from torchrec.sparse.jagged_tensor import can_use_torch_compiler
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -1011,7 +1012,7 @@ def reduce_scatter_v_pooled(
     ]
 
     equal_splits = False
-    if not torch.compiler.is_dynamo_compiling():
+    if can_use_torch_compiler() and not torch.compiler.is_dynamo_compiling():
         # We can not check during tracing equality of splits -> fallback on general
         equal_splits = all(ip_split == input_splits[0] for ip_split in input_splits)
 
