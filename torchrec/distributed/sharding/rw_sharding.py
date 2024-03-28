@@ -47,6 +47,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
+    ShardingType,
     ShardMetadata,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -488,6 +489,7 @@ class RwPooledEmbeddingSharding(
             pg=self._pg,
             device=device if device is not None else self._device,
             feature_processor=feature_processor,
+            sharding_type=ShardingType.ROW_WISE,
         )
 
     def create_output_dist(
