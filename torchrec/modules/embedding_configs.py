@@ -16,6 +16,7 @@ from typing import Callable, Dict, List, NamedTuple, Optional
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import PoolingMode
+from torchrec.distributed.types import ShardingType
 from torchrec.types import DataType
 
 
@@ -60,10 +61,19 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         raise Exception(f"Invalid data type {dtype}")
 
 
-def pooling_type_to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
+def pooling_type_to_pooling_mode(
+    pooling_type: PoolingType, sharding_type: Optional[ShardingType] = None
+) -> PoolingMode:
     if pooling_type.value == PoolingType.SUM.value:
         return PoolingMode.SUM
     elif pooling_type.value == PoolingType.MEAN.value:
+        if sharding_type is not None and sharding_type in [
+            ShardingType.TABLE_ROW_WISE,
+            ShardingType.ROW_WISE,
+        ]:
+            # Mean pooling is not supported in TBE for TWRW/RW sharding.
+            # Pass 'SUM' as a workaround, and apply mean pooling as a callback in EBC.
+            return PoolingMode.SUM
         return PoolingMode.MEAN
     elif pooling_type.value == PoolingType.NONE.value:
         return PoolingMode.NONE

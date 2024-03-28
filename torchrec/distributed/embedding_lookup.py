@@ -52,7 +52,7 @@ from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
     QuantBatchedEmbeddingBag,
 )
-from torchrec.distributed.types import ShardedTensor
+from torchrec.distributed.types import ShardedTensor, ShardingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -344,23 +344,27 @@ class GroupedPooledEmbeddingsLookup(
         pg: Optional[dist.ProcessGroup] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
         scale_weight_gradients: bool = True,
+        sharding_type: Optional[ShardingType] = None,
     ) -> None:
         # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
+            sharding_type: Optional[ShardingType] = None,
         ) -> BaseEmbedding:
             if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbeddingBag(
                     config=config,
                     pg=pg,
                     device=device,
+                    sharding_type=sharding_type,
                 )
             elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbeddingBag(
                     config=config,
                     pg=pg,
                     device=device,
+                    sharding_type=sharding_type,
                 )
             else:
                 raise ValueError(
@@ -370,7 +374,7 @@ class GroupedPooledEmbeddingsLookup(
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config, device))
+            self._emb_modules.append(_create_lookup(config, device, sharding_type))
 
         self._feature_splits: List[int] = []
         for config in grouped_configs:
