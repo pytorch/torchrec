@@ -348,6 +348,16 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             f"EmbeddingOffloadScaleupProposer - proposed size={round(bytes_to_gb(hbm_used_previously), 2)} GB, score={perf_rating}"
         )
 
+        if not partitionable:
+            # Focus our search on smaller plans by assuming plans larger than this
+            # proposal will also fail to partition.
+            starting_size = sum(
+                sharding_option.total_storage.hbm
+                for sharding_option in self.starting_proposal
+            )
+            new_budget = hbm_used_previously - starting_size
+            self.search.shrink_right(new_budget)  # pyre-ignore
+
         assert self.search is not None  # keep pyre happy
         budget = self.search.next(perf_rating or 1e99)
         if budget is not None:
