@@ -97,6 +97,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (`EmbeddingBags`).
 
+    NOTE:
+        EmbeddingBagCollection is an unsharded module and is not performance optimized.
+        For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingBagCollection.
+
+
     It processes sparse data in the form of `KeyedJaggedTensor` with values of the form
     [F X B X L] where:
 
@@ -291,6 +296,10 @@ class EmbeddingCollectionInterface(abc.ABC, nn.Module):
 class EmbeddingCollection(EmbeddingCollectionInterface):
     """
     EmbeddingCollection represents a collection of non-pooled embeddings.
+
+    NOTE:
+        EmbeddingCollection is an unsharded module and is not performance optimized.
+        For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingCollection.
 
     It processes sparse data in the form of `KeyedJaggedTensor` of the form [F X B X L]
     where:

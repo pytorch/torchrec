@@ -243,6 +243,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
     This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops and provides
     table batching.
 
+    NOTE:
+        EmbeddingBagCollection is an unsharded module and is not performance optimized.
+        For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingBagCollection.
+
     It processes sparse data in the form of KeyedJaggedTensor
     with values of the form [F X B X L]
     F: features (keys)
@@ -669,6 +673,11 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
 class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingCollection represents a collection of non-pooled embeddings.
+
+    NOTE:
+        EmbeddingCollection is an unsharded module and is not performance optimized.
+        For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingCollection.
+
 
     It processes sparse data in the form of `KeyedJaggedTensor` of the form [F X B X L]
     where:
