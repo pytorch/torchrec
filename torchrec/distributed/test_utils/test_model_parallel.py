@@ -25,7 +25,7 @@ from torchrec.distributed.test_utils.test_sharding import (
     sharding_single_rank_test,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingType
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, PoolingType
 from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 
@@ -57,6 +57,29 @@ class ModelParallelTestShared(MultiProcessTestBase):
             for i in range(shared_features)
         ]
         self.tables += shared_features_tables
+
+        self.mean_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 2) * 8,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+                pooling=PoolingType.MEAN,
+            )
+            for i in range(num_features)
+        ]
+
+        shared_features_tables_mean = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 10,
+                embedding_dim=(i + 2) * 8,
+                name="table_" + str(i + num_features),
+                feature_names=["feature_" + str(i)],
+                pooling=PoolingType.MEAN,
+            )
+            for i in range(shared_features)
+        ]
+        self.mean_tables += shared_features_tables_mean
 
         self.weighted_tables = [
             EmbeddingBagConfig(
@@ -105,13 +128,14 @@ class ModelParallelTestShared(MultiProcessTestBase):
         variable_batch_per_feature: bool = False,
         has_weighted_tables: bool = True,
         global_constant_batch: bool = False,
+        pooling: PoolingType = PoolingType.SUM,
     ) -> None:
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
             world_size=world_size,
             local_size=local_size,
             model_class=model_class,
-            tables=self.tables,
+            tables=self.tables if pooling == PoolingType.SUM else self.mean_tables,
             weighted_tables=self.weighted_tables if has_weighted_tables else None,
             embedding_groups=self.embedding_groups,
             sharders=sharders,
@@ -168,8 +192,9 @@ class ModelParallelBase(ModelParallelTestShared):
             ]
         ),
         variable_batch_size=st.booleans(),
+        pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_rw(
         self,
         sharder_type: str,
@@ -179,6 +204,7 @@ class ModelParallelBase(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
+        pooling: PoolingType,
     ) -> None:
         if self.backend == "gloo":
             self.skipTest(
@@ -190,6 +216,7 @@ class ModelParallelBase(ModelParallelTestShared):
             sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
             or not variable_batch_size
         )
+
         self._test_sharding(
             sharders=[
                 cast(
@@ -207,6 +234,7 @@ class ModelParallelBase(ModelParallelTestShared):
             backend=self.backend,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+            pooling=pooling,
         )
 
     # pyre-fixme[56]
@@ -510,8 +538,9 @@ class ModelParallelBase(ModelParallelTestShared):
             ]
         ),
         variable_batch_size=st.booleans(),
+        pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_twrw(
         self,
         sharder_type: str,
@@ -521,6 +550,7 @@ class ModelParallelBase(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
+        pooling: PoolingType,
     ) -> None:
         if self.backend == "gloo":
             self.skipTest(
@@ -547,6 +577,7 @@ class ModelParallelBase(ModelParallelTestShared):
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+            pooling=pooling,
         )
 
     @unittest.skipIf(
@@ -559,14 +590,12 @@ class ModelParallelBase(ModelParallelTestShared):
             [
                 ShardingType.TABLE_WISE.value,
                 ShardingType.COLUMN_WISE.value,
-                ShardingType.ROW_WISE.value,
-                ShardingType.TABLE_ROW_WISE.value,
                 ShardingType.TABLE_COLUMN_WISE.value,
             ]
         ),
         global_constant_batch=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_sharding_variable_batch(
         self,
         sharding_type: str,
@@ -595,4 +624,52 @@ class ModelParallelBase(ModelParallelTestShared):
             variable_batch_per_feature=True,
             has_weighted_tables=False,
             global_constant_batch=global_constant_batch,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+            ]
+        ),
+        global_constant_batch=st.booleans(),
+        pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_sharding_variable_batch_twrw(
+        self,
+        sharding_type: str,
+        global_constant_batch: bool,
+        pooling: PoolingType,
+    ) -> None:
+        if self.backend == "gloo":
+            # error is from FBGEMM, it says CPU even if we are on GPU.
+            self.skipTest(
+                "bounds_check_indices on CPU does not support variable length (batch size)"
+            )
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type=SharderType.EMBEDDING_BAG_COLLECTION.value,
+                    sharding_type=sharding_type,
+                    kernel_type=EmbeddingComputeKernel.FUSED.value,
+                    device=self.device,
+                ),
+            ],
+            backend=self.backend,
+            constraints={
+                table.name: ParameterConstraints(min_partition=4)
+                for table in self.tables
+            },
+            variable_batch_per_feature=True,
+            has_weighted_tables=False,
+            global_constant_batch=global_constant_batch,
+            pooling=pooling,
         )

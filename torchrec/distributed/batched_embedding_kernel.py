@@ -50,6 +50,7 @@ from torchrec.distributed.types import (
     Shard,
     ShardedTensor,
     ShardedTensorMetadata,
+    ShardingType,
     ShardMetadata,
     TensorProperties,
 )
@@ -720,13 +721,16 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
+        sharding_type: Optional[ShardingType] = None,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._config = config
         self._pg = pg
 
-        self._pooling: PoolingMode = pooling_type_to_pooling_mode(config.pooling)
+        self._pooling: PoolingMode = pooling_type_to_pooling_mode(
+            config.pooling, sharding_type  # pyre-ignore[6]
+        )
 
         self._local_rows: List[int] = []
         self._weight_init_mins: List[float] = []
@@ -859,8 +863,9 @@ class BatchedFusedEmbeddingBag(
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
+        sharding_type: Optional[ShardingType] = None,
     ) -> None:
-        super().__init__(config, pg, device)
+        super().__init__(config, pg, device, sharding_type)
 
         managed: List[EmbeddingLocation] = []
         compute_devices: List[ComputeDevice] = []
@@ -962,8 +967,9 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
         config: GroupedEmbeddingConfig,
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
+        sharding_type: Optional[ShardingType] = None,
     ) -> None:
-        super().__init__(config, pg, device)
+        super().__init__(config, pg, device, sharding_type)
 
         weights_precision = data_type_to_sparse_type(config.data_type)
         fused_params = config.fused_params or {}
