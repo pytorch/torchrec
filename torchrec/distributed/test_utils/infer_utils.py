@@ -336,7 +336,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         self,
         module: QuantEmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}

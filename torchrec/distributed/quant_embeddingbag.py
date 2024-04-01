@@ -8,7 +8,7 @@
 # pyre-strict
 
 import copy
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
@@ -72,6 +72,24 @@ except Exception:
         return False
 
 
+def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
+    # pyre-ignore
+    return ps.sharding_spec.shards[0].placement.device().type
+
+
+def get_device_from_sharding_type(
+    emb_shard_infos: List[EmbeddingShardingInfo],
+) -> str:
+    res = list(
+        {
+            get_device_from_parameter_sharding(ps.param_sharding)
+            for ps in emb_shard_infos
+        }
+    )
+    assert len(res) == 1, "All shards should be on the same type of device"
+    return res[0]
+
+
 torch.fx.wrap("len")
 
 
@@ -114,7 +132,7 @@ class ShardedQuantEmbeddingBagCollection(
         self,
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],  # support for Hybrid Sharding
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
     ) -> None:
@@ -137,9 +155,15 @@ class ShardedQuantEmbeddingBagCollection(
             ],
         ] = {
             sharding_type: create_infer_embedding_bag_sharding(
-                sharding_type, embedding_confings, env
+                sharding_type,
+                embedding_configs,
+                (
+                    env
+                    if not isinstance(env, Dict)
+                    else env[get_device_from_sharding_type(embedding_configs)]
+                ),
             )
-            for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()
+            for sharding_type, embedding_configs in self._sharding_type_to_sharding_infos.items()
         }
         self._device = device
         self._is_weighted: bool = module.is_weighted()
@@ -312,7 +336,7 @@ class QuantEmbeddingBagCollectionSharder(
         self,
         module: QuantEmbeddingBagCollection,
         params: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],
         device: Optional[torch.device] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}
