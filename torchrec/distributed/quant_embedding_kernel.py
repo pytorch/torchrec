@@ -117,6 +117,34 @@ def _quantize_weight(
     return quant_weight_list
 
 
+def _get_runtime_device(
+    device: Optional[torch.device], config: GroupedEmbeddingConfig
+) -> torch.device:
+    if device is not None and device.type != "meta":
+        return device
+    else:
+        return (
+            torch.device("cpu")
+            if all(
+                (
+                    table.local_metadata is not None
+                    and table.local_metadata.placement is not None
+                    and table.local_metadata.placement.device().type == "cpu"
+                )
+                or (
+                    table.global_metadata is not None
+                    and len(table.global_metadata.shards_metadata)
+                    and table.global_metadata.shards_metadata[0].placement is not None
+                    # pyre-ignore: Undefined attribute [16]
+                    and table.global_metadata.shards_metadata[0].placement.device().type
+                    == "cpu"
+                )
+                for table in config.embedding_tables
+            )
+            else torch.device("cuda")
+        )
+
+
 @torch.fx.wrap
 def _unwrap_kjt(
     features: KeyedJaggedTensor,
@@ -172,6 +200,9 @@ class QuantBatchedEmbeddingBag(
         ]
         if all(v is None for v in index_remapping):
             index_remapping = None
+        self._runtime_device: torch.device = _get_runtime_device(device, config)
+        # 16 for CUDA, 1 for others like CPU and MTIA.
+        self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
             IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=[
@@ -198,7 +229,7 @@ class QuantBatchedEmbeddingBag(
                 index_remapping=index_remapping,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
-                row_alignment=16,
+                row_alignment=self._tbe_row_alignment,
                 uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
                 **(tbe_fused_params(fused_params) or {}),
             )
@@ -221,7 +252,10 @@ class QuantBatchedEmbeddingBag(
         return {self._emb_module: self._config}
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        indices, offsets, per_sample_weights = _unwrap_kjt(features)
+        if self._runtime_device.type == "cpu":
+            indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(features)
+        else:
+            indices, offsets, per_sample_weights = _unwrap_kjt(features)
         # Conditional call of .forward function for FX:
         # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
         # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
@@ -327,32 +361,7 @@ class QuantBatchedEmbedding(
         self._quant_state_dict_split_scale_bias: bool = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
-        if device is not None and device.type != "meta":
-            self._runtime_device: torch.device = device
-        else:
-            self._runtime_device: torch.device = (
-                torch.device("cpu")
-                if all(
-                    (
-                        table.local_metadata is not None
-                        and table.local_metadata.placement is not None
-                        and table.local_metadata.placement.device().type == "cpu"
-                    )
-                    or (
-                        table.global_metadata is not None
-                        and len(table.global_metadata.shards_metadata)
-                        and table.global_metadata.shards_metadata[0].placement
-                        is not None
-                        # pyre-ignore: Undefined attribute [16]
-                        and table.global_metadata.shards_metadata[0]
-                        .placement.device()
-                        .type
-                        == "cpu"
-                    )
-                    for table in config.embedding_tables
-                )
-                else torch.device("cuda")
-            )
+        self._runtime_device: torch.device = _get_runtime_device(device, config)
         # 16 for CUDA, 1 for others like CPU and MTIA.
         self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
