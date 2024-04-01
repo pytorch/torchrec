@@ -656,7 +656,6 @@ def shard_qebc(
         kernel_type=EmbeddingComputeKernel.QUANT.value,
         shardable_params=[table.name for table in mi.tables],
     )
-
     if not plan:
         # pyre-ignore
         plan = mi.planner.plan(
