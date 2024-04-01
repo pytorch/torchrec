@@ -26,6 +26,28 @@ class PoolingType(Enum):
     NONE = "NONE"
 
 
+# TODO - duplicated, move elsewhere to remove circular dependencies
+class ShardingType(Enum):
+    """
+    Well-known sharding types, used by inter-module optimizations.
+    """
+
+    # Replicated on all ranks
+    DATA_PARALLEL = "data_parallel"
+    # Placed on a single rank
+    TABLE_WISE = "table_wise"
+    # Placed on multiple ranks as different sharded tables
+    COLUMN_WISE = "column_wise"
+    # Range-split on the first dimension across all ranks
+    ROW_WISE = "row_wise"
+    # Row-wise on the same node and table-wise across nodes
+    # Useful when having multiple ranks per node
+    # and comms within a single node are more efficient than across nodes.
+    TABLE_ROW_WISE = "table_row_wise"
+    # Column-wise on the same node and table-wise across nodes
+    TABLE_COLUMN_WISE = "table_column_wise"
+
+
 DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.FP32: 32,
     DataType.FP16: 16,
@@ -60,10 +82,19 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         raise Exception(f"Invalid data type {dtype}")
 
 
-def pooling_type_to_pooling_mode(pooling_type: PoolingType) -> PoolingMode:
+def pooling_type_to_pooling_mode(
+    pooling_type: PoolingType, sharding_type: Optional[ShardingType] = None
+) -> PoolingMode:
     if pooling_type.value == PoolingType.SUM.value:
         return PoolingMode.SUM
     elif pooling_type.value == PoolingType.MEAN.value:
+        if sharding_type is not None and sharding_type.value in [
+            ShardingType.TABLE_ROW_WISE.value,
+            ShardingType.ROW_WISE.value,
+        ]:
+            # Mean pooling is not supported in TBE for TWRW/RW sharding.
+            # Pass 'SUM' as a workaround, and apply mean pooling as a callback in EBC.
+            return PoolingMode.SUM
         return PoolingMode.MEAN
     elif pooling_type.value == PoolingType.NONE.value:
         return PoolingMode.NONE
