@@ -1013,6 +1013,43 @@ can prepare the embeddings list to be the list of:</p>
 
 </dd></dl>
 
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.ShardingType">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">ShardingType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.ShardingType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<p>Well-known sharding types, used by inter-module optimizations.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.ShardingType.COLUMN_WISE">
+<span class="sig-name descname"><span class="pre">COLUMN_WISE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'column_wise'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.ShardingType.COLUMN_WISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.ShardingType.DATA_PARALLEL">
+<span class="sig-name descname"><span class="pre">DATA_PARALLEL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'data_parallel'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.ShardingType.DATA_PARALLEL" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.ShardingType.ROW_WISE">
+<span class="sig-name descname"><span class="pre">ROW_WISE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'row_wise'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.ShardingType.ROW_WISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.ShardingType.TABLE_COLUMN_WISE">
+<span class="sig-name descname"><span class="pre">TABLE_COLUMN_WISE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'table_column_wise'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.ShardingType.TABLE_COLUMN_WISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.ShardingType.TABLE_ROW_WISE">
+<span class="sig-name descname"><span class="pre">TABLE_ROW_WISE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'table_row_wise'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.ShardingType.TABLE_ROW_WISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.embedding_configs.ShardingType.TABLE_WISE">
+<span class="sig-name descname"><span class="pre">TABLE_WISE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'table_wise'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.ShardingType.TABLE_WISE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.data_type_to_dtype">
 <span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">data_type_to_dtype</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataType</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dtype</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_configs.data_type_to_dtype" title="Permalink to this definition">¶</a></dt>
@@ -1030,7 +1067,7 @@ can prepare the embeddings list to be the list of:</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.pooling_type_to_pooling_mode">
-<span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">pooling_type_to_pooling_mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pooling_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType" title="torchrec.modules.embedding_configs.PoolingType"><span class="pre">PoolingType</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">PoolingMode</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_configs.pooling_type_to_pooling_mode" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">pooling_type_to_pooling_mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pooling_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType" title="torchrec.modules.embedding_configs.PoolingType"><span class="pre">PoolingType</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.modules.embedding_configs.ShardingType" title="torchrec.modules.embedding_configs.ShardingType"><span class="pre">ShardingType</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">PoolingMode</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_configs.pooling_type_to_pooling_mode" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
