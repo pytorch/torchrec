@@ -21,6 +21,9 @@ The features includes:
     - automatically building and selecting an optimized sharding plan.
 """
 
-from torchrec.distributed.planner.planners import EmbeddingShardingPlanner  # noqa
+from torchrec.distributed.planner.planners import (  # noqa
+    EmbeddingShardingPlanner,
+    HeteroEmbeddingShardingPlanner,
+)
 from torchrec.distributed.planner.types import ParameterConstraints, Topology  # noqa
 from torchrec.distributed.planner.utils import bytes_to_gb, sharder_name  # noqa

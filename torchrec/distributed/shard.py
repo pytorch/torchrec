@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Callable, cast, Dict, List, Optional, Type, Union
 
 import torch
 import torch.distributed as dist
@@ -16,6 +16,7 @@ from torch.distributed._composable.contract import contract
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.model_parallel import get_default_sharders
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
 from torchrec.distributed.sharding_plan import (
     get_module_to_default_sharders,
     ParameterShardingGenerator,
@@ -223,21 +224,32 @@ def _shard_modules(  # noqa: C901
     }
 
     if plan is None:
-        assert isinstance(
-            env, ShardingEnv
-        ), "Currently hybrid sharding only support use manual sharding plan"
-        planner = EmbeddingShardingPlanner(
-            topology=Topology(
-                local_world_size=get_local_size(env.world_size),
-                world_size=env.world_size,
-                compute_device=device.type,
+        if isinstance(env, dict) and len(env) > 1:  # use heterogenous sharding
+            planner = HeteroEmbeddingShardingPlanner(
+                topology_groups={
+                    group: Topology(
+                        local_world_size=get_local_size(cur_env.world_size),
+                        world_size=cur_env.world_size,
+                        compute_device=group,
+                    )
+                    for group, cur_env in env.items()
+                }
             )
-        )
-        pg = env.process_group
-        if pg is not None:
-            plan = planner.collective_plan(module, sharders, pg)
-        else:
             plan = planner.plan(module, sharders)
+        else:
+            env = cast(ShardingEnv, env)
+            planner = EmbeddingShardingPlanner(
+                topology=Topology(
+                    local_world_size=get_local_size(env.world_size),
+                    world_size=env.world_size,
+                    compute_device=device.type,
+                )
+            )
+            pg = env.process_group
+            if pg is not None:
+                plan = planner.collective_plan(module, sharders, pg)
+            else:
+                plan = planner.plan(module, sharders)
 
     if type(module) in sharder_map:
         # If the top level module is itself a shardable module, return the sharded variant.
