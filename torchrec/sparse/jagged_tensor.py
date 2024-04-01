@@ -239,7 +239,7 @@ def _permute_tensor_by_segments(
             segment_sizes,
             tensor,
             weights,
-            None,
+            tensor.numel(),
         )
     return permuted_tensor, permuted_weights
 
@@ -2153,16 +2153,29 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
         if variable_stride_per_key:
             assert stride_per_rank_per_key is not None
-            stride_per_key_per_rank: List[List[int]] = stride_per_rank_per_key.view(
+
+            stride_per_key_per_rank: torch.Tensor = stride_per_rank_per_key.view(
                 num_workers, len(keys)
-            ).T.tolist()
-            strides_cumsum: List[int] = torch.ops.fbgemm.asynchronous_complete_cumsum(
-                stride_per_rank_per_key
-            ).tolist()
+            ).T.cpu()
+
+            strides_cumsum: torch.Tensor = (
+                torch.ops.fbgemm.asynchronous_complete_cumsum(stride_per_rank_per_key)
+            ).cpu()
+
             cumsum_lengths = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
-            length_per_key = (
-                cumsum_lengths[strides_cumsum[1:]] - cumsum_lengths[strides_cumsum[:-1]]
+
+            n = strides_cumsum.size(0)
+            strides_cumsum_from_1 = torch.narrow(
+                strides_cumsum, dim=0, start=1, length=n - 1
             )
+            strides_cumsum_to_minus_1 = torch.narrow(
+                strides_cumsum, dim=0, start=0, length=n - 1
+            )
+            length_per_key = (
+                cumsum_lengths[strides_cumsum_from_1]
+                - cumsum_lengths[strides_cumsum_to_minus_1]
+            )
+
             with record_function("## all2all_data:recat_values ##"):
                 if recat is not None and recat.numel() > 0:
                     lengths, _ = _permute_tensor_by_segments(
@@ -2177,8 +2190,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         recat,
                         weights,
                     )
-            if not stride_per_key_per_rank:
-                stride_per_key_per_rank = [[0]] * len(keys)
+            if stride_per_key_per_rank is None:
+                stride_per_key_per_rank = torch.zeros(len(keys), 1)
+
             if stagger > 1:
                 stride_per_key_per_rank_stagger: List[List[int]] = []
                 local_world_size = num_workers // stagger
@@ -2186,20 +2200,42 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                     stride_per_rank_stagger: List[int] = []
                     for j in range(local_world_size):
                         stride_per_rank_stagger.extend(
-                            stride_per_key_per_rank[i][j::local_world_size]
+                            torch.jit.annotate(
+                                List[int],
+                                stride_per_key_per_rank[i][
+                                    j::local_world_size
+                                ].tolist(),
+                            )
                         )
                     stride_per_key_per_rank_stagger.append(stride_per_rank_stagger)
-                stride_per_key_per_rank = stride_per_key_per_rank_stagger
+                stride_per_key_per_rank_list = stride_per_key_per_rank_stagger
+            else:
+                stride_per_key_per_rank_list: List[List[int]] = (
+                    stride_per_key_per_rank.tolist()
+                )
+
+            if torch.compiler.is_dynamo_compiling() and not torch.jit.is_scripting():
+                total_sum = 0
+                for per_k in stride_per_key_per_rank_list:
+                    for per_rank in per_k:
+                        torch._check_is_size(per_rank)
+                        torch._check(per_rank <= values.numel())
+                        total_sum += per_rank
+
+                torch._check(total_sum == lengths.size(0))
+
             kjt = KeyedJaggedTensor(
                 keys=keys,
                 values=values,
                 weights=weights,
                 lengths=lengths,
-                stride_per_key_per_rank=stride_per_key_per_rank,
+                stride_per_key_per_rank=stride_per_key_per_rank_list,
             )
+
             return kjt.sync()
         else:
             assert stride_per_rank is not None
+
             with record_function("## all2all_data:recat_values ##"):
                 if recat is not None and recat.numel() > 0:
                     stride = stride_per_rank[0]
