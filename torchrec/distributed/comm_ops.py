@@ -34,7 +34,7 @@ except ImportError:
 
 
 try:
-    from torch._dynamo import is_compiling as is_torchdynamo_compiling
+    from torch.compiler import is_dynamo_compiling as is_torchdynamo_compiling
 except Exception:
 
     def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
@@ -1009,7 +1009,11 @@ def reduce_scatter_v_pooled(
         [ip_split if d == 0 else input_size[d] for d in range(len(input_size))]
         for ip_split in input_splits
     ]
-    equal_splits = all(ip_split == input_splits[0] for ip_split in input_splits)
+
+    equal_splits = False
+    if not is_torchdynamo_compiling():
+        # We can not check during tracing equality of splits -> fallback on general
+        equal_splits = all(ip_split == input_splits[0] for ip_split in input_splits)
 
     rsvi = ReduceScatterVInfo(
         input_sizes=input_sizes,
