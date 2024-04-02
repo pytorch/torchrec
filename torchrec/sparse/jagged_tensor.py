@@ -31,10 +31,23 @@ except ImportError:
     pass
 
 try:
-    from torch._dynamo import is_compiling as is_torchdynamo_compiling
-except Exception:
+    if torch.jit.is_scripting():
+        raise Exception()
 
+    from torch.compiler import (
+        is_compiling as is_compiler_compiling,
+        is_dynamo_compiling as is_torchdynamo_compiling,
+    )
+
+    def is_non_strict_exporting() -> bool:
+        return not is_torchdynamo_compiling() and is_compiler_compiling()
+
+except Exception:
+    # BC for torch versions without compiler and torch deploy path
     def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
+        return False
+
+    def is_non_strict_exporting() -> bool:
         return False
 
 
@@ -242,10 +255,6 @@ def _permute_tensor_by_segments(
             None,
         )
     return permuted_tensor, permuted_weights
-
-
-def is_non_strict_exporting() -> bool:
-    return not torch.compiler.is_dynamo_compiling() and torch.compiler.is_compiling()
 
 
 class JaggedTensorMeta(abc.ABCMeta, torch.fx._symbolic_trace.ProxyableClassMeta):
