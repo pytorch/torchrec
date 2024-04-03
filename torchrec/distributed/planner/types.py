@@ -445,6 +445,7 @@ class ParameterConstraints:
     bounds_check_mode: Optional[BoundsCheckMode] = None
     feature_names: Optional[List[str]] = None
     output_dtype: Optional[DataType] = None
+    device_group: Optional[str] = None
 
 
 class PlannerErrorType(Enum):
