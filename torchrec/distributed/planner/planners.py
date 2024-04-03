@@ -61,6 +61,7 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 
 
 def _to_sharding_plan(
@@ -181,12 +182,19 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self,
         module: nn.Module,
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
-        pg: Optional[dist.ProcessGroup] = dist.GroupMember.WORLD,
+        pg: Optional[dist.ProcessGroup] = None,
     ) -> ShardingPlan:
         """
         Call self.plan(...) on rank 0 and broadcast
         """
-        assert pg is not None, "Process group is not initialized"
+        if pg is None:
+            assert dist.is_initialized(), (
+                "The default process group is not yet initialized. "
+                "Please call torch.distributed.init_process_group() first before invoking this. "
+                "If you are not within a distributed environment, use the single rank version plan() instead."
+            )
+            pg = none_throws(dist.GroupMember.WORLD)
+
         if sharders is None:
             sharders = get_default_sharders()
         return invoke_on_rank_and_broadcast_result(
