@@ -55,6 +55,7 @@ from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
     LazyAwaitable,
+    LazyGetItemMixin,
     NullShardedModuleContext,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -353,7 +354,9 @@ class VariableBatchEmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
         )
 
 
-class EmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
+class EmbeddingBagCollectionAwaitable(
+    LazyGetItemMixin[str, Tensor], LazyAwaitable[KeyedTensor]
+):
     def __init__(
         self,
         awaitables: List[Awaitable[torch.Tensor]],
