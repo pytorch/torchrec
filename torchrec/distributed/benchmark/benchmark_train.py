@@ -71,6 +71,7 @@ def benchmark_ebc(
     args: argparse.Namespace,
     output_dir: str,
     pooling_configs: Optional[List[int]] = None,
+    variable_batch_embeddings: bool = False,
 ) -> List[BenchmarkResult]:
     table_configs = get_tables(tables, data_type=DataType.FP32)
     sharder = TestEBCSharder(
@@ -103,6 +104,9 @@ def benchmark_ebc(
 
     if pooling_configs:
         args_kwargs["pooling_configs"] = pooling_configs
+
+    if variable_batch_embeddings:
+        args_kwargs["variable_batch_embeddings"] = variable_batch_embeddings
 
     return benchmark_module(
         module=module,
@@ -153,6 +157,7 @@ def main() -> None:
             mb = int(float(num * dim) / 1024 / 1024) * 4
             tables_info += f"\nTABLE[{i}][{num:9}, {dim:4}] {mb:6}Mb"
 
+        ### Benchmark no VBE
         report: str = (
             f"REPORT BENCHMARK {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
         )
@@ -166,6 +171,27 @@ def main() -> None:
         # Save results to output them once benchmarking is all done
         benchmark_results_per_module.append(
             benchmark_func(shrunk_table_sizes, args, output_dir, pooling_configs)
+        )
+        write_report_funcs_per_module.append(
+            partial(
+                write_report,
+                report_file=report_file,
+                report_str=report,
+                num_requests=num_requests,
+            )
+        )
+
+        ### Benchmark with VBE
+        report: str = (
+            f"REPORT BENCHMARK (VBE) {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
+        )
+        report += f"Module: {module_name} (VBE)\n"
+        report += tables_info
+        report += "\n"
+        report_file = f"{output_dir}/run_vbe.report"
+
+        benchmark_results_per_module.append(
+            benchmark_func(shrunk_table_sizes, args, output_dir, pooling_configs, True)
         )
         write_report_funcs_per_module.append(
             partial(
