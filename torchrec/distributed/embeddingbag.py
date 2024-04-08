@@ -309,7 +309,9 @@ def construct_output_kt(
     )
 
 
-class VariableBatchEmbeddingBagCollectionAwaitable(LazyAwaitable[KeyedTensor]):
+class VariableBatchEmbeddingBagCollectionAwaitable(
+    LazyGetItemMixin[str, torch.Tensor], LazyAwaitable[KeyedTensor]
+):
     def __init__(
         self,
         awaitables: List[Awaitable[torch.Tensor]],
