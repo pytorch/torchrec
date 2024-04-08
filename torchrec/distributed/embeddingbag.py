@@ -69,6 +69,7 @@ from torchrec.distributed.utils import (
     append_prefix,
     convert_to_fbgemm_types,
     merge_fused_params,
+    none_throws,
     optimizer_type_to_emb_opt_type,
 )
 from torchrec.modules.embedding_configs import (
@@ -1274,9 +1275,11 @@ def _create_mean_pooling_callback(
     kt_key_ordering: torch.Tensor,
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
 ) -> Callable[[KeyedTensor], KeyedTensor]:
+    inverse_indices = none_throws(inverse_indices)
+
     with record_function("## ebc create mean pooling callback ##"):
         batch_size = (
-            inverse_indices[1].size(dim=1) if variable_batch_per_feature else stride  # pyre-ignore[16]
+            inverse_indices[1].size(dim=1) if variable_batch_per_feature else stride
         )
 
         if variable_batch_per_feature:
