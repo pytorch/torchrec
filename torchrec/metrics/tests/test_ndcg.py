@@ -99,6 +99,24 @@ def get_test_case_negative_task() -> Dict[str, torch.Tensor]:
     }
 
 
+"""
+predictions = [0.1, 0.5, 0.3, 0.4, 0.2, 0.1] * weights = [1, 0, 0, 1, 0, 0] => [0.1, 0, 0, 0.4, 0.0, 0.0]
+labels = [1, 0, 1, 1, 0, 1] * weights = [1, 0, 1, 1, 0, 1] => [1, 0, 0, 1, 0, 0]
+    => NDCG going to be perfect for both sessions (trivially).
+"""
+
+
+def get_test_case_scale_by_weights_tensor() -> Dict[str, torch.Tensor]:
+    return {
+        "predictions": torch.tensor([[0.1, 0.5, 0.3, 0.4, 0.2, 0.1]]),
+        "session_ids": torch.tensor([[1, 1, 1, 2, 2, 2]]),
+        "labels": torch.tensor([[1.0, 0.0, 1.0, 1.0, 0.0, 1.0]]),
+        "weights": torch.tensor([[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]]),
+        "expected_ndcg_exp": torch.tensor([(1.0 + 1.0) / 2]),
+        "expected_ndcg_non_exp": torch.tensor([(1.0 + 1.0) / 2]),
+    }
+
+
 class NDCGMetricValueTest(unittest.TestCase):
     def setUp(self) -> None:
         self.non_exponential_ndcg = NDCGMetric(
@@ -159,6 +177,23 @@ class NDCGMetricValueTest(unittest.TestCase):
             exponential_gain=False,  # exponential_gain is one of the kwargs
             # pyre-ignore
             session_key=SESSION_KEY,  # session_key is one of the kwargs
+        )
+
+        self.ndcg_report_as_increasing_and_scale_by_weights_tensor = NDCGMetric(
+            world_size=WORLD_SIZE,
+            my_rank=0,
+            batch_size=BATCH_SIZE,
+            tasks=[DefaultTaskInfo],
+            # pyre-ignore
+            exponential_gain=False,  # exponential_gain is one of the kwargs
+            # pyre-ignore
+            session_key=SESSION_KEY,  # session_key is one of the kwargs
+            # pyre-ignore[6]: In call `NDCGMetric.__init__`, for argument `remove_single_length_sessions`, expected `Dict[str, typing.Any]` but got `bool`
+            remove_single_length_sessions=True,
+            # pyre-ignore[6]: In call `NDCGMetric.__init__`, for argument `scale_by_weights_tensor`, expected `Dict[str, typing.Any]` but got `bool`
+            scale_by_weights_tensor=True,
+            # pyre-ignore[6]: In call `NDCGMetric.__init__`, for argument `report_ndcg_as_decreasing_curve`, expected `Dict[str, typing.Any]` but got `bool`
+            report_ndcg_as_decreasing_curve=False,
         )
 
     def test_single_session(self) -> None:
@@ -404,6 +439,32 @@ class NDCGMetricValueTest(unittest.TestCase):
         )
 
         metric = self.ndcg_apply_negative_task_mask.compute()
+        actual_metric = metric[f"ndcg-{DefaultTaskInfo.name}|lifetime_ndcg"]
+        expected_metric = model_output["expected_ndcg_non_exp"]
+
+        torch.testing.assert_close(
+            actual_metric,
+            expected_metric,
+            atol=1e-4,
+            rtol=1e-4,
+            check_dtype=False,
+            equal_nan=True,
+            msg=f"Actual: {actual_metric}, Expected: {expected_metric}",
+        )
+
+    def test_case_report_as_increasing_ndcg_and_scale_by_weights_tensor(self) -> None:
+        """
+        Test NDCG with reporting as increasing NDCG and scaling by weights tensor correctly.
+        """
+        model_output = get_test_case_scale_by_weights_tensor()
+        self.ndcg_report_as_increasing_and_scale_by_weights_tensor.update(
+            predictions={DefaultTaskInfo.name: model_output["predictions"][0]},
+            labels={DefaultTaskInfo.name: model_output["labels"][0]},
+            weights={DefaultTaskInfo.name: model_output["weights"][0]},
+            required_inputs={SESSION_KEY: model_output["session_ids"][0]},
+        )
+
+        metric = self.ndcg_report_as_increasing_and_scale_by_weights_tensor.compute()
         actual_metric = metric[f"ndcg-{DefaultTaskInfo.name}|lifetime_ndcg"]
         expected_metric = model_output["expected_ndcg_non_exp"]
 

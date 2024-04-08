@@ -84,6 +84,7 @@ def _get_ndcg_states(
     k: int = -1,  # In case we want to support NDCG @ K in the future.
     report_ndcg_as_decreasing_curve: bool = True,
     remove_single_length_sessions: bool = False,
+    scale_by_weights_tensor: bool = False,
 ) -> Dict[str, torch.Tensor]:
     """
     Normalized Discounted Cumulative Gain (NDCG) @ k.
@@ -110,6 +111,12 @@ def _get_ndcg_states(
             adjusted_weights,
             adjusted_session_ids,
         ) = (predictions, labels, weights, session_ids[0])
+
+    # If we are scaling by weights, then do that before NDCG computation.
+    if scale_by_weights_tensor:
+        adjusted_labels = adjusted_weights * adjusted_labels
+        adjusted_predictions = adjusted_weights * adjusted_predictions
+        print(f"{adjusted_predictions=} {adjusted_labels=}")
 
     # Helper variables for all reshaping below.
     num_tasks, batch_size = adjusted_labels.shape
@@ -253,7 +260,11 @@ def _get_ndcg_states(
     # Scale NDCG by max weight per session.
     ndcg_report = (1 - ndcg) if report_ndcg_as_decreasing_curve else ndcg
     ndcg_report = ndcg_report.to(device=labels.device)
-    ndcg_report *= max_weights
+
+    # If we aren't scaling gains by weight tensor,
+    # just scale by max_weight per session to match weird production logic.
+    if not scale_by_weights_tensor:
+        ndcg_report *= max_weights
 
     final_ndcg_report = torch.sum(
         ndcg_report, dim=-1
@@ -294,6 +305,7 @@ class NDCGComputation(RecMetricComputation):
         k: int = -1,
         report_ndcg_as_decreasing_curve: bool = True,
         remove_single_length_sessions: bool = False,
+        scale_by_weights_tensor: bool = False,
         is_negative_task_mask: Optional[List[bool]] = None,
         **kwargs: Any,
     ) -> None:
@@ -304,6 +316,7 @@ class NDCGComputation(RecMetricComputation):
         self._remove_single_length_sessions: bool = remove_single_length_sessions
         self._is_negative_task_mask: Optional[List[bool]] = is_negative_task_mask
         self._report_ndcg_as_decreasing_curve: bool = report_ndcg_as_decreasing_curve
+        self._scale_by_weights_tensor: bool = scale_by_weights_tensor
         self._add_state(
             SUM_NDCG,
             torch.zeros(self._n_tasks, dtype=torch.double),
@@ -385,6 +398,7 @@ class NDCGComputation(RecMetricComputation):
             remove_single_length_sessions=self._remove_single_length_sessions,
             report_ndcg_as_decreasing_curve=self._report_ndcg_as_decreasing_curve,
             k=self._k,
+            scale_by_weights_tensor=self._scale_by_weights_tensor,
         )
 
         # Update based on the new states.
