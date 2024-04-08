@@ -285,7 +285,7 @@ def group_tables(
                 table.has_feature_processor,
                 tuple(sorted(group_fused_params.items())),
                 _get_compute_kernel_type(table.compute_kernel),
-                emb_dim_bucketer.get_bucket(table.embedding_dim, table.data_type),
+                emb_dim_bucketer.get_bucket(table.local_cols, table.data_type),
             )
             # micromanage the order of we traverse the groups to ensure backwards compatibility
             if grouping_key not in groups:

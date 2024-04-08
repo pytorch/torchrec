@@ -36,11 +36,15 @@ class TestEmbDimBucketer(unittest.TestCase):
         buckets = random.sample(range(1024), num_buckets)
 
         for i in range(num_tables):
+            local_cols = buckets[i % num_buckets]
+            local_rows = random.randint(100, 500000)
             embeddings.append(
                 ShardedEmbeddingTable(
                     name=f"table_{i}",
-                    embedding_dim=buckets[i % num_buckets],
-                    num_embeddings=random.randint(100, 500000),
+                    local_cols=local_cols,
+                    local_rows=local_rows,
+                    embedding_dim=local_cols * random.randint(1, 20),
+                    num_embeddings=local_rows * random.randint(1, 20),
                     data_type=DataType.FP16,
                     compute_kernel=EmbeddingComputeKernel.FUSED_UVM_CACHING,
                 )
@@ -51,11 +55,15 @@ class TestEmbDimBucketer(unittest.TestCase):
         num_tables = 47
         embeddings: List[ShardedEmbeddingTable] = []
         for i in range(num_tables):
+            local_cols = 16
+            local_rows = random.randint(100, 500000)
             embeddings.append(
                 ShardedEmbeddingTable(
                     name=f"table_{i}",
-                    embedding_dim=16,
-                    num_embeddings=random.randint(100, 500000),
+                    local_cols=local_cols,
+                    local_rows=local_rows,
+                    embedding_dim=local_cols * random.randint(1, 20),
+                    num_embeddings=local_rows * random.randint(1, 20),
                     data_type=DataType.FP16,
                 )
             )
