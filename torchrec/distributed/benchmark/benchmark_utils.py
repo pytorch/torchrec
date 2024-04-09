@@ -269,19 +269,32 @@ def get_inputs(
     num_inputs: int,
     train: bool,
     pooling_configs: Optional[List[int]] = None,
+    variable_batch_embeddings: bool = False,
 ) -> List[List[KeyedJaggedTensor]]:
     inputs_batch: List[List[KeyedJaggedTensor]] = []
 
+    if variable_batch_embeddings and not train:
+        raise RuntimeError("Variable batch size is only supported in training mode")
+
     for _ in range(num_inputs):
-        _, model_input_by_rank = ModelInput.generate(
-            batch_size=batch_size,
-            world_size=world_size,
-            num_float_features=0,
-            tables=tables,
-            weighted_tables=[],
-            long_indices=False,
-            tables_pooling=pooling_configs,
-        )
+        if variable_batch_embeddings:
+            _, model_input_by_rank = ModelInput.generate_variable_batch_input(
+                average_batch_size=batch_size,
+                world_size=world_size,
+                num_float_features=0,
+                # pyre-ignore
+                tables=tables,
+            )
+        else:
+            _, model_input_by_rank = ModelInput.generate(
+                batch_size=batch_size,
+                world_size=world_size,
+                num_float_features=0,
+                tables=tables,
+                weighted_tables=[],
+                long_indices=False,
+                tables_pooling=pooling_configs,
+            )
 
         if train:
             sparse_features_by_rank = [
@@ -770,6 +783,7 @@ def benchmark_module(
     func_to_benchmark: Callable[..., None] = default_func_to_benchmark,
     benchmark_func_kwargs: Optional[Dict[str, Any]] = None,
     pooling_configs: Optional[List[int]] = None,
+    variable_batch_embeddings: bool = False,
 ) -> List[BenchmarkResult]:
     """
     Args:
@@ -820,7 +834,13 @@ def benchmark_module(
 
     num_inputs_to_gen: int = warmup_iters + bench_iters + prof_iters
     inputs = get_inputs(
-        tables, batch_size, world_size, num_inputs_to_gen, train, pooling_configs
+        tables,
+        batch_size,
+        world_size,
+        num_inputs_to_gen,
+        train,
+        pooling_configs,
+        variable_batch_embeddings,
     )
 
     warmup_inputs = [rank_inputs[:warmup_iters] for rank_inputs in inputs]
