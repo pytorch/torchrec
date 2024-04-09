@@ -16,7 +16,10 @@ from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
 from torchrec.distributed.planner.types import Topology
-from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
+from torchrec.distributed.quant_embedding import (
+    QuantEmbeddingCollectionSharder,
+    ShardedQuantEmbeddingCollection,
+)
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.sharding_plan import (
@@ -196,6 +199,11 @@ class InferHeteroShardingsTest(unittest.TestCase):
                 == env.world_size
             )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs available",
+    )
     def test_cpu_gpu_sharding_autoplanner(self) -> None:
         num_embeddings = 10
         emb_dim = 16
@@ -265,4 +273,69 @@ class InferHeteroShardingsTest(unittest.TestCase):
             .placement.device()
             .type,
             "cuda",
+        )
+
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs available",
+    )
+    def test_cpu_gpu_sharding_shard_modules(self) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(3)
+        ]
+        model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(
+                    tables=tables,
+                    device=torch.device("cpu"),
+                )
+            )
+        )
+        non_sharded_model = quantize(
+            model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=torch.qint8,
+        )
+        sharder = QuantEmbeddingCollectionSharder()
+        env_dict = {
+            "cpu": ShardingEnv.from_local(
+                3,
+                0,
+            ),
+            "cuda": ShardingEnv.from_local(
+                2,
+                0,
+            ),
+        }
+
+        shard_model = _shard_modules(
+            module=non_sharded_model,
+            env=env_dict,
+            # pyre-ignore
+            sharders=[sharder],
+            device=torch.device("cpu"),
+        )
+
+        self.assertTrue(
+            isinstance(
+                shard_model._module_kjt_input[0], ShardedQuantEmbeddingCollection
+            )
+        )
+
+        self.assertEqual(len(shard_model._module_kjt_input[0]._lookups), 1)
+        self.assertEqual(
+            len(
+                shard_model._module_kjt_input[0]._lookups[0]._embedding_lookups_per_rank
+            ),
+            env_dict["cpu"].world_size,
         )
