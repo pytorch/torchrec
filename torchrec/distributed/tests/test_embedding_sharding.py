@@ -202,7 +202,8 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 },
             ]
         ),
-        embedding_dim=st.sampled_from(list(range(160, 320, 40))),
+        local_dim=st.sampled_from(list(range(160, 320, 40))),
+        num_cw_shards=st.sampled_from([1, 2]),
         pooling_type=st.sampled_from(list(PoolingType)),
         compute_kernel=st.sampled_from(list(EmbeddingComputeKernel)),
     )
@@ -212,7 +213,8 @@ class TestGroupTablesPerRank(unittest.TestCase):
         data_type: DataType,
         has_feature_processor: bool,
         fused_params_group: Dict[str, Any],
-        embedding_dim: int,
+        local_dim: int,
+        num_cw_shards: int,
         pooling_type: PoolingType,
         compute_kernel: EmbeddingComputeKernel,
     ) -> None:
@@ -224,7 +226,8 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 has_feature_processor=has_feature_processor,
                 fused_params=fused_params_group,
                 compute_kernel=compute_kernel,
-                embedding_dim=embedding_dim,
+                embedding_dim=local_dim * num_cw_shards,
+                local_cols=local_dim,
                 num_embeddings=10000,
             )
             for i in range(2)
@@ -240,7 +243,8 @@ class TestGroupTablesPerRank(unittest.TestCase):
     @given(
         data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
         has_feature_processor=st.sampled_from([False, True]),
-        embedding_dim=st.sampled_from(list(range(160, 320, 40))),
+        local_dim=st.sampled_from(list(range(160, 320, 40))),
+        num_cw_shards=st.sampled_from([1, 2]),
         pooling_type=st.sampled_from(list(PoolingType)),
         compute_kernel=st.sampled_from(list(EmbeddingComputeKernel)),
     )
@@ -249,7 +253,8 @@ class TestGroupTablesPerRank(unittest.TestCase):
         self,
         data_type: DataType,
         has_feature_processor: bool,
-        embedding_dim: int,
+        local_dim: int,
+        num_cw_shards: int,
         pooling_type: PoolingType,
         compute_kernel: EmbeddingComputeKernel,
     ) -> None:
@@ -271,7 +276,8 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 has_feature_processor=has_feature_processor,
                 fused_params=fused_params_groups[i],
                 compute_kernel=compute_kernel,
-                embedding_dim=embedding_dim,
+                embedding_dim=local_dim * num_cw_shards,
+                local_cols=local_dim,
                 num_embeddings=10000,
             )
             for i in range(2)
@@ -306,6 +312,12 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 },
             ],
         ),
+        local_dim=st.lists(
+            st.sampled_from([4, 10, 40]),
+            min_size=2,
+            max_size=2,
+            unique=True,
+        ),
         embedding_dims=st.lists(
             st.sampled_from(list(range(160, 320, 40))),
             min_size=2,
@@ -326,6 +338,7 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 "data_type",
                 "has_feature_processor",
                 "embedding_dim",
+                "local_dim",
                 "pooling_type",
                 "compute_kernel",
             ]
@@ -337,6 +350,7 @@ class TestGroupTablesPerRank(unittest.TestCase):
         data_types: List[DataType],
         has_feature_processors: List[bool],
         fused_params_group: Dict[str, Any],
+        local_dim: List[int],
         embedding_dims: List[int],
         pooling_types: List[PoolingType],
         compute_kernels: List[EmbeddingComputeKernel],
@@ -369,6 +383,9 @@ class TestGroupTablesPerRank(unittest.TestCase):
                     if distinct_key == "embedding_dim"
                     else embedding_dims[0]
                 ),
+                local_cols=(
+                    local_dim[i] if distinct_key == "local_dim" else local_dim[0]
+                ),
                 num_embeddings=10000,
             )
             for i in range(2)
@@ -386,9 +403,18 @@ class TestGroupTablesPerRank(unittest.TestCase):
         # emb dim bucketizier only in use when computer kernel is uvm caching
         # and prefetch pipeline is True
         if (
-            distinct_key == "embedding_dim"
+            distinct_key == "local_dim"
             and compute_kernels[0] != EmbeddingComputeKernel.FUSED_UVM_CACHING
         ):
+            self.assertEqual(
+                _get_table_names_by_groups(tables),
+                [["table_0", "table_1"]],
+            )
+            return
+
+        # We never separate-group by embedding dim. So we don't care if it's distinct
+        # or not. Just group them together.
+        if distinct_key == "embedding_dim":
             self.assertEqual(
                 _get_table_names_by_groups(tables),
                 [["table_0", "table_1"]],
@@ -413,6 +439,7 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 fused_params={"use_one_tbe_per_table": i % 2 != 0},
                 compute_kernel=EmbeddingComputeKernel.FUSED_UVM_CACHING,
                 embedding_dim=10,
+                local_cols=5,
                 num_embeddings=10000,
             )
             for i in range(5)
