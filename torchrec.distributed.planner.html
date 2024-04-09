@@ -1218,73 +1218,250 @@ and sharders.</p>
 <p>If provided, <cite>pooling_factors</cite>, <cite>num_poolings</cite>, and <cite>batch_sizes</cite> must match in
 length, as per sample.</p>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.batch_sizes">
-<span class="sig-name descname"><span class="pre">batch_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.batch_sizes" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.bounds_check_mode">
-<span class="sig-name descname"><span class="pre">bounds_check_mode</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">BoundsCheckMode</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.bounds_check_mode" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.cache_params">
-<span class="sig-name descname"><span class="pre">cache_params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheParams" title="torchrec.distributed.types.CacheParams"><span class="pre">CacheParams</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.cache_params" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.sharding_types">
+<span class="sig-name descname"><span class="pre">sharding_types</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.sharding_types" title="Permalink to this definition">¶</a></dt>
+<dd><p>sharding types allowed for the table.
+Values of enum ShardingType.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[List[str]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.compute_kernels">
-<span class="sig-name descname"><span class="pre">compute_kernels</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.compute_kernels" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.device_group">
-<span class="sig-name descname"><span class="pre">device_group</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.device_group" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.enforce_hbm">
-<span class="sig-name descname"><span class="pre">enforce_hbm</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.enforce_hbm" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.feature_names">
-<span class="sig-name descname"><span class="pre">feature_names</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.feature_names" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.is_weighted">
-<span class="sig-name descname"><span class="pre">is_weighted</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.is_weighted" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">compute_kernels</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.compute_kernels" title="Permalink to this definition">¶</a></dt>
+<dd><p>compute kernels allowed for the table.
+Values of enum EmbeddingComputeKernel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[List[str]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.min_partition">
-<span class="sig-name descname"><span class="pre">min_partition</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.min_partition" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.num_poolings">
-<span class="sig-name descname"><span class="pre">num_poolings</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.num_poolings" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.output_dtype">
-<span class="sig-name descname"><span class="pre">output_dtype</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">DataType</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.output_dtype" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">min_partition</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.min_partition" title="Permalink to this definition">¶</a></dt>
+<dd><p>lower bound for dimension of column wise shards.
+Planner will search for the column wise shard dimension in the
+range of [min_partition, embedding_dim], as long as the column wise
+shard dimension divides embedding_dim and is divisible by 4. Used
+for column wise sharding only.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.pooling_factors">
-<span class="sig-name descname"><span class="pre">pooling_factors</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.pooling_factors" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">pooling_factors</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.pooling_factors" title="Permalink to this definition">¶</a></dt>
+<dd><p>pooling factors for each feature of the
+table. This is the average number of values each sample has for
+the feature. Length of pooling_factors should match the number of
+features.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[List[float]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.sharding_types">
-<span class="sig-name descname"><span class="pre">sharding_types</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.sharding_types" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.num_poolings">
+<span class="sig-name descname"><span class="pre">num_poolings</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.num_poolings" title="Permalink to this definition">¶</a></dt>
+<dd><p>number of poolings for each feature of the
+table. Length of num_poolings should match the number of features.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>OptionalList[float]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.batch_sizes">
+<span class="sig-name descname"><span class="pre">batch_sizes</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.batch_sizes" title="Permalink to this definition">¶</a></dt>
+<dd><p>batch sizes for each feature of the table. Length
+of batch_sizes should match the number of features.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[List[int]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.is_weighted">
+<span class="sig-name descname"><span class="pre">is_weighted</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.is_weighted" title="Permalink to this definition">¶</a></dt>
+<dd><p>whether the table is weighted.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[bool]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.cache_params">
+<span class="sig-name descname"><span class="pre">cache_params</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.cache_params" title="Permalink to this definition">¶</a></dt>
+<dd><p>cache parameters to be used by this table.
+These are passed to FBGEMM’s Split TBE kernel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[<a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheParams" title="torchrec.distributed.types.CacheParams">CacheParams</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.enforce_hbm">
+<span class="sig-name descname"><span class="pre">enforce_hbm</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.enforce_hbm" title="Permalink to this definition">¶</a></dt>
+<dd><p>whether to place all weights/momentums in HBM when
+using cache.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[bool]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.stochastic_rounding">
-<span class="sig-name descname"><span class="pre">stochastic_rounding</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.stochastic_rounding" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">stochastic_rounding</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.stochastic_rounding" title="Permalink to this definition">¶</a></dt>
+<dd><p>whether to do stochastic rounding. This is
+passed to FBGEMM’s Split TBE kernel. Stochastic rounding is
+non-deterministic, but important to maintain accuracy in longer
+term with FP16 embedding tables.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[bool]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.bounds_check_mode">
+<span class="sig-name descname"><span class="pre">bounds_check_mode</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.bounds_check_mode" title="Permalink to this definition">¶</a></dt>
+<dd><p>bounds check mode to be used by
+FBGEMM’s Split TBE kernel. Bounds check means checking if values
+(i.e. row id) is within the table size. If row id exceeds table
+size, it will be set to 0.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[BoundsCheckMode]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.feature_names">
+<span class="sig-name descname"><span class="pre">feature_names</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.feature_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of feature names for this table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[List[str]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.output_dtype">
+<span class="sig-name descname"><span class="pre">output_dtype</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.output_dtype" title="Permalink to this definition">¶</a></dt>
+<dd><p>output dtype to be used by this table.
+The default is FP32. If not None, the output dtype will also be used
+by the planner to produce a more balanced plan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[DataType]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ParameterConstraints.device_group">
+<span class="sig-name descname"><span class="pre">device_group</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ParameterConstraints.device_group" title="Permalink to this definition">¶</a></dt>
+<dd><p>device group to be used by this table. It can be cpu
+or cuda. This specifies if the table should be placed on a cpu device
+or a gpu device.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id0">
+<span class="sig-name descname"><span class="pre">batch_sizes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id0" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id1">
+<span class="sig-name descname"><span class="pre">bounds_check_mode</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">BoundsCheckMode</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id1" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id2">
+<span class="sig-name descname"><span class="pre">cache_params</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheParams" title="torchrec.distributed.types.CacheParams"><span class="pre">CacheParams</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id2" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id3">
+<span class="sig-name descname"><span class="pre">compute_kernels</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id3" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id4">
+<span class="sig-name descname"><span class="pre">device_group</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id4" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id5">
+<span class="sig-name descname"><span class="pre">enforce_hbm</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id5" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id6">
+<span class="sig-name descname"><span class="pre">feature_names</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id6" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id7">
+<span class="sig-name descname"><span class="pre">is_weighted</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#id7" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id8">
+<span class="sig-name descname"><span class="pre">min_partition</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id8" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id9">
+<span class="sig-name descname"><span class="pre">num_poolings</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id9" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id10">
+<span class="sig-name descname"><span class="pre">output_dtype</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">DataType</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id10" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id11">
+<span class="sig-name descname"><span class="pre">pooling_factors</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id11" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id12">
+<span class="sig-name descname"><span class="pre">sharding_types</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id12" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id13">
+<span class="sig-name descname"><span class="pre">stochastic_rounding</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#id13" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1479,7 +1656,202 @@ to store the shard with an estimation ‘perf’.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.types.</span></span><span class="sig-name descname"><span class="pre">ShardingOption</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">partition_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_kernel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shards</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Shard" title="torchrec.distributed.planner.types.Shard"><span class="pre">Shard</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheParams" title="torchrec.distributed.types.CacheParams"><span class="pre">CacheParams</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enforce_hbm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stochastic_rounding</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bounds_check_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">BoundsCheckMode</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dependency</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_pooled</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">feature_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">DataType</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>One way of sharding an embedding table.</p>
+<p>One way of sharding an embedding table. In the enumerator, we generate
+multiple sharding options per table, but in the planner output, there
+should only be one sharding option per table.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.name">
+<span class="sig-name descname"><span class="pre">name</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.name" title="Permalink to this definition">¶</a></dt>
+<dd><p>name of the sharding option.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.tensor">
+<span class="sig-name descname"><span class="pre">tensor</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.tensor" title="Permalink to this definition">¶</a></dt>
+<dd><p>tensor of the sharding option. Usually on meta
+device.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.module">
+<span class="sig-name descname"><span class="pre">module</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.module" title="Permalink to this definition">¶</a></dt>
+<dd><p>module and its fqn that contains the
+table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple[str, nn.Module]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.input_lengths">
+<span class="sig-name descname"><span class="pre">input_lengths</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.input_lengths" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of pooling factors of the feature for
+the table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[float]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.batch_size">
+<span class="sig-name descname"><span class="pre">batch_size</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.batch_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>batch size of training / eval job.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.sharding_type">
+<span class="sig-name descname"><span class="pre">sharding_type</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.sharding_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>sharding type of the table. Value of enum ShardingType.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.compute_kernel">
+<span class="sig-name descname"><span class="pre">compute_kernel</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.compute_kernel" title="Permalink to this definition">¶</a></dt>
+<dd><p>compute kernel of the table. Value of enum
+EmbeddingComputeKernel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.shards">
+<span class="sig-name descname"><span class="pre">shards</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.shards" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of shards of the table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[<a class="reference internal" href="#torchrec.distributed.planner.types.Shard" title="torchrec.distributed.planner.types.Shard">Shard</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.cache_params">
+<span class="sig-name descname"><span class="pre">cache_params</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.cache_params" title="Permalink to this definition">¶</a></dt>
+<dd><p>cache parameters to be used by this table.
+These are passed to FBGEMM’s Split TBE kernel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[<a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.CacheParams" title="torchrec.distributed.types.CacheParams">CacheParams</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.enforce_hbm">
+<span class="sig-name descname"><span class="pre">enforce_hbm</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.enforce_hbm" title="Permalink to this definition">¶</a></dt>
+<dd><p>whether to place all weights/momentums in HBM when
+using cache.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[bool]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.stochastic_rounding">
+<span class="sig-name descname"><span class="pre">stochastic_rounding</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.stochastic_rounding" title="Permalink to this definition">¶</a></dt>
+<dd><p>whether to do stochastic rounding. This is
+passed to FBGEMM’s Split TBE kernel. Stochastic rounding is
+non-deterministic, but important to maintain accuracy in longer
+term with FP16 embedding tables.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[bool]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.bounds_check_mode">
+<span class="sig-name descname"><span class="pre">bounds_check_mode</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.bounds_check_mode" title="Permalink to this definition">¶</a></dt>
+<dd><p>bounds check mode to be used by
+FBGEMM’s Split TBE kernel. Bounds check means checking if values
+(i.e. row id) is within the table size. If row id exceeds table
+size, it will be set to 0.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[BoundsCheckMode]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.dependency">
+<span class="sig-name descname"><span class="pre">dependency</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.dependency" title="Permalink to this definition">¶</a></dt>
+<dd><p>dependency of the table. Related to
+Embedding tower.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.is_pooled">
+<span class="sig-name descname"><span class="pre">is_pooled</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.is_pooled" title="Permalink to this definition">¶</a></dt>
+<dd><p>whether the table is pooled. Pooling can be
+sum pooling or mean pooling. Unpooled tables are also known as
+sequence embeddings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[bool]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.feature_names">
+<span class="sig-name descname"><span class="pre">feature_names</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.feature_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>list of feature names for this table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[List[str]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.output_dtype">
+<span class="sig-name descname"><span class="pre">output_dtype</span></span><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.output_dtype" title="Permalink to this definition">¶</a></dt>
+<dd><p>output dtype to be used by this table.
+The default is FP32. If not None, the output dtype will also be used
+by the planner to produce a more balanced plan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Optional[DataType]</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.cache_load_factor">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">cache_load_factor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.cache_load_factor" title="Permalink to this definition">¶</a></dt>
@@ -1491,13 +1863,13 @@ to store the shard with an estimation ‘perf’.</p>
 <dd></dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.is_pooled">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_pooled</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.is_pooled" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id14">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_pooled</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#id14" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.module">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">module</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.module" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id15">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">module</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#id15" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -1522,8 +1894,8 @@ to store the shard with an estimation ‘perf’.</p>
 <dd></dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="torchrec.distributed.planner.types.ShardingOption.tensor">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tensor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#torchrec.distributed.planner.types.ShardingOption.tensor" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="id16">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tensor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tensor</span></em><a class="headerlink" href="#id16" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
