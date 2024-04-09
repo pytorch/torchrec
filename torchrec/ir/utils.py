@@ -9,7 +9,10 @@
 
 from typing import Type
 
+import torch
+
 from torch import nn
+from torch.export.exported_program import ExportedProgram
 from torchrec.ir.types import SerializerInterface
 
 
@@ -22,7 +25,7 @@ def serialize_embedding_modules(
     serializer_cls: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
 ) -> nn.Module:
     for _, module in model.named_modules():
-        if type(module) in serializer_cls.module_to_serializer_cls:
+        if type(module).__name__ in serializer_cls.module_to_serializer_cls:
             serialized_module = serializer_cls.serialize(module)
             module.register_buffer("ir_metadata", serialized_module, persistent=False)
 
@@ -30,15 +33,31 @@ def serialize_embedding_modules(
 
 
 def deserialize_embedding_modules(
-    model: nn.Module,
+    ep: ExportedProgram,
     serializer_cls: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
 ) -> nn.Module:
+    model = torch.export.unflatten(ep)
+    module_type_dict = {}
+    for node in ep.graph.nodes:
+        if "nn_module_stack" in node.meta:
+            for fqn, type_name in node.meta["nn_module_stack"].values():
+                # Only get the module type name, not the full type name
+                module_type_dict[fqn] = type_name.split(".")[-1]
+
     fqn_to_new_module = {}
-    for name, module in model.named_modules():
+    for fqn, module in model.named_modules():
         if "ir_metadata" in dict(module.named_buffers()):
             serialized_module = dict(module.named_buffers())["ir_metadata"]
-            deserialized_module = serializer_cls.deserialize(serialized_module)
-            fqn_to_new_module[name] = deserialized_module
+
+            if fqn not in module_type_dict:
+                raise RuntimeError(
+                    f"Cannot find the type of module {fqn} in the exported program"
+                )
+
+            deserialized_module = serializer_cls.deserialize(
+                serialized_module, module_type_dict[fqn]
+            )
+            fqn_to_new_module[fqn] = deserialized_module
 
     for fqn, new_module in fqn_to_new_module.items():
         setattr(model, fqn, new_module)
