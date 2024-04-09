@@ -10,12 +10,14 @@
 #!/usr/bin/env python3
 
 import unittest
+from typing import List
 
 import torch
 from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
+from torchrec.distributed.embedding_types import ShardingType
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
-from torchrec.distributed.planner.types import Topology
+from torchrec.distributed.planner.types import CustomTopologyData, Topology
 from torchrec.distributed.quant_embedding import (
     QuantEmbeddingCollectionSharder,
     ShardedQuantEmbeddingCollection,
@@ -338,4 +340,101 @@ class InferHeteroShardingsTest(unittest.TestCase):
                 shard_model._module_kjt_input[0]._lookups[0]._embedding_lookups_per_rank
             ),
             env_dict["cpu"].world_size,
+        )
+
+    def test_cpu_gpu_uneven_sharding_shard_modules(self) -> None:
+        num_embeddings = 1000
+        emb_dim = 16
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(3)
+        ]
+        model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(
+                    tables=tables,
+                    device=torch.device("cpu"),
+                )
+            )
+        )
+        non_sharded_model = quantize(
+            model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=torch.qint8,
+        )
+        sharder = QuantEmbeddingCollectionSharder()
+        ddr_caps = [500, 100, 100]
+        topo_cpu = Topology(
+            world_size=3,
+            compute_device="cpu",
+            custom_topology_data=CustomTopologyData(
+                data={"ddr_cap": ddr_caps}, world_size=3
+            ),
+        )
+        topo_gpu = Topology(world_size=2, compute_device="cuda")
+        topo_groups = {
+            "cpu": topo_cpu,
+            "cuda": topo_gpu,
+        }
+        constraints = {
+            "table_0": ParameterConstraints(
+                device_group="cpu", sharding_types=[ShardingType.ROW_WISE.value]
+            ),
+            "table_1": ParameterConstraints(
+                device_group="cuda", sharding_types=[ShardingType.TABLE_WISE.value]
+            ),
+            "table_2": ParameterConstraints(
+                device_group="cuda", sharding_types=[ShardingType.TABLE_WISE.value]
+            ),
+        }
+        planner = HeteroEmbeddingShardingPlanner(
+            topology_groups=topo_groups, constraints=constraints
+        )
+        module_plan = planner.plan(
+            non_sharded_model,
+            # pyre-ignore
+            sharders=[sharder],
+        )
+
+        self.assertTrue(
+            # pyre-ignore
+            module_plan.plan["_module_kjt_input.0"]["table_0"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cpu",
+        )
+        expected_row_sizes: List[int] = []
+        total_ddr_cap = sum(ddr_caps)
+        expected_row_sizes.append(int(num_embeddings * (ddr_caps[0] / total_ddr_cap)))
+        expected_row_sizes.append(int(num_embeddings * (ddr_caps[1] / total_ddr_cap)))
+        expected_row_sizes.append(num_embeddings - sum(expected_row_sizes))
+
+        for i in range(len(ddr_caps)):
+            self.assertEqual(
+                module_plan.plan["_module_kjt_input.0"]["table_0"]
+                .sharding_spec.shards[i]
+                .shard_sizes[0],
+                expected_row_sizes[i],
+            )
+
+        self.assertTrue(
+            module_plan.plan["_module_kjt_input.0"]["table_1"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cuda",
+        )
+        self.assertTrue(
+            module_plan.plan["_module_kjt_input.0"]["table_2"]
+            .sharding_spec.shards[0]
+            .placement.device()
+            .type,
+            "cuda",
         )

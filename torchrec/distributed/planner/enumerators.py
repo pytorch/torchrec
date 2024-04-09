@@ -66,6 +66,15 @@ class EmbeddingEnumerator(Enumerator):
         self._batch_size: int = batch_size
         self._constraints = constraints
         self._sharder_map: Dict[str, ModuleSharder[nn.Module]] = {}
+        memory_type = "hbm_cap" if topology.compute_device == "cuda" else "ddr_cap"
+        self._device_memory_sizes: Optional[
+            List[int]
+        ] = (  # only used with custom topology where memory is different within a topology
+            topology._custom_topology_data.get_data(memory_type)
+            if topology._custom_topology_data
+            and topology._custom_topology_data.has_data(memory_type)
+            else None
+        )
 
         if estimator:
             self._estimators: List[ShardEstimator] = (
@@ -130,7 +139,12 @@ class EmbeddingEnumerator(Enumerator):
                     bounds_check_mode,
                     feature_names,
                     output_dtype,
+                    device_group,
                 ) = _extract_constraints_for_param(self._constraints, name)
+
+                # skip for other device groups
+                if device_group and device_group != self._compute_device:
+                    continue
 
                 sharding_options_per_table: List[ShardingOption] = []
 
@@ -151,6 +165,7 @@ class EmbeddingEnumerator(Enumerator):
                             local_world_size=self._local_world_size,
                             sharding_type=sharding_type,
                             col_wise_shard_dim=col_wise_shard_dim,
+                            device_memory_sizes=self._device_memory_sizes,
                         )
                         dependency = None
                         if isinstance(child_module, EmbeddingTower):
@@ -278,6 +293,7 @@ def _extract_constraints_for_param(
     Optional[BoundsCheckMode],
     Optional[List[str]],
     Optional[DataType],
+    Optional[str],
 ]:
     input_lengths = [POOLING_FACTOR]
     col_wise_shard_dim = None
@@ -287,6 +303,7 @@ def _extract_constraints_for_param(
     bounds_check_mode = None
     feature_names = None
     output_dtype = None
+    device_group = None
 
     if constraints and constraints.get(name):
         input_lengths = constraints[name].pooling_factors
@@ -297,6 +314,7 @@ def _extract_constraints_for_param(
         bounds_check_mode = constraints[name].bounds_check_mode
         feature_names = constraints[name].feature_names
         output_dtype = constraints[name].output_dtype
+        device_group = constraints[name].device_group
 
     return (
         input_lengths,
@@ -307,6 +325,7 @@ def _extract_constraints_for_param(
         bounds_check_mode,
         feature_names,
         output_dtype,
+        device_group,
     )
 
 
