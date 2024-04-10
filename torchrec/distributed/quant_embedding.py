@@ -10,7 +10,7 @@
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, cast, Dict, List, Optional, Set, Tuple, Type, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
@@ -42,9 +42,13 @@ from torchrec.distributed.sharding.cw_sequence_sharding import (
     InferCwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.sharding.rw_sequence_sharding import (
+    InferCPURwSequenceEmbeddingSharding,
     InferRwSequenceEmbeddingSharding,
 )
-from torchrec.distributed.sharding.rw_sharding import InferRwSparseFeaturesDist
+from torchrec.distributed.sharding.rw_sharding import (
+    InferCPURwSparseFeaturesDist,
+    InferRwSparseFeaturesDist,
+)
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
@@ -85,7 +89,7 @@ def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
     return ps.sharding_spec.shards[0].placement.device().type
 
 
-def get_device_from_sharding_type(
+def get_device_from_sharding_infos(
     emb_shard_infos: List[EmbeddingShardingInfo],
 ) -> str:
     res = list(
@@ -109,22 +113,41 @@ def create_infer_embedding_sharding(
     List[torch.Tensor],
     List[torch.Tensor],
 ]:
-    if sharding_type == ShardingType.TABLE_WISE.value:
-        return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
-    elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return InferCwSequenceEmbeddingSharding(sharding_infos, env, device)
-    elif sharding_type == ShardingType.ROW_WISE.value:
-        return InferRwSequenceEmbeddingSharding(sharding_infos, env, device)
+    device_type = get_device_from_sharding_infos(sharding_infos)
+
+    if device_type in ["cuda", "mtia"]:
+        if sharding_type == ShardingType.TABLE_WISE.value:
+            return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
+        elif sharding_type == ShardingType.COLUMN_WISE.value:
+            return InferCwSequenceEmbeddingSharding(sharding_infos, env, device)
+        elif sharding_type == ShardingType.ROW_WISE.value:
+            return InferRwSequenceEmbeddingSharding(sharding_infos, env, device)
+        else:
+            raise ValueError(
+                f"Sharding type not supported {sharding_type} for {device_type} sharding"
+            )
+    elif device_type == "cpu":
+        if sharding_type == ShardingType.ROW_WISE.value:
+            return InferCPURwSequenceEmbeddingSharding(sharding_infos, env, device)
+        elif sharding_type == ShardingType.TABLE_WISE.value:
+            return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
+        else:
+            raise ValueError(
+                f"Sharding type not supported {sharding_type} for {device_type} sharding"
+            )
     else:
-        raise ValueError(f"Sharding type not supported {sharding_type}")
+        raise ValueError(
+            f"Sharding type not supported {sharding_type} for {device_type} sharding"
+        )
 
 
 @torch.fx.wrap
-def _fx_unwrap_optional_tensor(optional: Optional[torch.Tensor]) -> torch.Tensor:
+def _fx_trec_unwrap_optional_tensor(optional: Optional[torch.Tensor]) -> torch.Tensor:
     assert optional is not None, "Expected optional to be non-None Tensor"
     return optional
 
 
+@torch.fx.wrap
 def _construct_jagged_tensors_tw(
     embeddings: List[torch.Tensor],
     features: KJTList,
@@ -163,6 +186,7 @@ def _construct_jagged_tensors_tw(
     return ret
 
 
+@torch.fx.wrap
 def _construct_jagged_tensors_rw(
     embeddings: List[torch.Tensor],
     features_before_input_dist: KeyedJaggedTensor,
@@ -196,6 +220,7 @@ def _construct_jagged_tensors_rw(
     return ret
 
 
+@torch.fx.wrap
 def _construct_jagged_tensors_cw(
     embeddings: List[torch.Tensor],
     features: KJTList,
@@ -267,15 +292,12 @@ def _construct_jagged_tensors(
     if sharding_type == ShardingType.ROW_WISE.value and rw_unbucketize_tensor is None:
         raise ValueError("rw_unbucketize_tensor is required for row-wise sharding")
 
-    if (
-        sharding_type == ShardingType.ROW_WISE.value
-        and rw_unbucketize_tensor is not None
-    ):
+    if sharding_type == ShardingType.ROW_WISE.value:
         return _construct_jagged_tensors_rw(
             embeddings,
             features_before_input_dist,
             need_indices,
-            rw_unbucketize_tensor,
+            _fx_trec_unwrap_optional_tensor(rw_unbucketize_tensor),
         )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return _construct_jagged_tensors_cw(
@@ -301,6 +323,7 @@ def annotate_embedding_names(
     return torch.jit.annotate(List[str], embedding_names)
 
 
+@torch.fx.wrap
 def format_embedding_names_per_rank_per_sharding(
     embedding_names_per_rank_per_sharding: List[List[List[str]]],
     dummy: List[List[torch.Tensor]],
@@ -316,57 +339,6 @@ def format_embedding_names_per_rank_per_sharding(
             annotated_embedding_names_per_rank
         )
     return annotated_embedding_names_per_rank_per_sharding
-
-
-@torch.fx.wrap
-def output_jt_dict(
-    sharding_types: List[str],
-    emb_per_sharding: List[List[torch.Tensor]],
-    features_per_sharding: List[KJTList],
-    embedding_names_per_rank_per_sharding: List[List[List[str]]],
-    need_indices: bool,
-    features_before_input_dist_per_sharding: List[KeyedJaggedTensor],
-    features_to_permute_indices: Dict[str, torch.Tensor],
-    unbucketize_tensors: List[torch.Tensor],
-    unbucketize_tensor_idxs_per_sharding: List[int],
-    key_to_feature_permuted_coordinates_per_sharding: List[Dict[str, torch.Tensor]],
-) -> Dict[str, JaggedTensor]:
-    jt_dict: Dict[str, JaggedTensor] = {}
-    for (
-        sharding_type,
-        emb_sharding,
-        features_sharding,
-        embedding_names_per_rank,
-        unbucketize_tensor_idx,
-        features_before_input_dist,
-        key_to_feature_permuted_coordinates,
-    ) in zip(
-        sharding_types,
-        emb_per_sharding,
-        features_per_sharding,
-        embedding_names_per_rank_per_sharding,
-        unbucketize_tensor_idxs_per_sharding,
-        features_before_input_dist_per_sharding,
-        key_to_feature_permuted_coordinates_per_sharding,
-    ):
-        jt_dict.update(
-            _construct_jagged_tensors(
-                sharding_type=sharding_type,
-                embeddings=emb_sharding,
-                features=features_sharding,
-                embedding_names_per_rank=embedding_names_per_rank,
-                features_before_input_dist=features_before_input_dist,
-                need_indices=need_indices,
-                rw_unbucketize_tensor=(
-                    unbucketize_tensors[unbucketize_tensor_idx]
-                    if unbucketize_tensor_idx != -1
-                    else None
-                ),
-                cw_features_to_permute_indices=features_to_permute_indices,
-                key_to_feature_permuted_coordinates=key_to_feature_permuted_coordinates,
-            )
-        )
-    return jt_dict
 
 
 class ShardedQuantEmbeddingCollection(
@@ -396,8 +368,6 @@ class ShardedQuantEmbeddingCollection(
 
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
 
-        self._is_hybrid_sharding: bool = isinstance(env, Dict)
-
         self._sharding_type_to_sharding_infos: Dict[
             str, List[EmbeddingShardingInfo]
         ] = create_sharding_infos_by_sharding(
@@ -415,22 +385,23 @@ class ShardedQuantEmbeddingCollection(
         ] = {
             sharding_type: create_infer_embedding_sharding(
                 sharding_type,
-                embedding_confings,
+                embedding_configs,
                 (
                     env
-                    if not self._is_hybrid_sharding
-                    # pyre-ignore
-                    else env[get_device_from_sharding_type(embedding_confings)]
+                    if not isinstance(env, Dict)
+                    else env[get_device_from_sharding_infos(embedding_configs)]
                 ),
             )
-            for sharding_type, embedding_confings in self._sharding_type_to_sharding_infos.items()
+            for sharding_type, embedding_configs in self._sharding_type_to_sharding_infos.items()
         }
         self._embedding_dim: int = module.embedding_dim()
         self._local_embedding_dim: int = self._embedding_dim
+        self._all_embedding_names: Set[str] = set()
         self._embedding_names_per_sharding: List[List[str]] = []
         self._embedding_names_per_rank_per_sharding: List[List[List[str]]] = []
         for sharding in self._sharding_type_to_sharding.values():
             self._embedding_names_per_sharding.append(sharding.embedding_names())
+            self._all_embedding_names.update(sharding.embedding_names())
             self._embedding_names_per_rank_per_sharding.append(
                 sharding.embedding_names_per_rank()
             )
@@ -494,6 +465,10 @@ class ShardedQuantEmbeddingCollection(
                 tables_weights_prefix="embeddings",
             )
         else:
+            assert not isinstance(
+                env, Dict
+            ), "CPU sharding currently only support RW sharding where split scale and bias is required"
+
             table_wise_sharded_only: bool = all(
                 sharding_type == ShardingType.TABLE_WISE.value
                 for sharding_type in self._sharding_type_to_sharding.keys()
@@ -686,6 +661,7 @@ class ShardedQuantEmbeddingCollection(
                         unbucketize_permute_tensor=(
                             input_dist.unbucketize_permute_tensor
                             if isinstance(input_dist, InferRwSparseFeaturesDist)
+                            or isinstance(input_dist, InferCPURwSparseFeaturesDist)
                             else None
                         ),
                     )
@@ -715,8 +691,7 @@ class ShardedQuantEmbeddingCollection(
         emb_per_sharding: List[List[torch.Tensor]] = []
         features_before_input_dist_per_sharding: List[KeyedJaggedTensor] = []
         features_per_sharding: List[KJTList] = []
-        unbucketize_tensor_idxs_per_sharding: List[int] = []
-        unbucketize_tensors: List[torch.Tensor] = []
+        unbucketize_tensors: List[Optional[torch.Tensor]] = []
         for sharding_output_dist, embeddings, sharding_ctx in zip(
             self._output_dists,
             output,
@@ -727,34 +702,87 @@ class ShardedQuantEmbeddingCollection(
             )
             emb_per_sharding.append(sharding_output_dist_res)
             features_per_sharding.append(sharding_ctx.features)
-            if sharding_ctx.unbucketize_permute_tensor is None:
-                unbucketize_tensor_idxs_per_sharding.append(-1)
-            else:
-                unbucketize_tensors.append(
-                    _fx_unwrap_optional_tensor(sharding_ctx.unbucketize_permute_tensor)
-                )
-                unbucketize_tensor_idxs_per_sharding.append(
-                    len(unbucketize_tensors) - 1
-                )
+            unbucketize_tensors.append(
+                sharding_ctx.unbucketize_permute_tensor
+                if sharding_ctx.unbucketize_permute_tensor is not None
+                else None
+            )
             features_before_input_dist_per_sharding.append(
                 # pyre-ignore
                 sharding_ctx.features_before_input_dist
             )
-
-        return output_jt_dict(
-            sharding_types=list(self._sharding_type_to_sharding.keys()),
+        return self.output_jt_dict(
             emb_per_sharding=emb_per_sharding,
             features_per_sharding=features_per_sharding,
-            embedding_names_per_rank_per_sharding=format_embedding_names_per_rank_per_sharding(
-                self._embedding_names_per_rank_per_sharding, output
-            ),
-            need_indices=self._need_indices,
             features_before_input_dist_per_sharding=features_before_input_dist_per_sharding,
-            unbucketize_tensor_idxs_per_sharding=unbucketize_tensor_idxs_per_sharding,
             unbucketize_tensors=unbucketize_tensors,
-            features_to_permute_indices=self._features_to_permute_indices,
-            key_to_feature_permuted_coordinates_per_sharding=self._key_to_feature_permuted_coordinates_per_sharding,
         )
+
+    def output_jt_dict(
+        self,
+        emb_per_sharding: List[List[torch.Tensor]],
+        features_per_sharding: List[KJTList],
+        features_before_input_dist_per_sharding: List[KeyedJaggedTensor],
+        unbucketize_tensors: List[Optional[torch.Tensor]],
+    ) -> Dict[str, JaggedTensor]:
+        jt_values: Dict[str, torch.Tensor] = {}
+        jt_lengths: Dict[str, torch.Tensor] = {}
+        jt_weights: Dict[str, torch.Tensor] = {}
+        jt_dict_res: Dict[str, JaggedTensor] = {}
+        for (
+            sharding_type,
+            emb_sharding,
+            features_sharding,
+            embedding_names,
+            embedding_names_per_rank,
+            features_before_input_dist,
+            unbucketize_tensor,
+            key_to_feature_permuted_coordinates,
+        ) in zip(
+            self._sharding_type_to_sharding.keys(),
+            emb_per_sharding,
+            features_per_sharding,
+            self._embedding_names_per_sharding,
+            self._embedding_names_per_rank_per_sharding,
+            features_before_input_dist_per_sharding,
+            unbucketize_tensors,
+            self._key_to_feature_permuted_coordinates_per_sharding,
+        ):
+
+            jt_dict = _construct_jagged_tensors(
+                sharding_type=sharding_type,
+                embeddings=emb_sharding,
+                features=features_sharding,
+                embedding_names_per_rank=embedding_names_per_rank,
+                features_before_input_dist=features_before_input_dist,
+                need_indices=self._need_indices,
+                rw_unbucketize_tensor=(
+                    # this is batching hint for constructing alignment sparse features for batching
+                    _fx_trec_unwrap_optional_tensor(unbucketize_tensor)
+                    if sharding_type == ShardingType.ROW_WISE.value
+                    else None
+                ),
+                cw_features_to_permute_indices=self._features_to_permute_indices,
+                key_to_feature_permuted_coordinates=key_to_feature_permuted_coordinates,
+            )
+            for n in embedding_names:
+                # For graph split at the end of TW and TW separately,
+                # we need to unwrap JT to Tensors since JT cannot be par of boundary type.
+                jt_values[n] = jt_dict[n].values()
+                jt_lengths[n] = jt_dict[n].lengths()
+                if self._need_indices:
+                    jt_weights[n] = jt_dict[n].weights()
+        for n in self._all_embedding_names:
+            if self._need_indices:
+                jt_dict_res[n] = JaggedTensor(
+                    values=jt_values[n], lengths=jt_lengths[n], weights=jt_weights[n]
+                )
+            else:
+                jt_dict_res[n] = JaggedTensor(
+                    values=jt_values[n], lengths=jt_lengths[n]
+                )
+
+        return jt_dict_res
 
     # pyre-ignore
     def compute_and_output_dist(
