@@ -36,6 +36,7 @@ These include:
 
 from torchrec.distributed.comm import get_local_rank, get_local_size  # noqa
 from torchrec.distributed.model_parallel import DistributedModelParallel  # noqa
+from torchrec.distributed.shard import shard, shard_modules  # noqa
 from torchrec.distributed.train_pipeline import (  # noqa
     DataLoadingThread,
     EvalPipelineSparseDist,
