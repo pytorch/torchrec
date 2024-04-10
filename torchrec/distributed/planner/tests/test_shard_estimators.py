@@ -30,8 +30,8 @@ from torchrec.distributed.planner.shard_estimators import (
 )
 from torchrec.distributed.planner.types import ParameterConstraints, Perf, Topology
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
+from torchrec.distributed.test_utils.infer_utils import quantize
 from torchrec.distributed.test_utils.test_model import TestEBCSharder, TestSparseNN
-from torchrec.distributed.tests.test_quant_model_parallel import _quantize
 from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
 from torchrec.distributed.types import (
     CacheParams,
@@ -378,7 +378,7 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             )
         ]
         model = TestSparseNN(tables=tables, weighted_tables=[])
-        quant_model = _quantize(model, inplace=True)
+        quant_model = quantize(model, inplace=True)
 
         inference_estimator = EmbeddingPerfEstimator(
             topology=self.topology, is_inference=True

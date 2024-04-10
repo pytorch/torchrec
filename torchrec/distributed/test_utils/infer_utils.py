@@ -76,6 +76,7 @@ from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
     EmbeddingBagConfig,
+    QuantConfig,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
@@ -248,6 +249,7 @@ def quantize(
     register_tbes: bool = False,
     quant_state_dict_split_scale_bias: bool = False,
     weight_dtype: torch.dtype = torch.qint8,
+    per_table_weight_dtypes: Optional[Dict[str, torch.dtype]] = None,
 ) -> torch.nn.Module:
     module_types: List[Type[torch.nn.Module]] = [
         torchrec.modules.embedding_modules.EmbeddingBagCollection,
@@ -264,6 +266,14 @@ def quantize(
         activation=quant.PlaceholderObserver.with_args(dtype=output_type),
         weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
     )
+
+    if per_table_weight_dtypes:
+        qconfig = QuantConfig(
+            activation=quant.PlaceholderObserver.with_args(dtype=output_type),
+            weight=quant.PlaceholderObserver.with_args(dtype=torch.quint8),
+            per_table_weight_dtype=per_table_weight_dtypes,
+        )
+
     return quant.quantize_dynamic(
         module,
         qconfig_spec={
@@ -285,6 +295,7 @@ def quantize_fpebc(
     register_tbes: bool = False,
     quant_state_dict_split_scale_bias: bool = False,
     weight_dtype: torch.dtype = torch.qint8,
+    per_table_weight_dtypes: Optional[Dict[str, torch.dtype]] = None,
 ) -> torch.nn.Module:
     module_types: List[Type[torch.nn.Module]] = [
         torchrec.modules.fp_embedding_modules.FeatureProcessedEmbeddingBagCollection,
@@ -300,6 +311,14 @@ def quantize_fpebc(
         activation=quant.PlaceholderObserver.with_args(dtype=output_type),
         weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
     )
+
+    if per_table_weight_dtypes:
+        qconfig = QuantConfig(
+            activation=quant.PlaceholderObserver.with_args(dtype=output_type),
+            weight=quant.PlaceholderObserver.with_args(dtype=torch.quint8),
+            per_table_weight_dtype=per_table_weight_dtypes,
+        )
+
     return quant.quantize_dynamic(
         module,
         qconfig_spec={
