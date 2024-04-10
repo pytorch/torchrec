@@ -10,6 +10,7 @@
 import copy
 from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
+from functools import partial
 from typing import (
     Any,
     Callable,
@@ -386,7 +387,7 @@ class EmbeddingBagCollectionContext(Multistreamable):
     )
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None
     variable_batch_per_feature: bool = False
-    mean_pooling_callback: Optional[Callable[[KeyedTensor], KeyedTensor]] = None
+    divisor: Optional[torch.Tensor] = None
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for ctx in self.sharding_contexts:
@@ -394,6 +395,8 @@ class EmbeddingBagCollectionContext(Multistreamable):
                 ctx.record_stream(stream)
         if self.inverse_indices is not None:
             self.inverse_indices[1].record_stream(stream)
+        if self.divisor is not None:
+            self.divisor.record_stream(stream)
 
 
 class ShardedEmbeddingBagCollection(
@@ -859,7 +862,7 @@ class ShardedEmbeddingBagCollection(
                     self._features_order_tensor,
                 )
             if self._has_mean_pooling_callback:
-                ctx.mean_pooling_callback = _create_mean_pooling_callback(
+                ctx.divisor = _create_mean_pooling_divisor(
                     lengths=features.lengths(),
                     stride=features.stride(),
                     keys=features.keys(),
@@ -939,7 +942,9 @@ class ShardedEmbeddingBagCollection(
 
         # register callback if there are features that need mean pooling
         if self._has_mean_pooling_callback:
-            awaitable.callbacks.append(ctx.mean_pooling_callback)
+            awaitable.callbacks.append(
+                partial(_apply_mean_pooling, divisor=ctx.divisor)
+            )
 
         return awaitable
 
@@ -984,7 +989,9 @@ class ShardedEmbeddingBagCollection(
 
         # register callback if there are features that need mean pooling
         if self._has_mean_pooling_callback:
-            awaitable.callbacks.append(ctx.mean_pooling_callback)
+            awaitable.callbacks.append(
+                partial(_apply_mean_pooling, divisor=ctx.divisor)
+            )
 
         return awaitable
 
@@ -1260,7 +1267,7 @@ class EmbeddingBagSharder(BaseEmbeddingSharder[nn.EmbeddingBag]):
         return nn.EmbeddingBag
 
 
-def _create_mean_pooling_callback(
+def _create_mean_pooling_divisor(
     lengths: torch.Tensor,
     keys: List[str],
     stride: int,
@@ -1274,7 +1281,7 @@ def _create_mean_pooling_callback(
     kjt_key_indices: Dict[str, int],
     kt_key_ordering: torch.Tensor,
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
-) -> Callable[[KeyedTensor], KeyedTensor]:
+) -> torch.Tensor:
     with record_function("## ebc create mean pooling callback ##"):
         batch_size = (
             none_throws(inverse_indices)[1].size(dim=1)
@@ -1321,22 +1328,23 @@ def _create_mean_pooling_callback(
         )
         eps = 1e-6  # used to safe guard against 0 division
         divisor = divisor + eps
+        return divisor.detach()
 
-    # pyre-ignore[53]
-    def _apply_mean_pooling(keyed_tensor: KeyedTensor) -> KeyedTensor:
-        """
-        Apply mean pooling to pooled embeddings in RW/TWRW sharding schemes.
-        This function is applied as a callback to the awaitable
-        """
-        with record_function("## ebc apply mean pooling ##"):
-            mean_pooled_values = (
-                keyed_tensor.values() / divisor
-            )  # [batch size, num_features * embedding dim]
-            return KeyedTensor(
-                keys=keyed_tensor.keys(),
-                values=mean_pooled_values,
-                length_per_key=keyed_tensor.length_per_key(),
-                key_dim=1,
-            )
 
-    return _apply_mean_pooling
+def _apply_mean_pooling(
+    keyed_tensor: KeyedTensor, divisor: torch.Tensor
+) -> KeyedTensor:
+    """
+    Apply mean pooling to pooled embeddings in RW/TWRW sharding schemes.
+    This function is applied as a callback to the awaitable
+    """
+    with record_function("## ebc apply mean pooling ##"):
+        mean_pooled_values = (
+            keyed_tensor.values() / divisor
+        )  # [batch size, num_features * embedding dim]
+        return KeyedTensor(
+            keys=keyed_tensor.keys(),
+            values=mean_pooled_values,
+            length_per_key=keyed_tensor.length_per_key(),
+            key_dim=1,
+        )
