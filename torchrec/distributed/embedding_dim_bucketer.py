@@ -104,7 +104,7 @@ class EmbDimBucketer:
         bucket_id = 0
 
         for table in embedding_tables:
-            dim_in_bytes = self.dim_in_bytes(table.embedding_dim, table.data_type)
+            dim_in_bytes = self.dim_in_bytes(table.local_cols, table.data_type)
             buckets[dim_in_bytes] = bucket_id
 
         self.num_buckets = 1
@@ -119,7 +119,7 @@ class EmbDimBucketer:
         bucket_id = -1
 
         for table in embedding_tables:
-            dim_in_bytes = self.dim_in_bytes(table.embedding_dim, table.data_type)
+            dim_in_bytes = self.dim_in_bytes(table.local_cols, table.data_type)
             if dim_in_bytes not in buckets.keys():
                 bucket_id += 1
                 buckets[dim_in_bytes] = bucket_id
@@ -137,7 +137,7 @@ class EmbDimBucketer:
         bucket_id = -1
 
         for table in embedding_tables:
-            dim_in_bytes = self.dim_in_bytes(table.embedding_dim, table.data_type)
+            dim_in_bytes = self.dim_in_bytes(table.local_cols, table.data_type)
             cl_dim = dim_in_bytes // self.cacheline
             if cl_dim not in cl_buckets.keys():
                 bucket_id += 1

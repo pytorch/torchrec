@@ -21,7 +21,7 @@ class SerializerInterface(abc.ABC):
     @classmethod
     @property
     # pyre-ignore [3]: Returning `None` but type `Any` is specified.
-    def module_to_serializer_cls(cls) -> Dict[Type[nn.Module], Type[Any]]:
+    def module_to_serializer_cls(cls) -> Dict[str, Type[Any]]:
         raise NotImplementedError
 
     @classmethod
@@ -37,6 +37,6 @@ class SerializerInterface(abc.ABC):
     @classmethod
     @abc.abstractmethod
     # pyre-ignore [2]: Parameter `input` must have a type other than `Any`.
-    def deserialize(cls, input: Any) -> nn.Module:
+    def deserialize(cls, input: Any, typename: str) -> nn.Module:
         # Take the bytes in the buffer and regenerate the eager embedding module
         pass
