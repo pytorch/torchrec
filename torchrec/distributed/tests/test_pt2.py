@@ -163,6 +163,7 @@ class TestPt2(unittest.TestCase):
             kjt.keys(),
             (kjt._values, kjt._lengths, indices),
             test_aot_inductor=False,
+            test_pt2_ir_export=True,
         )
 
     def test_kjt_length_per_key(self) -> None:
