@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
+from torch.fx.experimental.symbolic_shapes import guard_size_oblivious
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
 
 from torchrec.streamable import Pipelineable
@@ -682,13 +683,14 @@ register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 def _assert_tensor_has_no_elements_or_has_integers(
     tensor: torch.Tensor, tensor_name: str
 ) -> None:
-    assert tensor.numel() == 0 or tensor.dtype in [
-        torch.long,
-        torch.int,
-        torch.short,
-        torch.int8,
-        torch.uint8,
-    ], "{} must be of integer type, but got {}".format(tensor_name, tensor.dtype)
+    if not is_non_strict_exporting():
+        assert tensor.numel() == 0 or tensor.dtype in [
+            torch.long,
+            torch.int,
+            torch.short,
+            torch.int8,
+            torch.uint8,
+        ], "{} must be of integer type, but got {}".format(tensor_name, tensor.dtype)
 
 
 def _maybe_compute_index_per_key(
@@ -798,15 +800,26 @@ def _maybe_compute_length_per_key(
                 else torch.sum(torch.diff(offsets).view(-1, stride), dim=1).tolist()
             )
         elif len(keys) and lengths is not None:
-            _length: List[int] = (
-                _length_per_key_from_stride_per_key(lengths, stride_per_key)
-                if variable_stride_per_key
-                else (
-                    torch.sum(lengths.view(-1, stride), dim=1).tolist()
-                    if lengths.numel() != 0
-                    else [0] * len(keys)
+            if not torch.jit.is_scripting() and is_non_strict_exporting():
+                _length: List[int] = (
+                    _length_per_key_from_stride_per_key(lengths, stride_per_key)
+                    if variable_stride_per_key
+                    else (
+                        torch.sum(lengths.view(-1, stride), dim=1).tolist()
+                        if guard_size_oblivious(lengths.numel() != 0)
+                        else [0] * len(keys)
+                    )
                 )
-            )
+            else:
+                _length: List[int] = (
+                    _length_per_key_from_stride_per_key(lengths, stride_per_key)
+                    if variable_stride_per_key
+                    else (
+                        torch.sum(lengths.view(-1, stride), dim=1).tolist()
+                        if lengths.numel() != 0
+                        else [0] * len(keys)
+                    )
+                )
         else:
             _length: List[int] = []
         length_per_key = _length
@@ -1298,6 +1311,12 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             _assert_tensor_has_no_elements_or_has_integers(offsets, "offsets")
         if lengths is not None:
             _assert_tensor_has_no_elements_or_has_integers(lengths, "lengths")
+            if (
+                not torch.jit.is_scripting()
+                and is_non_strict_exporting()
+                and len(keys) > 0
+            ):
+                torch._check(lengths.numel() % len(keys) == 0)
         self._lengths: Optional[torch.Tensor] = lengths
         self._offsets: Optional[torch.Tensor] = offsets
 
@@ -1427,7 +1446,14 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             elif stride is None:
                 stride = kjt.stride()
             else:
-                assert stride == kjt.stride(), "strides must be consistent for all KJTs"
+                if not torch.jit.is_scripting():
+                    # torch._check when jit scripting: Unknown builtin op: aten::_check.
+                    torch._check(
+                        stride == kjt.stride(),
+                        "strides must be consistent for all KJTs",
+                    )
+                else:
+                    assert stride == kjt.stride()
 
         return KeyedJaggedTensor(
             keys=keys,

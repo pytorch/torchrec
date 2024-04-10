@@ -216,6 +216,35 @@ class TestPt2(unittest.TestCase):
             test_pt2_ir_export=True,
         )
 
+    # pyre-ignore
+    def test_kjt__getitem__batch_size_lengths(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor, sz: torch.Tensor):
+                # Have to manipulate the size here instead of the input
+                # for torch.export to record as SymInt
+                sz_int = sz.item()
+                new_kjt = KeyedJaggedTensor(
+                    keys=kjt.keys(),
+                    # batch_size sz, doesn't matter what it is, get's turned into SymInt
+                    values=torch.ones(sz_int, dtype=torch.int32).repeat(256),
+                    lengths=torch.ones(sz_int, dtype=torch.int32).repeat(256),
+                )
+
+                return new_kjt["key0"]
+
+        # 3 keys for a compound expression for stride, (2 * length_numel) / 7
+        kjt: KeyedJaggedTensor = make_kjt([1] * 447, [1] * 447)
+        sz: torch.Tensor = torch.tensor([447], dtype=torch.int32)
+
+        self._test_kjt_input_module(
+            M(),
+            kjt.keys(),
+            (kjt._values, kjt._lengths, sz),
+            test_dynamo=False,
+            test_aot_inductor=False,
+            test_pt2_ir_export=True,
+        )
+
     # pyre-ignores
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
