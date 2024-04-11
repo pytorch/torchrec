@@ -46,7 +46,12 @@ from torchrec.modules.fp_embedding_modules import (
 )
 
 from torchrec.modules.utils import construct_jagged_tensors_inference
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import (
+    ComputeKJTToJTDict,
+    JaggedTensor,
+    KeyedJaggedTensor,
+    KeyedTensor,
+)
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
 
@@ -230,13 +235,6 @@ def _update_embedding_configs(
         )
 
 
-@torch.fx.wrap
-def features_to_dict(
-    features: KeyedJaggedTensor,
-) -> Dict[str, JaggedTensor]:
-    return features.to_dict()
-
-
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
@@ -332,6 +330,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             Dict[str, Tuple[Tensor, Tensor]]
         ] = None
         self.row_alignment = row_alignment
+        self._kjt_to_jt_dict = ComputeKJTToJTDict()
 
         table_names = set()
         for table in self._embedding_bag_configs:
@@ -463,7 +462,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             KeyedTensor
         """
 
-        feature_dict = features_to_dict(features)
+        feature_dict = self._kjt_to_jt_dict(features)
         embeddings = []
 
         # TODO ideally we can accept KJTs with any feature order. However, this will require an order check + permute, which will break torch.script.
