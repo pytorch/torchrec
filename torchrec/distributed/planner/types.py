@@ -168,6 +168,9 @@ class CustomTopologyData:
         ), f"{key} not supported in CustomTopologyData"
         return self._data[key]
 
+    def has_data(self, key: str) -> bool:
+        return key in self._data
+
 
 class Topology:
     def __init__(
@@ -220,6 +223,7 @@ class Topology:
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
         self._bwd_compute_multiplier = bwd_compute_multiplier
+        self._custom_topology_data = custom_topology_data
 
     @property
     def compute_device(self) -> str:

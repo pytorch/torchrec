@@ -83,6 +83,7 @@ def calculate_shard_sizes_and_offsets(
     local_world_size: int,
     sharding_type: str,
     col_wise_shard_dim: Optional[int] = None,
+    device_memory_sizes: Optional[List[int]] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
     """
     Calculates sizes and offsets for tensor sharded according to provided sharding type.
@@ -103,12 +104,23 @@ def calculate_shard_sizes_and_offsets(
 
     (rows, columns) = tensor.shape
 
+    if device_memory_sizes is not None:
+        assert (
+            sharding_type == ShardingType.ROW_WISE.value
+        ), "Currently only support uneven sharding for row_wise sharding"
+
     if sharding_type == ShardingType.DATA_PARALLEL.value:
         return [[rows, columns]] * world_size, [[0, 0]] * world_size
     elif sharding_type == ShardingType.TABLE_WISE.value:
         return [[rows, columns]], [[0, 0]]
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return _calculate_rw_shard_sizes_and_offsets(rows, world_size, columns)
+        return (
+            _calculate_rw_shard_sizes_and_offsets(rows, world_size, columns)
+            if not device_memory_sizes
+            else _calculate_uneven_rw_shard_sizes_and_offsets(
+                rows, world_size, columns, device_memory_sizes
+            )
+        )
     elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
         return _calculate_rw_shard_sizes_and_offsets(rows, local_world_size, columns)
     elif (
@@ -148,6 +160,33 @@ def _calculate_rw_shard_sizes_and_offsets(
             local_row: int = block_size
         elif rank == last_rank:
             local_row: int = last_block_size
+        else:
+            local_row: int = 0
+        shard_sizes.append([local_row, columns])
+    shard_offsets = [[0, 0]]
+
+    for i in range(num_devices - 1):
+        shard_offsets.append([shard_sizes[i][0] + shard_offsets[i][0], 0])
+
+    return shard_sizes, shard_offsets
+
+
+def _calculate_uneven_rw_shard_sizes_and_offsets(
+    hash_size: int, num_devices: int, columns: int, device_memory_sizes: List[int]
+) -> Tuple[List[List[int]], List[List[int]]]:
+    assert num_devices == len(device_memory_sizes), "must provide all the memory size"
+    total_size = sum(device_memory_sizes)
+    shard_sizes: List[List[int]] = []
+    last_rank = num_devices - 1
+
+    processed_total_rows = 0
+
+    for rank in range(num_devices):
+        if rank < last_rank:
+            local_row: int = int(hash_size * (device_memory_sizes[rank] / total_size))
+            processed_total_rows += local_row
+        elif rank == last_rank:
+            local_row: int = hash_size - processed_total_rows
         else:
             local_row: int = 0
         shard_sizes.append([local_row, columns])
