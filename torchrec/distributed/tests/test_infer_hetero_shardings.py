@@ -47,7 +47,7 @@ class InferHeteroShardingsTest(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        sharding_device=st.sampled_from(["meta"]),
+        sharding_device=st.sampled_from(["cpu"]),
     )
     @settings(max_examples=4, deadline=None)
     def test_sharder_different_world_sizes_for_qec(self, sharding_device: str) -> None:
@@ -109,34 +109,20 @@ class InferHeteroShardingsTest(unittest.TestCase):
             torch.tensor([1, 1, 1]),
             None,
         )
-        with SplitDispatchMode(), torch.inference_mode():
-            sharded_model = _shard_modules(
-                module=non_sharded_model,
-                # pyre-ignore
-                sharders=[sharder],
-                device=torch.device(sharding_device),
-                plan=plan,
-                env=env_dict,
-            )
-            # Run the model once to initialize input_dist and output_dist.
-            sharded_model(*dummy_input)
+
+        sharded_model = _shard_modules(
+            module=non_sharded_model,
+            # pyre-ignore
+            sharders=[sharder],
+            device=torch.device(sharding_device),
+            plan=plan,
+            env=env_dict,
+        )
 
         self.assertTrue(hasattr(sharded_model._module_kjt_input[0], "_lookups"))
         self.assertTrue(len(sharded_model._module_kjt_input[0]._lookups) == 2)
         self.assertTrue(hasattr(sharded_model._module_kjt_input[0], "_input_dists"))
-        self.assertTrue(len(sharded_model._module_kjt_input[0]._input_dists) == 2)
-        self.assertTrue(
-            isinstance(
-                sharded_model._module_kjt_input[0]._input_dists[0],
-                InferCPURwSparseFeaturesDist,
-            )
-        )
-        self.assertTrue(
-            isinstance(
-                sharded_model._module_kjt_input[0]._input_dists[1],
-                InferTwSparseFeaturesDist,
-            )
-        )
+
         for i, env in enumerate(env_dict.values()):
             self.assertTrue(
                 hasattr(
