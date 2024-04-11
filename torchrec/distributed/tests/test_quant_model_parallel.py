@@ -13,7 +13,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple
 import hypothesis.strategies as st
 import torch
 from hypothesis import given, settings, Verbosity
-from torch import nn, quantization as quant
+from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ModuleSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
@@ -22,8 +22,8 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
-from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.shard import _shard_modules
+from torchrec.distributed.test_utils.infer_utils import quantize, TestQuantEBCSharder
 from torchrec.distributed.test_utils.test_model import (
     _get_default_rtol_and_atol,
     ModelInput,
@@ -31,68 +31,8 @@ from torchrec.distributed.test_utils.test_model import (
 )
 from torchrec.distributed.types import ShardedModule, ShardingEnv, ShardingType
 from torchrec.distributed.utils import copy_to_device
-from torchrec.modules.embedding_configs import EmbeddingBagConfig, QuantConfig
-from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.quant.embedding_modules import (
-    EmbeddingBagCollection as QuantEmbeddingBagCollection,
-    quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
-)
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.types import CopyMixIn
-
-
-class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
-    def __init__(
-        self,
-        sharding_type: str,
-        kernel_type: str,
-        fused_params: Optional[Dict[str, Any]] = None,
-        shardable_params: Optional[List[str]] = None,
-    ) -> None:
-        super().__init__(fused_params=fused_params, shardable_params=shardable_params)
-        self._sharding_type = sharding_type
-        self._kernel_type = kernel_type
-
-    def sharding_types(self, compute_device_type: str) -> List[str]:
-        return [self._sharding_type]
-
-    def compute_kernels(
-        self, sharding_type: str, compute_device_type: str
-    ) -> List[str]:
-        return [self._kernel_type]
-
-
-def _quantize(
-    module: nn.Module,
-    inplace: bool,
-    output_type: torch.dtype = torch.float,
-    quant_state_dict_split_scale_bias: bool = False,
-    per_table_weight_dtypes: Optional[Dict[str, torch.dtype]] = None,
-) -> nn.Module:
-    if quant_state_dict_split_scale_bias:
-        quant_prep_enable_quant_state_dict_split_scale_bias_for_types(
-            module, [EmbeddingBagCollection]
-        )
-    qconfig = quant.QConfig(
-        activation=quant.PlaceholderObserver.with_args(dtype=output_type),
-        weight=quant.PlaceholderObserver.with_args(dtype=torch.qint8),
-    )
-    if per_table_weight_dtypes:
-        qconfig = QuantConfig(
-            activation=quant.PlaceholderObserver.with_args(dtype=output_type),
-            weight=quant.PlaceholderObserver.with_args(dtype=torch.quint8),
-            per_table_weight_dtype=per_table_weight_dtypes,
-        )
-
-    return quant.quantize_dynamic(
-        module,
-        qconfig_spec={
-            EmbeddingBagCollection: qconfig,
-        },
-        mapping={
-            EmbeddingBagCollection: QuantEmbeddingBagCollection,
-        },
-        inplace=inplace,
-    )
 
 
 class CopyModule(nn.Module, CopyMixIn):
@@ -238,7 +178,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             output_type=output_type,
@@ -301,7 +241,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             output_type=output_type,
@@ -395,7 +335,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             output_type=output_type,
@@ -455,7 +395,7 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         )
         model.copy_module = CopyModule()
         model.no_copy_module = NoCopyModule()
-        quant_model = _quantize(model, inplace=True)
+        quant_model = quantize(model, inplace=True)
         dmp = DistributedModelParallel(
             quant_model,
             sharders=[
@@ -546,7 +486,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
@@ -625,7 +565,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
@@ -704,7 +644,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
@@ -781,7 +721,7 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
