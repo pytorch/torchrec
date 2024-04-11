@@ -1461,6 +1461,8 @@
 </li>
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.DpSparseFeaturesDist.forward">(torchrec.distributed.sharding.dp_sharding.DpSparseFeaturesDist method)</a>
 </li>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InferCPURwSparseFeaturesDist.forward">(torchrec.distributed.sharding.rw_sharding.InferCPURwSparseFeaturesDist method)</a>
+</li>
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InferRwPooledEmbeddingDist.forward">(torchrec.distributed.sharding.rw_sharding.InferRwPooledEmbeddingDist method)</a>
 </li>
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InferRwSparseFeaturesDist.forward">(torchrec.distributed.sharding.rw_sharding.InferRwSparseFeaturesDist method)</a>
@@ -1638,7 +1640,7 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.get_device_from_parameter_sharding">get_device_from_parameter_sharding() (in module torchrec.distributed.quant_embeddingbag)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.get_device_from_sharding_type">get_device_from_sharding_type() (in module torchrec.distributed.quant_embeddingbag)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.get_device_from_sharding_infos">get_device_from_sharding_infos() (in module torchrec.distributed.quant_embeddingbag)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.get_ec_index_dedup">get_ec_index_dedup() (in module torchrec.distributed.embedding)</a>
 </li>
@@ -1666,9 +1668,11 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.get_plan_for_module">get_plan_for_module() (torchrec.distributed.types.ShardingPlan method)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup.get_tbes_to_register">get_tbes_to_register() (torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup method)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup.get_tbes_to_register">get_tbes_to_register() (torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup.get_tbes_to_register">(torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.get_tbes_to_register">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.get_tbes_to_register">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup method)</a>
@@ -1748,6 +1752,10 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.index_per_key">index_per_key() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup">InferCPUGroupedEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
+</li>
+      <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InferCPURwSparseFeaturesDist">InferCPURwSparseFeaturesDist (class in torchrec.distributed.sharding.rw_sharding)</a>
+</li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.cw_sharding.InferCwPooledEmbeddingDist">InferCwPooledEmbeddingDist (class in torchrec.distributed.sharding.cw_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.cw_sharding.InferCwPooledEmbeddingDistWithPermute">InferCwPooledEmbeddingDistWithPermute (class in torchrec.distributed.sharding.cw_sharding)</a>
@@ -1810,6 +1818,8 @@
         <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.input_size">(torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#id21">input_sizes (torchrec.distributed.comm_ops.ReduceScatterBaseInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo.input_sizes">[1]</a>
 
       <ul>
@@ -1818,8 +1828,6 @@
         <li><a href="torchrec.distributed.html#id25">(torchrec.distributed.comm_ops.ReduceScatterVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterVInfo.input_sizes">[1]</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#id18">input_split_sizes (torchrec.distributed.comm_ops.All2AllVInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo.input_split_sizes">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.input_splits">input_splits (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
@@ -3839,6 +3847,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup attribute)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup attribute)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.InferGroupedEmbeddingsLookup attribute)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.training">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup attribute)</a>
@@ -3884,6 +3894,8 @@
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingDist.training">(torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingDist attribute)</a>
 </li>
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.DpSparseFeaturesDist.training">(torchrec.distributed.sharding.dp_sharding.DpSparseFeaturesDist attribute)</a>
+</li>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InferCPURwSparseFeaturesDist.training">(torchrec.distributed.sharding.rw_sharding.InferCPURwSparseFeaturesDist attribute)</a>
 </li>
         <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InferRwPooledEmbeddingDist.training">(torchrec.distributed.sharding.rw_sharding.InferRwPooledEmbeddingDist attribute)</a>
 </li>
