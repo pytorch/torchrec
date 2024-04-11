@@ -77,7 +77,7 @@ def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
     return ps.sharding_spec.shards[0].placement.device().type
 
 
-def get_device_from_sharding_type(
+def get_device_from_sharding_infos(
     emb_shard_infos: List[EmbeddingShardingInfo],
 ) -> str:
     res = list(
@@ -160,7 +160,7 @@ class ShardedQuantEmbeddingBagCollection(
                 (
                     env
                     if not isinstance(env, Dict)
-                    else env[get_device_from_sharding_type(embedding_configs)]
+                    else env[get_device_from_sharding_infos(embedding_configs)]
                 ),
             )
             for sharding_type, embedding_configs in self._sharding_type_to_sharding_infos.items()

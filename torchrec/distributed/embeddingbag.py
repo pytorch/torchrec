@@ -28,7 +28,7 @@ from typing import (
 
 import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
-from torch import nn, Tensor
+from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
@@ -727,6 +727,12 @@ class ShardedEmbeddingBagCollection(
             param = self.embedding_bags[f"{table_config.name}"].weight
             # pyre-ignore
             table_config.init_fn(param)
+
+            sharding_type = self.module_sharding_plan[table_config.name].sharding_type
+            if sharding_type == ShardingType.DATA_PARALLEL.value:
+                pg = self._env.process_group
+                with torch.no_grad():
+                    dist.broadcast(param.data, src=0, group=pg)
 
     def _create_input_dist(
         self,

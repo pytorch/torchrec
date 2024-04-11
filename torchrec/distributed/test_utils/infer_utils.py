@@ -751,7 +751,7 @@ def assert_close(expected, actual) -> None:
         torch.testing.assert_close(expected.values(), actual.values())
         torch.testing.assert_close(expected.length_per_key(), actual.length_per_key())
     elif isinstance(expected, dict):
-        assert list(expected.keys()) == list(actual.keys())
+        assert sorted(expected.keys()) == sorted(actual.keys())
         for feature, jt_e in expected.items():
             jt_got = actual[feature]
             assert_close(jt_e.lengths(), jt_got.lengths())

@@ -11,14 +11,23 @@
 
 import unittest
 
+import hypothesis.strategies as st
+
 import torch
+from caffe2.torch.fb.model_transform.splitting.split_dispatcher import SplitDispatchMode
+from hypothesis import given, settings
 from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
 from torchrec.distributed.planner.types import Topology
-from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
+from torchrec.distributed.quant_embedding import (
+    QuantEmbeddingCollectionSharder,
+    ShardedQuantEmbeddingCollection,
+)
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.shard import _shard_modules
+from torchrec.distributed.sharding.rw_sharding import InferCPURwSparseFeaturesDist
+from torchrec.distributed.sharding.tw_sharding import InferTwSparseFeaturesDist
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     row_wise,
@@ -30,12 +39,16 @@ from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 
 class InferHeteroShardingsTest(unittest.TestCase):
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 3,
         "Not enough GPUs available",
     )
-    def test_sharder_different_world_sizes_for_qec(self) -> None:
+    # pyre-ignore
+    @given(
+        sharding_device=st.sampled_from(["meta"]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_sharder_different_world_sizes_for_qec(self, sharding_device: str) -> None:
         num_embeddings = 10
         emb_dim = 16
         world_size = 2
@@ -87,16 +100,41 @@ class InferHeteroShardingsTest(unittest.TestCase):
                 0,
             ),
         }
-        sharded_model = _shard_modules(
-            module=non_sharded_model,
-            # pyre-ignore
-            sharders=[sharder],
-            device=torch.device("cpu"),
-            plan=plan,
-            env=env_dict,
+        dummy_input = (
+            ["feature_0", "feature_1", "feature_2"],
+            torch.tensor([1, 1, 1]),
+            None,
+            torch.tensor([1, 1, 1]),
+            None,
         )
+        with SplitDispatchMode(), torch.inference_mode():
+            sharded_model = _shard_modules(
+                module=non_sharded_model,
+                # pyre-ignore
+                sharders=[sharder],
+                device=torch.device(sharding_device),
+                plan=plan,
+                env=env_dict,
+            )
+            # Run the model once to initialize input_dist and output_dist.
+            sharded_model(*dummy_input)
+
         self.assertTrue(hasattr(sharded_model._module_kjt_input[0], "_lookups"))
         self.assertTrue(len(sharded_model._module_kjt_input[0]._lookups) == 2)
+        self.assertTrue(hasattr(sharded_model._module_kjt_input[0], "_input_dists"))
+        self.assertTrue(len(sharded_model._module_kjt_input[0]._input_dists) == 2)
+        self.assertTrue(
+            isinstance(
+                sharded_model._module_kjt_input[0]._input_dists[0],
+                InferCPURwSparseFeaturesDist,
+            )
+        )
+        self.assertTrue(
+            isinstance(
+                sharded_model._module_kjt_input[0]._input_dists[1],
+                InferTwSparseFeaturesDist,
+            )
+        )
         for i, env in enumerate(env_dict.values()):
             self.assertTrue(
                 hasattr(
@@ -196,6 +234,11 @@ class InferHeteroShardingsTest(unittest.TestCase):
                 == env.world_size
             )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs available",
+    )
     def test_cpu_gpu_sharding_autoplanner(self) -> None:
         num_embeddings = 10
         emb_dim = 16
@@ -265,4 +308,69 @@ class InferHeteroShardingsTest(unittest.TestCase):
             .placement.device()
             .type,
             "cuda",
+        )
+
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs available",
+    )
+    def test_cpu_gpu_sharding_shard_modules(self) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(3)
+        ]
+        model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                EmbeddingCollection(
+                    tables=tables,
+                    device=torch.device("cpu"),
+                )
+            )
+        )
+        non_sharded_model = quantize(
+            model,
+            inplace=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=torch.qint8,
+        )
+        sharder = QuantEmbeddingCollectionSharder()
+        env_dict = {
+            "cpu": ShardingEnv.from_local(
+                3,
+                0,
+            ),
+            "cuda": ShardingEnv.from_local(
+                2,
+                0,
+            ),
+        }
+
+        shard_model = _shard_modules(
+            module=non_sharded_model,
+            env=env_dict,
+            # pyre-ignore
+            sharders=[sharder],
+            device=torch.device("cpu"),
+        )
+
+        self.assertTrue(
+            isinstance(
+                shard_model._module_kjt_input[0], ShardedQuantEmbeddingCollection
+            )
+        )
+
+        self.assertEqual(len(shard_model._module_kjt_input[0]._lookups), 1)
+        self.assertEqual(
+            len(
+                shard_model._module_kjt_input[0]._lookups[0]._embedding_lookups_per_rank
+            ),
+            env_dict["cpu"].world_size,
         )

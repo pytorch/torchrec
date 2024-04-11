@@ -17,7 +17,7 @@ from itertools import accumulate
 from typing import Any, cast, Dict, List, MutableMapping, Optional, Type, Union
 
 import torch
-from torch import nn
+from torch import distributed as dist, nn
 from torch.autograd.profiler import record_function
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
@@ -609,6 +609,12 @@ class ShardedEmbeddingCollection(
             param = self.embeddings[f"{table_config.name}"].weight
             # pyre-ignore
             table_config.init_fn(param)
+
+            sharding_type = self.module_sharding_plan[table_config.name].sharding_type
+            if sharding_type == ShardingType.DATA_PARALLEL.value:
+                pg = self._env.process_group
+                with torch.no_grad():
+                    dist.broadcast(param.data, src=0, group=pg)
 
     def _generate_permute_indices_per_feature(
         self,
