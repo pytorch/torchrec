@@ -20,10 +20,7 @@ from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     table_wise,
 )
-from torchrec.distributed.tests.test_quant_model_parallel import (
-    _quantize,
-    TestQuantEBCSharder,
-)
+from torchrec.distributed.test_utils.infer_utils import quantize, TestQuantEBCSharder
 from torchrec.distributed.types import ShardingEnv, ShardingPlan, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -58,7 +55,7 @@ class UtilsTest(unittest.TestCase):
         )
         model.training = False
 
-        quant_model = _quantize(
+        quant_model = quantize(
             model,
             inplace=True,
             output_type=torch.float,
