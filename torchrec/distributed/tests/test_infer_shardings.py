@@ -24,6 +24,7 @@ from torchrec import (
     KeyedJaggedTensor,
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
+from torchrec.distributed.infer_utils import get_path_device_tuples
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
@@ -968,6 +969,12 @@ class InferShardingsTest(unittest.TestCase):
         gm_script = torch.jit.script(gm)
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
+
+        get_path_device_tuples(sharded_model)
+
+        # TODO : enable this after device propagation fix
+        # for path_device in path_device_lists:
+        #     assert device in path_device[1]
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
