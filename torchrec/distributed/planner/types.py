@@ -141,6 +141,37 @@ class DeviceHardware:
     perf: Perf
 
 
+class CustomTopologyData:
+    """
+    Custom device data for individual device in a topology.
+    """
+
+    supported_fields = ["ddr_cap", "hbm_cap"]
+
+    def __init__(
+        self,
+        data: Dict[str, List[int]],
+        world_size: int,
+    ) -> None:
+        assert all(
+            key in self.supported_fields for key in data.keys()
+        ), f"{data.keys()} not supported in CustomTopologyData"
+        assert all(
+            len(v) == world_size for v in data.values()
+        ), f"{data.values()} must be positive"
+        self._data = data
+        self._world_size = world_size
+
+    def get_data(self, key: str) -> List[int]:
+        assert (
+            key in self.supported_fields
+        ), f"{key} not supported in CustomTopologyData"
+        return self._data[key]
+
+    def has_data(self, key: str) -> bool:
+        return key in self._data
+
+
 class Topology:
     def __init__(
         self,
@@ -154,6 +185,7 @@ class Topology:
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
         bwd_compute_multiplier: float = BWD_COMPUTE_MULTIPLIER,
+        custom_topology_data: Optional[CustomTopologyData] = None,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -191,6 +223,7 @@ class Topology:
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
         self._bwd_compute_multiplier = bwd_compute_multiplier
+        self._custom_topology_data = custom_topology_data
 
     @property
     def compute_device(self) -> str:
