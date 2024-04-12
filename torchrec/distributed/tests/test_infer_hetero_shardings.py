@@ -15,7 +15,6 @@ from typing import List
 import hypothesis.strategies as st
 
 import torch
-from caffe2.torch.fb.model_transform.splitting.split_dispatcher import SplitDispatchMode
 from hypothesis import given, settings
 from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
 from torchrec.distributed.embedding_types import ShardingType
