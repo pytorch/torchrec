@@ -29,10 +29,14 @@ from torchrec.modules.embedding_modules import (
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
-    features_to_dict,
     quant_prep_enable_quant_state_dict_split_scale_bias,
 )
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import (
+    ComputeKJTToJTDict,
+    JaggedTensor,
+    KeyedJaggedTensor,
+    KeyedTensor,
+)
 
 
 class EmbeddingBagCollectionTest(unittest.TestCase):
@@ -445,7 +449,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         from torchrec.fx import symbolic_trace
 
-        gm = symbolic_trace(qebc)
+        gm = symbolic_trace(qebc, leaf_modules=[ComputeKJTToJTDict.__name__])
 
         non_placeholder_nodes = [
             node for node in gm.graph.nodes if node.op != "placeholder"
@@ -455,13 +459,13 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self.assertEqual(
             non_placeholder_nodes[0].op,
-            "call_function",
-            f"First non-placeholder node must be call_function, got {non_placeholder_nodes[0].op} instead",
+            "call_module",
+            f"First non-placeholder node must be call_method, got {non_placeholder_nodes[0].op} instead",
         )
         self.assertEqual(
             non_placeholder_nodes[0].name,
-            features_to_dict.__name__,
-            f"First non-placeholder node must be features_to_dict, got {non_placeholder_nodes[0].name} instead",
+            "_kjt_to_jt_dict",
+            f"First non-placeholder node must be _kjt_to_jt_dict, got {non_placeholder_nodes[0].name} instead",
         )
 
         features = KeyedJaggedTensor(
