@@ -636,6 +636,10 @@ def _rewrite_model(  # noqa C901
                     dist_stream,
                 )
                 pipelined_forwards.append(child)
+            else:
+                logger.warning(
+                    f"Module '{node.target}'' will not be pipelined, due to input modifications"
+                )
 
     # JIT script unsharded modules if applicable.
     if apply_jit:

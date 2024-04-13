@@ -191,12 +191,12 @@ class TestKeyedOptimizer(unittest.TestCase):
                 [{"params": [param_1], "param_group_val_0": 3.0}],
             )
 
-    def test_init_state(self) -> None:
+    def test_init_state_with_momentum(self) -> None:
         dense = torch.nn.Parameter(torch.ones((2, 3), dtype=torch.float))
         sparse = torch.nn.Parameter(torch.ones((1, 4), dtype=torch.float))
         opt = KeyedOptimizerWrapper(
             {"dense": dense, "sparse": sparse},
-            lambda params: torch.optim.SGD(params, lr=0.1),
+            lambda params: torch.optim.SGD(params, lr=0.1, momentum=0.1),
         )
         opt.init_state({"sparse"})
 
@@ -207,6 +207,24 @@ class TestKeyedOptimizer(unittest.TestCase):
         self.assertTrue(sparse.grad is not None)
         self.assertTrue(sparse.grad.is_sparse)
         self.assertTrue("momentum_buffer" in opt.state_dict()["state"]["sparse"])
+
+    def test_init_state_no_momentum(self) -> None:
+        dense = torch.nn.Parameter(torch.ones((2, 3), dtype=torch.float))
+        sparse = torch.nn.Parameter(torch.ones((1, 4), dtype=torch.float))
+        opt = KeyedOptimizerWrapper(
+            {"dense": dense, "sparse": sparse},
+            lambda params: torch.optim.SGD(params, lr=0.1),
+        )
+        opt.init_state({"sparse"})
+
+        self.assertTrue(dense.grad is not None)
+        self.assertFalse(dense.grad.is_sparse)
+
+        self.assertTrue(sparse.grad is not None)
+        self.assertTrue(sparse.grad.is_sparse)
+
+        self.assertTrue("state" in opt.state_dict())
+        self.assertFalse(opt.state_dict()["state"])
 
     def test_pickle(self) -> None:
         dense = torch.nn.Parameter(torch.ones((2, 3), dtype=torch.float))
