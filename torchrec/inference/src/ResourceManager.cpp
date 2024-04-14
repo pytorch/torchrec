@@ -52,8 +52,7 @@ bool ResourceManager::occupyDevice(
             << " -- gpuToOutstandingBatches_ list <"
             << folly::join(",", gpuToOutstandingBatches_) << ">. "
             << " -- all time highs: <" << folly::join(",", allTimeHigh_)
-            << ">. "
-            << "Waited: " << waitedFor.count()
+            << ">. " << "Waited: " << waitedFor.count()
             << " ms. Slack: " << slack.count() << " ms.";
 
         gpuToOutstandingBatches_[gpuIdx] += 1;
