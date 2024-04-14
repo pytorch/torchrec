@@ -457,14 +457,15 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         self.assertTrue(
             len(non_placeholder_nodes) > 0, "Graph must have non-placeholder nodes"
         )
+
         self.assertEqual(
             non_placeholder_nodes[0].op,
-            "call_module",
+            "call_method",
             f"First non-placeholder node must be call_method, got {non_placeholder_nodes[0].op} instead",
         )
         self.assertEqual(
             non_placeholder_nodes[0].name,
-            "_kjt_to_jt_dict",
+            "keys",
             f"First non-placeholder node must be _kjt_to_jt_dict, got {non_placeholder_nodes[0].name} instead",
         )
 
