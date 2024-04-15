@@ -283,7 +283,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if self._dataloader_exhausted:
             batch = None
         else:
-            batch = next(dataloader_iter, None)
+            with record_function("## dataloader_iter ##"):
+                batch = next(dataloader_iter, None)
             if batch is None:
                 self._dataloader_exhausted = True
         return batch
