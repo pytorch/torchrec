@@ -6,15 +6,16 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
+import copy
 import multiprocessing
 import time
-from typing import List
+from typing import Callable, Dict, List
 
 import click
 
 from torchrec.distributed.test_utils.test_model import ModelInput
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 
 def generate_kjt(
@@ -63,26 +64,61 @@ def prepare_benchmark(
     return list(kjt_lists)
 
 
+def kjt_to_dict(kjt: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
+    return kjt.to_dict()
+
+
+def benchmark(
+    input_data: List[KeyedJaggedTensor],
+    test_name: str,
+    warmup_size: int,
+    test_size: int,
+    test_func: Callable[..., object],
+) -> None:
+    start = time.perf_counter()
+    for i in range(warmup_size):
+        test_func(input_data[i])
+    end = time.perf_counter()
+    print(f"warmup time for {test_name} {(end-start)*1000/warmup_size:.1f}ms")
+    start = time.perf_counter()
+    for i in range(warmup_size, warmup_size + test_size):
+        test_func(input_data[i])
+    end = time.perf_counter()
+    print(f"benmark avarge time {test_name} {(end-start)*1000/test_size:.1f}ms")
+
+
 def bench(
     feature_per_kjt: int,
     test_size: int,
     warmup_size: int,
+    test_jitscripted: bool = True,
     parallel: bool = False,
 ) -> None:
-    input_data = prepare_benchmark(
+    generated_input_data = prepare_benchmark(
         feature_per_kjt, test_size + warmup_size, in_parallel=parallel
     )
-    assert len(input_data) == test_size + warmup_size
-    start = time.perf_counter()
-    for i in range(warmup_size):
-        input_data[i].to_dict()
-    end = time.perf_counter()
-    print(f"warmup time {(end-start)*1000/warmup_size:.1f}ms")
-    start = time.perf_counter()
-    for i in range(warmup_size, warmup_size + test_size):
-        input_data[i].to_dict()
-    end = time.perf_counter()
-    print(f"benmark avarge time {(end-start)*1000/test_size:.1f}ms")
+    assert len(generated_input_data) == test_size + warmup_size
+
+    test_sets = [generated_input_data]
+    test_names = ["eager"]
+    if test_jitscripted:
+        test_sets.append(copy.deepcopy(generated_input_data))
+        test_names.append("jitscripted")
+
+    benchmark(
+        input_data=test_sets[0],
+        test_name=test_names[0],
+        warmup_size=warmup_size,
+        test_size=test_size,
+        test_func=lambda x: x.to_dict(),
+    )
+    benchmark(
+        input_data=test_sets[1],
+        test_name=test_names[1],
+        warmup_size=warmup_size,
+        test_size=test_size,
+        test_func=lambda x: kjt_to_dict(x),
+    )
 
 
 @click.command()
