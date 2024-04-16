@@ -617,9 +617,16 @@ class MetaInferGroupedEmbeddingsLookup(
             # 2d embedding by nature
             embeddings.append(self._emb_modules[i].forward(features_by_group[i]))
 
-        return embeddings_cat_empty_rank_handle_inference(
-            embeddings, device=self.device, dtype=self.output_dtype
-        )
+        if len(self._emb_modules) == 0:
+            # return a dummy empty tensor when grouped_configs is empty
+            device: Optional[torch.device] = (
+                torch.device(self.device) if self.device is not None else None
+            )
+            return torch.empty([0], dtype=self.output_dtype, device=device)
+        elif len(self._emb_modules) == 1:
+            return embeddings[0]
+        else:
+            return torch.cat(embeddings, dim=0)
 
     # pyre-ignore [14]
     def state_dict(
