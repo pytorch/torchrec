@@ -917,7 +917,12 @@ class InferGroupedPooledEmbeddingsLookup(
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     # syntax for torchscript
-                    device=torch.device(type=device_type, index=rank),
+                    # No rank for cpu
+                    device=(
+                        torch.device(type=device_type, index=rank)
+                        if device_type != "cpu"
+                        else torch.device(device_type)
+                    ),
                     fused_params=fused_params,
                 )
             )
