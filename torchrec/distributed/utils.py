@@ -247,6 +247,14 @@ def copy_to_device(
         name: _copy_if_device_match(buffer)
         for name, buffer in copy_module.named_buffers(recurse=False)
     }
+    if hasattr(copy_module, "position_weights_dict"):
+        for name, weight in copy_module.position_weights_dict.items():
+            copy_module.position_weights_dict[name] = _copy_if_device_match(weight)
+
+    if hasattr(copy_module, "bucket_w_dict"):
+        for name, weight in copy_module.bucket_w_dict.items():
+            copy_module.bucket_w_dict[name] = _copy_if_device_match(weight)
+
     for name, param in copied_param.items():
         copy_module.register_parameter(name, param)
     for name, buffer in copied_buffer.items():

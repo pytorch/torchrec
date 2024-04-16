@@ -68,7 +68,10 @@ from torchrec.distributed.test_utils.test_model import ModelInput
 from torchrec.distributed.types import ShardingEnv, ShardingPlan
 from torchrec.fx import symbolic_trace
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
+from torchrec.modules.feature_processor_ import (
+    FeatureProcessorsCollection,
+    PositionWeightedModuleCollection,
+)
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 
 torch.fx.wrap("len")
@@ -1585,3 +1588,173 @@ class InferShardingsTest(unittest.TestCase):
         print(f"gm_script:\n{gm_script}")
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
+
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8]),
+    )
+    @settings(max_examples=1, deadline=None)
+    def test_sharded_quant_fp_ebc_tw_meta(self, weight_dtype: torch.dtype) -> None:
+        # Simulate inference, take unsharded cpu model and shard on meta
+        # Use PositionWeightedModuleCollection, FP used in production
+
+        num_embeddings = 10
+        emb_dim = 16
+        world_size = 2
+        batch_size = 2
+        local_device = torch.device("cpu")
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cpu")
+        mi = TestModelInfo(
+            dense_device=local_device,
+            sparse_device=local_device,
+            num_features=2,
+            num_float_features=10,
+            num_weighted_features=0,
+            topology=topology,
+        )
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+
+        mi.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(mi.num_features)
+        ]
+
+        max_feature_lengths = {"feature_0": 20}
+
+        mi.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                FeatureProcessedEmbeddingBagCollection(
+                    EmbeddingBagCollection(
+                        tables=mi.tables,
+                        is_weighted=True,
+                        device=mi.sparse_device,
+                    ),
+                    PositionWeightedModuleCollection(
+                        max_feature_lengths=max_feature_lengths,
+                        device=mi.sparse_device,
+                    ),
+                )
+            )
+        )
+        model_inputs: List[ModelInput] = prep_inputs(
+            mi, world_size, batch_size, long_indices=False, count=1
+        )
+        inputs = []
+        kjt = model_inputs[0].idlist_features
+        kjt = kjt.to(local_device)
+        weights = torch.rand(
+            kjt._values.size(0), dtype=torch.float, device=local_device
+        )
+
+        inputs = [
+            kjt._keys,
+            kjt._values,
+            weights,
+            kjt._lengths,
+            kjt._offsets,
+        ]
+
+        mi.model(*inputs)
+        print(f"model:\n{mi.model}")
+
+        mi.quant_model = quantize_fpebc(
+            module=mi.model,
+            inplace=False,
+            register_tbes=True,
+            quant_state_dict_split_scale_bias=False,
+            weight_dtype=weight_dtype,
+        )
+        quant_model = mi.quant_model
+        print(f"quant_model:\n{quant_model}")
+
+        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+        sharder = QuantFeatureProcessedEmbeddingBagCollectionSharder()
+        # pyre-ignore
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+        sharded_model = _shard_modules(
+            module=quant_model,
+            # pyre-ignore
+            sharders=[sharder],
+            # shard on meta to simulate device movement from cpu -> meta QFPEBC
+            device=torch.device("meta"),
+            plan=plan,
+            # pyre-ignore
+            env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+        )
+        print(f"sharded_model:\n{sharded_model}")
+        for n, m in sharded_model.named_modules():
+            print(f"sharded_model.MODULE[{n}]:{type(m)}")
+
+        # Check that FP is registered as module
+        count_registered_fp: int = 0
+        for _, m in sharded_model.named_modules():
+            if isinstance(m, PositionWeightedModuleCollection):
+                count_registered_fp += 1
+
+        assert count_registered_fp == world_size
+
+        # Move inputs to meta now that we shard on meta
+        for i, input in enumerate(inputs):
+            if isinstance(input, torch.Tensor):
+                inputs[i] = input.to(torch.device("meta"))
+
+        sharded_model(*inputs)
+        # Don't care about the output since we are sharding on meta
+
+        gm: torch.fx.GraphModule = symbolic_trace(
+            sharded_model,
+            leaf_modules=[
+                "PositionWeightedModuleCollection",
+                "IntNBitTableBatchedEmbeddingBagsCodegen",
+            ],
+        )
+
+        # Check that FP was traced as a call_module
+        fp_call_module: int = 0
+        for node in gm.graph.nodes:
+            if node.op == "call_module":
+                m = gm
+                for attr in node.target.split("."):
+                    m = getattr(m, attr)
+                if isinstance(m, PositionWeightedModuleCollection):
+                    fp_call_module += 1
+
+        assert fp_call_module == world_size
+        print(f"fx.graph:\n{gm.graph}")
+
+        gm_script = torch.jit.script(gm)
+        print(f"gm_script:\n{gm_script}")
+        gm_script(*inputs)
