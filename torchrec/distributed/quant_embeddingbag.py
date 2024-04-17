@@ -383,16 +383,42 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
         assert feature_processor is not None
         device_type: str = self._device.type if self._device is not None else "cuda"
         self.feature_processors_per_rank: nn.ModuleList = torch.nn.ModuleList()
-        for i in range(env.world_size):
-            self.feature_processors_per_rank.append(
-                copy.deepcopy(feature_processor)
-                if device_type == "meta"
-                else copy_to_device(
-                    feature_processor,
-                    feature_processor.device,
-                    torch.device(f"{device_type}:{i}"),
+        feature_processor_device = None
+        for _, param in feature_processor.named_parameters():
+            if feature_processor_device is None:
+                feature_processor_device = param.device
+            elif feature_processor_device != param.device:
+                raise RuntimeError(
+                    f"Feature processor has inconsistent devices. Expected {feature_processor_device}, got {param.device}"
                 )
-            )
+
+        for _, buffer in feature_processor.named_buffers():
+            if feature_processor_device is None:
+                feature_processor_device = buffer.device
+            elif feature_processor_device != buffer.device:
+                raise RuntimeError(
+                    f"Feature processor has inconsistent devices. Expected {feature_processor_device}, got {param.device}"
+                )
+
+        if feature_processor_device is None:
+            for _ in range(env.world_size):
+                self.feature_processors_per_rank.append(feature_processor)
+        else:
+            for i in range(env.world_size):
+                # Generic copy, for example initailized on cpu but -> sharding as meta
+                self.feature_processors_per_rank.append(
+                    copy.deepcopy(feature_processor)
+                    if device_type == feature_processor_device
+                    else copy_to_device(
+                        feature_processor,
+                        feature_processor_device,
+                        (
+                            torch.device(f"{device_type}:{i}")
+                            if device_type == "cuda"
+                            else torch.device(f"{device_type}")
+                        ),
+                    )
+                )
 
     def apply_feature_processor(
         self,

@@ -16,6 +16,7 @@ import torch
 
 from torch import nn
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
+from torchrec.types import CopyMixIn
 
 
 class FeatureProcessor(nn.Module):
@@ -149,7 +150,7 @@ def get_weights_list(
     return torch.cat(weights_list) if weights_list else features.weights_or_none()
 
 
-class PositionWeightedModuleCollection(FeatureProcessorsCollection):
+class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
     def __init__(
         self, max_feature_lengths: Dict[str, int], device: Optional[torch.device] = None
     ) -> None:
@@ -193,3 +194,10 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection):
             stride=features.stride(),
             length_per_key=features.length_per_key(),
         )
+
+    def copy(self, device: torch.device) -> nn.Module:
+        self.position_weights = self.position_weights.to(device=device)
+        for key in self.position_weights.keys():
+            self.position_weights_dict[key] = self.position_weights[key]
+
+        return self
