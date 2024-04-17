@@ -604,6 +604,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
                 pooling_mode=PoolingMode.NONE,
                 weights_precision=weights_precision,
                 device=device,
+                table_names=[t.name for t in config.embedding_tables],
                 **fused_params,
             )
         )
