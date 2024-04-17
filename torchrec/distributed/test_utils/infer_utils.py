@@ -60,7 +60,9 @@ from torchrec.distributed.quant_embedding import (
 from torchrec.distributed.quant_embeddingbag import (
     QuantEmbeddingBagCollection,
     QuantEmbeddingBagCollectionSharder,
+    QuantFeatureProcessedEmbeddingBagCollectionSharder,
     ShardedQuantEmbeddingBagCollection,
+    ShardedQuantFeatureProcessedEmbeddingBagCollection,
 )
 from torchrec.distributed.quant_state import WeightSpec
 from torchrec.distributed.shard import _shard_modules
@@ -79,6 +81,7 @@ from torchrec.modules.embedding_configs import (
     QuantConfig,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
@@ -331,6 +334,53 @@ def quantize_fpebc(
     )
 
 
+class TestQuantFPEBCSharder(QuantFeatureProcessedEmbeddingBagCollectionSharder):
+    def __init__(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Optional[Dict[str, Any]] = None,
+        shardable_params: Optional[List[str]] = None,
+    ) -> None:
+        super().__init__(fused_params=fused_params, shardable_params=shardable_params)
+        self._sharding_type = sharding_type
+        self._kernel_type = kernel_type
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [self._kernel_type]
+
+    def shard(
+        self,
+        module: QuantFeatureProcessedEmbeddingBagCollection,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+    ) -> ShardedQuantFeatureProcessedEmbeddingBagCollection:
+        fused_params = self.fused_params if self.fused_params else {}
+        fused_params["output_dtype"] = data_type_to_sparse_type(
+            dtype_to_data_type(module.output_dtype())
+        )
+        fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
+            module, MODULE_ATTR_REGISTER_TBES_BOOL, False
+        )
+        fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+            module, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+        )
+        return ShardedQuantFeatureProcessedEmbeddingBagCollection(
+            module=module,
+            table_name_to_parameter_sharding=params,
+            env=env,
+            fused_params=fused_params,
+            device=device,
+            feature_processor=module.feature_processor,
+        )
+
+
 class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
     def __init__(
         self,
@@ -576,8 +626,10 @@ def create_test_model_ebc_only_no_quantize(
     num_features: int = 1,
     num_float_features: int = 8,
     num_weighted_features: int = 1,
+    compute_device: str = "cuda",
+    feature_processor: bool = False,
 ) -> TestModelInfo:
-    topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+    topology: Topology = Topology(world_size=world_size, compute_device=compute_device)
     mi = TestModelInfo(
         dense_device=dense_device,
         sparse_device=sparse_device,
@@ -620,12 +672,27 @@ def create_test_model_ebc_only_no_quantize(
         for i in range(mi.num_weighted_features)
     ]
 
-    mi.model = torch.nn.Sequential(
-        EmbeddingBagCollection(
+    if feature_processor:
+        max_feature_lengths = {config.feature_names[0]: 100 for config in mi.tables}
+        fp = PositionWeightedModuleCollection(
+            max_feature_lengths=max_feature_lengths, device=mi.sparse_device
+        )
+        ebc = FeatureProcessedEmbeddingBagCollection(
+            embedding_bag_collection=EmbeddingBagCollection(
+                # pyre-ignore [6]
+                tables=mi.tables,
+                device=mi.sparse_device,
+                is_weighted=True,
+            ),
+            feature_processors=fp,
+        )
+    else:
+        ebc = EmbeddingBagCollection(
             tables=mi.tables,
             device=mi.sparse_device,
         )
-    )
+
+    mi.model = torch.nn.Sequential(ebc)
     mi.model.training = False
     return mi
 
@@ -641,6 +708,8 @@ def create_test_model_ebc_only(
     num_float_features: int = 8,
     num_weighted_features: int = 1,
     quant_state_dict_split_scale_bias: bool = False,
+    compute_device: str = "cuda",
+    feature_processor: bool = False,
 ) -> TestModelInfo:
     mi = create_test_model_ebc_only_no_quantize(
         num_embeddings=num_embeddings,
@@ -652,13 +721,24 @@ def create_test_model_ebc_only(
         num_features=num_features,
         num_float_features=num_float_features,
         num_weighted_features=num_weighted_features,
+        compute_device=compute_device,
+        feature_processor=feature_processor,
     )
-    mi.quant_model = quantize(
-        module=mi.model,
-        inplace=False,
-        register_tbes=True,
-        quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
-    )
+
+    if feature_processor:
+        mi.quant_model = quantize_fpebc(
+            module=mi.model,
+            inplace=True,
+            register_tbes=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
+    else:
+        mi.quant_model = quantize(
+            module=mi.model,
+            inplace=False,
+            register_tbes=True,
+            quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
+        )
     return mi
 
 
