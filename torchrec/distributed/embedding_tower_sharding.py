@@ -69,10 +69,6 @@ def _replace_sharding_with_intra_node(
             raise ValueError(f"Sharding type not supported {value.sharding_type}")
         if value.ranks:
             value.ranks = [rank % local_size for rank in value.ranks]
-        if value.sharding_spec:
-            # pyre-ignore [6, 16]
-            for shard, rank in zip(value.sharding_spec.shards, value.ranks):
-                shard.placement._rank = rank
 
 
 class TowerLazyAwaitable(LazyAwaitable[torch.Tensor]):
