@@ -872,6 +872,7 @@ class ShardedEmbeddingBagCollection(
                     lengths=features.lengths(),
                     stride=features.stride(),
                     keys=features.keys(),
+                    offsets=features.offsets(),
                     pooling_type_to_rs_features=self._pooling_type_to_rs_features,
                     stride_per_key=features.stride_per_key(),
                     dim_per_key=self._dim_per_key,  # pyre-ignore[6]
@@ -882,6 +883,7 @@ class ShardedEmbeddingBagCollection(
                     kjt_key_indices=self._kjt_key_indices,
                     kt_key_ordering=self._kt_key_ordering,  # pyre-ignore[6]
                     inverse_indices=ctx.inverse_indices,
+                    weights=features.weights_or_none(),
                 )
 
             features_by_shards = features.split(
@@ -1276,6 +1278,7 @@ class EmbeddingBagSharder(BaseEmbeddingSharder[nn.EmbeddingBag]):
 def _create_mean_pooling_divisor(
     lengths: torch.Tensor,
     keys: List[str],
+    offsets: torch.Tensor,
     stride: int,
     stride_per_key: List[int],
     dim_per_key: torch.Tensor,
@@ -1287,6 +1290,7 @@ def _create_mean_pooling_divisor(
     kjt_key_indices: Dict[str, int],
     kt_key_ordering: torch.Tensor,
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
+    weights: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     with record_function("## ebc create mean pooling callback ##"):
         batch_size = (
@@ -1294,6 +1298,10 @@ def _create_mean_pooling_divisor(
             if variable_batch_per_feature
             else stride
         )
+
+        if weights is not None:
+            # if we have weights, lengths is the sum of weights by offsets for feature
+            lengths = torch.ops.fbgemm.segment_sum_csr(1, offsets.int(), weights)
 
         if variable_batch_per_feature:
             inverse_indices = none_throws(inverse_indices)
