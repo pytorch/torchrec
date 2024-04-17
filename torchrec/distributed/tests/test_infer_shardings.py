@@ -24,7 +24,10 @@ from torchrec import (
     KeyedJaggedTensor,
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
-from torchrec.distributed.infer_utils import get_tbes_from_sharded_module
+from torchrec.distributed.infer_utils import (
+    get_path_device_tuples,
+    get_tbes_from_sharded_module,
+)
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
@@ -973,6 +976,12 @@ class InferShardingsTest(unittest.TestCase):
         tbes = get_tbes_from_sharded_module(sharded_model._module_kjt_input[0])
         for tbe in tbes:
             self.assertTrue(tbe.weight_initialized)
+
+        get_path_device_tuples(sharded_model)
+
+        # TODO : enable this after device propagation fix
+        # for path_device in path_device_lists:
+        #     assert device in path_device[1]
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
