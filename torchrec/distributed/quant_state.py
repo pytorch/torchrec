@@ -418,7 +418,7 @@ def sharded_tbes_weights_spec(
     # 	"ebc.tbes.0.0.table_0.weight": WeightSpec("ebc.embedding_bags.table_0.weight", [0, 0], [500, 192])
     # 	"ebc.tbes.0.0.table_0.weight_qscale":WeightSpec("ebc.embedding_bags.table_0.weight_qscale", [0, 0], [500, 2])
     # 	"ebc.tbes.0.0.table_0.weight_qbias":WeightSpec("ebc.embedding_bags.table_0.weight_qbias", [0, 0], [500, 2])
-    # table_1 in tbes.1
+    # table_1 in tbes.0
     # 	"ebc.tbes.0.1.table_1.weight": WeightSpec("ebc.embedding_bags.table_1.weight", [0, 0], [500, 192])
     # 	"ebc.tbes.0.1.table_1.weight_qscale":WeightSpec("ebc.embedding_bags.table_1.weight_qscale", [0, 0], [500, 2])
     # 	"ebc.tbes.0.1.table_1.weight_qbias":WeightSpec("ebc.embedding_bags.table_1.weight_qbias", [0, 0], [500, 2])
