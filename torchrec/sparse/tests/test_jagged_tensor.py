@@ -1836,6 +1836,13 @@ KeyedJaggedTensor({
             keys=keys, values=values, weights=weights, offsets=offsets
         )
 
+        # test empty keys case
+        kjt = KeyedJaggedTensor.from_lengths_sync(
+            keys=[],
+            values=torch.tensor([], device=torch.device("meta")),
+            lengths=torch.tensor([], device=torch.device("meta")),
+        )
+
 
 class TestKeyedJaggedTensorScripting(unittest.TestCase):
     def test_scriptable_forward(self) -> None:
