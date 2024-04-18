@@ -32,6 +32,7 @@ from torchrec.distributed.embeddingbag import (
     create_sharding_infos_by_sharding,
 )
 from torchrec.distributed.fused_params import (
+    FUSED_PARAM_IS_WEIGHTED,
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     FUSED_PARAM_REGISTER_TBE_BOOL,
     get_tbes_to_register_from_iterable,
@@ -351,6 +352,8 @@ class QuantEmbeddingBagCollectionSharder(
             fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
                 module, FUSED_PARAM_REGISTER_TBE_BOOL, False
             )
+        if FUSED_PARAM_IS_WEIGHTED not in fused_params:
+            fused_params[FUSED_PARAM_IS_WEIGHTED] = module.is_weighted()
 
         return ShardedQuantEmbeddingBagCollection(
             module, params, env, fused_params, device=device

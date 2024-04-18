@@ -21,6 +21,7 @@ FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
     "__register_quant_state_dict_split_scale_bias"
 )
 FUSED_PARAM_TBE_ROW_ALIGNMENT: str = "__register_tbe_row_alignment"
+FUSED_PARAM_IS_WEIGHTED: str = "__register_tbe_is_weighted"
 
 
 class TBEToRegisterMixIn:
@@ -57,6 +58,13 @@ def get_fused_param_tbe_row_alignment(
         return fused_params[FUSED_PARAM_TBE_ROW_ALIGNMENT]
 
 
+def is_fused_param_weighted(fused_params: Optional[Dict[str, Any]]) -> Optional[bool]:
+    if fused_params is None or FUSED_PARAM_IS_WEIGHTED not in fused_params:
+        return None
+    else:
+        return fused_params[FUSED_PARAM_IS_WEIGHTED]
+
+
 def is_fused_param_quant_state_dict_split_scale_bias(
     fused_params: Optional[Dict[str, Any]]
 ) -> bool:
@@ -80,5 +88,7 @@ def tbe_fused_params(
         fused_params_for_tbe.pop(FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS)
     if FUSED_PARAM_TBE_ROW_ALIGNMENT in fused_params_for_tbe:
         fused_params_for_tbe.pop(FUSED_PARAM_TBE_ROW_ALIGNMENT)
+    if FUSED_PARAM_IS_WEIGHTED in fused_params_for_tbe:
+        fused_params_for_tbe.pop(FUSED_PARAM_IS_WEIGHTED)
 
     return fused_params_for_tbe
