@@ -870,6 +870,11 @@ returns the loss. Optional for most optimizers.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupPolicy.COSINE_ANNEALING_WARM_RESTARTS">
+<span class="sig-name descname"><span class="pre">COSINE_ANNEALING_WARM_RESTARTS</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cosine_annealing_warm_restarts'</span></em><a class="headerlink" href="#torchrec.optim.warmup.WarmupPolicy.COSINE_ANNEALING_WARM_RESTARTS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupPolicy.INVSQRT">
 <span class="sig-name descname"><span class="pre">INVSQRT</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'inv_sqrt'</span></em><a class="headerlink" href="#torchrec.optim.warmup.WarmupPolicy.INVSQRT" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -898,7 +903,7 @@ returns the loss. Optional for most optimizers.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupStage">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.warmup.</span></span><span class="sig-name descname"><span class="pre">WarmupStage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy:</span> <span class="pre">torchrec.optim.warmup.WarmupPolicy</span> <span class="pre">=</span> <span class="pre">&lt;WarmupPolicy.LINEAR:</span> <span class="pre">'linear'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iters:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr_scale:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decay_iters:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">-1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.warmup.WarmupStage" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.optim.warmup.</span></span><span class="sig-name descname"><span class="pre">WarmupStage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">policy:</span> <span class="pre">torchrec.optim.warmup.WarmupPolicy</span> <span class="pre">=</span> <span class="pre">&lt;WarmupPolicy.LINEAR:</span> <span class="pre">'linear'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iters:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lr_scale:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decay_iters:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sgdr_period:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.optim.warmup.WarmupStage" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupStage.decay_iters">
@@ -918,6 +923,11 @@ returns the loss. Optional for most optimizers.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupStage.policy">
 <span class="sig-name descname"><span class="pre">policy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.optim.warmup.WarmupPolicy" title="torchrec.optim.warmup.WarmupPolicy"><span class="pre">WarmupPolicy</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'linear'</span></em><a class="headerlink" href="#torchrec.optim.warmup.WarmupStage.policy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.optim.warmup.WarmupStage.sgdr_period">
+<span class="sig-name descname"><span class="pre">sgdr_period</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#torchrec.optim.warmup.WarmupStage.sgdr_period" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
