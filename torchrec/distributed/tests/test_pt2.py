@@ -12,6 +12,7 @@ import unittest
 from typing import List, Tuple
 
 import torch
+from torchrec.distributed.test_utils.infer_utils import TestQuantFPEBCSharder
 
 try:
     # pyre-ignore
@@ -50,12 +51,17 @@ def make_kjt(values: List[int], lengths: List[int]) -> KeyedJaggedTensor:
     return kjt
 
 
-def _sharded_quant_ebc_model() -> Tuple[torch.nn.Module, List[KeyedJaggedTensor]]:
+def _sharded_quant_ebc_model(
+    local_device: str = "cuda",
+    compute_device: str = "cuda",
+    feature_processor: bool = False,
+) -> Tuple[torch.nn.Module, List[KeyedJaggedTensor]]:
     num_embeddings = 256
     emb_dim = 12
     world_size = 2
     batch_size = 4
-    local_device = torch.device("cuda:0")
+
+    local_device = torch.device(local_device)
     mi = create_test_model_ebc_only(
         num_embeddings,
         emb_dim,
@@ -66,34 +72,47 @@ def _sharded_quant_ebc_model() -> Tuple[torch.nn.Module, List[KeyedJaggedTensor]
         dense_device=local_device,
         sparse_device=local_device,
         quant_state_dict_split_scale_bias=True,
+        compute_device=compute_device,
+        feature_processor=feature_processor,
     )
     input_kjts = [
         inp.to(local_device).idlist_features
         for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
     ]
-    model: torch.nn.Module = KJTInputExportWrapper(mi.quant_model, input_kjts[0].keys())
 
     sharding_type: ShardingType = ShardingType.TABLE_WISE
-    sharder = TestQuantEBCSharder(
-        sharding_type=sharding_type.value,
-        kernel_type=EmbeddingComputeKernel.QUANT.value,
-        shardable_params=[table.name for table in mi.tables],
-    )
+
+    if feature_processor:
+        sharder = TestQuantFPEBCSharder(
+            sharding_type=sharding_type.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=[table.name for table in mi.tables],
+        )
+    else:
+        sharder = TestQuantEBCSharder(
+            sharding_type=sharding_type.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=[table.name for table in mi.tables],
+        )
     # pyre-ignore
     plan = mi.planner.plan(
-        model,
+        mi.quant_model,
         [sharder],
     )
+
     sharded_model = _shard_modules(
-        module=model,
+        module=mi.quant_model,
         # pyre-ignore
         sharders=[sharder],
-        device=local_device,
+        # Always shard on meta
+        device=torch.device("meta"),
         plan=plan,
         # pyre-ignore
         env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
     )
-    return sharded_model, input_kjts
+
+    model: torch.nn.Module = KJTInputExportWrapper(sharded_model, input_kjts[0].keys())
+    return model, input_kjts
 
 
 class TestPt2(unittest.TestCase):
@@ -268,6 +287,51 @@ class TestPt2(unittest.TestCase):
                 aot_inductor_module(*kjt_to_inputs(kjt)) for kjt in input_kjts[1:]
             ]
             assert_close(expected_outputs, aot_actual_outputs)
+
+    def test_sharded_quant_ebc_non_strict_export(self) -> None:
+        sharded_model, input_kjts = _sharded_quant_ebc_model(
+            local_device="cpu", compute_device="cpu"
+        )
+        kjt = input_kjts[0]
+        kjt = kjt.to("meta")
+        sharded_model(kjt.values(), kjt.lengths())
+
+        ep = torch.export.export(
+            sharded_model,
+            (
+                kjt.values(),
+                kjt.lengths(),
+            ),
+            {},
+            strict=False,
+        )
+
+        ep.module()(kjt.values(), kjt.lengths())
+
+        # TODO: Fix Unflatten
+        # torch.export.unflatten(ep)
+
+    def test_sharded_quant_fpebc_non_strict_export(self) -> None:
+        sharded_model, input_kjts = _sharded_quant_ebc_model(
+            local_device="cpu", compute_device="cpu", feature_processor=True
+        )
+        kjt = input_kjts[0]
+        kjt = kjt.to("meta")
+        sharded_model(kjt.values(), kjt.lengths())
+
+        ep = torch.export.export(
+            sharded_model,
+            (
+                kjt.values(),
+                kjt.lengths(),
+            ),
+            {},
+            strict=False,
+        )
+        ep.module()(kjt.values(), kjt.lengths())
+
+        # TODO: Fix Unflatten
+        # torch.export.unflatten(ep)
 
     def test_maybe_compute_kjt_to_jt_dict(self) -> None:
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])

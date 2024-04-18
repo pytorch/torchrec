@@ -27,6 +27,7 @@ class WarmupPolicy(Enum):
     POLY = "poly"
     STEP = "step"
     INVSQRT = "inv_sqrt"  # inverse square root
+    COSINE_ANNEALING_WARM_RESTARTS = "cosine_annealing_warm_restarts"
 
 
 @dataclass
@@ -40,6 +41,7 @@ class WarmupStage:
     # also used as stepsize in step decay
     # default to 1 if not set to value > 0
     decay_iters: int = -1
+    sgdr_period: int = 1
 
 
 def _lr_stages(stages: List[WarmupStage]) -> List[WarmupStage]:
@@ -74,6 +76,16 @@ def _get_multiplier(stage: WarmupStage, iter: int) -> float:
         multiplier = math.pow(stage.value, iter // stage.decay_iters)
     elif stage.policy == WarmupPolicy.INVSQRT:
         multiplier = 1.0 / math.sqrt(iter)
+    elif stage.policy == WarmupPolicy.COSINE_ANNEALING_WARM_RESTARTS:
+        # SGDR: Stochastic Gradient Descent with Warm Restarts:
+        # https://arxiv.org/abs/1608.03983.
+        # Forgo period multiplier T_mult, as lr multiplier is a stateless
+        # computation without knowledge of previous period size.
+        eta_min = stage.value
+        t_0 = stage.sgdr_period
+        t_cur = iter % t_0
+        cos_iter = 0.5 * (1 + math.cos(math.pi * t_cur / t_0))
+        multiplier = eta_min + (1.0 - eta_min) * cos_iter
     return multiplier * stage.lr_scale
 
 

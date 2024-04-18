@@ -10,7 +10,7 @@
 import unittest
 
 import torch
-from torchrec.distributed.utils import init_parameters
+from torchrec.distributed.utils import copy_to_device, init_parameters
 
 from torchrec.fx.tracer import symbolic_trace
 from torchrec.modules.feature_processor_ import (
@@ -150,3 +150,28 @@ class PositionWeightedCollectionModuleTest(unittest.TestCase):
             self.assertTrue(not param.is_meta)
             self.assertTrue(pwmc.position_weights_dict[key] is param)
             torch.testing.assert_close(param, torch.ones_like(param))
+
+    def test_copy(self) -> None:
+        pwmc = PositionWeightedModuleCollection(
+            max_feature_lengths={"f1": 10, "f2": 10},
+            device=torch.device("cpu"),
+        )
+
+        self.assertTrue(
+            all(param.device.type == "cpu" for param in pwmc.position_weights.values())
+        )
+        self.assertTrue(
+            all(
+                param.device.type == "cpu"
+                for param in pwmc.position_weights_dict.values()
+            )
+        )
+
+        res = copy_to_device(
+            pwmc, current_device=torch.device("cpu"), to_device=torch.device("meta")
+        )
+
+        self.assertTrue(all(param.is_meta for param in res.position_weights.values()))
+        self.assertTrue(
+            all(param.is_meta for param in res.position_weights_dict.values())
+        )

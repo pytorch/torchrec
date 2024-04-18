@@ -35,6 +35,7 @@ from torchrec.distributed.fused_params import (
     get_fused_param_tbe_row_alignment,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
+    is_fused_param_weighted,
     tbe_fused_params,
     TBEToRegisterMixIn,
 )
@@ -192,6 +193,7 @@ class QuantBatchedEmbeddingBag(
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
         self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
+        self._is_weighted: Optional[bool] = is_fused_param_weighted(fused_params)
         self._quant_state_dict_split_scale_bias: bool = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
@@ -256,6 +258,10 @@ class QuantBatchedEmbeddingBag(
             indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(features)
         else:
             indices, offsets, per_sample_weights = _unwrap_kjt(features)
+        if self._is_weighted:
+            assert per_sample_weights is not None
+        elif self._is_weighted is not None:
+            per_sample_weights = None
         # Conditional call of .forward function for FX:
         # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
         # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
