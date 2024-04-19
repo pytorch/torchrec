@@ -15,11 +15,8 @@ from torch import nn
 from torch.distributed._composable.contract import contract
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.model_parallel import get_default_sharders
-from torchrec.distributed.planner import (
-    EmbeddingShardingPlanner,
-    HeteroEmbeddingShardingPlanner,
-    Topology,
-)
+from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
 from torchrec.distributed.sharding_plan import (
     get_module_to_default_sharders,
     ParameterShardingGenerator,
