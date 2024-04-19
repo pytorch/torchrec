@@ -2519,17 +2519,22 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
 def _kt_flatten(
     kt: KeyedTensor,
-) -> Tuple[List[torch.Tensor], List[str]]:
-    return [torch.tensor(kt._length_per_key, dtype=torch.int64), kt._values], kt._keys
+) -> Tuple[List[torch.Tensor], Tuple[List[str], List[int]]]:
+    return [kt._values], (kt._keys, kt._length_per_key)
 
 
-def _kt_unflatten(values: List[torch.Tensor], context: List[str]) -> KeyedTensor:
-    return KeyedTensor(context, values[0].tolist(), values[1])
+def _kt_unflatten(
+    values: List[torch.Tensor], context: Tuple[List[str], List[int]]
+) -> KeyedTensor:
+    return KeyedTensor(context[0], context[1], values[0])
 
 
 def _kt_flatten_spec(kt: KeyedTensor, spec: TreeSpec) -> List[torch.Tensor]:
     return _kt_flatten(kt)[0]
 
 
-register_pytree_node(KeyedTensor, _kt_flatten, _kt_unflatten)
+# The assumption here in torch.exporting KeyedTensor is that _length_per_key is static
+register_pytree_node(
+    KeyedTensor, _kt_flatten, _kt_unflatten, serialized_type_name="KeyedTensor"
+)
 register_pytree_flatten_spec(KeyedTensor, _kt_flatten_spec)
