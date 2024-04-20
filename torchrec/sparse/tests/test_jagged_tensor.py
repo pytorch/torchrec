@@ -2289,6 +2289,23 @@ KeyedTensor({
 """,
         )
 
+    def test_pytree(self) -> None:
+        tensor_list = [
+            torch.Tensor([[1.0, 1.0]]),
+            torch.Tensor([[2.0, 2.0], [3.0, 3.0]]),
+        ]
+        keys = ["dense_0", "dense_1"]
+        kt = KeyedTensor.from_tensor_list(keys, tensor_list, cat_dim=0, key_dim=0)
+
+        flattened, out_spec = pytree.tree_flatten(kt)
+
+        self.assertTrue(torch.equal(flattened[0], kt.values()))
+        unflattened = pytree.tree_unflatten(flattened, out_spec)
+
+        self.assertTrue(isinstance(unflattened, KeyedTensor))
+        self.assertListEqual(unflattened.keys(), keys)
+        self.assertListEqual(unflattened._length_per_key, kt._length_per_key)
+
 
 class TestComputeKJTToJTDict(unittest.TestCase):
     def test_key_lookup(self) -> None:

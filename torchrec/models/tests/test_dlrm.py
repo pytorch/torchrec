@@ -14,6 +14,8 @@ from torch import nn
 from torch.testing import FileCheck  # @manual
 from torchrec.datasets.utils import Batch
 from torchrec.fx import symbolic_trace
+from torchrec.ir.serializer import JsonSerializer
+from torchrec.ir.utils import deserialize_embedding_modules, serialize_embedding_modules
 from torchrec.models.dlrm import (
     choose,
     DenseArch,
@@ -1218,3 +1220,66 @@ class DLRMExampleTest(unittest.TestCase):
         )
 
         self.assertEqual(logits.size(), (B, 1))
+
+    def test_export_serialization(self) -> None:
+        B = 2
+        D = 8
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        model = DLRM(
+            embedding_bag_collection=ebc,
+            dense_in_features=100,
+            dense_arch_layer_sizes=[20, D],
+            over_arch_layer_sizes=[5, 1],
+        )
+
+        features = torch.rand((B, 100))
+
+        #     0       1
+        # 0   [1,2] [4,5]
+        # 1   [4,3] [2,9]
+        # ^
+        # feature
+        sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9]),
+            offsets=torch.tensor([0, 2, 4, 6, 8]),
+        )
+
+        logits = model(
+            dense_features=features,
+            sparse_features=sparse_features,
+        )
+
+        self.assertEqual(logits.size(), (B, 1))
+
+        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+
+        ep = torch.export.export(
+            model,
+            (features, sparse_features),
+            {},
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=(tuple(sparse_fqns)),
+        )
+
+        # Run forward on ExportedProgram
+        ep_output = ep.module()(features, sparse_features)
+        self.assertEqual(ep_output.size(), (B, 1))
+        self.assertTrue(torch.allclose(logits, ep_output))
+
+        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+        deserialized_logits = deserialized_model(features, sparse_features)
+
+        self.assertEqual(deserialized_logits.size(), (B, 1))
