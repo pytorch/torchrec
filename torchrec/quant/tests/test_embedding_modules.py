@@ -459,13 +459,13 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self.assertEqual(
             non_placeholder_nodes[0].op,
-            "call_module",
-            f"First non-placeholder node must be call_method, got {non_placeholder_nodes[0].op} instead",
+            "call_function",
+            f"First non-placeholder node must be call_function, got {non_placeholder_nodes[0].op} instead",
         )
         self.assertEqual(
             non_placeholder_nodes[0].name,
-            "_kjt_to_jt_dict",
-            f"First non-placeholder node must be _kjt_to_jt_dict, got {non_placeholder_nodes[0].name} instead",
+            "_get_kjt_keys",
+            f"First non-placeholder node must be '_get_kjt_keys', got {non_placeholder_nodes[0].name} instead",
         )
 
         features = KeyedJaggedTensor(
