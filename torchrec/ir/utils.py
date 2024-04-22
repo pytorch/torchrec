@@ -7,14 +7,34 @@
 
 #!/usr/bin/env python3
 
-from typing import List, Tuple, Type
+import threading
+from typing import Callable, Dict, List, Optional, Tuple, Type
 
 import torch
 
 from torch import nn
 from torch.export.exported_program import ExportedProgram
+from torch.library import Library
 from torchrec.ir.types import SerializerInterface
 
+
+lib = Library("custom", "FRAGMENT")
+
+
+class OpRegistryState:
+    """
+    State of operator registry.
+
+    We can only register the op schema once. So if we're registering multiple
+    times we need a lock and check if they're the same schema
+    """
+
+    op_registry_lock = threading.Lock()
+    # operator schema: op_name: schema
+    op_registry_schema: Dict[str, str] = {}
+
+
+operator_registry_state = OpRegistryState()
 
 # TODO: Replace the default interface with the python dataclass interface
 DEFAULT_SERIALIZER_CLS = SerializerInterface
@@ -83,3 +103,63 @@ def deserialize_embedding_modules(
         setattr(parent, attrs[-1], new_module)
 
     return model
+
+
+def register_custom_op(
+    module: nn.Module, dims: List[int]
+) -> Callable[[List[Optional[torch.Tensor]], int], List[torch.Tensor]]:
+    """
+    Register a customized operator.
+
+    Args:
+        module: customized module instance
+        dims: output dimensions
+    """
+
+    global operator_registry_state
+
+    op_name = f"{type(module).__name__}_{hash(module)}"
+    with operator_registry_state.op_registry_lock:
+        if op_name in operator_registry_state.op_registry_schema:
+            return getattr(torch.ops.custom, op_name)
+
+    def pea_op(
+        values: List[Optional[torch.Tensor]],
+        batch_size: int,
+    ) -> List[torch.Tensor]:
+        device = None
+        for v in values:
+            if v is not None:
+                device = v.device
+                break
+        else:
+            raise AssertionError(
+                f"Custom op {type(module).__name__} expects at least one "
+                "input tensor"
+            )
+
+        return [
+            torch.empty(
+                batch_size,
+                dim,
+                device=device,
+            )
+            for dim in dims
+        ]
+
+    schema_string = f"{op_name}(Tensor?[] values, int batch_size) -> Tensor[]"
+    with operator_registry_state.op_registry_lock:
+        if op_name in operator_registry_state.op_registry_schema:
+            return getattr(torch.ops.custom, op_name)
+        operator_registry_state.op_registry_schema[op_name] = schema_string
+        # Register schema
+        lib.define(schema_string)
+
+        # Register implementation
+        lib.impl(op_name, pea_op, "CPU")
+        lib.impl(op_name, pea_op, "CUDA")
+
+        # Register meta formula
+        lib.impl(op_name, pea_op, "Meta")
+
+    return getattr(torch.ops.custom, op_name)

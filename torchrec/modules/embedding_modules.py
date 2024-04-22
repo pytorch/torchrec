@@ -8,12 +8,11 @@
 # pyre-strict
 
 import abc
-import threading
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from torch.library import Library
+from torchrec.ir.utils import register_custom_op
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -27,96 +26,24 @@ from torchrec.sparse.jagged_tensor import (
     KeyedTensor,
 )
 
-lib = Library("custom", "FRAGMENT")
-
-
-class OpRegistryState:
-    """
-    State of operator registry.
-
-    We can only register the op schema once. So if we're registering multiple
-    times we need a lock and check if they're the same schema
-    """
-
-    op_registry_lock = threading.Lock()
-    # operator schema: op_name: schema
-    op_registry_schema: Dict[str, str] = {}
-
-
-operator_registry_state = OpRegistryState()
-
-
-def register_ebc_op(
-    ebc: "EmbeddingBagCollectionInterface",
-) -> str:
-    """
-    Register EBC operator.
-
-    Args:
-        ebc (EmbeddingBagCollection): EBC instance.
-    """
-
-    global operator_registry_state
-
-    op_name = f"{type(ebc).__name__}_{hash(ebc)}"
-    with operator_registry_state.op_registry_lock:
-        if op_name in operator_registry_state.op_registry_schema:
-            return op_name
-
-    dim: int = sum(ebc._lengths_per_embedding)
-
-    def ebc_op(
-        values: List[Optional[torch.Tensor]],
-        batch_size: int,
-    ) -> torch.Tensor:
-        device = None
-        for v in values:
-            if v is not None:
-                device = v.device
-                break
-        else:
-            raise AssertionError(
-                "PooledEmbeddingArch op expects at least one of "
-                "id_list_features or id_score_list_features"
-            )
-        return torch.empty(batch_size, dim, device=device)
-
-    schema_string = f"{op_name}(Tensor?[] values, int batch_size) -> Tensor"
-
-    with operator_registry_state.op_registry_lock:
-        if op_name in operator_registry_state.op_registry_schema:
-            return op_name
-        operator_registry_state.op_registry_schema[op_name] = schema_string
-        # Register schema
-        lib.define(schema_string)
-
-        # Register implementation
-        lib.impl(op_name, ebc_op, "CPU")
-        lib.impl(op_name, ebc_op, "CUDA")
-
-        # Register meta formula
-        lib.impl(op_name, ebc_op, "Meta")
-
-    return op_name
-
 
 def _forward_meta(
     ebc: "EmbeddingBagCollectionInterface",
     features: KeyedJaggedTensor,
 ) -> KeyedTensor:
-    ebc_op_name: str = register_ebc_op(ebc)
     batch_size = features.stride()
-
     arg_list = [
         features.values(),
         features.weights_or_none(),
         features.lengths_or_none(),
         features.offsets_or_none(),
     ]
-    outputs = getattr(torch.ops.custom, ebc_op_name)(arg_list, batch_size)
+    dims = [sum(ebc._lengths_per_embedding)]
+    ebc_op = register_custom_op(ebc, dims)
+    outputs = ebc_op(arg_list, batch_size)
     return KeyedTensor(
         keys=ebc._embedding_names,
-        values=outputs,
+        values=outputs[0],
         length_per_key=ebc._lengths_per_embedding,
     )
 
