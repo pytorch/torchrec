@@ -8,10 +8,12 @@
 # pyre-strict
 
 import abc
+import threading
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torch.library import Library
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -19,6 +21,24 @@ from torchrec.modules.embedding_configs import (
     pooling_type_to_str,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+
+lib = Library("custom", "FRAGMENT")
+
+
+class OpRegistryState:
+    """
+    State of operator registry.
+
+    We can only register the op schema once. So if we're registering multiple
+    times we need a lock and check if they're the same schema
+    """
+
+    op_registry_lock = threading.Lock()
+    # operator schema: op_name: schema
+    op_registry_schema: Dict[str, str] = {}
+
+
+operator_registry_state = OpRegistryState()
 
 
 @torch.fx.wrap
