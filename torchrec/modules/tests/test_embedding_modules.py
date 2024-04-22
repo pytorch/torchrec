@@ -128,6 +128,38 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings.keys(), ["f1", "f3", "f2"])
         self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3, 6, 10])
 
+    def test_forward_with_meta_device(self) -> None:
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+        ebc = EmbeddingBagCollection(
+            tables=[eb1_config, eb2_config],
+            is_weighted=True,
+            device=torch.device("meta"),
+        )
+
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f3", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9, 1, 3, 4, 7], device="meta"),
+            offsets=torch.tensor([0, 2, 4, 6, 8, 10, 12], device="meta"),
+            weights=torch.tensor(
+                [0.1, 0.2, 0.4, 0.5, 0.4, 0.3, 0.2, 0.9, 0.1, 0.3, 0.4, 0.7],
+                device="meta",
+            ),
+        )
+
+        pooled_embeddings = ebc(features)
+        self.assertEqual(pooled_embeddings.values().size(), (2, 10))
+        self.assertEqual(pooled_embeddings.keys(), ["f1", "f3", "f2"])
+        self.assertEqual(pooled_embeddings.offset_per_key(), [0, 3, 6, 10])
+        self.assertEqual(pooled_embeddings.values().device, torch.device("meta"))
+
     def test_fx(self) -> None:
         eb1_config = EmbeddingBagConfig(
             name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1", "f3"]
@@ -194,6 +226,75 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ebc = EmbeddingBagCollection(tables=[config])
         self.assertEqual(torch.device("cpu"), ebc.embedding_bags["t1"].weight.device)
         self.assertEqual(torch.device("cpu"), ebc.device)
+
+    def test_exporting(self) -> None:
+        class MyModule(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                eb1_config = EmbeddingBagConfig(
+                    name="t1",
+                    embedding_dim=3,
+                    num_embeddings=10,
+                    feature_names=["f1", "f3"],
+                )
+                eb2_config = EmbeddingBagConfig(
+                    name="t2",
+                    embedding_dim=4,
+                    num_embeddings=10,
+                    feature_names=["f2"],
+                )
+                eb3_config = EmbeddingBagConfig(
+                    name="t3",
+                    embedding_dim=3,
+                    num_embeddings=10,
+                    feature_names=["f1", "f2"],
+                )
+                eb4_config = EmbeddingBagConfig(
+                    name="t4",
+                    embedding_dim=5,
+                    num_embeddings=10,
+                    feature_names=["f3"],
+                )
+                self.ebc1 = EmbeddingBagCollection(
+                    tables=[eb1_config, eb2_config], is_weighted=True
+                )
+                self.ebc2 = EmbeddingBagCollection(
+                    tables=[eb3_config, eb4_config], is_weighted=True
+                )
+
+            def forward(
+                self,
+                features: KeyedJaggedTensor,
+            ) -> torch.Tensor:
+                embeddings1 = self.ebc1(features)
+                embeddings2 = self.ebc2(features)
+                return torch.concat([embeddings1.values(), embeddings2.values()], dim=1)
+
+        features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f3", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9, 1, 3, 4, 7]),
+            offsets=torch.tensor([0, 2, 4, 6, 8, 10, 12]),
+            weights=torch.tensor(
+                [0.1, 0.2, 0.4, 0.5, 0.4, 0.3, 0.2, 0.9, 0.1, 0.3, 0.4, 0.7]
+            ),
+        )
+
+        m = MyModule()
+        ep = torch.export.export(
+            m,
+            (features,),
+            {},
+            strict=False,
+        )
+        self.assertEqual(
+            sum(n.name.startswith("_embedding_bag") for n in ep.graph.nodes),
+            0,
+        )
+        self.assertEqual(
+            sum(n.name.startswith("embedding_bag_collection") for n in ep.graph.nodes),
+            2,
+            "Shoulde be exact 2 EmbeddingBagCollection nodes in the exported graph",
+        )
 
 
 class EmbeddingCollectionTest(unittest.TestCase):
