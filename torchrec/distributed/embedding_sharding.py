@@ -12,6 +12,7 @@ import copy
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import filterfalse
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -242,6 +243,20 @@ def _get_compute_kernel_type(
     return compute_kernel_type
 
 
+def _use_hbm_as_cache(
+    table: ShardedEmbeddingTable,
+) -> bool:
+    """
+    Return if this embedding use hbm as cache. In this case we might want to use
+    bucketizer to group by dimension for memory efficiency.
+    """
+
+    return table.compute_kernel in [
+        EmbeddingComputeKernel.FUSED_UVM_CACHING,
+        EmbeddingComputeKernel.QUANT_UVM_CACHING,
+    ]
+
+
 # group tables by `DataType`, `PoolingType`, and `EmbeddingComputeKernel`.
 def group_tables(
     tables_per_rank: List[List[ShardedEmbeddingTable]],
@@ -262,12 +277,14 @@ def group_tables(
     ) -> List[GroupedEmbeddingConfig]:
         grouped_embedding_configs: List[GroupedEmbeddingConfig] = []
 
-        emb_dim_bucketer_policy = (
-            EmbDimBucketerPolicy.ALL_BUCKETS
-            if should_do_dim_bucketing(embedding_tables)
-            else EmbDimBucketerPolicy.SINGLE_BUCKET
+        cached_dim_bucketer = EmbDimBucketer(
+            list(filter(_use_hbm_as_cache, embedding_tables)),
+            EmbDimBucketerPolicy.ALL_BUCKETS,
         )
-        emb_dim_bucketer = EmbDimBucketer(embedding_tables, emb_dim_bucketer_policy)
+        noncached_dim_bucketer = EmbDimBucketer(
+            list(filterfalse(_use_hbm_as_cache, embedding_tables)),
+            EmbDimBucketerPolicy.SINGLE_BUCKET,
+        )
 
         # all embedding tables have the same weight status
         is_weighted = (
@@ -279,13 +296,19 @@ def group_tables(
         grouping_keys = []
         for table in embedding_tables:
             group_fused_params = _get_grouping_fused_params(table.fused_params) or {}
+            bucketer = (
+                cached_dim_bucketer
+                if _use_hbm_as_cache(table)
+                else noncached_dim_bucketer
+            )
             grouping_key = (
                 table.data_type,
                 table.pooling,
                 table.has_feature_processor,
                 tuple(sorted(group_fused_params.items())),
                 _get_compute_kernel_type(table.compute_kernel),
-                emb_dim_bucketer.get_bucket(table.local_cols, table.data_type),
+                bucketer.get_bucket(table.local_cols, table.data_type),
+                _use_hbm_as_cache(table),
             )
             # micromanage the order of we traverse the groups to ensure backwards compatibility
             if grouping_key not in groups:
@@ -299,6 +322,7 @@ def group_tables(
                 has_feature_processor,
                 fused_params_tuple,
                 compute_kernel_type,
+                _,
                 _,
             ) = grouping_key
             grouped_tables = groups[grouping_key]
