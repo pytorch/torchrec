@@ -32,6 +32,8 @@ from typing import (
     Union,
 )
 
+import numpy as np
+
 import torch
 from torch import multiprocessing as mp
 from torch.autograd.profiler import record_function
@@ -102,9 +104,15 @@ class CompileMode(Enum):
 class BenchmarkResult:
     "Class for holding results of benchmark runs"
     short_name: str
-    elapsed_time: torch.Tensor
-    max_mem_allocated: List[int]
+    elapsed_time: torch.Tensor  # milliseconds
+    max_mem_allocated: List[int]  # megabytes
     rank: int = -1
+
+    def runtime_percentile(self, percentile: int = 50) -> torch.Tensor:
+        return np.percentile(self.elapsed_time, percentile)
+
+    def max_mem_percentile(self, percentile: int = 50) -> torch.Tensor:
+        return np.percentile(self.max_mem_allocated, percentile)
 
 
 class ECWrapper(torch.nn.Module):
@@ -482,9 +490,11 @@ def benchmark(
     func_to_benchmark: Any,
     benchmark_func_kwargs: Optional[Dict[str, Any]],
     rank: int,
+    enable_logging: bool = True,
 ) -> BenchmarkResult:
     max_mem_allocated: List[int] = []
-    logger.info(f" BENCHMARK_MODEL[{name}]:\n{model}")
+    if enable_logging:
+        logger.info(f" BENCHMARK_MODEL[{name}]:\n{model}")
 
     for _input in warmup_inputs:
         model(_input)
