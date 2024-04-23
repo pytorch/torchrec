@@ -38,7 +38,7 @@ class MultiProcessContext:
         self.backend = backend
         self.local_size = local_size
 
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and world_size <= torch.cuda.device_count():
             self.device: torch.device = torch.device(f"cuda:{rank}")
             torch.cuda.set_device(self.device)
 
