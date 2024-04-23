@@ -28,6 +28,7 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
     bucketize_kjt_before_all2all,
+    bucketize_kjt_inference,
     EmbeddingSharding,
     EmbeddingShardingContext,
     EmbeddingShardingInfo,
@@ -683,6 +684,8 @@ class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
         self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
+        self.bucket_mapping_tensor: Optional[torch.Tensor] = None
+        self.bucketized_length_tensor: Optional[torch.Tensor] = None
         self._embedding_shard_metadata = emb_sharding
 
     def forward(
@@ -700,7 +703,8 @@ class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         (
             bucketized_features,
             self.unbucketize_permute_tensor,
-        ) = bucketize_kjt_before_all2all(
+            bucket_mapping_tensor_opt,
+        ) = bucketize_kjt_inference(
             sparse_features,
             num_buckets=self._world_size,
             block_sizes=block_sizes,
@@ -711,6 +715,12 @@ class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
                 else self._need_pos
             ),
             block_bucketize_row_pos=block_bucketize_row_pos,
+            return_bucket_mapping=self._is_sequence,
+        )
+        self.bucket_mapping_tensor = bucket_mapping_tensor_opt
+        # 2d requried
+        self.bucketized_length_tensor = bucketized_features.lengths().view(
+            self._world_size * self._num_features, -1
         )
         # KJTOneToAll
         kjt = bucketized_features
