@@ -96,6 +96,8 @@ class InferSequenceShardingContext(Multistreamable):
     features: KJTList
     features_before_input_dist: Optional[KeyedJaggedTensor] = None
     unbucketize_permute_tensor: Optional[torch.Tensor] = None
+    bucket_mapping_tensor: Optional[torch.Tensor] = None
+    bucketized_length: Optional[torch.Tensor] = None
 
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features:
@@ -104,3 +106,7 @@ class InferSequenceShardingContext(Multistreamable):
             self.features_before_input_dist.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
             self.unbucketize_permute_tensor.record_stream(stream)
+        if self.bucket_mapping_tensor is not None:
+            self.bucket_mapping_tensor.record_stream(stream)
+        if self.bucketized_length is not None:
+            self.bucketized_length.record_stream(stream)
