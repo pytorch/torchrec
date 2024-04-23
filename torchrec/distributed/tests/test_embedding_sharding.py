@@ -23,6 +23,7 @@ from torchrec.distributed.embedding_sharding import (
     _get_compute_kernel_type,
     _get_grouping_fused_params,
     _get_weighted_avg_cache_load_factor,
+    _prefetch_and_cached,
     group_tables,
 )
 
@@ -394,18 +395,24 @@ class TestGroupTablesPerRank(unittest.TestCase):
         if distinct_key == "compute_kernel" and _get_compute_kernel_type(
             compute_kernels[0]
         ) == _get_compute_kernel_type(compute_kernels[1]):
-            self.assertEqual(
-                _get_table_names_by_groups(tables),
-                [["table_0", "table_1"]],
-            )
+            # Typically, a table with same group of kernel (e.g. FUSED vs FUSED_UVM)
+            # would be grouped together. But if one of them are related to CACHE,
+            # we'll group them separately because we don't want to add the burden of
+            # prefetch()
+            if _prefetch_and_cached(tables[0]) != _prefetch_and_cached(tables[1]):
+                self.assertEqual(
+                    sorted(_get_table_names_by_groups(tables)),
+                    [["table_0"], ["table_1"]],
+                )
+            else:
+                self.assertEqual(
+                    _get_table_names_by_groups(tables),
+                    [["table_0", "table_1"]],
+                )
             return
 
-        # emb dim bucketizier only in use when computer kernel is uvm caching
-        # and prefetch pipeline is True
-        if (
-            distinct_key == "local_dim"
-            and compute_kernels[0] != EmbeddingComputeKernel.FUSED_UVM_CACHING
-        ):
+        # emb dim bucketizier only in use when computer kernel is caching
+        if distinct_key == "local_dim" and _prefetch_and_cached(tables[0]):
             self.assertEqual(
                 _get_table_names_by_groups(tables),
                 [["table_0", "table_1"]],
