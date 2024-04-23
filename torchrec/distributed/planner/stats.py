@@ -7,9 +7,12 @@
 
 # pyre-strict
 
+import copy
 import logging
+import math
+import statistics
 from collections import defaultdict
-from typing import Any, cast, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, cast, Dict, Iterable, List, Optional, Tuple, Union
 
 from torch import nn
 
@@ -218,8 +221,8 @@ class EmbeddingStats(Stats):
                 if sharding_type not in stats[rank]["type"]:
                     stats[rank]["type"][sharding_type] = 0
 
-            rank_hbm = f"{round(used_hbm_gb, 1)} ({used_hbm_ratio:.0%})"
-            rank_ddr = f"{round(used_ddr_gb, 1)} ({used_ddr_ratio:.0%})"
+            rank_hbm = f"{round(used_hbm_gb, 3)} ({used_hbm_ratio:.0%})"
+            rank_ddr = f"{round(used_ddr_gb, 3)} ({used_ddr_ratio:.0%})"
             rank_perf = _format_perf_breakdown(perf[rank])
             rank_input = f"{round(stats[rank]['input_sizes'], 2)}"
             rank_output = f"{round(stats[rank]['output_sizes'], 2)}"
@@ -519,14 +522,60 @@ class EmbeddingStats(Stats):
         )
         self._stats_table.append(f"# {sum_of_maxima_text : <{self._width-3}}#")
 
-        max_hbm = max(used_hbm)
-        max_hbm_indices = [i for i in range(len(used_hbm)) if used_hbm[i] == max_hbm]
-        rank_text = "ranks" if len(max_hbm_indices) > 1 else "rank"
-        max_hbm_indices = _collapse_consecutive_ranks(max_hbm_indices)
-        max_hbm_ranks = f"{rank_text} {','.join(max_hbm_indices)}"
-        peak_memory_pressure = f"Peak Memory Pressure: {round(bytes_to_gb(max_hbm), 3)} GB on {max_hbm_ranks}"
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-        self._stats_table.append(f"# {peak_memory_pressure : <{self._width-3}}#")
+        self._stats_table.append(
+            f"# {'Estimated Sharding Distribution' : <{self._width-2}}#"
+        )
+        self._stats_table.append(
+            f"# {'Max HBM: '+_generate_rank_hbm_stats(used_hbm, max) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'Min HBM: '+_generate_rank_hbm_stats(used_hbm, min) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'Mean HBM: '+_generate_rank_hbm_stats(used_hbm, statistics.mean) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'Low Median HBM: '+_generate_rank_hbm_stats(used_hbm, statistics.median_low) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'High Median HBM: '+_generate_rank_hbm_stats(used_hbm, statistics.median_high) : <{self._width-3}}#"
+        )
+
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        per_rank_hbm = copy.copy(used_hbm)
+        NUM_PEAK_RANK = 5
+        peak_memory_pressure = []
+
+        top_hbm_usage_estimation = f"Top HBM Memory Usage Estimation: {round(bytes_to_gb(max(used_hbm)), 3)} GB"
+        self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+        self._stats_table.append(f"# {top_hbm_usage_estimation : <{self._width-3}}#")
+
+        for top in range(NUM_PEAK_RANK):
+            if not per_rank_hbm:
+                break
+            max_hbm = max(per_rank_hbm)
+            max_hbm_indices = [
+                i
+                for i in range(len(per_rank_hbm))
+                if math.isclose(
+                    bytes_to_mb(per_rank_hbm[i]), bytes_to_mb(max_hbm), abs_tol=1.0
+                )
+            ]
+            rank_text = "ranks" if len(max_hbm_indices) > 1 else "rank"
+            max_hbm_indices = _collapse_consecutive_ranks(max_hbm_indices)
+            max_hbm_ranks = f"{rank_text} {','.join(max_hbm_indices)}"
+            peak_memory_pressure.append(
+                f"Top Tier #{top+1} Estimated Peak HBM Pressure: {round(bytes_to_gb(max_hbm), 3)} GB on {max_hbm_ranks}"
+            )
+            per_rank_hbm = [
+                hbm
+                for hbm in per_rank_hbm
+                if not math.isclose(bytes_to_mb(hbm), bytes_to_mb(max_hbm), abs_tol=1.0)
+            ]
+
+        for peak_rank in reversed(peak_memory_pressure):
+            self._stats_table.append(f"# {peak_rank : <{self._width-3}}#")
 
     def _log_storage_reservation_stats(
         self,
@@ -540,13 +589,21 @@ class EmbeddingStats(Stats):
         usable_hbm = round(
             bytes_to_gb(int((1 - reserved_hbm_percent) * device_storage.hbm)), 3
         )
+        reserved_hbm = round(
+            bytes_to_gb(int(reserved_hbm_percent * device_storage.hbm)), 3
+        )
+        reserved_memory = f"HBM: {reserved_hbm} GB"
+        reserved_hbm_percentage = f"Percent of Total HBM: {reserved_hbm_percent:.0%}"
         usable_ddr = round(bytes_to_gb(int(device_storage.ddr)), 3)
         usable_memory = f"HBM: {usable_hbm} GB, DDR: {usable_ddr} GB"
         usable_hbm_percentage = (
             f"Percent of Total HBM: {(1 - reserved_hbm_percent):.0%}"
         )
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-        self._stats_table.append(f"# {'Usable Memory:' : <{self._width-3}}#")
+        self._stats_table.append(f"# {'Reserved Memory:' : <{self._width-3}}#")
+        self._stats_table.append(f"#    {reserved_memory : <{self._width-6}}#")
+        self._stats_table.append(f"#    {reserved_hbm_percentage : <{self._width-6}}#")
+        self._stats_table.append(f"# {'Planning Memory:' : <{self._width-3}}#")
         self._stats_table.append(f"#    {usable_memory : <{self._width-6}}#")
         self._stats_table.append(f"#    {usable_hbm_percentage : <{self._width-6}}#")
 
@@ -582,7 +639,15 @@ class EmbeddingStats(Stats):
             f"# {'Top 5 Tables Causing Max HBM:' : <{self._width-3}}#"
         )
         for sharding_option in hbm_imbalance_tables[0:5]:
-            self._stats_table.append(f"#    {sharding_option.name : <{self._width-6}}#")
+            storage = sharding_option.shards[0].storage
+            assert storage is not None  # linter friendly optional check
+
+            rank_text = "ranks" if len(sharding_option.shards) > 1 else "rank"
+            top_table = (
+                f"{sharding_option.name}: {round(bytes_to_gb(storage.hbm),3)} GB on {rank_text} "
+                f"{[shard.rank for shard in sharding_option.shards]}"
+            )
+            self._stats_table.append(f"#    {top_table : <{self._width-6}}#")
 
     def _log_compute_kernel_stats(
         self, compute_kernels_to_count: Dict[str, int]
@@ -595,6 +660,19 @@ class EmbeddingStats(Stats):
         self._stats_table.append(f"# {'Compute Kernels:' : <{self._width-3}}#")
         for compute_kernel_count in compute_kernels_count:
             self._stats_table.append(f"#    {compute_kernel_count : <{self._width-6}}#")
+
+
+def _generate_rank_hbm_stats(
+    per_rank_hbm: List[int], func: Callable[[Iterable[float]], float]
+) -> str:
+    stats = round(func(per_rank_hbm))
+    stats_indicies = [
+        i
+        for i in range(len(per_rank_hbm))
+        if math.isclose(bytes_to_mb(per_rank_hbm[i]), bytes_to_mb(stats), abs_tol=1.0)
+    ]
+    rank_text = "ranks" if len(stats_indicies) > 1 else "rank"
+    return f"{round(bytes_to_gb(stats), 3)} GB on {rank_text} {stats_indicies}"
 
 
 def _generate_max_text(perfs: List[float]) -> str:

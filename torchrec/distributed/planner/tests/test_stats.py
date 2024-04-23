@@ -15,7 +15,7 @@ from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
-from torchrec.distributed.planner.stats import NoopEmbeddingStats
+from torchrec.distributed.planner.stats import EmbeddingStats, NoopEmbeddingStats
 from torchrec.distributed.planner.types import Topology
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingType
@@ -53,7 +53,9 @@ class TestEmbeddingStats(unittest.TestCase):
         planner = EmbeddingShardingPlanner(topology=self.topology)
         _ = planner.plan(module=self.model, sharders=[TWvsRWSharder()])
         self.assertEqual(len(planner._stats), 1)
-        stats: List[str] = planner._stats[0]._stats_table  # pyre-ignore[16]
+        stats_data = planner._stats[0]
+        assert isinstance(stats_data, EmbeddingStats)
+        stats: List[str] = stats_data._stats_table
         self.assertTrue(isinstance(stats, list))
         self.assertTrue(stats[0].startswith("####"))
 
@@ -68,3 +70,19 @@ class TestEmbeddingStats(unittest.TestCase):
         )
         _ = planner.plan(module=self.model, sharders=[TWvsRWSharder()])
         self.assertEqual(len(planner._stats), 1)
+
+    def test_embedding_stats_output_with_top_hbm_usage(self) -> None:
+        planner = EmbeddingShardingPlanner(topology=self.topology)
+        _ = planner.plan(module=self.model, sharders=[TWvsRWSharder()])
+        self.assertEqual(len(planner._stats), 1)
+        stats_data = planner._stats[0]
+        assert isinstance(stats_data, EmbeddingStats)
+        stats: List[str] = stats_data._stats_table
+        self.assertTrue(isinstance(stats, list))
+        top_hbm_usage_keyword = "Top HBM Memory Usage Estimation:"
+        self.assertTrue(any(top_hbm_usage_keyword in row for row in stats))
+        top_hbm_mem_usage = None
+        for row in stats:
+            if top_hbm_usage_keyword in row:
+                top_hbm_mem_usage = float(row.split(" ")[6])
+        self.assertIsNotNone(top_hbm_mem_usage)
