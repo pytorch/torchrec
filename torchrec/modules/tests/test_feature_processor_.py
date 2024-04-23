@@ -61,6 +61,7 @@ class PositionWeightedModuleTest(unittest.TestCase):
             weighted_features.lengths(), weighted_features_gm_script.lengths()
         )
 
+    # TODO: this test is not being run
     # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
@@ -132,6 +133,7 @@ class PositionWeightedCollectionModuleTest(unittest.TestCase):
             empty_fp_kjt.length_per_key(), empty_fp_kjt_gm_script.length_per_key()
         )
 
+    # TODO: this test is not being run
     # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
@@ -151,6 +153,11 @@ class PositionWeightedCollectionModuleTest(unittest.TestCase):
             self.assertTrue(pwmc.position_weights_dict[key] is param)
             torch.testing.assert_close(param, torch.ones_like(param))
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 0,
+        "Not enough GPUs available",
+    )
     def test_copy(self) -> None:
         pwmc = PositionWeightedModuleCollection(
             max_feature_lengths={"f1": 10, "f2": 10},

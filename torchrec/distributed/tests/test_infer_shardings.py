@@ -1877,6 +1877,11 @@ class InferShardingsTest(unittest.TestCase):
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
     def test_sharded_quant_fp_ebc_tw_meta(self) -> None:
         # Simulate inference, take unsharded cpu model and shard on meta
         # Use PositionWeightedModuleCollection, FP used in production
