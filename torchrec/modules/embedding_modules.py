@@ -12,13 +12,40 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torchrec.ir.utils import register_custom_op
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
     EmbeddingConfig,
     pooling_type_to_str,
 )
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import (
+    is_non_strict_exporting,
+    JaggedTensor,
+    KeyedJaggedTensor,
+    KeyedTensor,
+)
+
+
+def _forward_meta(
+    ebc: "EmbeddingBagCollectionInterface",
+    features: KeyedJaggedTensor,
+) -> KeyedTensor:
+    batch_size = features.stride()
+    arg_list = [
+        features.values(),
+        features.weights_or_none(),
+        features.lengths_or_none(),
+        features.offsets_or_none(),
+    ]
+    dims = [sum(ebc._lengths_per_embedding)]
+    ebc_op = register_custom_op(ebc, dims)
+    outputs = ebc_op(arg_list, batch_size)
+    return KeyedTensor(
+        keys=ebc._embedding_names,
+        values=outputs[0],
+        length_per_key=ebc._lengths_per_embedding,
+    )
 
 
 @torch.fx.wrap
@@ -212,6 +239,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         Returns:
             KeyedTensor
         """
+        if is_non_strict_exporting() and not torch.jit.is_scripting():
+            return _forward_meta(self, features)
         flat_feature_names: List[str] = []
         for names in self._feature_names:
             flat_feature_names.extend(names)
