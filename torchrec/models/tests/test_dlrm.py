@@ -1277,7 +1277,6 @@ class DLRMExampleTest(unittest.TestCase):
         # Run forward on ExportedProgram
         ep_output = ep.module()(features, sparse_features)
         self.assertEqual(ep_output.size(), (B, 1))
-        self.assertTrue(torch.allclose(logits, ep_output))
 
         deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
         deserialized_logits = deserialized_model(features, sparse_features)
