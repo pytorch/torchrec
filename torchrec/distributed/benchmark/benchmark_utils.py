@@ -102,9 +102,18 @@ class CompileMode(Enum):
 class BenchmarkResult:
     "Class for holding results of benchmark runs"
     short_name: str
-    elapsed_time: torch.Tensor
-    max_mem_allocated: List[int]
+    elapsed_time: torch.Tensor  # milliseconds
+    max_mem_allocated: List[int]  # megabytes
     rank: int = -1
+
+    def runtime_percentile(self, percentile: int = 50) -> torch.Tensor:
+        return torch.quantile(
+            self.elapsed_time, percentile / 100.0, interpolation="nearest"
+        )
+
+    def max_mem_percentile(self, percentile: int = 50) -> torch.Tensor:
+        max_mem = torch.tensor(self.max_mem_allocated, dtype=torch.float)
+        return torch.quantile(max_mem, percentile / 100.0, interpolation="nearest")
 
 
 class ECWrapper(torch.nn.Module):
@@ -482,9 +491,11 @@ def benchmark(
     func_to_benchmark: Any,
     benchmark_func_kwargs: Optional[Dict[str, Any]],
     rank: int,
+    enable_logging: bool = True,
 ) -> BenchmarkResult:
     max_mem_allocated: List[int] = []
-    logger.info(f" BENCHMARK_MODEL[{name}]:\n{model}")
+    if enable_logging:
+        logger.info(f" BENCHMARK_MODEL[{name}]:\n{model}")
 
     for _input in warmup_inputs:
         model(_input)

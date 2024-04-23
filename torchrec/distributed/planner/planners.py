@@ -453,9 +453,7 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
             }
         self._topology_groups: Dict[str, Topology] = topology_groups
         self._batch_size: int = batch_size if batch_size else BATCH_SIZE
-        self._constraints: Dict[str, ParameterConstraints] = (
-            constraints if constraints else {}
-        )
+        self._constraints = constraints
         # pyre-ignore
         self._enumerators: Dict[str, Enumerator] = (
             enumerators
@@ -586,27 +584,17 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                 sharders=sharders,
             )
 
-            # If no device_group is assigned in the constraints, use the current device group
-            # TODO: Create a util function to assign device_group according to empirical rules to cuda or cpu
-            for sharding_option in search_space:
-                if sharding_option.name not in self._constraints:
-                    self._constraints[sharding_option.name] = ParameterConstraints(
-                        device_group=group
-                    )
-                elif not self._constraints[sharding_option.name].device_group:
-                    self._constraints[sharding_option.name].device_group = group
-
             # filter by device group
             search_space = [
-                sharding_option
-                for sharding_option in search_space
-                if self._constraints[sharding_option.name].device_group == group
+                s_o
+                for s_o in search_space
+                # pyre-ignore [16]
+                if self._constraints[s_o.name].device_group == group
             ]
 
             if not search_space:
                 # No shardable parameters
-                best_plans.append(ShardingPlan({}))
-                continue
+                return ShardingPlan({})
 
             proposal_cache: Dict[
                 Tuple[int, ...],

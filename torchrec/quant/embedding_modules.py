@@ -93,6 +93,12 @@ def _get_feature_length(feature: KeyedJaggedTensor) -> Tensor:
     return feature.lengths()
 
 
+@torch.fx.wrap
+def _get_kjt_keys(feature: KeyedJaggedTensor) -> List[str]:
+    # this is a fx rule to help with batching hinting jagged sequence tensor coalescing.
+    return feature.keys()
+
+
 def for_each_module_of_type_do(
     module: nn.Module,
     module_types: List[Type[torch.nn.Module]],
@@ -320,6 +326,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._key_to_tables: Dict[
             Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
         ] = defaultdict(list)
+        self._feature_names: List[str] = []
+        self._feature_splits: List[int] = []
         self._length_per_key: List[int] = []
         # Registering in a List instead of ModuleList because we want don't want them to be auto-registered.
         # Their states will be modified via self.embedding_bags
@@ -389,6 +397,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             if weight_lists is None:
                 emb_module.initialize_weights()
             self._emb_modules.append(emb_module)
+            for table in emb_configs:
+                self._feature_names.extend(table.feature_names)
+            self._feature_splits.append(
+                sum(table.num_features() for table in emb_configs)
+            )
 
         ordered_tables = list(itertools.chain(*self._key_to_tables.values()))
         self._embedding_names: List[str] = list(
@@ -462,47 +475,31 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             KeyedTensor
         """
 
-        feature_dict = self._kjt_to_jt_dict(features)
         embeddings = []
+        kjt_keys = _get_kjt_keys(features)
+        kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
+        kjt_permute = features.permute(kjt_permute_order)
+        kjts_per_key = kjt_permute.split(self._feature_splits)
 
-        # TODO ideally we can accept KJTs with any feature order. However, this will require an order check + permute, which will break torch.script.
-        # Once torchsccript is no longer a requirement, we should revisit this.
-
-        for emb_op, (_key, tables) in zip(
-            self._emb_modules, self._key_to_tables.items()
+        for i, (emb_op, _) in enumerate(
+            zip(self._emb_modules, self._key_to_tables.keys())
         ):
-            indices = []
-            lengths = []
-            offsets = []
-            weights = []
-
-            for table in tables:
-                for feature in table.feature_names:
-                    f = feature_dict[feature]
-                    indices.append(f.values())
-                    lengths.append(f.lengths())
-                    if self._is_weighted:
-                        weights.append(f.weights())
-
-            indices = torch.cat(indices)
-            lengths = torch.cat(lengths)
-
-            offsets = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
-            if self._is_weighted:
-                weights = torch.cat(weights)
+            f = kjts_per_key[i]
+            indices = f.values()
+            offsets = f.offsets()
 
             embeddings.append(
                 # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
                 emb_op(
                     indices=indices,
                     offsets=offsets,
-                    per_sample_weights=weights if self._is_weighted else None,
+                    per_sample_weights=f.weights() if self._is_weighted else None,
                 )
                 if self.register_tbes
                 else emb_op.forward(
                     indices=indices,
                     offsets=offsets,
-                    per_sample_weights=weights if self._is_weighted else None,
+                    per_sample_weights=f.weights() if self._is_weighted else None,
                 )
             )
 

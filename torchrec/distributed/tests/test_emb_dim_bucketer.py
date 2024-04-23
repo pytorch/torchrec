@@ -15,7 +15,6 @@ from typing import List, Tuple
 from torchrec.distributed.embedding_dim_bucketer import (
     EmbDimBucketer,
     EmbDimBucketerPolicy,
-    should_do_dim_bucketing,
 )
 
 from torchrec.distributed.embedding_types import (
@@ -101,7 +100,3 @@ class TestEmbDimBucketer(unittest.TestCase):
 
         for i in range(emb_dim_bucketer.bucket_count()):
             self.assertTrue(i in emb_dim_bucketer.emb_dim_buckets.values())
-
-    def test_should_do_dim_bucketing(self) -> None:
-        embedding_tables, _ = self.gen_tables()
-        self.assertFalse(should_do_dim_bucketing(embedding_tables))
