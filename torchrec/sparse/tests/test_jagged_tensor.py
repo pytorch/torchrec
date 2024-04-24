@@ -9,13 +9,14 @@
 
 
 import unittest
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 import torch.utils._pytree as pytree
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
+    _regroup_keyed_tensors,
     ComputeJTDictToKJT,
     ComputeKJTToJTDict,
     JaggedTensor,
@@ -24,6 +25,7 @@ from torchrec.sparse.jagged_tensor import (
     KeyedTensor,
     kjt_is_equal,
 )
+from torchrec.sparse.tests.utils import build_groups, build_kts
 
 torch.fx.wrap("len")
 
@@ -2170,10 +2172,10 @@ class TestKeyedTensor(unittest.TestCase):
 
     def test_regroup_multiple_kt(self) -> None:
         key_dim = 1
-        tensor_list_1 = [torch.randn(2, 3) for i in range(3)]
+        tensor_list_1 = [torch.randn(2, 4), torch.randn(2, 8), torch.randn(2, 2)]
         keys_1 = ["dense_0", "dense_1", "dense_2"]
         kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
-        tensor_list_2 = [torch.randn(2, 3) for i in range(2)]
+        tensor_list_2 = [torch.randn(2, 3), torch.randn(2, 10)]
         keys_2 = ["sparse_0", "sparse_1"]
         kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
         grouped_tensors = KeyedTensor.regroup(
@@ -2194,11 +2196,117 @@ class TestKeyedTensor(unittest.TestCase):
             )
         )
 
+    def test_regroup_backward_skips_and_duplicates(self) -> None:
+        kts = build_kts(
+            dense_features=20,
+            sparse_features=20,
+            dim_dense=64,
+            dim_sparse=128,
+            batch_size=128,
+            device=torch.device("cpu"),
+            run_backward=True,
+        )
+        groups = build_groups(kts=kts, num_groups=2, skips=True, duplicates=True)
+        labels = torch.randint(0, 1, (128,), device=torch.device("cpu")).float()
+
+        tensor_groups = KeyedTensor.regroup(kts, groups)
+        pred0 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
+        loss = torch.nn.functional.l1_loss(pred0, labels).sum()
+        actual_kt_0_grad = torch.autograd.grad(
+            loss, kts[0].values(), retain_graph=True
+        )[0]
+        actual_kt_1_grad = torch.autograd.grad(
+            loss, kts[1].values(), retain_graph=True
+        )[0]
+
+        # clear grads are return
+        kts[0].values().grad = None
+        kts[1].values().grad = None
+
+        tensor_groups = _regroup_keyed_tensors(kts, groups)
+        pred1 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
+        loss = torch.nn.functional.l1_loss(pred1, labels).sum()
+        expected_kt_0_grad = torch.autograd.grad(
+            loss, kts[0].values(), retain_graph=True
+        )[0]
+        expected_kt_1_grad = torch.autograd.grad(
+            loss, kts[1].values(), retain_graph=True
+        )[0]
+
+        torch.allclose(actual_kt_0_grad, expected_kt_0_grad)
+        torch.allclose(actual_kt_1_grad, expected_kt_1_grad)
+
+    def test_regroup_backward(self) -> None:
+        kts = build_kts(
+            dense_features=20,
+            sparse_features=20,
+            dim_dense=64,
+            dim_sparse=128,
+            batch_size=128,
+            device=torch.device("cpu"),
+            run_backward=True,
+        )
+        groups = build_groups(kts=kts, num_groups=2, skips=False, duplicates=False)
+        labels = torch.randint(0, 1, (128,), device=torch.device("cpu")).float()
+
+        tensor_groups = KeyedTensor.regroup(kts, groups)
+        pred0 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
+        loss = torch.nn.functional.l1_loss(pred0, labels).sum()
+        actual_kt_0_grad = torch.autograd.grad(
+            loss, kts[0].values(), retain_graph=True
+        )[0]
+        actual_kt_1_grad = torch.autograd.grad(
+            loss, kts[1].values(), retain_graph=True
+        )[0]
+
+        # clear grads are return
+        kts[0].values().grad = None
+        kts[1].values().grad = None
+
+        tensor_groups = _regroup_keyed_tensors(kts, groups)
+        pred1 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
+        loss = torch.nn.functional.l1_loss(pred1, labels).sum()
+        expected_kt_0_grad = torch.autograd.grad(
+            loss, kts[0].values(), retain_graph=True
+        )[0]
+        expected_kt_1_grad = torch.autograd.grad(
+            loss, kts[1].values(), retain_graph=True
+        )[0]
+
+        torch.allclose(actual_kt_0_grad, expected_kt_0_grad)
+        torch.allclose(actual_kt_1_grad, expected_kt_1_grad)
+
+    def test_regroup_multiple_kt_duplicate_keys(self) -> None:
+        key_dim = 1
+        tensor_list_1 = [torch.randn(2, 4) for i in range(2)]
+        keys_1 = ["dense_0", "dense_1"]
+        kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
+        tensor_list_2 = [torch.randn(2, 3) for i in range(3)]
+        keys_2 = ["sparse_0", "sparse_1", "dense_2"]
+        kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
+        grouped_tensors = KeyedTensor.regroup(
+            [kt_1, kt_2], [["dense_0", "sparse_1"], ["dense_1", "sparse_0", "dense_0"]]
+        )
+        self.assertTrue(
+            torch.equal(
+                grouped_tensors[0],
+                torch.cat([tensor_list_1[0], tensor_list_2[1]], key_dim),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                grouped_tensors[1],
+                torch.cat(
+                    [tensor_list_1[1], tensor_list_2[0], tensor_list_1[0]], key_dim
+                ),
+            )
+        )
+
     def test_regroup_scriptable(self) -> None:
         class MyModule(torch.nn.Module):
-            def forward(
-                self, inputs: List[KeyedTensor], groups: List[List[str]]
-            ) -> List[torch.Tensor]:
+            def forward(self, inputs: List[KeyedTensor]) -> List[torch.Tensor]:
+                # user provided, not model input
+                groups = [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
                 return KeyedTensor.regroup(inputs, groups)
 
         m = MyModule()
@@ -2230,6 +2338,43 @@ class TestKeyedTensor(unittest.TestCase):
         traced_results = gm(inputs, groups)
         self.assertEqual(len(results), len(traced_results))
         for result, traced_result in zip(results, traced_results):
+            self.assertTrue(torch.equal(result, traced_result))
+
+    def test_regroup_as_dict_scriptable(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(self, inputs: List[KeyedTensor]) -> Dict[str, torch.Tensor]:
+                groups = [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
+                keys = ["group_0", "group_1"]
+                return KeyedTensor.regroup_as_dict(inputs, groups, keys)
+
+        m = MyModule()
+        torch.jit.script(m)
+
+    def test_regroup_as_dict_fxable(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(self, inputs: List[KeyedTensor]) -> Dict[str, torch.Tensor]:
+                groups = [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
+                keys = ["group_0", "group_1"]
+                return KeyedTensor.regroup_as_dict(inputs, groups, keys)
+
+        m = MyModule()
+
+        # input
+        key_dim = 1
+        tensor_list_1 = [torch.randn(2, 3) for i in range(3)]
+        keys_1 = ["dense_0", "dense_1", "dense_2"]
+        kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
+        tensor_list_2 = [torch.randn(2, 3) for i in range(2)]
+        keys_2 = ["sparse_0", "sparse_1"]
+        kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
+        inputs = [kt_1, kt_2]
+
+        # ensure that symbolic tracing works
+        gm = torch.fx.symbolic_trace(m)
+        results = m(inputs)
+        traced_results = gm(inputs)
+        self.assertEqual(len(results), len(traced_results))
+        for result, traced_result in zip(results.values(), traced_results.values()):
             self.assertTrue(torch.equal(result, traced_result))
 
     def test_scriptable(self) -> None:
