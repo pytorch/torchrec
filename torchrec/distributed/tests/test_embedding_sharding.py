@@ -345,7 +345,7 @@ class TestGroupTablesPerRank(unittest.TestCase):
             ]
         ),
     )
-    @settings(max_examples=10, deadline=10000)
+    @settings(max_examples=100, deadline=10000)
     def test_should_not_group_together(
         self,
         data_types: List[DataType],
@@ -411,8 +411,9 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 )
             return
 
-        # emb dim bucketizier only in use when computer kernel is caching
-        if distinct_key == "local_dim" and _prefetch_and_cached(tables[0]):
+        # emb dim bucketizier only in use when computer kernel is caching. Otherwise
+        # they shall be grouped into the same bucket even with different dimensions
+        if distinct_key == "local_dim" and not _prefetch_and_cached(tables[0]):
             self.assertEqual(
                 _get_table_names_by_groups(tables),
                 [["table_0", "table_1"]],

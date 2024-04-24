@@ -101,6 +101,12 @@ def _fx_wrap_gen_list_n_times(ls: List[str], n: int) -> List[str]:
     return ret
 
 
+@torch.fx.wrap
+def _fx_wrap_gen_keys(ls: List[str], n: int) -> List[str]:
+    # Syntax for dynamo (instead of generator kjt.keys() * num_buckets)
+    return ls * n
+
+
 def bucketize_kjt_before_all2all(
     kjt: KeyedJaggedTensor,
     num_buckets: int,
@@ -169,6 +175,73 @@ def bucketize_kjt_before_all2all(
             index_per_key=None,
         ),
         unbucketize_permute,
+    )
+
+
+def bucketize_kjt_inference(
+    kjt: KeyedJaggedTensor,
+    num_buckets: int,
+    block_sizes: torch.Tensor,
+    output_permute: bool = False,
+    bucketize_pos: bool = False,
+    block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
+    return_bucket_mapping: bool = False,
+) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    """
+    Bucketizes the `values` in KeyedJaggedTensor into `num_buckets` buckets,
+    `lengths` are readjusted based on the bucketization results.
+
+    Note: This function should be used only for row-wise sharding before calling
+    `KJTAllToAll`.
+
+    Args:
+        num_buckets (int): number of buckets to bucketize the values into.
+        block_sizes: (torch.Tensor): bucket sizes for the keyed dimension.
+        output_permute (bool): output the memory location mapping from the unbucketized
+            values to bucketized values or not.
+        bucketize_pos (bool): output the changed position of the bucketized values or
+            not.
+        block_bucketize_row_pos (Optional[List[torch.Tensor]]): The offsets of shard size for each feature.
+
+    Returns:
+        Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]: the bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized value.
+    """
+
+    num_features = len(kjt.keys())
+    assert_fx_safe(
+        block_sizes.numel() == num_features,
+        f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received.",
+    )
+    block_sizes_new_type = _fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values())
+    (
+        bucketized_lengths,
+        bucketized_indices,
+        bucketized_weights,
+        pos,
+        unbucketize_permute,
+        bucket_mapping,
+    ) = torch.ops.fbgemm.block_bucketize_sparse_features_inference(
+        kjt.lengths().view(-1),
+        kjt.values(),
+        bucketize_pos=bucketize_pos,
+        sequence=output_permute,
+        block_sizes=block_sizes_new_type,
+        my_size=num_buckets,
+        weights=kjt.weights_or_none(),
+        max_B=_fx_wrap_max_B(kjt),
+        block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
+        return_bucket_mapping=return_bucket_mapping,
+    )
+
+    return (
+        KeyedJaggedTensor(
+            keys=_fx_wrap_gen_keys(kjt.keys(), num_buckets),
+            values=bucketized_indices,
+            weights=pos if bucketize_pos else bucketized_weights,
+            lengths=bucketized_lengths.view(-1),
+        ),
+        unbucketize_permute,
+        bucket_mapping,
     )
 
 

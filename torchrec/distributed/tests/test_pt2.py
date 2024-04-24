@@ -311,6 +311,11 @@ class TestPt2(unittest.TestCase):
         # TODO: Fix Unflatten
         # torch.export.unflatten(ep)
 
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
     def test_sharded_quant_fpebc_non_strict_export(self) -> None:
         sharded_model, input_kjts = _sharded_quant_ebc_model(
             local_device="cpu", compute_device="cpu", feature_processor=True
