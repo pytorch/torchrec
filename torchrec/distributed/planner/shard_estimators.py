@@ -9,6 +9,7 @@
 
 import logging
 import math
+from enum import Enum
 from typing import cast, Dict, List, Optional, Tuple, Type
 
 import torch
@@ -47,6 +48,24 @@ from torchrec.modules.embedding_configs import DATA_TYPE_NUM_BITS
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+def _is_prefetch_pipelined(
+    sharding_option: ShardingOption, sharder: ModuleSharder[nn.Module]
+) -> bool:
+    prefetch_pipeline = (
+        sharding_option.cache_params.prefetch_pipeline
+        if sharding_option.cache_params
+        else None
+    )
+    # TODO: remove after deprecating fused_params in sharder
+    if not prefetch_pipeline:
+        prefetch_pipeline = (
+            sharder.fused_params.get("prefetch_pipeline", False)  # pyre-ignore[16]
+            if hasattr(sharder, "fused_params") and sharder.fused_params
+            else False
+        )
+    return prefetch_pipeline
 
 
 class EmbeddingPerfEstimator(ShardEstimator):
@@ -147,18 +166,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 bwd_sr_comm_data_type_size,
             ) = _extract_comm_data_type_size(sharder, sharding_option)
 
-            prefetch_pipeline = (
-                sharding_option.cache_params.prefetch_pipeline
-                if sharding_option.cache_params
-                else None
-            )
-            # TODO: remove after deprecating fused_params in sharder
-            if not prefetch_pipeline:
-                prefetch_pipeline = (
-                    sharder.fused_params.get("prefetch_pipeline", False)
-                    if hasattr(sharder, "fused_params") and sharder.fused_params
-                    else False
-                )
+            prefetch_pipeline = _is_prefetch_pipelined(sharding_option, sharder)
 
             # hardcoded as 8 bytes
             # input indices can be of int32, but in TBE they get converted to int64 anyway
@@ -829,18 +837,43 @@ def _extract_comm_data_type_size(
     )
 
 
+class PipelineAwareMode(Enum):
+    """
+    Control how the estimator will estimate cost for pipeline type.
+    Check out //torchrec/distributed/train_pipeline/train_pipelines.py
+    for details about pipelines.
+    """
+
+    # Do not consider pipeline overhead. Not recommended as it'll severely underestimate
+    # the storage cost for prefetch-enabled tables. Available just for backward compatibility.
+    NONE = "none"
+
+    # Only price in overhead for prefetch pipeline as it's really huge. This mode keeps the
+    # best back-compatibility while not sacrificing estimation precision for UVM-cached
+    # jobs.
+    PREFETCH_ONLY = "prefetch_only"
+
+    # All pipeline overhead will be calculated.
+    ALL = "all"
+
+
 class EmbeddingStorageEstimator(ShardEstimator):
     """
-    Embedding Storage Usage Estimator
+    Embedding Storage Usage Estimator.
+
+    Args:
+        pipeline_aware(bool): When true,
     """
 
     def __init__(
         self,
         topology: Topology,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        pipeline_aware_mode: PipelineAwareMode = PipelineAwareMode.PREFETCH_ONLY,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
+        self._pipeline_aware_mode = pipeline_aware_mode
 
     def estimate(
         self,
@@ -890,6 +923,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 else sharding_option.tensor.element_size()
             )
 
+            prefetch_pipeline = _is_prefetch_pipelined(sharding_option, sharder)
+
             shard_storages = calculate_shard_storages(
                 sharder=sharder,
                 sharding_type=sharding_option.sharding_type,
@@ -906,6 +941,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 is_pooled=sharding_option.is_pooled,
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
+                prefetch_pipeline=prefetch_pipeline,
+                pipeline_aware_mode=self._pipeline_aware_mode,
             )
 
             for shard, storage in zip(sharding_option.shards, shard_storages):
@@ -928,6 +965,8 @@ def calculate_shard_storages(
     is_pooled: bool,
     input_data_type_size: float,
     output_data_type_size: float,
+    prefetch_pipeline: bool,
+    pipeline_aware_mode: PipelineAwareMode,
 ) -> List[Storage]:
     """
     Calculates estimated storage sizes for each sharded tensor, comprised of input,
@@ -974,11 +1013,13 @@ def calculate_shard_storages(
     hbm_storage: int = tensor_storage.get("hbm", 0)
     ddr_storage: int = tensor_storage.get("ddr", 0)
 
+    table_will_be_prefetched: bool = False
     if compute_kernel in {
         EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
         EmbeddingComputeKernel.QUANT_UVM_CACHING.value,
     }:
         hbm_storage = round(ddr_storage * caching_ratio)
+        table_will_be_prefetched = True
 
     optimizer_class = getattr(tensor, "_optimizer_class", None)
 
@@ -997,8 +1038,42 @@ def calculate_shard_storages(
         optimizer_class=optimizer_class,
     )
 
+    def calculate_hbm_storage_cost(
+        input_size: int, output_size: int, hbm_specific_size: int
+    ) -> int:
+        # These magical number comes from heuristical analysis of memory snapshot during
+        # pipelining, and are subject to the actual implementation.
+        #
+        # Now it's static to make memory estimation more sane for UVM offloading,
+        # we need to make this estimation more blackbox-based.
+        pipelining_hbm_input_factor = 4 if prefetch_pipeline else 2
+        prefetch_bursty_hbm_input_factor = (
+            7 if prefetch_pipeline and table_will_be_prefetched else 0
+        )
+        if (
+            pipeline_aware_mode == PipelineAwareMode.ALL
+            or pipeline_aware_mode == PipelineAwareMode.PREFETCH_ONLY
+            and prefetch_pipeline
+        ):
+            # New calculation format to consider pipeline overhead
+            return (
+                max(
+                    (pipelining_hbm_input_factor + prefetch_bursty_hbm_input_factor)
+                    * input_size,
+                    output_size,
+                )
+                + hbm_specific_size
+            )
+        else:
+            # Old calculation for backward compatibility
+            return input_size + output_size + hbm_specific_size
+
     hbm_sizes: List[int] = [
-        input_size + output_size + hbm_specific_size if compute_device == "cuda" else 0
+        (
+            calculate_hbm_storage_cost(input_size, output_size, hbm_specific_size)
+            if compute_device == "cuda"
+            else 0
+        )
         for input_size, output_size, hbm_specific_size in zip(
             input_sizes,
             output_sizes,
