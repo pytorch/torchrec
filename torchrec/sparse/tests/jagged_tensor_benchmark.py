@@ -8,65 +8,214 @@
 # pyre-strict
 
 
-import time
+import functools
 import timeit
-from typing import Callable, List, Tuple
+from typing import Any, Callable, Dict, List
 
 import click
 
-import numpy as np
-
 import torch
-from torchrec.sparse.jagged_tensor import _regroup_keyed_tensors, KeyedTensor
+from torchrec.distributed.benchmark.benchmark_utils import benchmark, BenchmarkResult
+from torchrec.sparse.jagged_tensor import (
+    _regroup_keyed_tensors,
+    KeyedJaggedTensor,
+    KeyedTensor,
+)
+from torchrec.sparse.tests.utils import build_groups, build_kts
 
 
-def prepare_benchmark(
-    dense_features: int, sparse_features: int
-) -> Tuple[List["KeyedTensor"], List[List[str]]]:
-    key_dim = 1
-    tensor_list_1 = [torch.randn(2, 3) for i in range(dense_features)]
-    keys_1 = [f"dense_{i}" for i in range(dense_features)]
-    kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
-    tensor_list_2 = [torch.randn(2, 3) for i in range(sparse_features)]
-    keys_2 = [f"sparse_{i}" for i in range(sparse_features)]
-    kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
-    return ([kt_1, kt_2], [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]])
+class DummyModel(torch.nn.Module):
+    # pyre-ignore
+    def forward(self, *args, **kwargs) -> None:
+        pass
 
 
 def bench(
     name: str,
-    fn: Callable[[List["KeyedTensor"], List[List[str]]], List[torch.Tensor]],
-    n_dense: int,
-    n_sparse: int,
+    labels: torch.Tensor,
+    batch_size: int,
+    feature_count: int,
+    device_type: str,
+    run_backward: bool,
+    fn: Callable[..., List[torch.Tensor]],
+    fn_kwargs: Dict[str, Any],
 ) -> None:
-    input_data = prepare_benchmark(n_dense, n_sparse)
-    start = time.perf_counter()
-    for _ in range(3):
-        fn(input_data[0], input_data[1])
-    end = time.perf_counter()
-    print(f"warmup time {(end-start)*1000:.1f}ms")
-    results = timeit.repeat(
-        lambda: fn(input_data[0], input_data[1]), number=10, repeat=10
-    )
 
-    p_50 = np.percentile(np.asarray(results), 50)
-    print(f"{name} {p_50*1000:.1f}us")
+    # initial call
+    fn(**fn_kwargs)
+
+    def wrapped_func(
+        model: torch.nn.Module,  # not used
+        bench_inputs: List[KeyedJaggedTensor],  # not used
+        fn: Callable[..., List[torch.Tensor]],
+        fn_kwargs: Dict[str, Any],
+        run_backward: bool,
+    ) -> None:
+        result = fn(**fn_kwargs)
+        if run_backward:
+            vectors = [tensor.sum(dim=1) for tensor in result]
+            pred = vectors[0]
+            for vector in vectors[1:]:
+                pred.mul(vector)
+            loss = torch.nn.functional.l1_loss(pred, labels)
+            loss.sum().backward()
+
+    if device_type == "cuda":
+        result = benchmark(
+            name=name,
+            model=DummyModel(),
+            warmup_inputs=[],
+            bench_inputs=[],
+            prof_inputs=[],
+            world_size=1,
+            output_dir="",
+            num_benchmarks=20,
+            func_to_benchmark=functools.partial(
+                wrapped_func, fn=fn, run_backward=run_backward, fn_kwargs=fn_kwargs
+            ),
+            benchmark_func_kwargs={},
+            rank=0,
+            enable_logging=False,
+        )
+
+    else:  # cpu
+        model = DummyModel()
+        times = timeit.repeat(
+            lambda: wrapped_func(
+                model=model,
+                bench_inputs=[],
+                fn=fn,
+                fn_kwargs=fn_kwargs,
+                run_backward=run_backward,
+            ),
+            number=1,
+            repeat=20,
+        )
+        result = BenchmarkResult(
+            short_name=name,
+            elapsed_time=torch.tensor(times),
+            max_mem_allocated=[0],
+        )
+
+    print(
+        f"  {name : <{35}} | B: {batch_size : <{8}} | F: {feature_count : <{8}} | device: {device_type : <{8}} | Runtime (P90): {result.runtime_percentile(90):5.1f} ms | Memory (P90): {result.max_mem_percentile(90):5.1f}"
+    )
 
 
 @click.command()
 @click.option(
+    "--cuda_matrix",
+    type=bool,
+    default=False,
+    help="Run a full GPU matrix, overrides relevant settings",
+)
+@click.option(
+    "--run_backward",
+    type=bool,
+    default=False,
+    help="run backward (forward always runs)",
+)
+@click.option(
+    "--device_type",
+    type=str,
+    default="cuda",
+    help="device type",
+)
+@click.option(
     "--n_dense",
     type=int,
-    default=2000,
-    help="Total number of dense embeddings to be used.",
+    default=20,
+    help="Total number of dense embeddings.",
+)
+@click.option(
+    "--dim_dense",
+    type=int,
+    default=64,
+    help="Dim dense embedding.",
 )
 @click.option(
     "--n_sparse",
-    default=3000,
+    default=1000,
     help="Total number of sparse embeddings to be used.",
 )
-def main(n_dense: int, n_sparse: int) -> None:
-    bench("regular ", _regroup_keyed_tensors, n_dense, n_sparse)
+@click.option(
+    "--dim_sparse",
+    type=int,
+    default=128,
+    help="Dim dense embedding.",
+)
+@click.option(
+    "--batch_size",
+    type=int,
+    default=1024,
+    help="Batch size.",
+)
+@click.option(
+    "--n_groups",
+    type=int,
+    default=2,
+    help="Total num of regrouping",
+)
+def main(
+    cuda_matrix: bool,
+    run_backward: bool,
+    device_type: str,
+    n_dense: int,
+    n_sparse: int,
+    dim_dense: int,
+    dim_sparse: int,
+    batch_size: int,
+    n_groups: int,
+) -> None:
+    if cuda_matrix:
+        n_denses = [64, 128, 256, 512, 1024]
+        n_sparses = [16, 32, 64, 128, 256]
+        batch_sizes = [512, 1024, 2048, 4096]
+        device_types = ["cuda"]
+    else:
+        n_denses = [n_dense]
+        n_sparses = [n_sparse]
+        batch_sizes = [batch_size]
+        device_types = [device_type]
+
+    for device_type in device_types:
+        for batch_size in batch_sizes:
+            for n_dense, n_sparse in zip(n_denses, n_sparses):
+
+                device = torch.device(device_type)
+                kts = build_kts(
+                    n_dense,
+                    n_sparse,
+                    dim_dense,
+                    dim_sparse,
+                    batch_size,
+                    device,
+                    run_backward,
+                )
+                labels = torch.randint(
+                    0, 1, (batch_size,), device=torch.device(device_type)
+                ).float()
+                groups = build_groups(kts, n_groups)
+                bench(
+                    "[fallback] _regroup_keyed_tenors",
+                    labels,
+                    batch_size,
+                    n_dense + n_sparse,
+                    device_type,
+                    run_backward,
+                    _regroup_keyed_tensors,
+                    {"keyed_tensors": kts, "groups": groups},
+                )
+                bench(
+                    "[prod] KeyedTensor.regroup",
+                    labels,
+                    batch_size,
+                    n_dense + n_sparse,
+                    device_type,
+                    run_backward,
+                    KeyedTensor.regroup,
+                    {"keyed_tensors": kts, "groups": groups},
+                )
 
 
 if __name__ == "__main__":
