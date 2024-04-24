@@ -10,7 +10,7 @@
 
 import random
 import unittest
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
 import hypothesis.strategies as st
@@ -36,6 +36,9 @@ from torchrec.modules.embedding_configs import DataType, PoolingType
 
 class TestGetWeightedAverageCacheLoadFactor(unittest.TestCase):
     def test_get_avg_cache_load_factor_hbm(self) -> None:
+        x: Optional[int | str] = None
+        _ = x or 1
+
         cache_load_factors = [random.random() for _ in range(5)]
         embedding_tables: List[ShardedEmbeddingTable] = [
             ShardedEmbeddingTable(
