@@ -309,7 +309,64 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         ]
         # deepcopy so it won't affect other proposers
         self.starting_proposal = copy.deepcopy(proposal)
+        self.promote_high_prefetch_overheaad_table_to_hbm(self.starting_proposal)
         self.proposal = copy.deepcopy(self.starting_proposal)
+
+    def promote_high_prefetch_overheaad_table_to_hbm(
+        self, proposal: List[ShardingOption]
+    ) -> None:
+        """
+        Prefetch overhead is related to IO. When it's larger than saved memory from
+        embedding offloading, we'd undo offloading and promote to HBM for better
+        memory efficiency.
+
+        This function will end up updating proposal.
+        """
+        if not self.enumerator:
+            return
+        what_if_hbm_proposal = copy.deepcopy(proposal)
+        what_if_hbm_cached_tables = [
+            sharding_option
+            for sharding_option in what_if_hbm_proposal
+            if sharding_option.compute_kernel
+            == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+        ]
+        original_cached_tables = [
+            sharding_option
+            for sharding_option in proposal
+            if sharding_option.compute_kernel
+            == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+        ]
+
+        # Modify all cached tables in what_if_proposal to be HBM only
+        for sharding_option in what_if_hbm_cached_tables:
+            assert sharding_option.cache_params  # appease pyre
+            sharding_option.cache_params.load_factor = None
+            sharding_option.compute_kernel = EmbeddingComputeKernel.FUSED.value
+
+        assert self.enumerator
+        self.enumerator.populate_estimates(what_if_hbm_cached_tables)
+
+        # Now what_if_hbm_proposal contain estimated storage for all HBM case. If
+        # it's even smaller than offloaded case, we promote it to HBM
+        promoted_count = 0
+        saved_hbm = 0
+        for so, original_so in zip(what_if_hbm_cached_tables, original_cached_tables):
+            if so.total_storage.hbm < original_so.total_storage.hbm:
+                promoted_count += 1
+                saved_hbm += original_so.total_storage.hbm - so.total_storage.hbm
+                assert original_so.cache_params  # appease pyre
+                original_so.cache_params.load_factor = None
+                original_so.compute_kernel = EmbeddingComputeKernel.FUSED.value
+
+        if promoted_count > 0:
+            logger.info(
+                f"EmbeddingOffloadScaleupProposer - promoted {promoted_count} tables to HBM, saving {saved_hbm // 1024 // 1024}MiB HBM"
+            )
+
+        # In the end, update the storage cost for new proposal
+        assert self.enumerator
+        self.enumerator.populate_estimates(original_cached_tables)
 
     def propose(self) -> Optional[List[ShardingOption]]:
         return self.proposal
@@ -365,6 +422,8 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         self.proposal = EmbeddingOffloadScaleupProposer.next_plan(
             self.starting_proposal, budget, self.enumerator
         )
+        if self.proposal is not None:
+            self.promote_high_prefetch_overheaad_table_to_hbm(self.proposal)
 
     @staticmethod
     def get_budget(proposal: List[ShardingOption], storage_constraint: Topology) -> int:

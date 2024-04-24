@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import cast, List, Optional
+from typing import cast, Dict, List, Optional
 from unittest.mock import MagicMock
 
 import torch
@@ -23,11 +23,19 @@ from torchrec.distributed.planner.proposers import (
     proposers_to_proposals_list,
     UniformProposer,
 )
+from torchrec.distributed.planner.shard_estimators import (
+    EmbeddingPerfEstimator,
+    EmbeddingStorageEstimator,
+    PipelineAwareMode,
+)
 from torchrec.distributed.planner.types import (
     Enumerator,
     ParameterConstraints,
+    Perf,
     Proposer,
+    Shard,
     ShardingOption,
+    Storage,
     Topology,
 )
 from torchrec.distributed.test_utils.test_model import TestSparseNN
@@ -472,7 +480,19 @@ class TestProposers(unittest.TestCase):
         # with 110GB of available budget.
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
         enumerator = EmbeddingEnumerator(
-            topology=storage_constraint, batch_size=BATCH_SIZE, constraints=constraints
+            topology=storage_constraint,
+            batch_size=BATCH_SIZE,
+            constraints=constraints,
+            estimator=[
+                EmbeddingPerfEstimator(
+                    topology=storage_constraint, constraints=constraints
+                ),
+                EmbeddingStorageEstimator(
+                    topology=storage_constraint,
+                    constraints=constraints,
+                    pipeline_aware_mode=PipelineAwareMode.NONE,
+                ),
+            ],
         )
         search_space = enumerator.enumerate(
             module=model,
@@ -536,6 +556,113 @@ class TestProposers(unittest.TestCase):
             },
         )
 
+    def test_promote_high_prefetch_overheaad_table_to_hbm(self) -> None:
+        def make_sharding_option(
+            name: str, raw_size: int, clf: Optional[float]
+        ) -> ShardingOption:
+            return ShardingOption(
+                name=name,
+                tensor=torch.zeros(1),
+                # pyre-ignore
+                module=("model", None),
+                input_lengths=[],
+                batch_size=8,
+                sharding_type="row_wise",
+                partition_by="DEVICE",
+                compute_kernel="fused" if clf is None else "fused_uvm_caching",
+                shards=[
+                    Shard(
+                        size=[1, raw_size],
+                        offset=[0, 0],
+                        perf=Perf(
+                            fwd_compute=0,
+                            fwd_comms=0,
+                            bwd_compute=0,
+                            bwd_comms=0,
+                        ),
+                    )
+                ],
+                cache_params=(
+                    None
+                    if clf is None
+                    else CacheParams(
+                        load_factor=clf,
+                    )
+                ),
+            )
+
+        def expect_sharding_option(
+            so: List[ShardingOption],
+            names: List[str],
+            total_hbms: List[int],
+            total_ddrs: List[int],
+            kernels: List[str],
+        ) -> None:
+            for s, name, hbm, ddr, kernel in zip(
+                so, names, total_hbms, total_ddrs, kernels
+            ):
+                self.assertEqual(s.name, name)
+                self.assertEqual(s.total_storage.hbm, hbm)
+                self.assertEqual(s.total_storage.ddr, ddr)
+                self.assertEqual(s.compute_kernel, kernel)
+
+        def mock_storage_estimator_func(so: List[ShardingOption]) -> None:
+            # This mock storage estimator will give table2 a consistent penalty
+            # for using UVM caching
+            for s in so:
+                size = s.shards[0].size[0] * s.shards[0].size[1]
+                if s.compute_kernel == "fused_uvm_caching":
+                    assert s.cache_params
+                    assert s.cache_params.load_factor
+                    penalty = 50 if s.name == "table-2" else 0
+                    s.shards[0].storage = Storage(
+                        ddr=size,
+                        hbm=int(size * s.cache_params.load_factor) + penalty,
+                    )
+                else:
+                    s.shards[0].storage = Storage(
+                        ddr=0,
+                        hbm=size,
+                    )
+
+        mock_enumerator = MagicMock()
+        mock_enumerator.populate_estimates.side_effect = mock_storage_estimator_func
+
+        # Run1: table-2 is getting penalized but HBM is still lower when offloaded.
+        # so it won't change after promotion
+        p = EmbeddingOffloadScaleupProposer()
+        proposal1 = [
+            make_sharding_option("table-1", 50, None),
+            make_sharding_option("table-2", 90, 0.3),
+            make_sharding_option("table-3", 100, 0.5),
+        ]
+        mock_storage_estimator_func(proposal1)
+        p.load(search_space=proposal1, enumerator=mock_enumerator)
+        expect_sharding_option(
+            p.starting_proposal,
+            ["table-1", "table-2", "table-3"],
+            [50, 77, 50],
+            [0, 90, 100],
+            ["fused", "fused_uvm_caching", "fused_uvm_caching"],
+        )
+
+        # Run1: table-2 will have higher HBM after penalty (90 * 0.8 + 50 > 90). So promote it.
+        p = EmbeddingOffloadScaleupProposer()
+        proposal2 = [
+            make_sharding_option("table-1", 50, None),
+            make_sharding_option("table-2", 90, 0.8),
+            make_sharding_option("table-3", 100, 0.9),
+        ]
+        mock_storage_estimator_func(proposal2)
+        p.load(search_space=proposal2, enumerator=mock_enumerator)
+        expect_sharding_option(
+            p.starting_proposal,
+            ["table-1", "table-2", "table-3"],
+            [50, 90, 90],
+            [0, 0, 100],
+            ["fused", "fused", "fused_uvm_caching"],
+        )
+
     def test_budget_shrink(self) -> None:
         tables = [
             EmbeddingBagConfig(
@@ -561,7 +688,19 @@ class TestProposers(unittest.TestCase):
         )
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
         enumerator = EmbeddingEnumerator(
-            topology=storage_constraint, batch_size=BATCH_SIZE, constraints=constraints
+            topology=storage_constraint,
+            batch_size=BATCH_SIZE,
+            constraints=constraints,
+            estimator=[
+                EmbeddingPerfEstimator(
+                    topology=storage_constraint, constraints=constraints
+                ),
+                EmbeddingStorageEstimator(
+                    topology=storage_constraint,
+                    constraints=constraints,
+                    pipeline_aware_mode=PipelineAwareMode.NONE,
+                ),
+            ],
         )
         search_space = enumerator.enumerate(
             module=model,
