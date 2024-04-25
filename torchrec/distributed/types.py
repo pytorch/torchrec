@@ -131,6 +131,19 @@ class ShardingType(Enum):
     TABLE_COLUMN_WISE = "table_column_wise"
 
 
+class PipelineType(Enum):
+    """
+    Known pipeline types.
+    Check out //torchrec/distributed/train_pipeline/train_pipelines.py
+    for details about pipelines.
+    """
+
+    NONE = "none"
+    TRAIN_BASE = "train_base"
+    TRAIN_SPARSE_DIST = "train_sparse_dist"
+    TRAIN_PREFETCH_SPARSE_DIST = "train_prefetch_sparse_dist"
+
+
 class ParameterStorage(Enum):
     """
     Well-known physical resources, which can be used as constraints by ShardingPlanner.
