@@ -201,3 +201,12 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
             self.position_weights_dict[key] = self.position_weights[key]
 
         return self
+
+    # Override to make sure position_weights and position_weights_dict are in sync
+    # pyre-ignore [2]
+    def _apply(self, *args, **kwargs) -> nn.Module:
+        super()._apply(*args, **kwargs)
+        for k, param in self.position_weights.items():
+            self.position_weights_dict[k] = param
+
+        return self

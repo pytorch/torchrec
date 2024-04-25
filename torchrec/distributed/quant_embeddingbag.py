@@ -411,7 +411,7 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
                 # Generic copy, for example initailized on cpu but -> sharding as meta
                 self.feature_processors_per_rank.append(
                     copy.deepcopy(feature_processor)
-                    if device_type == feature_processor_device
+                    if device_type == "meta"
                     else copy_to_device(
                         feature_processor,
                         feature_processor_device,
