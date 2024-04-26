@@ -7015,6 +7015,35 @@ ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.types.PipelineType">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">PipelineType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.PipelineType" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
+<p>Known pipeline types.
+Check out //torchrec/distributed/train_pipeline/train_pipelines.py
+for details about pipelines.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.types.PipelineType.NONE">
+<span class="sig-name descname"><span class="pre">NONE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'none'</span></em><a class="headerlink" href="#torchrec.distributed.types.PipelineType.NONE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.types.PipelineType.TRAIN_BASE">
+<span class="sig-name descname"><span class="pre">TRAIN_BASE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'train_base'</span></em><a class="headerlink" href="#torchrec.distributed.types.PipelineType.TRAIN_BASE" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.types.PipelineType.TRAIN_PREFETCH_SPARSE_DIST">
+<span class="sig-name descname"><span class="pre">TRAIN_PREFETCH_SPARSE_DIST</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'train_prefetch_sparse_dist'</span></em><a class="headerlink" href="#torchrec.distributed.types.PipelineType.TRAIN_PREFETCH_SPARSE_DIST" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.types.PipelineType.TRAIN_SPARSE_DIST">
+<span class="sig-name descname"><span class="pre">TRAIN_SPARSE_DIST</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'train_sparse_dist'</span></em><a class="headerlink" href="#torchrec.distributed.types.PipelineType.TRAIN_SPARSE_DIST" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="torchrec.distributed.types.QuantizedCommCodec">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.types.</span></span><span class="sig-name descname"><span class="pre">QuantizedCommCodec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.types.QuantizedCommCodec" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Generic</span></code>[<code class="xref py py-obj docutils literal notranslate"><span class="pre">QuantizationContext</span></code>]</p>
