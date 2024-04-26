@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+
 import operator
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -15,6 +16,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
+
+# pyre-ignore
+from torch.fx.experimental.symbolic_shapes import guard_size_oblivious
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
 
 from torchrec.streamable import Pipelineable
@@ -342,7 +346,7 @@ def _permute_tensor_by_segments(
             segment_sizes,
             tensor,
             weights,
-            None,
+            tensor.numel(),
         )
     return permuted_tensor, permuted_weights
 
@@ -772,6 +776,11 @@ register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 def _assert_tensor_has_no_elements_or_has_integers(
     tensor: torch.Tensor, tensor_name: str
 ) -> None:
+    if is_torchdynamo_compiling():
+        # Skipping the check tensor.numel() == 0 to not guard on pt2 symbolic shapes.
+        # TODO(ivankobzarev): Use guard_size_oblivious to pass tensor.numel() == 0 once it is torch scriptable.
+        return
+
     assert tensor.numel() == 0 or tensor.dtype in [
         torch.long,
         torch.int,
@@ -863,6 +872,16 @@ def _length_per_key_from_stride_per_key(
             return []
 
         return torch.cat(tensor_list).tolist()
+
+
+def _length_per_key_from_stride_per_key_tensor(
+    lengths: torch.Tensor, stride_per_key: List[int]
+) -> torch.Tensor:
+    tensor_list: List[torch.Tensor] = []
+    for chunk in lengths.split(stride_per_key):
+        tensor_list.append(torch.sum(chunk).view(1))
+
+    return torch.cat(tensor_list).to(device="cpu")
 
 
 def _maybe_compute_length_per_key(
@@ -1380,6 +1399,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         index_per_key: Optional[Dict[str, int]] = None,
         jt_dict: Optional[Dict[str, JaggedTensor]] = None,
         inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
+        stride_per_key_per_rank_tensor: Optional[torch.Tensor] = None,
+        stride_per_key_tensor: Optional[torch.Tensor] = None,
+        length_per_key_tensor: Optional[torch.Tensor] = None,
+        offset_per_key_tensor: Optional[torch.Tensor] = None,
+        lengths_offset_per_key_tensor: Optional[torch.Tensor] = None,
     ) -> None:
         self._keys: List[str] = keys
         self._values: torch.Tensor = values
@@ -1391,33 +1415,37 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._lengths: Optional[torch.Tensor] = lengths
         self._offsets: Optional[torch.Tensor] = offsets
 
+        self._use_per_key_tensor_compute: bool = (
+            stride_per_key_per_rank_tensor is not None
+        )
         self._stride_per_key_per_rank: List[List[int]] = []
         self._stride_per_key: List[int] = []
         self._variable_stride_per_key: bool = False
         self._stride: int = -1
 
-        if stride_per_key_per_rank is not None:
-            if stride is not None:
-                raise ValueError(
-                    "Cannot initialize KJT with both `stride` and `stride_per_key_per_rank`"
-                )
-            self._stride_per_key_per_rank = stride_per_key_per_rank
-            self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
-            self._variable_stride_per_key = True
-            if not stride_per_key_per_rank:
-                self._stride = 0
-            elif all(s == self.stride_per_key()[0] for s in self.stride_per_key()):
-                self._stride = self.stride_per_key()[0]
-        else:
-            if torch.jit.is_tracing():
-                stride = _maybe_compute_stride_kjt_scripted(
-                    keys, stride, lengths, offsets
-                )[0]
+        if not self._use_per_key_tensor_compute:
+            if stride_per_key_per_rank is not None:
+                if stride is not None:
+                    raise ValueError(
+                        "Cannot initialize KJT with both `stride` and `stride_per_key_per_rank`"
+                    )
+                self._stride_per_key_per_rank: List[List[int]] = stride_per_key_per_rank
+                self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
+                self._variable_stride_per_key = True
+                if stride_per_key_per_rank is not None:
+                    self._stride = 0
+                elif all(s == self.stride_per_key()[0] for s in self.stride_per_key()):
+                    self._stride = self.stride_per_key()[0]
             else:
-                stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
-            self._stride = stride
-            self._stride_per_key_per_rank = [[stride]] * len(self._keys)
-            self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
+                if torch.jit.is_tracing():
+                    stride = _maybe_compute_stride_kjt_scripted(
+                        keys, stride, lengths, offsets
+                    )[0]
+                else:
+                    stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
+                self._stride = stride
+                self._stride_per_key_per_rank = [[stride]] * len(self._keys)
+                self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
 
         # lazy fields
         self._length_per_key: Optional[List[int]] = length_per_key
@@ -1428,6 +1456,134 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             inverse_indices
         )
         self._lengths_offset_per_key: List[int] = []
+
+        self.__init__per_key_tensor_compute(
+            stride_per_key_per_rank_tensor,
+            stride_per_key_tensor,
+            length_per_key_tensor,
+            offset_per_key_tensor,
+            lengths_offset_per_key_tensor,
+        )
+
+    def __init__per_key_tensor_compute(
+        self,
+        stride_per_key_per_rank_tensor: Optional[torch.Tensor] = None,
+        stride_per_key_tensor: Optional[torch.Tensor] = None,
+        length_per_key_tensor: Optional[torch.Tensor] = None,
+        offset_per_key_tensor: Optional[torch.Tensor] = None,
+        lengths_offset_per_key_tensor: Optional[torch.Tensor] = None,
+    ) -> None:
+        # Dynamo compilation tensor compute path
+        self._stride_per_key_per_rank_tensor: Optional[torch.Tensor] = (
+            stride_per_key_per_rank_tensor
+        )
+        self._stride_per_key_per_rank_tensor_list: Optional[List[int]] = None
+        self._stride_per_key_tensor: Optional[torch.Tensor] = stride_per_key_tensor
+        self._stride_per_key_tensor_list: Optional[List[int]] = None
+
+        self._length_per_key_tensor: Optional[torch.Tensor] = length_per_key_tensor
+        self._offset_per_key_tensor: Optional[torch.Tensor] = offset_per_key_tensor
+        self._lengths_offset_per_key_tensor: Optional[torch.Tensor] = (
+            lengths_offset_per_key_tensor
+        )
+
+        if not torch.jit.is_scripting() and self._use_per_key_tensor_compute:
+            # NOTE:
+            # Optional Tensor compute path that operates with Tensors instead of *per_key List[int].
+            # Path is used if stride_per_key_per_rank_tensor arg is not None.
+            #
+            # Main targeting for dynamo compilation:
+            # to reduce scalar compute
+            # reuse compute with tensor views in permute, split.
+            # postpone convertion to List to reduce unbacked symints.
+            # Currently uses VB path to avoid graph breaks on single-batch-checks.
+            if self._stride_per_key_tensor is None:
+                # pyre-ignore
+                self._stride_per_key_tensor = self._stride_per_key_per_rank_tensor.sum(
+                    dim=1,
+                    keepdim=False,
+                    # pyre-ignore
+                    dtype=self._stride_per_key_per_rank_tensor.dtype,
+                )
+
+            # This generic path has unacceptable compilation time for num_features=700+.
+            # https://github.com/pytorch/pytorch/issues/123964
+            # Generic path region
+            self._stride_per_key_tensor_list = self._stride_per_key_tensor.tolist()
+            # pyre-ignore
+            for s in self._stride_per_key_tensor_list:
+                torch._check_is_size(s)
+
+            self._stride_per_key_per_rank_tensor_list = (
+                # pyre-ignore
+                self._stride_per_key_per_rank_tensor.tolist()
+            )
+            for s in self._stride_per_key_per_rank_tensor_list:
+                for _s in s:
+                    torch._check_is_size(_s)
+            # Generic path region end
+
+            # Workaround for pt2 symbolic shapes compilation time of unbacked for only non-VB case.
+            # Uncomment this and comment Generic Path to torch.compile num_features > 500.
+            # s0 = self._stride_per_key_tensor[0].item()
+            # torch._check_is_size(s0)
+            # self._stride_per_key_tensor_list = [s0] * len(self._keys)
+            # if not is_torchdynamo_compiling():
+            #     assert (
+            #         self._stride_per_key_tensor_list
+            #         == self._stride_per_key_tensor.tolist()
+            #     )
+            # s0: int = self._stride_per_key_per_rank_tensor[0][0].item()
+            # torch._check_is_size(s0)
+            # self._stride_per_key_per_rank_tensor_list = [
+            #     [s0]
+            #     * self._stride_per_key_per_rank_tensor.size(1)
+            # ] * len(self._keys)
+            # if not is_torchdynamo_compiling():
+            #     assert (
+            #         self._stride_per_key_per_rank_tensor_list
+            #         == self._stride_per_key_per_rank_tensor.tolist()
+            #     )
+            # Workaround end
+
+            self._variable_stride_per_key: bool = True
+
+            if self._length_per_key_tensor is None:
+                assert self._lengths is not None, "Always use KJT with lengths for pt2"
+                self._length_per_key_tensor = _length_per_key_from_stride_per_key_tensor(
+                    self._lengths,
+                    # pyre-ignore
+                    self._stride_per_key_tensor_list,
+                )
+
+            if self._offset_per_key_tensor is None:
+                self._offset_per_key_tensor = (
+                    torch.ops.fbgemm.asynchronous_complete_cumsum(
+                        self._length_per_key_tensor
+                    )
+                )
+
+            if self._lengths_offset_per_key_tensor is None:
+                self._lengths_offset_per_key_tensor = (
+                    torch.ops.fbgemm.asynchronous_complete_cumsum(
+                        self._stride_per_key_tensor
+                    )
+                )
+
+            # pyre-ignore[16]
+            torch._check(self._length_per_key_tensor.ndim == 1)
+            torch._check(self._stride_per_key_per_rank_tensor.ndim == 2)
+            torch._check(self._stride_per_key_tensor.ndim == 1)
+            torch._check(self._offset_per_key_tensor.ndim == 1)
+            torch._check(self._lengths_offset_per_key_tensor.ndim == 1)
+
+            if not is_torchdynamo_compiling():
+                # pyre-ignore
+                assert self._stride_per_key_per_rank_tensor.device.type == "cpu"
+                assert self._stride_per_key_tensor.device.type == "cpu"
+                assert self._length_per_key_tensor.device.type == "cpu"
+                assert self._offset_per_key_tensor.device.type == "cpu"
+                assert self._lengths_offset_per_key_tensor.device.type == "cpu"
 
     @staticmethod
     def from_offsets_sync(
@@ -1651,8 +1807,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return kjt
 
     def sync(self) -> "KeyedJaggedTensor":
-        self.length_per_key()
-        self.offset_per_key()
+        if not is_torchdynamo_compiling():
+            self.length_per_key()
+            self.offset_per_key()
         return self
 
     def unsync(self) -> "KeyedJaggedTensor":
@@ -1695,10 +1852,27 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return self._stride
 
     def stride_per_key(self) -> List[int]:
+        if self._use_per_key_tensor_compute:
+            assert self._stride_per_key_tensor_list is not None
+            return self._stride_per_key_tensor_list
+
         return self._stride_per_key
 
+    def stride_per_key_tensor(self) -> torch.Tensor:
+        assert self._use_per_key_tensor_compute
+        return torch.jit._unwrap_optional(self._stride_per_key_tensor)
+
     def stride_per_key_per_rank(self) -> List[List[int]]:
+        if self._use_per_key_tensor_compute:
+            assert self._stride_per_key_per_rank_tensor_list is not None
+            # pyre-ignore
+            return self._stride_per_key_per_rank_tensor_list
+
         return self._stride_per_key_per_rank
+
+    def stride_per_key_per_rank_tensor(self) -> torch.Tensor:
+        assert self._use_per_key_tensor_compute
+        return torch.jit._unwrap_optional(self._stride_per_key_per_rank_tensor)
 
     def variable_stride_per_key(self) -> bool:
         return self._variable_stride_per_key
@@ -1718,6 +1892,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return _index_per_key
 
     def length_per_key(self) -> List[int]:
+        assert (
+            not self._use_per_key_tensor_compute
+        ), "Use _length_per_key_tensor in case of per_key tensor mode"
+
         _length_per_key = _maybe_compute_length_per_key(
             keys=self._keys,
             stride=self.stride(),
@@ -1735,6 +1913,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return self._length_per_key
 
     def offset_per_key(self) -> List[int]:
+        assert (
+            not self._use_per_key_tensor_compute
+        ), "Use _offset_per_key_tensor in case of per_key tensor mode"
+
         _length_per_key, _offset_per_key = _maybe_compute_offset_per_key(
             keys=self._keys,
             stride=self.stride(),
@@ -1754,6 +1936,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return self._offset_per_key
 
     def lengths_offset_per_key(self) -> List[int]:
+        assert (
+            not self._use_per_key_tensor_compute
+        ), "Use _lengths_offset_per_key_tensor in case of per_key tensor mode"
+
         if not self._lengths_offset_per_key:
             self._lengths_offset_per_key = _cumsum(self.stride_per_key())
         return self._lengths_offset_per_key
@@ -1761,7 +1947,180 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def index_per_key(self) -> Dict[str, int]:
         return self._key_indices()
 
+    def _split_per_key_tensor_compute(
+        self, segments: List[int]
+    ) -> List["KeyedJaggedTensor"]:
+        split_list: List[KeyedJaggedTensor] = []
+        start = 0
+        start_offset: int = 0
+        _offset_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._offset_per_key_tensor
+        )
+        _stride_per_key_per_rank_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._stride_per_key_per_rank_tensor
+        )
+
+        for segment in segments:
+            end = start + segment
+            end_offset: int = -1
+            keys: List[str] = self._keys[start:end]
+            # pyre-ignore
+            end_offset = _offset_per_key_tensor[end].item()
+            stride, stride_per_key_per_rank_tensor = (
+                (None, _stride_per_key_per_rank_tensor[start:end])
+                if self.variable_stride_per_key()
+                else (self._stride, None)
+            )
+
+            if segment == len(self._keys):
+                split_list.append(
+                    KeyedJaggedTensor(
+                        keys=self._keys,
+                        values=self._values,
+                        weights=self.weights_or_none(),
+                        lengths=self._lengths,
+                        offsets=self._offsets,
+                        stride=stride,
+                        stride_per_key_per_rank=None,
+                        length_per_key=self._length_per_key,
+                        offset_per_key=self._offset_per_key,
+                        index_per_key=self._index_per_key,
+                        jt_dict=self._jt_dict,
+                        inverse_indices=self.inverse_indices_or_none(),
+                        stride_per_key_per_rank_tensor=self._stride_per_key_per_rank_tensor,
+                        stride_per_key_tensor=self._stride_per_key_tensor,
+                        length_per_key_tensor=self._length_per_key_tensor,
+                        offset_per_key_tensor=self._offset_per_key_tensor,
+                        lengths_offset_per_key_tensor=self._lengths_offset_per_key_tensor,
+                    )
+                )
+            elif segment == 0:
+                empty_int_list: List[int] = torch.jit.annotate(List[int], [])
+                split_list.append(
+                    KeyedJaggedTensor(
+                        keys=keys,
+                        values=torch.tensor(
+                            empty_int_list,
+                            device=self.device(),
+                            dtype=self._values.dtype,
+                        ),
+                        weights=(
+                            None
+                            if self.weights_or_none() is None
+                            else torch.tensor(
+                                empty_int_list,
+                                device=self.device(),
+                                dtype=self.weights().dtype,
+                            )
+                        ),
+                        lengths=torch.tensor(
+                            empty_int_list, device=self.device(), dtype=torch.int
+                        ),
+                        offsets=torch.tensor(
+                            empty_int_list, device=self.device(), dtype=torch.int
+                        ),
+                        stride=stride,
+                        stride_per_key_per_rank=None,
+                        length_per_key=None,
+                        offset_per_key=None,
+                        index_per_key=None,
+                        jt_dict=None,
+                        inverse_indices=None,
+                        stride_per_key_per_rank_tensor=torch.tensor(
+                            empty_int_list, dtype=torch.int32
+                        ),
+                        stride_per_key_tensor=None,
+                        length_per_key_tensor=None,
+                        offset_per_key_tensor=None,
+                        lengths_offset_per_key_tensor=None,
+                    )
+                )
+            else:
+                assert self._lengths is not None
+                _length_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+                    self._length_per_key_tensor
+                )
+                split_length_per_key_tensor: torch.Tensor = (
+                    _length_per_key_tensor.narrow(
+                        dim=0, start=start, length=end - start
+                    )
+                )
+
+                sz: int = torch.jit.annotate(
+                    int, split_length_per_key_tensor.sum().item()
+                )
+                if not torch.jit.is_scripting():
+                    for i in range(split_length_per_key_tensor.size(0)):
+                        torch._check_is_size(split_length_per_key_tensor[i].item())
+
+                _lengths_offset_per_key_tensor: torch.Tensor = (
+                    torch.jit._unwrap_optional(self._lengths_offset_per_key_tensor)
+                )
+
+                lengths_start: int = torch.jit.annotate(
+                    int, _lengths_offset_per_key_tensor[start].item()
+                )
+                lengths_end: int = torch.jit.annotate(
+                    int, _lengths_offset_per_key_tensor[end].item()
+                )
+                lengths_sz: int = lengths_end - lengths_start
+
+                if not torch.jit.is_scripting():
+                    torch._check_is_size(lengths_start)
+                    torch._check_is_size(lengths_end)
+                    torch._check(start_offset <= self._values.size(0))
+                    torch._check(sz <= self._values.size(0))
+                    torch._check_is_size(start_offset)
+                    torch._check(start_offset + sz <= self._values.size(0))
+
+                    torch._check_is_size(lengths_start)
+                    torch._check(lengths_start < self.lengths().size(0))
+                    torch._check(lengths_start + lengths_sz <= self.lengths().size(0))
+
+                _stride_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+                    self._stride_per_key_tensor
+                )
+                split_list.append(
+                    KeyedJaggedTensor(
+                        keys=keys,
+                        values=torch.narrow(self._values, 0, start_offset, sz),
+                        weights=(
+                            None
+                            if self.weights_or_none() is None
+                            else torch.narrow(self.weights(), 0, start_offset, sz)
+                        ),
+                        lengths=torch.narrow(
+                            self.lengths(), 0, lengths_start, lengths_sz
+                        ),
+                        offsets=None,
+                        stride=stride,
+                        stride_per_key_per_rank=None,
+                        length_per_key=None,
+                        offset_per_key=None,
+                        index_per_key=None,
+                        jt_dict=None,
+                        inverse_indices=None,
+                        stride_per_key_per_rank_tensor=_stride_per_key_per_rank_tensor.narrow(
+                            dim=0, start=start, length=end - start
+                        ),
+                        stride_per_key_tensor=_stride_per_key_tensor.narrow(
+                            dim=0, start=start, length=end - start
+                        ),
+                        length_per_key_tensor=split_length_per_key_tensor,
+                        offset_per_key_tensor=None,
+                        lengths_offset_per_key_tensor=None,
+                    )
+                )
+
+            start = end
+            start_offset = end_offset
+
+        return split_list
+
     def split(self, segments: List[int]) -> List["KeyedJaggedTensor"]:
+        if not torch.jit.is_scripting() and self._use_per_key_tensor_compute:
+            return self._split_per_key_tensor_compute(segments)
+
         split_list: List[KeyedJaggedTensor] = []
         start = 0
         start_offset = 0
@@ -1792,6 +2151,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         index_per_key=self._index_per_key,
                         jt_dict=self._jt_dict,
                         inverse_indices=None,
+                        stride_per_key_per_rank_tensor=None,
+                        stride_per_key_tensor=None,
+                        length_per_key_tensor=None,
+                        offset_per_key_tensor=None,
+                        lengths_offset_per_key_tensor=None,
                     )
                 )
             elif segment == 0:
@@ -1826,6 +2190,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         index_per_key=None,
                         jt_dict=None,
                         inverse_indices=None,
+                        stride_per_key_per_rank_tensor=None,
+                        stride_per_key_tensor=None,
+                        length_per_key_tensor=None,
+                        offset_per_key_tensor=None,
+                        lengths_offset_per_key_tensor=None,
                     )
                 )
             else:
@@ -1865,6 +2234,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             index_per_key=None,
                             jt_dict=None,
                             inverse_indices=None,
+                            stride_per_key_per_rank_tensor=None,
+                            stride_per_key_tensor=None,
+                            length_per_key_tensor=None,
+                            offset_per_key_tensor=None,
+                            lengths_offset_per_key_tensor=None,
                         )
                     )
                 else:
@@ -1899,11 +2273,117 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             index_per_key=None,
                             jt_dict=None,
                             inverse_indices=None,
+                            stride_per_key_per_rank_tensor=None,
+                            stride_per_key_tensor=None,
+                            length_per_key_tensor=None,
+                            offset_per_key_tensor=None,
+                            lengths_offset_per_key_tensor=None,
                         )
                     )
             start = end
             start_offset = end_offset
         return split_list
+
+    def _permute_per_key_tensor_compute(
+        self,
+        indices: List[int],
+        indices_tensor: Optional[torch.Tensor] = None,
+        include_inverse_indices: bool = False,
+    ) -> "KeyedJaggedTensor":
+        _length_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._length_per_key_tensor
+        )
+        _stride_per_key_per_rank_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._stride_per_key_per_rank_tensor
+        )
+        _stride_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._stride_per_key_tensor
+        )
+        if indices_tensor is None:
+            indices_tensor = torch.tensor(
+                indices, dtype=torch.int, device=self.device()
+            )
+
+        permuted_keys: List[str] = []
+        permuted_lengths_sum: int = 0
+
+        keys = self.keys()
+        indices_tensor_cpu = torch.tensor(indices, dtype=torch.int, device="cpu")
+        permuted_length_per_key_tensor = _length_per_key_tensor[indices_tensor_cpu]
+        permuted_lengths_sum: int = torch.jit.annotate(
+            int, permuted_length_per_key_tensor.sum().item()
+        )
+        permuted_stride_per_key_per_rank_tensor = _stride_per_key_per_rank_tensor[
+            indices_tensor_cpu
+        ]
+        permuted_stride_per_key_tensor = _stride_per_key_tensor[indices_tensor_cpu]
+        for index in indices:
+            key = keys[index]
+            permuted_keys.append(key)
+
+        if self.variable_stride_per_key():
+            # Do not pin for per key tensor compute
+            length_per_key_tensor: torch.Tensor = _length_per_key_tensor.to(
+                self.device()
+            )
+            stride_per_key_tensor = _stride_per_key_tensor.to(self.device())
+
+            permuted_lengths, _ = _permute_tensor_by_segments(
+                self.lengths(),
+                stride_per_key_tensor,
+                indices_tensor,
+                None,
+            )
+            permuted_values, permuted_weights = _permute_tensor_by_segments(
+                self.values(),
+                length_per_key_tensor,
+                indices_tensor,
+                self.weights_or_none(),
+            )
+        else:
+            (
+                permuted_lengths,
+                permuted_values,
+                permuted_weights,
+            ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                indices_tensor,
+                self.lengths().view(len(self._keys), -1),
+                self.values(),
+                self.weights_or_none(),
+                permuted_lengths_sum,
+            )
+
+        optional_permuted_stride_per_key_per_rank_tensor: Optional[torch.Tensor] = None
+        stride, optional_permuted_stride_per_key_per_rank_tensor = (
+            (None, permuted_stride_per_key_per_rank_tensor)
+            if self.variable_stride_per_key()
+            else (self._stride, None)
+        )
+
+        kjt = KeyedJaggedTensor(
+            keys=permuted_keys,
+            values=permuted_values,
+            weights=permuted_weights,
+            lengths=permuted_lengths.view(-1),
+            offsets=None,
+            stride=stride,
+            stride_per_key_per_rank=None,
+            length_per_key=None,
+            offset_per_key=None,
+            index_per_key=None,
+            jt_dict=None,
+            inverse_indices=(
+                self.inverse_indices_or_none() if include_inverse_indices else None
+            ),
+            stride_per_key_per_rank_tensor=_stride_per_key_per_rank_tensor[
+                indices_tensor_cpu
+            ],
+            length_per_key_tensor=permuted_length_per_key_tensor,
+            stride_per_key_tensor=permuted_stride_per_key_tensor,
+            offset_per_key_tensor=None,
+            lengths_offset_per_key_tensor=None,
+        )
+        return kjt
 
     def permute(
         self,
@@ -1911,6 +2391,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         indices_tensor: Optional[torch.Tensor] = None,
         include_inverse_indices: bool = False,
     ) -> "KeyedJaggedTensor":
+        if not torch.jit.is_scripting() and self._use_per_key_tensor_compute:
+            return self._permute_per_key_tensor_compute(
+                indices, indices_tensor, include_inverse_indices
+            )
 
         if indices_tensor is None:
             indices_tensor = torch.tensor(
@@ -1995,6 +2479,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             inverse_indices=(
                 self.inverse_indices_or_none() if include_inverse_indices else None
             ),
+            stride_per_key_per_rank_tensor=None,
+            stride_per_key_tensor=None,
+            length_per_key_tensor=None,
+            offset_per_key_tensor=None,
+            lengths_offset_per_key_tensor=None,
         )
         return kjt
 
@@ -2017,9 +2506,87 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             index_per_key=None,
             jt_dict=None,
             inverse_indices=None,
+            stride_per_key_per_rank_tensor=None,
+            stride_per_key_tensor=None,
+            length_per_key_tensor=None,
+            offset_per_key_tensor=None,
+            lengths_offset_per_key_tensor=None,
+        )
+
+    def _getitem_per_key_tensor_compute(self, key: str) -> JaggedTensor:
+        _length_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._length_per_key_tensor
+        )
+        _offset_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._offset_per_key_tensor
+        )
+        _lengths_offset_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+            self._lengths_offset_per_key_tensor
+        )
+
+        index: int = self._key_indices()[key]
+        start_offset: int = torch.jit.annotate(
+            int, _offset_per_key_tensor[index].item()
+        )
+
+        sz: int = torch.jit.annotate(int, _length_per_key_tensor[index].item())
+        lengths_start: int = torch.jit.annotate(
+            int, _lengths_offset_per_key_tensor[index].item()
+        )
+        lengths_sz: int = torch.jit.annotate(
+            int,
+            (
+                _lengths_offset_per_key_tensor[index + 1].item()
+                # pyre-ignore
+                - _lengths_offset_per_key_tensor[index].item()
+            ),
+        )
+
+        if not torch.jit.is_scripting():
+            torch._check_is_size(lengths_start)
+            torch._check(lengths_start < self.lengths().size(0))
+            torch._check_is_size(lengths_sz)
+            torch._check(lengths_start + lengths_sz <= self.lengths().size(0))
+            torch._check(lengths_start + lengths_sz >= 0)
+
+        _lengths = torch.narrow(
+            self.lengths(),
+            0,
+            lengths_start,
+            lengths_sz,
+        )
+
+        if not torch.jit.is_scripting():
+            torch._check_is_size(start_offset)
+            torch._check_is_size(sz)
+            torch._check(start_offset <= self.values().size(0))
+            torch._check(sz <= self.values().size(0))
+
+        return JaggedTensor(
+            values=torch.narrow(
+                self._values,
+                0,
+                start_offset,
+                sz,
+            ),
+            weights=(
+                None
+                if self.weights_or_none() is None
+                else torch.narrow(
+                    self.weights(),
+                    0,
+                    start_offset,
+                    sz,
+                )
+            ),
+            lengths=_lengths,
+            offsets=None,
         )
 
     def __getitem__(self, key: str) -> JaggedTensor:
+        if not torch.jit.is_scripting() and self._use_per_key_tensor_compute:
+            return self._getitem_per_key_tensor_compute(key)
+
         offset_per_key = self.offset_per_key()
         index = self._key_indices()[key]
         start_offset = offset_per_key[index]
@@ -2082,11 +2649,31 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             )
 
     def to_dict(self) -> Dict[str, JaggedTensor]:
+        stride_per_key: List[int] = []
+        length_per_key: List[int] = []
+        if not torch.jit.is_scripting() and self._use_per_key_tensor_compute:
+            _stride_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+                self._stride_per_key_tensor
+            )
+            _length_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+                self._length_per_key_tensor
+            )
+
+            stride_per_key = torch.jit.annotate(
+                List[int], _stride_per_key_tensor.tolist()
+            )
+            length_per_key = torch.jit.annotate(
+                List[int], _length_per_key_tensor.tolist()
+            )
+        else:
+            stride_per_key = self.stride_per_key()
+            length_per_key = self.length_per_key()
+
         _jt_dict = _maybe_compute_kjt_to_jt_dict(
             stride=self.stride(),
-            stride_per_key=self.stride_per_key(),
+            stride_per_key=stride_per_key,
             keys=self.keys(),
-            length_per_key=self.length_per_key(),
+            length_per_key=length_per_key,
             lengths=self.lengths(),
             values=self.values(),
             variable_stride_per_key=self.variable_stride_per_key(),
@@ -2162,6 +2749,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             index_per_key=index_per_key,
             jt_dict=jt_dict,
             inverse_indices=inverse_indices,
+            length_per_key_tensor=self._length_per_key_tensor,
+            stride_per_key_tensor=self._stride_per_key_tensor,
+            stride_per_key_per_rank_tensor=self._stride_per_key_per_rank_tensor,
+            offset_per_key_tensor=self._offset_per_key_tensor,
+            lengths_offset_per_key_tensor=self._lengths_offset_per_key_tensor,
         )
 
     def __str__(self) -> str:
@@ -2214,6 +2806,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             index_per_key=self._index_per_key,
             jt_dict=None,
             inverse_indices=inverse_indices,
+            stride_per_key_per_rank_tensor=None,
+            stride_per_key_tensor=None,
+            length_per_key_tensor=None,
+            offset_per_key_tensor=None,
+            lengths_offset_per_key_tensor=None,
         )
 
     def dist_labels(self) -> List[str]:
@@ -2225,9 +2822,28 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return labels
 
     def dist_splits(self, key_splits: List[int]) -> List[List[int]]:
-        batch_size_per_split = _sum_by_splits(self.stride_per_key(), key_splits)
-        length_per_split = _sum_by_splits(self.length_per_key(), key_splits)
-        splits = [batch_size_per_split, length_per_split]
+        batch_size_per_split: List[int] = []
+        length_per_split: List[int] = []
+
+        if self._use_per_key_tensor_compute:
+            _stride_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+                self._stride_per_key_tensor
+            )
+            _length_per_key_tensor: torch.Tensor = torch.jit._unwrap_optional(
+                self._length_per_key_tensor
+            )
+            for s in torch.split(_stride_per_key_tensor, key_splits):
+                # pyre-ignore
+                batch_size_per_split.append(torch.sum(s).item())
+
+            for s in torch.split(_length_per_key_tensor, key_splits):
+                # pyre-ignore
+                length_per_split.append(torch.sum(s).item())
+        else:
+            batch_size_per_split = _sum_by_splits(self.stride_per_key(), key_splits)
+            length_per_split = _sum_by_splits(self.length_per_key(), key_splits)
+
+        splits: List[List[int]] = [batch_size_per_split, length_per_split]
         if self.variable_stride_per_key():
             splits.append(key_splits)
         if self.weights_or_none() is not None:
@@ -2237,11 +2853,79 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def dist_tensors(self) -> List[torch.Tensor]:
         tensors = [self.lengths(), self.values()]
         if self.variable_stride_per_key():
-            strides = _pin_and_move(torch.tensor(self.stride_per_key()), self.device())
+            if self._use_per_key_tensor_compute:
+                assert self._stride_per_key_tensor is not None
+                tensor: torch.Tensor = torch.jit._unwrap_optional(
+                    self._stride_per_key_tensor
+                )
+                strides = _pin_and_move(tensor, self.device())
+            else:
+                strides = _pin_and_move(
+                    torch.tensor(self.stride_per_key()), self.device()
+                )
             tensors.append(strides)
         if self.weights_or_none() is not None:
             tensors.append(self.weights())
         return tensors
+
+    @staticmethod
+    def _dist_init_per_key_tensor_compute(
+        keys: List[str],
+        lengths: torch.Tensor,
+        values: torch.Tensor,
+        weights: Optional[torch.Tensor],
+        stride_per_rank_per_key: torch.Tensor,
+        num_workers: int,
+        recat: Optional[torch.Tensor],
+        stagger: int,
+    ) -> "KeyedJaggedTensor":
+        assert is_torchdynamo_compiling()
+
+        stride_per_key_per_rank: torch.Tensor = stride_per_rank_per_key.view(
+            num_workers, len(keys)
+        ).T.cpu()
+
+        strides_cumsum: torch.Tensor = (
+            torch.ops.fbgemm.asynchronous_complete_cumsum(stride_per_rank_per_key)
+        ).cpu()
+
+        cumsum_lengths = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
+
+        n = strides_cumsum.size(0)
+        strides_cumsum_from_1 = torch.narrow(
+            strides_cumsum, dim=0, start=1, length=n - 1
+        )
+        strides_cumsum_to_minus_1 = torch.narrow(
+            strides_cumsum, dim=0, start=0, length=n - 1
+        )
+        length_per_key = (
+            cumsum_lengths[strides_cumsum_from_1]
+            - cumsum_lengths[strides_cumsum_to_minus_1]
+        )
+
+        with record_function("## all2all_data:recat_values ##"):
+            if recat is not None:
+                lengths, _ = _permute_tensor_by_segments(
+                    lengths,
+                    stride_per_rank_per_key,
+                    torch.jit._unwrap_optional(recat),
+                    None,
+                )
+                values, weights = _permute_tensor_by_segments(
+                    values,
+                    length_per_key,
+                    torch.jit._unwrap_optional(recat),
+                    weights,
+                )
+
+        return KeyedJaggedTensor(
+            keys=keys,
+            values=values,
+            weights=weights,
+            lengths=lengths,
+            length_per_key_tensor=length_per_key,
+            stride_per_key_per_rank_tensor=stride_per_key_per_rank,
+        )
 
     @staticmethod
     def dist_init(
@@ -2265,6 +2949,20 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
 
         if variable_stride_per_key:
+            assert stride_per_rank_per_key is not None
+
+            if not torch.jit.is_scripting() and is_torchdynamo_compiling():
+                return KeyedJaggedTensor._dist_init_per_key_tensor_compute(
+                    keys,
+                    lengths,
+                    values,
+                    weights,
+                    stride_per_rank_per_key,
+                    num_workers,
+                    recat,
+                    stagger,
+                )
+
             assert stride_per_rank_per_key is not None
             stride_per_key_per_rank: List[List[int]] = stride_per_rank_per_key.view(
                 num_workers, len(keys)
@@ -2313,13 +3011,21 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             return kjt.sync()
         else:
             assert stride_per_rank is not None
+
             with record_function("## all2all_data:recat_values ##"):
-                if recat is not None and recat.numel() > 0:
+                recat_cond: bool = recat is not None
+
+                if not torch.jit.is_scripting() and is_torchdynamo_compiling():
+                    # pyre-ignore
+                    recat_cond = recat_cond and guard_size_oblivious(recat.numel() > 0)
+                else:
+                    recat_cond = (
+                        recat_cond and torch.jit._unwrap_optional(recat).numel() > 0
+                    )
+
+                if recat_cond:
                     stride = stride_per_rank[0]
 
-                    # dynamo don't handle generators well
-                    # so had to unroll the original generator into
-                    # this for loop.
                     single_batch_per_rank = True
                     for s in stride_per_rank:
                         if s != stride:
@@ -2331,7 +3037,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             values,
                             weights,
                         ) = torch.ops.fbgemm.permute_2D_sparse_data(
-                            recat,
+                            torch.jit._unwrap_optional(recat),
                             lengths.view(-1, stride),
                             values,
                             weights,
@@ -2344,7 +3050,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             values,
                             weights,
                         ) = torch.ops.fbgemm.permute_1D_sparse_data(
-                            recat,
+                            torch.jit._unwrap_optional(recat),
                             lengths.view(-1),
                             values,
                             weights,

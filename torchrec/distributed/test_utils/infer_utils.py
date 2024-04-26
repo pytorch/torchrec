@@ -112,6 +112,10 @@ class TestModelInfo:
 
 
 class KJTInputExportWrapper(torch.nn.Module):
+    """
+    Wrapper nn.Module with KJT creation inside forward, returns pytree flatten output.
+    """
+
     def __init__(
         self,
         module_kjt_input: torch.nn.Module,
@@ -138,6 +142,41 @@ class KJTInputExportWrapper(torch.nn.Module):
         )
         output = self._module_kjt_input(kjt, *args, **kwargs)
         # TODO(ivankobzarev): Support of None leaves in dynamo/export (e.g. KJT offsets)
+        return [leaf for leaf in pytree.tree_leaves(output) if leaf is not None]
+
+
+class KJTInputExportWrapperWithStrides(torch.nn.Module):
+    """
+    Version of KJTInputExportWrapper with stride_per_key_per_rank_tensor argument for VB path.
+    """
+
+    def __init__(
+        self,
+        module_kjt_input: torch.nn.Module,
+        kjt_keys: List[str],
+    ) -> None:
+        super().__init__()
+        self._module_kjt_input = module_kjt_input
+        self._kjt_keys = kjt_keys
+
+    # pyre-ignore
+    def forward(
+        self,
+        values: torch.Tensor,
+        lengths: torch.Tensor,
+        stride_per_key_per_rank_tensor: Optional[torch.Tensor],
+        # pyre-ignore
+        *args,
+        # pyre-ignore
+        **kwargs,
+    ):
+        kjt = KeyedJaggedTensor(
+            keys=self._kjt_keys,
+            values=values,
+            lengths=lengths,
+            stride_per_key_per_rank_tensor=stride_per_key_per_rank_tensor,
+        )
+        output = self._module_kjt_input(kjt, *args, **kwargs)
         return [leaf for leaf in pytree.tree_leaves(output) if leaf is not None]
 
 

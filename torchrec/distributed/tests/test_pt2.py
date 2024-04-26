@@ -9,10 +9,14 @@
 
 import sys
 import unittest
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import torch
-from torchrec.distributed.test_utils.infer_utils import TestQuantFPEBCSharder
+from torchrec.distributed.test_utils.infer_utils import (
+    KJTInputExportWrapperWithStrides,
+    TestQuantFPEBCSharder,
+)
+from torchrec.sparse.jagged_tensor import JaggedTensor
 
 try:
     # pyre-ignore
@@ -51,10 +55,19 @@ def make_kjt(values: List[int], lengths: List[int]) -> KeyedJaggedTensor:
     return kjt
 
 
+def kjt_module_kjt_inputs_with_strides(kjt: KeyedJaggedTensor) -> Tuple:
+    return (
+        kjt._values,
+        kjt._lengths,
+        kjt._stride_per_key_per_rank_tensor,
+    )
+
+
 def _sharded_quant_ebc_model(
     local_device: str = "cuda",
     compute_device: str = "cuda",
     feature_processor: bool = False,
+    sharding_type: ShardingType = ShardingType.TABLE_WISE,
 ) -> Tuple[torch.nn.Module, List[KeyedJaggedTensor]]:
     num_embeddings = 256
     emb_dim = 12
@@ -79,8 +92,6 @@ def _sharded_quant_ebc_model(
         inp.to(local_device).idlist_features
         for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
     ]
-
-    sharding_type: ShardingType = ShardingType.TABLE_WISE
 
     if feature_processor:
         sharder = TestQuantFPEBCSharder(
@@ -115,7 +126,44 @@ def _sharded_quant_ebc_model(
     return model, input_kjts
 
 
+def kjt_for_tracing(
+    kjt: KeyedJaggedTensor, always_to_vb: bool = False
+) -> KeyedJaggedTensor:
+    is_vb = kjt.variable_stride_per_key()
+    if always_to_vb and not is_vb:
+        stride: int = kjt.stride()
+        n = len(kjt.keys())
+        return KeyedJaggedTensor(
+            keys=kjt.keys(),
+            values=kjt.values(),
+            lengths=kjt.lengths(),
+            stride_per_key_per_rank=[[stride]] * n,
+            inverse_indices=(
+                kjt.keys(),
+                torch.arange(stride)
+                .expand(n, stride)
+                .contiguous()
+                .to(device=kjt.device()),
+            ),
+            stride_per_key_per_rank_tensor=torch.full([n], fill_value=stride).view(
+                n, 1
+            ),
+        )
+
+    return KeyedJaggedTensor(
+        keys=kjt.keys(),
+        values=kjt.values(),
+        lengths=kjt.lengths(),
+        stride_per_key_per_rank=(kjt.stride_per_key_per_rank() if is_vb else None),
+        inverse_indices=kjt.inverse_indices_or_none() if is_vb else None,
+        stride_per_key_per_rank_tensor=torch.tensor(
+            kjt.stride_per_key_per_rank(), dtype=torch.int32
+        ),
+    )
+
+
 class TestPt2(unittest.TestCase):
+
     def _test_kjt_input_module(
         self,
         kjt_input_module: torch.nn.Module,
@@ -154,13 +202,35 @@ class TestPt2(unittest.TestCase):
                 pt2_ir_output = pt2_ir.module()(*inputs)
                 assert_close(eager_output, pt2_ir_output)
 
+    # Separate test for Dynamo, as it fallbacks on VB path.
+    # Torchrec has lazy init modules, depending on the first input => we need to run eager with tracing inputs.
+    # But other test cases do not need to go VB.
+    def _test_kjt_input_module_dynamo_compile(
+        self,
+        kjt_input_module: torch.nn.Module,
+        kjt_keys: List[str],
+        # pyre-ignore
+        inputs,
+    ) -> None:
+        with dynamo_skipfiles_allow("torchrec"):
+            EM: torch.nn.Module = KJTInputExportWrapperWithStrides(
+                kjt_input_module, kjt_keys
+            )
+            eager_output = EM(*inputs)
+            torch._dynamo.config.capture_scalar_outputs = True
+            torch._dynamo.config.capture_dynamic_output_shape_ops = True
+
+            dynamo_eager_out = torch.compile(EM, backend="eager", fullgraph=True)(
+                *inputs
+            )
+            assert_close(eager_output, dynamo_eager_out)
+
     def test_kjt_split(self) -> None:
         class M(torch.nn.Module):
             def forward(self, kjt: KeyedJaggedTensor):
                 return kjt.split([1, 2, 1])
 
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
-        segments: List[int] = [1, 2, 1]
         self._test_kjt_input_module(
             M(),
             kjt.keys(),
@@ -170,6 +240,18 @@ class TestPt2(unittest.TestCase):
             test_pt2_ir_export=True,
         )
 
+    def test_kjt_split_with_strides_dynamo(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor):
+                return kjt.split([1, 2, 1])
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+        self._test_kjt_input_module_dynamo_compile(
+            M(),
+            kjt.keys(),
+            kjt_module_kjt_inputs_with_strides(kjt_for_tracing(kjt)),
+        )
+
     def test_kjt_permute(self) -> None:
         class M(torch.nn.Module):
             def forward(self, kjt: KeyedJaggedTensor, indices: List[int]):
@@ -177,12 +259,35 @@ class TestPt2(unittest.TestCase):
 
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
         indices: List[int] = [1, 0, 3, 2]
+
+        # pyre-ignore
+        def inputs_fn(kjt):
+            return *kjt_module_kjt_inputs_with_strides(kjt), indices
+
         self._test_kjt_input_module(
             M(),
             kjt.keys(),
             (kjt._values, kjt._lengths, indices),
             test_aot_inductor=False,
             test_pt2_ir_export=True,
+        )
+
+    def test_kjt_permute_with_strides_dynamo(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor, indices: List[int]):
+                return kjt.permute(indices)
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+        indices: List[int] = [1, 0, 3, 2]
+
+        # pyre-ignore
+        def inputs_fn(kjt):
+            return *kjt_module_kjt_inputs_with_strides(kjt), indices
+
+        self._test_kjt_input_module_dynamo_compile(
+            M(),
+            kjt.keys(),
+            inputs_fn(kjt_for_tracing(kjt)),
         )
 
     def test_kjt_length_per_key(self) -> None:
@@ -225,7 +330,6 @@ class TestPt2(unittest.TestCase):
                 return out0, out1
 
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
-
         self._test_kjt_input_module(
             M(),
             kjt.keys(),
@@ -233,6 +337,34 @@ class TestPt2(unittest.TestCase):
             test_dynamo=False,
             test_aot_inductor=False,
             test_pt2_ir_export=True,
+        )
+
+    def test_kjt__getitem__with_strides_dynamo(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor):
+                out0 = kjt["key0"]
+                out1 = kjt["key1"]
+
+                return out0, out1
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+        self._test_kjt_input_module_dynamo_compile(
+            M(),
+            kjt.keys(),
+            kjt_module_kjt_inputs_with_strides(kjt_for_tracing(kjt)),
+        )
+
+    def test_kjt_to_dict_with_strides_dynamo(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
+                return kjt.to_dict()
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+
+        self._test_kjt_input_module_dynamo_compile(
+            M(),
+            kjt.keys(),
+            kjt_module_kjt_inputs_with_strides(kjt_for_tracing(kjt)),
         )
 
     # pyre-ignores
