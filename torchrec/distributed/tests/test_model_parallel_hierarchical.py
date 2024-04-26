@@ -29,6 +29,7 @@ from torchrec.distributed.test_utils.test_sharding import (
     sharding_single_rank_test,
 )
 from torchrec.distributed.types import ShardingType
+from torchrec.modules.embedding_configs import PoolingType
 from torchrec.test_utils import skip_if_asan_class
 
 
@@ -78,8 +79,9 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             ]
         ),
         variable_batch_size=st.booleans(),
+        pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_nccl_twrw(
         self,
         sharder_type: str,
@@ -91,6 +93,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
+        pooling: PoolingType,
     ) -> None:
         # Dense kernels do not have overlapped optimizer behavior yet
         assume(
@@ -121,6 +124,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+            pooling=pooling,
         )
 
     @unittest.skipIf(
@@ -397,9 +401,15 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
     )
     # pyre-fixme[56]
     @given(
-        sharding_type=st.just(ShardingType.TABLE_ROW_WISE.value),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
         local_size=st.sampled_from([2]),
         global_constant_batch=st.booleans(),
+        pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_variable_batch(
@@ -407,6 +417,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
         sharding_type: str,
         local_size: int,
         global_constant_batch: bool,
+        pooling: PoolingType,
     ) -> None:
         self._test_sharding(
             # pyre-ignore[6]
@@ -424,4 +435,5 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             variable_batch_per_feature=True,
             has_weighted_tables=False,
             global_constant_batch=global_constant_batch,
+            pooling=pooling,
         )
