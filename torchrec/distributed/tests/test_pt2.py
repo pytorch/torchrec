@@ -322,6 +322,9 @@ class TestPt2(unittest.TestCase):
         )
         kjt = input_kjts[0]
         kjt = kjt.to("meta")
+        # Move FP parameters
+        sharded_model.to("meta")
+
         sharded_model(kjt.values(), kjt.lengths())
 
         ep = torch.export.export(

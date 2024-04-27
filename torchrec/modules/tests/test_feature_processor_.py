@@ -182,3 +182,26 @@ class PositionWeightedCollectionModuleTest(unittest.TestCase):
         self.assertTrue(
             all(param.is_meta for param in res.position_weights_dict.values())
         )
+
+    def test_to(self) -> None:
+        pwmc = PositionWeightedModuleCollection(
+            max_feature_lengths={"f1": 10, "f2": 10},
+            device=torch.device("cpu"),
+        )
+
+        self.assertTrue(
+            all(param.device.type == "cpu" for param in pwmc.position_weights.values())
+        )
+        self.assertTrue(
+            all(
+                param.device.type == "cpu"
+                for param in pwmc.position_weights_dict.values()
+            )
+        )
+
+        pwmc.to("meta")
+
+        self.assertTrue(all(param.is_meta for param in pwmc.position_weights.values()))
+        self.assertTrue(
+            all(param.is_meta for param in pwmc.position_weights_dict.values())
+        )

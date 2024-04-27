@@ -2019,6 +2019,8 @@ class InferShardingsTest(unittest.TestCase):
             if isinstance(input, torch.Tensor):
                 inputs[i] = input.to(torch.device("meta"))
 
+        # move dense params also to meta
+        sharded_model.to("meta")
         sharded_model(*inputs)
         # Don't care about the output since we are sharding on meta
 
