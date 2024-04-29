@@ -9,7 +9,7 @@
 
 import random
 from dataclasses import dataclass
-from typing import Any, cast, Dict, List, Optional, Tuple, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
@@ -26,6 +26,7 @@ from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
 from torchrec.distributed.types import QuantizedCommCodecs
 from torchrec.distributed.utils import CopyableMixin
+from torchrec.modules.activation import SwishLayerNorm
 from torchrec.modules.embedding_configs import (
     BaseEmbeddingConfig,
     EmbeddingBagConfig,
@@ -524,6 +525,14 @@ class TestDHNArch(nn.Module):
         return self.linear1(self.linear0(input))
 
 
+@torch.fx.wrap
+def _concat(
+    dense: torch.Tensor,
+    sparse_embeddings: List[torch.Tensor],
+) -> torch.Tensor:
+    return torch.cat([dense] + sparse_embeddings, dim=1)
+
+
 class TestOverArch(nn.Module):
     """
     Basic nn.Module for testing
@@ -578,13 +587,78 @@ class TestOverArch(nn.Module):
         dense: torch.Tensor,
         sparse: KeyedTensor,
     ) -> torch.Tensor:
-        ret_list = []
-        ret_list.append(dense)
-        for embedding_name in self._embedding_names:
-            ret_list.append(sparse[embedding_name])
-        for feature_name in self._weighted_features:
-            ret_list.append(sparse[feature_name])
-        return self.dhn_arch(torch.cat(ret_list, dim=1))
+        sparse_regrouped: List[torch.Tensor] = KeyedTensor.regroup(
+            [sparse], [self._embedding_names, self._weighted_features]
+        )
+
+        return self.dhn_arch(_concat(dense, sparse_regrouped))
+
+
+class TestOverArchLarge(nn.Module):
+    """
+    Basic nn.Module for testing, w 5/ layers.
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        embedding_names: Optional[List[str]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+        self._embedding_names: List[str] = (
+            embedding_names
+            if embedding_names
+            else [feature for table in tables for feature in table.feature_names]
+        )
+        self._weighted_features: List[str] = [
+            feature for table in weighted_tables for feature in table.feature_names
+        ]
+        in_features = (
+            8
+            + sum([table.embedding_dim * len(table.feature_names) for table in tables])
+            + sum(
+                [
+                    table.embedding_dim * len(table.feature_names)
+                    for table in weighted_tables
+                ]
+            )
+        )
+        out_features = 1000
+        layers = [
+            torch.nn.Linear(
+                in_features=in_features,
+                out_features=out_features,
+            ),
+            SwishLayerNorm([out_features]),
+        ]
+
+        for _ in range(5):
+            layers += [
+                torch.nn.Linear(
+                    in_features=out_features,
+                    out_features=out_features,
+                ),
+                SwishLayerNorm([out_features]),
+            ]
+
+        self.overarch = torch.nn.Sequential(*layers)
+
+    def forward(
+        self,
+        dense: torch.Tensor,
+        sparse: KeyedTensor,
+    ) -> torch.Tensor:
+        ret_list = [dense]
+        ret_list.extend(
+            KeyedTensor.regroup(
+                [sparse], [self._embedding_names, self._weighted_features]
+            )
+        )
+        return self.overarch(torch.cat(ret_list, dim=1))
 
 
 @torch.fx.wrap
@@ -829,6 +903,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         sparse_device: Optional[torch.device] = None,
         max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
         feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
+        over_arch_clazz: Type[nn.Module] = TestOverArch,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -850,23 +925,26 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         embedding_names = (
             list(embedding_groups.values())[0] if embedding_groups else None
         )
-        self.over = TestOverArch(tables, weighted_tables, embedding_names, dense_device)
+        self.over: nn.Module = over_arch_clazz(
+            tables, weighted_tables, embedding_names, dense_device
+        )
         self.register_buffer(
             "dummy_ones",
             torch.ones(1, device=dense_device),
         )
 
-    def forward(
-        self,
-        input: ModelInput,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        dense_r = self.dense(input.float_features)
-        sparse_r = self.sparse(
+    def sparse_forward(self, input: ModelInput) -> KeyedTensor:
+        return self.sparse(
             features=input.idlist_features,
             weighted_features=input.idscore_features,
             batch_size=input.float_features.size(0),
         )
-        over_r = self.over(dense_r, sparse_r)
+
+    def dense_forward(
+        self, input: ModelInput, sparse_output: KeyedTensor
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        dense_r = self.dense(input.float_features)
+        over_r = self.over(dense_r, sparse_output)
         pred = torch.sigmoid(torch.mean(over_r, dim=1)) + self.dummy_ones
         if self.training:
             return (
@@ -875,6 +953,12 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
             )
         else:
             return pred
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        return self.dense_forward(input, self.sparse_forward(input))
 
 
 class TestTowerInteraction(nn.Module):
