@@ -31,6 +31,7 @@ class MultiProcessContext:
         world_size: int,
         backend: str = "gloo",
         local_size: Optional[int] = None,
+        use_deterministic_algorithms: bool = True,
     ) -> None:
 
         self.rank = rank
@@ -42,11 +43,14 @@ class MultiProcessContext:
             self.device: torch.device = torch.device(f"cuda:{rank}")
             torch.cuda.set_device(self.device)
 
-            torch.backends.cudnn.allow_tf32 = False
-            torch.backends.cuda.matmul.allow_tf32 = False
         else:
             self.device: torch.device = torch.device("cpu")
-        torch.use_deterministic_algorithms(True)
+
+        if use_deterministic_algorithms:
+            if torch.cuda.is_available():
+                torch.backends.cudnn.allow_tf32 = False
+                torch.backends.cuda.matmul.allow_tf32 = False
+            torch.use_deterministic_algorithms(True)
 
         self.pg: Optional[dist.ProcessGroup] = None
 
