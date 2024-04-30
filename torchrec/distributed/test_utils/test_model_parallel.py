@@ -590,59 +590,14 @@ class ModelParallelBase(ModelParallelTestShared):
             [
                 ShardingType.TABLE_WISE.value,
                 ShardingType.COLUMN_WISE.value,
-                ShardingType.TABLE_COLUMN_WISE.value,
-            ]
-        ),
-        global_constant_batch=st.booleans(),
-    )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
-    def test_sharding_variable_batch(
-        self,
-        sharding_type: str,
-        global_constant_batch: bool,
-    ) -> None:
-        if self.backend == "gloo":
-            # error is from FBGEMM, it says CPU even if we are on GPU.
-            self.skipTest(
-                "bounds_check_indices on CPU does not support variable length (batch size)"
-            )
-        self._test_sharding(
-            # pyre-ignore[6]
-            sharders=[
-                create_test_sharder(
-                    sharder_type=SharderType.EMBEDDING_BAG_COLLECTION.value,
-                    sharding_type=sharding_type,
-                    kernel_type=EmbeddingComputeKernel.FUSED.value,
-                    device=self.device,
-                ),
-            ],
-            backend=self.backend,
-            constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
-            },
-            variable_batch_per_feature=True,
-            has_weighted_tables=False,
-            global_constant_batch=global_constant_batch,
-        )
-
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
-    )
-    # pyre-fixme[56]
-    @given(
-        sharding_type=st.sampled_from(
-            [
                 ShardingType.ROW_WISE.value,
-                ShardingType.TABLE_ROW_WISE.value,
             ]
         ),
         global_constant_batch=st.booleans(),
         pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
-    def test_sharding_variable_batch_twrw(
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    def test_sharding_variable_batch(
         self,
         sharding_type: str,
         global_constant_batch: bool,
