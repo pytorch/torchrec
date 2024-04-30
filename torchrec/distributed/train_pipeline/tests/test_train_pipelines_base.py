@@ -132,5 +132,16 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
                 )
             ],
         )
-        optimizer = optim.SGD(sharded_model.parameters(), lr=0.1)
+        # default fused optimizer is SGD w/ lr=0.1; we need to drop params
+        fused_named_parameters: List[str] = [
+            x for x in DistributedModelParallel._sharded_parameter_names(sharded_model)
+        ]
+        optimizer = optim.SGD(
+            [
+                y
+                for x, y in sharded_model.named_parameters()
+                if x not in fused_named_parameters
+            ],
+            lr=0.1,
+        )
         return sharded_model, optimizer
