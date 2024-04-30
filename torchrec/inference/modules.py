@@ -21,6 +21,7 @@ from torch.fx.passes.split_utils import getattr_recursive
 from torchrec import distributed as trec_dist, inference as trec_infer
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fused_params import (
+    FUSED_PARAM_BOUNDS_CHECK_MODE,
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     FUSED_PARAM_REGISTER_TBE_BOOL,
 )
@@ -36,7 +37,12 @@ from torchrec.distributed.quant_embeddingbag import (
     QuantFeatureProcessedEmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.shard import _shard_modules
-from torchrec.distributed.types import ModuleSharder, ShardingPlan, ShardingType
+from torchrec.distributed.types import (
+    BoundsCheckMode,
+    ModuleSharder,
+    ShardingPlan,
+    ShardingType,
+)
 
 from torchrec.modules.embedding_configs import QuantConfig
 from torchrec.modules.embedding_modules import (
@@ -375,6 +381,7 @@ def shard_quant_model(
     _fused_param: Dict[str, Any] = {
         FUSED_PARAM_REGISTER_TBE_BOOL: True,
         FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: True,
+        FUSED_PARAM_BOUNDS_CHECK_MODE: BoundsCheckMode.NONE,
     }
 
     _sharders: List[ModuleSharder[torch.nn.Module]] = [

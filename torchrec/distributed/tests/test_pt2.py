@@ -24,6 +24,7 @@ except (unittest.SkipTest, ImportError):
 
 from fbgemm_gpu import sparse_ops  # noqa: F401, E402
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.fused_params import FUSED_PARAM_BOUNDS_CHECK_MODE
 from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.infer_utils import (
     assert_close,
@@ -35,7 +36,7 @@ from torchrec.distributed.test_utils.infer_utils import (
     replace_sharded_quant_modules_tbes_with_mock_tbes,
     TestQuantEBCSharder,
 )
-from torchrec.distributed.types import ShardingEnv, ShardingType
+from torchrec.distributed.types import BoundsCheckMode, ShardingEnv, ShardingType
 from torchrec.sparse.jagged_tensor import ComputeKJTToJTDict, KeyedJaggedTensor
 
 
@@ -82,17 +83,22 @@ def _sharded_quant_ebc_model(
 
     sharding_type: ShardingType = ShardingType.TABLE_WISE
 
+    fused_params = {
+        FUSED_PARAM_BOUNDS_CHECK_MODE: BoundsCheckMode.NONE,
+    }
     if feature_processor:
         sharder = TestQuantFPEBCSharder(
             sharding_type=sharding_type.value,
             kernel_type=EmbeddingComputeKernel.QUANT.value,
             shardable_params=[table.name for table in mi.tables],
+            fused_params=fused_params,
         )
     else:
         sharder = TestQuantEBCSharder(
             sharding_type=sharding_type.value,
             kernel_type=EmbeddingComputeKernel.QUANT.value,
             shardable_params=[table.name for table in mi.tables],
+            fused_params=fused_params,
         )
     # pyre-ignore
     plan = mi.planner.plan(
@@ -308,6 +314,11 @@ class TestPt2(unittest.TestCase):
 
         ep.module()(kjt.values(), kjt.lengths())
 
+        # PT2 IR autofunctionalizes mutation funcs (bounds_check_indices)
+        # ensure such node isn't present, as it causes issues with IR
+        for n in ep.graph_module.graph.nodes:
+            self.assertFalse("auto_functionalized" in str(n.name))
+
         # TODO: Fix Unflatten
         # torch.export.unflatten(ep)
 
@@ -337,6 +348,11 @@ class TestPt2(unittest.TestCase):
             strict=False,
         )
         ep.module()(kjt.values(), kjt.lengths())
+
+        # PT2 IR autofunctionalizes mutation funcs (bounds_check_indices)
+        # ensure such node isn't present, as it causes issues with IR
+        for n in ep.graph_module.graph.nodes:
+            self.assertFalse("auto_functionalized" in str(n.name))
 
         # TODO: Fix Unflatten
         # torch.export.unflatten(ep)
