@@ -151,14 +151,12 @@ def _get_runtime_device(
 def _unwrap_kjt(
     features: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    if features.device().type == "cuda":
-        return (
-            features.values().int(),
-            features.offsets().int(),
-            features.weights_or_none(),
-        )
-    else:
-        return features.values(), features.offsets(), features.weights_or_none()
+    # Here it should always follow cuda path, runtime device cannot be meta
+    return (
+        features.values().int(),
+        features.offsets().int(),
+        features.weights_or_none(),
+    )
 
 
 @torch.fx.wrap
