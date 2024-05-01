@@ -32,13 +32,14 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
 )
 from torchrec.distributed.fused_params import (
-    get_fused_param_tbe_row_alignment,
+    fused_param_bounds_check_mode,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
     is_fused_param_weighted,
     tbe_fused_params,
     TBEToRegisterMixIn,
 )
+from torchrec.distributed.types import BoundsCheckMode
 from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     DATA_TYPE_NUM_BITS,
@@ -197,6 +198,10 @@ class QuantBatchedEmbeddingBag(
         self._quant_state_dict_split_scale_bias: bool = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
+        bounds_check_mode: Optional[BoundsCheckMode] = fused_param_bounds_check_mode(
+            fused_params
+        )
+
         index_remapping = [
             table.pruning_indices_remapping for table in config.embedding_tables
         ]
@@ -233,6 +238,9 @@ class QuantBatchedEmbeddingBag(
                 feature_table_map=self._feature_table_map,
                 row_alignment=self._tbe_row_alignment,
                 uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+                bounds_check_mode=(
+                    bounds_check_mode if bounds_check_mode else BoundsCheckMode.WARNING
+                ),
                 **(tbe_fused_params(fused_params) or {}),
             )
         )
