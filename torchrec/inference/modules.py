@@ -10,17 +10,48 @@
 import abc
 import json
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, cast, Dict, List, Optional, Tuple, Type
 
 import torch
 import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
 import torchrec.quant as trec_quant
+from torch.fx.passes.split_utils import getattr_recursive
+from torchrec import distributed as trec_dist, inference as trec_infer
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.fused_params import (
+    FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+    FUSED_PARAM_REGISTER_TBE_BOOL,
+)
+from torchrec.distributed.planner import ParameterConstraints
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.shard_estimators import (
+    EmbeddingPerfEstimator,
+    EmbeddingStorageEstimator,
+)
+from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
+from torchrec.distributed.quant_embeddingbag import (
+    QuantEmbeddingBagCollectionSharder,
+    QuantFeatureProcessedEmbeddingBagCollectionSharder,
+)
+from torchrec.distributed.shard import _shard_modules
+from torchrec.distributed.types import ModuleSharder, ShardingPlan, ShardingType
+
 from torchrec.modules.embedding_configs import QuantConfig
 from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
     EmbeddingBagCollectionInterface,
+    EmbeddingCollection,
     EmbeddingCollectionInterface,
+)
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+
+from torchrec.quant.embedding_modules import (
+    EmbeddingBagCollection as QuantEmbeddingBagCollection,
+    EmbeddingCollection as QuantEmbeddingCollection,
+    FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
+    quant_prep_enable_register_tbes,
 )
 
 
@@ -262,3 +293,149 @@ def quantize_dense(
     for key, value in reassign.items():
         module._modules[key] = value
     return predict_module
+
+
+def quantize_inference_model(model: torch.nn.Module) -> torch.nn.Module:
+    """
+    Quantize the model.
+    """
+
+    DEFAULT_QUANTIZATION_DTYPE: torch.dtype = torch.int8
+
+    FEATURE_PROCESSED_EBC_TYPE: str = trim_torch_package_prefix_from_typename(
+        torch.typename(FeatureProcessedEmbeddingBagCollection)
+    )
+
+    def _quantize_fp_module(
+        model: torch.nn.Module,
+        fp_module: FeatureProcessedEmbeddingBagCollection,
+        fp_module_fqn: str,
+        activation_dtype: torch.dtype = torch.float,
+        weight_dtype: torch.dtype = DEFAULT_QUANTIZATION_DTYPE,
+    ) -> None:
+        """
+        If FeatureProcessedEmbeddingBagCollection is found, quantize via direct module swap.
+        """
+        fp_module.qconfig = quant.QConfig(
+            activation=quant.PlaceholderObserver.with_args(dtype=activation_dtype),
+            weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
+        )
+        # ie. "root.submodule.feature_processed_mod" -> "root.submodule", "feature_processed_mod"
+        fp_ebc_parent_fqn, fp_ebc_name = fp_module_fqn.rsplit(".", 1)
+        fp_ebc_parent = getattr_recursive(model, fp_ebc_parent_fqn)
+        fp_ebc_parent.register_module(
+            fp_ebc_name,
+            QuantFeatureProcessedEmbeddingBagCollection.from_float(fp_module),
+        )
+
+    QUANTIZATION_MAPPING: Dict[str, Type[torch.nn.Module]] = {
+        trim_torch_package_prefix_from_typename(
+            torch.typename(EmbeddingBagCollection)
+        ): QuantEmbeddingBagCollection,
+        trim_torch_package_prefix_from_typename(
+            torch.typename(EmbeddingCollection)
+        ): QuantEmbeddingCollection,
+    }
+
+    additional_qconfig_spec_keys = []
+    additional_mapping = {}
+
+    for n, m in model.named_modules():
+        typename = trim_torch_package_prefix_from_typename(torch.typename(m))
+
+        if typename in QUANTIZATION_MAPPING:
+            additional_qconfig_spec_keys.append(type(m))
+            additional_mapping[type(m)] = QUANTIZATION_MAPPING[typename]
+        elif typename == FEATURE_PROCESSED_EBC_TYPE:
+            # handle the fp ebc separately
+            _quantize_fp_module(model, m, n)
+
+    quant_prep_enable_register_tbes(model, list(additional_mapping.keys()))
+    trec_infer.modules.quantize_embeddings(
+        model,
+        dtype=DEFAULT_QUANTIZATION_DTYPE,
+        additional_qconfig_spec_keys=additional_qconfig_spec_keys,
+        additional_mapping=additional_mapping,
+        inplace=True,
+    )
+
+    return model
+
+
+def shard_quant_model(
+    model: torch.nn.Module,
+    table_fqns: List[str],
+    world_size: int = 1,
+    compute_device: str = "cuda",
+) -> Tuple[torch.nn.Module, ShardingPlan]:
+    """
+    Shard the model.
+    """
+
+    _fused_param: Dict[str, Any] = {
+        FUSED_PARAM_REGISTER_TBE_BOOL: True,
+        FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: True,
+    }
+
+    _sharders: List[ModuleSharder[torch.nn.Module]] = [
+        cast(
+            ModuleSharder[torch.nn.Module],
+            QuantEmbeddingBagCollectionSharder(fused_params=_fused_param),
+        ),
+        cast(
+            ModuleSharder[torch.nn.Module],
+            QuantEmbeddingCollectionSharder(fused_params=_fused_param),
+        ),
+        cast(
+            ModuleSharder[torch.nn.Module],
+            QuantFeatureProcessedEmbeddingBagCollectionSharder(
+                fused_params=_fused_param
+            ),
+        ),
+    ]
+
+    constraints = {}
+
+    for name in table_fqns:
+        constraints[name] = ParameterConstraints(
+            sharding_types=[ShardingType.TABLE_WISE.value],
+            compute_kernels=[EmbeddingComputeKernel.QUANT.value],
+        )
+
+    topology = trec_dist.planner.Topology(
+        world_size=world_size,
+        compute_device=compute_device,
+    )
+    batch_size = 1
+    model_plan = trec_dist.planner.EmbeddingShardingPlanner(
+        topology=topology,
+        batch_size=batch_size,
+        constraints=constraints,
+        enumerator=EmbeddingEnumerator(
+            topology=topology,
+            batch_size=batch_size,
+            constraints=constraints,
+            estimator=[
+                EmbeddingPerfEstimator(
+                    topology=topology, constraints=constraints, is_inference=True
+                ),
+                EmbeddingStorageEstimator(topology=topology, constraints=constraints),
+            ],
+        ),
+    ).plan(
+        model,
+        _sharders,
+    )
+
+    model = _shard_modules(
+        module=model,
+        device=torch.device("meta"),
+        plan=model_plan,
+        env=trec_dist.ShardingEnv.from_local(
+            world_size,
+            0,
+        ),
+        sharders=_sharders,
+    )
+
+    return model, model_plan

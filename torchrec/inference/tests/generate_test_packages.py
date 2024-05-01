@@ -18,10 +18,27 @@ from typing import Optional, Tuple
 import torch
 from torch.package import PackageExporter
 
-try:
-    from .test_modules import Nested, Simple
-except ImportError:
-    from test_modules import Nested, Simple  # pyre-ignore
+
+class Simple(torch.nn.Module):
+    def __init__(self, N: int, M: int) -> None:
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.ones(N, M))
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        output = self.weight + input
+        return output
+
+    def set_weight(self, weight: torch.Tensor) -> None:
+        self.weight[:] = torch.nn.Parameter(weight)
+
+
+class Nested(torch.nn.Module):
+    def __init__(self, N: int, M: int) -> None:
+        super().__init__()
+        self.simple = Simple(N, M)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return self.simple(input)
 
 
 def save(
