@@ -15,6 +15,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torchrec.distributed.embedding_types import GroupedEmbeddingConfig
+from torchrec.distributed.types import BoundsCheckMode
 
 FUSED_PARAM_REGISTER_TBE_BOOL: str = "__register_tbes_in_named_modules"
 FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
@@ -22,6 +23,7 @@ FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
 )
 FUSED_PARAM_TBE_ROW_ALIGNMENT: str = "__register_tbe_row_alignment"
 FUSED_PARAM_IS_WEIGHTED: str = "__register_tbe_is_weighted"
+FUSED_PARAM_BOUNDS_CHECK_MODE: str = "__register_tbe_bounds_check_mode"
 
 
 class TBEToRegisterMixIn:
@@ -65,6 +67,15 @@ def is_fused_param_weighted(fused_params: Optional[Dict[str, Any]]) -> Optional[
         return fused_params[FUSED_PARAM_IS_WEIGHTED]
 
 
+def fused_param_bounds_check_mode(
+    fused_params: Optional[Dict[str, Any]]
+) -> Optional[BoundsCheckMode]:
+    if fused_params is None or FUSED_PARAM_BOUNDS_CHECK_MODE not in fused_params:
+        return None
+    else:
+        return fused_params[FUSED_PARAM_BOUNDS_CHECK_MODE]
+
+
 def is_fused_param_quant_state_dict_split_scale_bias(
     fused_params: Optional[Dict[str, Any]]
 ) -> bool:
@@ -90,5 +101,7 @@ def tbe_fused_params(
         fused_params_for_tbe.pop(FUSED_PARAM_TBE_ROW_ALIGNMENT)
     if FUSED_PARAM_IS_WEIGHTED in fused_params_for_tbe:
         fused_params_for_tbe.pop(FUSED_PARAM_IS_WEIGHTED)
+    if FUSED_PARAM_BOUNDS_CHECK_MODE in fused_params_for_tbe:
+        fused_params_for_tbe.pop(FUSED_PARAM_BOUNDS_CHECK_MODE)
 
     return fused_params_for_tbe

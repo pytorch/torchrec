@@ -11,26 +11,36 @@
 #!/usr/bin/env python3
 # @nolint
 
-import torch
+import unittest
+
+from torchrec.distributed.test_utils.infer_utils import TorchTypesModelInputWrapper
+from torchrec.distributed.test_utils.test_model import TestSparseNN
+from torchrec.inference.modules import quantize_inference_model, shard_quant_model
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
-class Simple(torch.nn.Module):
-    def __init__(self, N: int, M: int) -> None:
-        super().__init__()
-        self.weight = torch.nn.Parameter(torch.ones(N, M))
+class EagerModelProcessingTests(unittest.TestCase):
+    def test_quantize_shard_cuda(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=10,
+                embedding_dim=4,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(10)
+        ]
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        output = self.weight + input
-        return output
+        model = TorchTypesModelInputWrapper(
+            TestSparseNN(
+                tables=tables,
+            )
+        )
 
-    def set_weight(self, weight: torch.Tensor) -> None:
-        self.weight[:] = torch.nn.Parameter(weight)
+        table_fqns = ["table_" + str(i) for i in range(10)]
 
+        quantized_model = quantize_inference_model(model)
+        sharded_model, _ = shard_quant_model(quantized_model, table_fqns)
 
-class Nested(torch.nn.Module):
-    def __init__(self, N: int, M: int) -> None:
-        super().__init__()
-        self.simple = Simple(N, M)
-
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return self.simple(input)
+        sharded_qebc = sharded_model._module.sparse.ebc
+        self.assertEqual(len(sharded_qebc.tbes), 1)
