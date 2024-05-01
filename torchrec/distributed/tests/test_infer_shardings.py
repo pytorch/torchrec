@@ -1877,12 +1877,16 @@ class InferShardingsTest(unittest.TestCase):
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
-    # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    def test_sharded_quant_fp_ebc_tw_meta(self) -> None:
+    # pyre-ignore
+    @given(
+        compute_device=st.sampled_from(["cuda", "cpu"]),
+    )
+    @settings(max_examples=2, deadline=None)
+    def test_sharded_quant_fp_ebc_tw_meta(self, compute_device: str) -> None:
         # Simulate inference, take unsharded cpu model and shard on meta
         # Use PositionWeightedModuleCollection, FP used in production
 
@@ -1890,28 +1894,14 @@ class InferShardingsTest(unittest.TestCase):
         emb_dim = 16
         world_size = 2
         batch_size = 2
-        local_device = torch.device("cpu")
+        local_device = torch.device(compute_device)
 
-        topology: Topology = Topology(world_size=world_size, compute_device="cpu")
         mi = TestModelInfo(
             dense_device=local_device,
             sparse_device=local_device,
             num_features=2,
             num_float_features=10,
             num_weighted_features=0,
-            topology=topology,
-        )
-        mi.planner = EmbeddingShardingPlanner(
-            topology=topology,
-            batch_size=batch_size,
-            enumerator=EmbeddingEnumerator(
-                topology=topology,
-                batch_size=batch_size,
-                estimator=[
-                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
-                    EmbeddingStorageEstimator(topology=topology),
-                ],
-            ),
         )
 
         mi.tables = [
@@ -1999,8 +1989,7 @@ class InferShardingsTest(unittest.TestCase):
             # shard on meta to simulate device movement from cpu -> meta QFPEBC
             device=torch.device("meta"),
             plan=plan,
-            # pyre-ignore
-            env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+            env=ShardingEnv.from_local(world_size=topology.world_size, rank=0),
         )
         print(f"sharded_model:\n{sharded_model}")
         for n, m in sharded_model.named_modules():
