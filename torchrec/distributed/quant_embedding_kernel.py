@@ -35,7 +35,6 @@ from torchrec.distributed.fused_params import (
     fused_param_bounds_check_mode,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
-    is_fused_param_weighted,
     tbe_fused_params,
     TBEToRegisterMixIn,
 )
@@ -151,14 +150,12 @@ def _get_runtime_device(
 def _unwrap_kjt(
     features: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    if features.device().type == "cuda":
-        return (
-            features.values().int(),
-            features.offsets().int(),
-            features.weights_or_none(),
-        )
-    else:
-        return features.values(), features.offsets(), features.weights_or_none()
+    # Here it should always follow cuda path, runtime device cannot be meta
+    return (
+        features.values().int(),
+        features.offsets().int(),
+        features.weights_or_none(),
+    )
 
 
 @torch.fx.wrap
@@ -194,7 +191,7 @@ class QuantBatchedEmbeddingBag(
                 managed.append(EmbeddingLocation.HOST)
         self._config: GroupedEmbeddingConfig = config
         self._emb_module_registered: bool = is_fused_param_register_tbe(fused_params)
-        self._is_weighted: Optional[bool] = is_fused_param_weighted(fused_params)
+        self._is_weighted: Optional[bool] = config.is_weighted
         self._quant_state_dict_split_scale_bias: bool = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
