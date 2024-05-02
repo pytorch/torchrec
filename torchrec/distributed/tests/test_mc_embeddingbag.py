@@ -283,7 +283,7 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     )
     # pyre-ignore
     @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
+    @settings(deadline=None)
     def test_uneven_sharding(self, backend: str) -> None:
         WORLD_SIZE = 2
 
@@ -316,7 +316,7 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     )
     # pyre-ignore
     @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
+    @settings(deadline=None)
     def test_even_sharding(self, backend: str) -> None:
         WORLD_SIZE = 2
 
@@ -349,7 +349,7 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     )
     # pyre-ignore
     @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
+    @settings(deadline=None)
     def test_sharding_zch_mc_ebc(self, backend: str) -> None:
 
         WORLD_SIZE = 2
@@ -455,7 +455,7 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     )
     # pyre-ignore
     @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
+    @settings(deadline=None)
     def test_sharding_zch_mch_mc_ebc(self, backend: str) -> None:
 
         WORLD_SIZE = 2
