@@ -2341,7 +2341,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 if recat_cond:
                     stride = stride_per_rank[0]
 
-                    single_batch_per_rank = False
+                    single_batch_per_rank = True
                     if not is_torchdynamo_compiling():
                         single_batch_per_rank = all(
                             s == stride for s in stride_per_rank
