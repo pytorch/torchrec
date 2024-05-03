@@ -20,6 +20,24 @@ from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 lib = torch.library.Library("custom", "FRAGMENT")
 
 
+try:
+    if torch.jit.is_scripting():
+        raise Exception()
+
+    from torch.compiler import (
+        is_compiling as is_compiler_compiling,
+        is_dynamo_compiling as is_torchdynamo_compiling,
+    )
+
+    def is_non_strict_exporting() -> bool:
+        return not is_torchdynamo_compiling() and is_compiler_compiling()
+
+except Exception:
+
+    def is_non_strict_exporting() -> bool:
+        return False
+
+
 class OpRegistryState:
     """
     State of operator registry.
