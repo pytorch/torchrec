@@ -111,20 +111,19 @@ def _get_recat(
             for j in feature_order:  # range(num_splits):
                 recat.append(i + j * local_split)
 
-        vb_condition: bool = batch_size_per_rank is not None
+        vb_per_rank_condition: bool = False
         if not is_torchdynamo_compiling():
-            vb_condition = vb_condition and any(
-                # pyre-ignore
-                bs != batch_size_per_rank[0]
-                # pyre-ignore
-                for bs in batch_size_per_rank
+            vb_per_rank_condition = batch_size_per_rank is not None and any(
+                bs != batch_size_per_rank[0] for bs in batch_size_per_rank
             )
 
-        # variable batch size
-        if vb_condition:
+        # variable batch per rank
+        if vb_per_rank_condition:
             batch_size_per_feature = list(
                 itertools.chain.from_iterable(
-                    itertools.repeat(x, local_split) for x in batch_size_per_rank
+                    itertools.repeat(x, local_split)
+                    # pyre-ignore
+                    for x in batch_size_per_rank
                 )
             )
             permuted_batch_size_per_feature = [batch_size_per_feature[r] for r in recat]
