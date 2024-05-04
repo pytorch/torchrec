@@ -769,7 +769,6 @@ def shard_qebc(
             assert ps.sharding_type == sharding_type.value
             assert ps.sharding_spec is not None
             sharding_spec: ShardingSpec = ps.sharding_spec
-            # pyre-ignore
             assert len(sharding_spec.shards) == len(expected_shards[i])
             for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
                 sharding_spec.shards, expected_shards[i]
@@ -819,7 +818,6 @@ def shard_qec(
             assert ps.sharding_type == sharding_type.value
             assert ps.sharding_spec is not None
             sharding_spec: ShardingSpec = ps.sharding_spec
-            # pyre-ignore
             assert len(sharding_spec.shards) == len(expected_shards[i])
             for shard, ((offset_r, offset_c, size_r, size_c), placement) in zip(
                 sharding_spec.shards, expected_shards[i]

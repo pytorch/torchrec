@@ -47,6 +47,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -75,28 +76,27 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
-        sharded_tables_per_rank = self._shard(sharding_infos)
-
-        self._sharded_tables_per_rank: List[List[ShardedEmbeddingTable]] = (
-            sharded_tables_per_rank
+        self._sharded_tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = (
+            self._shard(sharding_infos)
         )
 
-        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
-            []
-        )
-        self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
+        self._grouped_embedding_configs_per_rank: Dict[
+            int, List[GroupedEmbeddingConfig]
+        ] = group_tables(self._sharded_tables_per_rank)
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[self._rank]
         )
 
+    def get_sharded_tables_for_rank(self, rank: int) -> List[ShardedEmbeddingTable]:
+        return self._sharded_tables_per_rank[rank]
+
     def _shard(
         self,
         sharding_infos: List[EmbeddingShardingInfo],
-    ) -> List[List[ShardedEmbeddingTable]]:
-        world_size = self._world_size
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
-        ]
+    ) -> Dict[int, List[ShardedEmbeddingTable]]:
+        tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = {
+            rank: [] for rank in self._env.group_ranks
+        }
         for info in sharding_infos:
             # pyre-fixme [16]
             shards = info.param_sharding.sharding_spec.shards
@@ -111,8 +111,10 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
-            # pyre-fixme [16]
-            tables_per_rank[info.param_sharding.ranks[0]].append(
+            ranks = none_throws(info.param_sharding.ranks)
+            # for TW sharding, it should be a singleton
+            rank = ranks[0]
+            tables_per_rank[rank].append(
                 ShardedEmbeddingTable(
                     num_embeddings=info.embedding_config.num_embeddings,
                     embedding_dim=info.embedding_config.embedding_dim,
@@ -140,7 +142,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def _dim_sum_per_rank(self) -> List[int]:
         dim_sum_per_rank = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             dim_sum = 0
             for grouped_config in grouped_embedding_configs:
                 dim_sum += grouped_config.dim_sum()
@@ -149,7 +153,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def _emb_dim_per_rank_per_feature(self) -> List[List[int]]:
         emb_dim_per_rank_per_feature = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             emb_dim_per_feature = []
             for grouped_config in grouped_embedding_configs:
                 emb_dim_per_feature += grouped_config.embedding_dims()
@@ -158,21 +164,27 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             for grouped_config in grouped_embedding_configs:
                 embedding_dims.extend(grouped_config.embedding_dims())
         return embedding_dims
 
     def embedding_names(self) -> List[str]:
         embedding_names = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             for grouped_config in grouped_embedding_configs:
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
 
     def embedding_names_per_rank(self) -> List[List[str]]:
         embedding_names = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             embedding_names_per_rank = []
             for grouped_config in grouped_embedding_configs:
                 embedding_names_per_rank.extend(grouped_config.embedding_names())
@@ -181,7 +193,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             for grouped_config in grouped_embedding_configs:
                 embedding_shard_metadata.extend(
                     grouped_config.embedding_shard_metadata()
@@ -190,21 +204,27 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def feature_names(self) -> List[str]:
         feature_names = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             for grouped_config in grouped_embedding_configs:
                 feature_names.extend(grouped_config.feature_names())
         return feature_names
 
     def embedding_tables(self) -> List[ShardedEmbeddingTable]:
         embedding_tables = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             for grouped_config in grouped_embedding_configs:
                 embedding_tables.extend(grouped_config.embedding_tables)
         return embedding_tables
 
     def feature_names_per_rank(self) -> List[List[str]]:
         feature_names = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             feature_names_per_rank = []
             for grouped_config in grouped_embedding_configs:
                 feature_names_per_rank.extend(grouped_config.feature_names())
@@ -213,7 +233,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def features_per_rank(self) -> List[int]:
         features_per_rank = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             num_features = 0
             for grouped_config in grouped_embedding_configs:
                 num_features += grouped_config.num_features()

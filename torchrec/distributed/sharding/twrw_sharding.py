@@ -85,19 +85,19 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             intra_pg.size() if intra_pg else get_local_size(self._world_size)
         )
 
-        sharded_tables_per_rank = self._shard(sharding_infos)
-        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
-            []
+        self._sharded_tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = (
+            self._shard(sharding_infos)
         )
-        self._grouped_embedding_configs_per_node: List[List[GroupedEmbeddingConfig]] = (
-            []
-        )
-        self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
-        self._grouped_embedding_configs_per_node = [
-            self._grouped_embedding_configs_per_rank[rank]
-            for rank in range(self._world_size)
+        self._grouped_embedding_configs_per_rank: Dict[
+            int, List[GroupedEmbeddingConfig]
+        ] = group_tables(self._sharded_tables_per_rank)
+        self._grouped_embedding_configs_per_node: Dict[
+            int, List[GroupedEmbeddingConfig]
+        ] = {
+            rank: self._grouped_embedding_configs_per_rank[rank]
+            for rank in self._env.group_ranks
             if rank % self._local_size == 0
-        ]
+        }
         self._has_feature_processor: bool = False
         for group_config in self._grouped_embedding_configs_per_rank[
             self._rank // self._local_size
@@ -105,15 +105,17 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
 
+    def get_sharded_tables_for_rank(self, rank: int) -> List[ShardedEmbeddingTable]:
+        return self._sharded_tables_per_rank[rank]
+
     def _shard(
         self,
         sharding_infos: List[EmbeddingShardingInfo],
-    ) -> List[List[ShardedEmbeddingTable]]:
-        world_size = self._world_size
+    ) -> Dict[int, List[ShardedEmbeddingTable]]:
         local_size = self._local_size
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
-        ]
+        tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = {
+            i: [] for i in self._env.group_ranks
+        }
         for info in sharding_infos:
             # pyre-ignore [16]
             table_node = info.param_sharding.ranks[0] // local_size
@@ -164,14 +166,18 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_node.values():
             for grouped_config in grouped_embedding_configs:
                 embedding_dims.extend(grouped_config.embedding_dims())
         return embedding_dims
 
     def embedding_names(self) -> List[str]:
         embedding_names = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_node.values():
             for grouped_config in grouped_embedding_configs:
                 embedding_names.extend(grouped_config.embedding_names())
         return embedding_names
@@ -181,28 +187,30 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def embedding_shard_metadata(self) -> List[Optional[ShardMetadata]]:
         embedding_shard_metadata = []
-        for grouped_config in self._grouped_embedding_configs_per_node:
+        for grouped_config in self._grouped_embedding_configs_per_node.values():
             for config in grouped_config:
                 embedding_shard_metadata.extend(config.embedding_shard_metadata())
         return embedding_shard_metadata
 
     def feature_names(self) -> List[str]:
         feature_names = []
-        for grouped_config in self._grouped_embedding_configs_per_node:
+        for grouped_config in self._grouped_embedding_configs_per_node.values():
             for config in grouped_config:
                 feature_names.extend(config.feature_names())
         return feature_names
 
     def _get_feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes: List[int] = []
-        for grouped_config in self._grouped_embedding_configs_per_node:
+        for grouped_config in self._grouped_embedding_configs_per_node.values():
             for config in grouped_config:
                 feature_hash_sizes.extend(config.feature_hash_sizes())
         return feature_hash_sizes
 
     def _dim_sum_per_node(self) -> List[int]:
         dim_sum_per_node = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_node.values():
             dim_sum = 0
             for grouped_config in grouped_embedding_configs:
                 dim_sum += grouped_config.dim_sum()
@@ -211,7 +219,9 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def _emb_dim_per_node_per_feature(self) -> List[List[int]]:
         emb_dim_per_node_per_feature = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_node.values():
             emb_dim_per_feature = []
             for grouped_config in grouped_embedding_configs:
                 emb_dim_per_feature += grouped_config.embedding_dims()
@@ -219,10 +229,10 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         return emb_dim_per_node_per_feature
 
     def _features_per_rank(
-        self, group: List[List[GroupedEmbeddingConfig]]
+        self, group: Dict[int, List[GroupedEmbeddingConfig]]
     ) -> List[int]:
         features_per_rank = []
-        for grouped_embedding_configs in group:
+        for grouped_embedding_configs in group.values():
             num_features = 0
             for grouped_config in grouped_embedding_configs:
                 num_features += grouped_config.num_features()

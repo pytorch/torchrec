@@ -46,6 +46,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
@@ -347,11 +348,9 @@ def sharding_single_rank_test(
                 ):
                     sharding_spec = parameter_sharding.sharding_spec
                     if sharding_spec is not None:
-                        # pyre-ignore
                         for shard in sharding_spec.shards:
-                            placement = shard.placement
-                            rank: Optional[int] = placement.rank()
-                            assert rank is not None
+                            placement = none_throws(shard.placement)
+                            rank = none_throws(placement.rank())
                             shard.placement = torch.distributed._remote_device(
                                 f"rank:{rank}/cuda:{rank}"
                             )

@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import (
     Any,
-    Callable,
     cast,
     Dict,
     Iterator,

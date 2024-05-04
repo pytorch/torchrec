@@ -53,25 +53,28 @@ class BaseDpEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._device = device
         self._rank: int = self._env.rank
         self._world_size: int = self._env.world_size
-        sharded_tables_per_rank = self._shard(sharding_infos)
-        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
-            []
+        self._sharded_tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = (
+            self._shard(sharding_infos)
         )
-        self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
+        self._grouped_embedding_configs_per_rank: Dict[
+            int, List[GroupedEmbeddingConfig]
+        ] = group_tables(self._sharded_tables_per_rank)
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[env.rank]
         )
 
+    def get_sharded_tables_for_rank(self, rank: int) -> List[ShardedEmbeddingTable]:
+        return self._sharded_tables_per_rank[rank]
+
     def _shard(
         self,
         sharding_infos: List[EmbeddingShardingInfo],
-    ) -> List[List[ShardedEmbeddingTable]]:
-        world_size = self._world_size
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
-        ]
+    ) -> Dict[int, List[ShardedEmbeddingTable]]:
+        tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = {
+            rank: [] for rank in self._env.group_ranks
+        }
         for info in sharding_infos:
-            for rank in range(world_size):
+            for rank in self._env.group_ranks:
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=info.embedding_config.num_embeddings,

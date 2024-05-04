@@ -16,7 +16,6 @@ from typing import cast, Dict, List, Optional, Set, Tuple, Union
 import torch
 
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-
 from torchrec.distributed.planner.types import (
     Enumerator,
     Perf,

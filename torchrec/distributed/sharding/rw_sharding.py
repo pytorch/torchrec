@@ -64,7 +64,7 @@ W = TypeVar("W")
 
 
 def get_embedding_shard_metadata(
-    grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]],
+    grouped_embedding_configs_per_rank: Dict[int, List[GroupedEmbeddingConfig]],
 ) -> Tuple[List[List[int]], bool]:
     is_even_sharding: bool = True
     world_size = len(grouped_embedding_configs_per_rank)
@@ -128,12 +128,13 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         if device is None:
             device = torch.device("cpu")
         self._device: torch.device = device
-        sharded_tables_per_rank = self._shard(sharding_infos)
-        self._need_pos = need_pos
-        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
-            []
+        self._sharded_tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = (
+            self._shard(sharding_infos)
         )
-        self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
+        self._need_pos = need_pos
+        self._grouped_embedding_configs_per_rank: Dict[
+            int, List[GroupedEmbeddingConfig]
+        ] = group_tables(self._sharded_tables_per_rank)
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[self._rank]
         )
@@ -143,16 +144,20 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
 
+    def get_sharded_tables_for_rank(self, rank: int) -> List[ShardedEmbeddingTable]:
+        return self._sharded_tables_per_rank[rank]
+
     def _shard(
         self,
         sharding_infos: List[EmbeddingShardingInfo],
-    ) -> List[List[ShardedEmbeddingTable]]:
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(self._world_size)
-        ]
+    ) -> Dict[int, List[ShardedEmbeddingTable]]:
+        tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = {
+            rank: [] for rank in self._env.group_ranks
+        }
         for info in sharding_infos:
-            # pyre-fixme [16]
-            shards = info.param_sharding.sharding_spec.shards
+            sharding_spec = info.param_sharding.sharding_spec
+            assert sharding_spec is not None
+            shards = sharding_spec.shards
 
             # construct the global sharded_tensor_metadata
             global_metadata = ShardedTensorMetadata(
@@ -165,7 +170,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
-            for rank in range(self._world_size):
+            for rank in self._env.group_ranks:
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=info.embedding_config.num_embeddings,
@@ -205,7 +210,9 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def embedding_names_per_rank(self) -> List[List[str]]:
         embedding_names = []
-        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+        for (
+            grouped_embedding_configs
+        ) in self._grouped_embedding_configs_per_rank.values():
             embedding_names_per_rank = []
             for grouped_config in grouped_embedding_configs:
                 embedding_names_per_rank.extend(grouped_config.embedding_names())

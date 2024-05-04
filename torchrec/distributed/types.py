@@ -599,7 +599,7 @@ class ParameterSharding:
     sharding_type: str
     compute_kernel: str
     ranks: Optional[List[int]] = None
-    sharding_spec: Optional[ShardingSpec] = None
+    sharding_spec: Optional[EnumerableShardingSpec] = None
     cache_params: Optional[CacheParams] = None
     enforce_hbm: Optional[bool] = None
     stochastic_rounding: Optional[bool] = None
@@ -702,20 +702,34 @@ class ShardingEnv:
         world_size: int,
         rank: int,
         pg: Optional[dist.ProcessGroup] = None,
+        group_ranks: Optional[List[int]] = None,
     ) -> None:
         self.world_size = world_size
         self.rank = rank
         self.process_group: Optional[dist.ProcessGroup] = pg
+        self.group_ranks: List[int]
+        if group_ranks is not None:
+            self.group_ranks = group_ranks
+        else:
+            self.group_ranks = list(range(world_size))
 
     @classmethod
-    def from_process_group(cls, pg: dist.ProcessGroup) -> "ShardingEnv":
+    def from_process_group(
+        cls, pg: dist.ProcessGroup, *, group_ranks: Optional[List[int]] = None
+    ) -> "ShardingEnv":
         """
         Creates ProcessGroup-based sharding environment.
 
         NOTE:
             Typically used during training.
         """
-        return cls(dist.get_world_size(pg), dist.get_rank(pg), pg)
+        return cls(
+            dist.get_world_size(pg),
+            # pg may be a group pg, so use world pg to get world rank
+            dist.get_rank(dist.GroupMember.WORLD),
+            pg=pg,
+            group_ranks=group_ranks,
+        )
 
     @classmethod
     def from_local(cls, world_size: int, rank: int) -> "ShardingEnv":
@@ -725,7 +739,7 @@ class ShardingEnv:
         NOTE:
             Typically used during single host inference.
         """
-        return cls(world_size, rank, None)
+        return cls(world_size, rank, pg=None, group_ranks=list(range(world_size)))
 
 
 class NullShardingContext(Multistreamable):

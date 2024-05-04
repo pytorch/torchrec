@@ -68,36 +68,19 @@ def _to_sharding_plan(
     sharding_options: List[ShardingOption],
     topology: Topology,
 ) -> ShardingPlan:
-
-    compute_device = topology.compute_device
-    local_size = topology.local_world_size
-
     plan = {}
     for sharding_option in sharding_options:
-        shards = sharding_option.shards
         sharding_type = sharding_option.sharding_type
 
         module_plan = plan.get(sharding_option.path, EmbeddingModuleShardingPlan())
+        ranks, sharding_spec = _to_ranks_and_sharding_spec(
+            sharding_type, topology, sharding_option
+        )
         module_plan[sharding_option.name] = ParameterSharding(
-            sharding_spec=(
-                None
-                if sharding_type == ShardingType.DATA_PARALLEL.value
-                else EnumerableShardingSpec(
-                    [
-                        ShardMetadata(
-                            shard_sizes=shard.size,
-                            shard_offsets=shard.offset,
-                            placement=placement(
-                                compute_device, cast(int, shard.rank), local_size
-                            ),
-                        )
-                        for shard in shards
-                    ]
-                )
-            ),
+            sharding_spec=sharding_spec,
             sharding_type=sharding_type,
             compute_kernel=sharding_option.compute_kernel,
-            ranks=[cast(int, shard.rank) for shard in shards],
+            ranks=ranks,
             cache_params=sharding_option.cache_params,
             enforce_hbm=sharding_option.enforce_hbm,
             stochastic_rounding=sharding_option.stochastic_rounding,
@@ -106,6 +89,37 @@ def _to_sharding_plan(
         )
         plan[sharding_option.path] = module_plan
     return ShardingPlan(plan)
+
+
+def _to_ranks_and_sharding_spec(
+    sharding_type: str,
+    topology: Topology,
+    sharding_option: ShardingOption,
+) -> Tuple[List[int], Optional[EnumerableShardingSpec]]:
+    compute_device = topology.compute_device
+    local_size = topology.local_world_size
+
+    need_sharding_spec = sharding_type != ShardingType.DATA_PARALLEL.value
+    shards = sharding_option.shards
+    ranks: List[int] = []
+    shard_metadata_list: List[ShardMetadata] = []
+    for shard in shards:
+        rank = none_throws(shard.rank)
+        ranks.append(rank)
+        if need_sharding_spec:
+            shard_metadata_list.append(
+                ShardMetadata(
+                    shard_sizes=shard.size,
+                    shard_offsets=shard.offset,
+                    placement=placement(
+                        compute_device, none_throws(shard.rank), local_size
+                    ),
+                )
+            )
+
+    if not need_sharding_spec:
+        return ranks, None
+    return ranks, EnumerableShardingSpec(shard_metadata_list)
 
 
 def _merge_plans(best_plans: List[ShardingPlan]) -> ShardingPlan:

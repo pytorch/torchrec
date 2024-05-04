@@ -45,6 +45,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -140,11 +141,10 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
     def _shard(
         self,
         sharding_infos: List[EmbeddingShardingInfo],
-    ) -> List[List[ShardedEmbeddingTable]]:
-        world_size: int = self._env.world_size
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
-        ]
+    ) -> Dict[int, List[ShardedEmbeddingTable]]:
+        tables_per_rank: Dict[int, List[ShardedEmbeddingTable]] = {
+            rank: [] for rank in self._env.group_ranks
+        }
         for info in sharding_infos:
             # pyre-fixme [16]
             shards: List[ShardMetadata] = info.param_sharding.sharding_spec.shards
@@ -160,8 +160,8 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                 ),
             )
 
-            # pyre-fixme [6]
-            for i, rank in enumerate(info.param_sharding.ranks):
+            ranks = none_throws(info.param_sharding.ranks)
+            for i, rank in enumerate(ranks):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=info.embedding_config.num_embeddings,

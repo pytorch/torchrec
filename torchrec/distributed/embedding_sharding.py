@@ -337,8 +337,8 @@ def _prefetch_and_cached(
 
 # group tables by `DataType`, `PoolingType`, and `EmbeddingComputeKernel`.
 def group_tables(
-    tables_per_rank: List[List[ShardedEmbeddingTable]],
-) -> List[List[GroupedEmbeddingConfig]]:
+    tables_per_rank: Dict[int, List[ShardedEmbeddingTable]],
+) -> Dict[int, List[GroupedEmbeddingConfig]]:
     """
     Groups tables by `DataType`, `PoolingType`, and `EmbeddingComputeKernel`.
 
@@ -434,14 +434,14 @@ def group_tables(
         return grouped_embedding_configs
 
     table_weightedness = [
-        table.is_weighted for tables in tables_per_rank for table in tables
+        table.is_weighted for tables in tables_per_rank.values() for table in tables
     ]
     assert all(table_weightedness) or not any(table_weightedness)
 
-    grouped_embedding_configs_by_rank: List[List[GroupedEmbeddingConfig]] = []
-    for tables in tables_per_rank:
+    grouped_embedding_configs_by_rank: Dict[int, List[GroupedEmbeddingConfig]] = {}
+    for rank, tables in tables_per_rank.items():
         grouped_embedding_configs = _group_tables_per_rank(tables)
-        grouped_embedding_configs_by_rank.append(grouped_embedding_configs)
+        grouped_embedding_configs_by_rank[rank] = grouped_embedding_configs
 
     return grouped_embedding_configs_by_rank
 
@@ -838,6 +838,10 @@ class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
 
     @abc.abstractmethod
     def embedding_names_per_rank(self) -> List[List[str]]:
+        pass
+
+    @abc.abstractmethod
+    def get_sharded_tables_for_rank(self, rank: int) -> List[ShardedEmbeddingTable]:
         pass
 
     def embedding_tables(self) -> List[ShardedEmbeddingTable]:

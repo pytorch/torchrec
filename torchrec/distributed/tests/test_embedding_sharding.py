@@ -147,22 +147,21 @@ class TestPerTBECacheLoadFactor(unittest.TestCase):
             {"cache_load_factor": 0.9},  # hbm table, would have no effect
             {"cache_load_factor": 0.4},  # uvm table, would have no effect
         ]
-        tables = [
-            ShardedEmbeddingTable(
-                name=f"table_{i}",
-                data_type=data_type,
-                pooling=pooling_type,
-                has_feature_processor=has_feature_processor,
-                fused_params=fused_params_groups[i],
-                compute_kernel=compute_kernels[i],
-                embedding_dim=embedding_dim,
-                num_embeddings=10000 * (2 * i + 1),  # 10000 and 30000
-            )
-            for i in range(4)
-        ]
-
-        # since we don't have access to _group_tables_per_rank
-        tables_per_rank: List[List[ShardedEmbeddingTable]] = [tables]
+        tables_per_rank = {
+            0: [
+                ShardedEmbeddingTable(
+                    name=f"table_{i}",
+                    data_type=data_type,
+                    pooling=pooling_type,
+                    has_feature_processor=has_feature_processor,
+                    fused_params=fused_params_groups[i],
+                    compute_kernel=compute_kernels[i],
+                    embedding_dim=embedding_dim,
+                    num_embeddings=10000 * (2 * i + 1),  # 10000 and 30000
+                )
+                for i in range(4)
+            ]
+        }
 
         # taking only the list for the first rank
         table_groups: List[GroupedEmbeddingConfig] = group_tables(tables_per_rank)[0]
@@ -176,13 +175,10 @@ class TestPerTBECacheLoadFactor(unittest.TestCase):
 
 
 def _get_table_names_by_groups(
-    embedding_tables: List[ShardedEmbeddingTable],
+    embedding_tables: Dict[int, List[ShardedEmbeddingTable]],
 ) -> List[List[str]]:
-    # since we don't have access to _group_tables_per_rank
-    tables_per_rank: List[List[ShardedEmbeddingTable]] = [embedding_tables]
-
     # taking only the list for the first rank
-    table_groups: List[GroupedEmbeddingConfig] = group_tables(tables_per_rank)[0]
+    table_groups: List[GroupedEmbeddingConfig] = group_tables(embedding_tables)[0]
     return [table_group.table_names() for table_group in table_groups]
 
 
@@ -219,20 +215,22 @@ class TestGroupTablesPerRank(unittest.TestCase):
         pooling_type: PoolingType,
         compute_kernel: EmbeddingComputeKernel,
     ) -> None:
-        tables = [
-            ShardedEmbeddingTable(
-                name=f"table_{i}",
-                data_type=data_type,
-                pooling=pooling_type,
-                has_feature_processor=has_feature_processor,
-                fused_params=fused_params_group,
-                compute_kernel=compute_kernel,
-                embedding_dim=local_dim * num_cw_shards,
-                local_cols=local_dim,
-                num_embeddings=10000,
-            )
-            for i in range(2)
-        ]
+        tables = {
+            0: [
+                ShardedEmbeddingTable(
+                    name=f"table_{i}",
+                    data_type=data_type,
+                    pooling=pooling_type,
+                    has_feature_processor=has_feature_processor,
+                    fused_params=fused_params_group,
+                    compute_kernel=compute_kernel,
+                    embedding_dim=local_dim * num_cw_shards,
+                    local_cols=local_dim,
+                    num_embeddings=10000,
+                )
+                for i in range(2)
+            ]
+        }
 
         expected_table_names_by_groups = [["table_0", "table_1"]]
         self.assertEqual(
@@ -269,20 +267,22 @@ class TestGroupTablesPerRank(unittest.TestCase):
                 "prefetch_pipeline": True,
             },
         ]
-        tables = [
-            ShardedEmbeddingTable(
-                name=f"table_{i}",
-                data_type=data_type,
-                pooling=pooling_type,
-                has_feature_processor=has_feature_processor,
-                fused_params=fused_params_groups[i],
-                compute_kernel=compute_kernel,
-                embedding_dim=local_dim * num_cw_shards,
-                local_cols=local_dim,
-                num_embeddings=10000,
-            )
-            for i in range(2)
-        ]
+        tables = {
+            0: [
+                ShardedEmbeddingTable(
+                    name=f"table_{i}",
+                    data_type=data_type,
+                    pooling=pooling_type,
+                    has_feature_processor=has_feature_processor,
+                    fused_params=fused_params_groups[i],
+                    compute_kernel=compute_kernel,
+                    embedding_dim=local_dim * num_cw_shards,
+                    local_cols=local_dim,
+                    num_embeddings=10000,
+                )
+                for i in range(2)
+            ]
+        }
 
         expected_table_names_by_groups = [["table_0", "table_1"]]
         self.assertEqual(
@@ -357,40 +357,42 @@ class TestGroupTablesPerRank(unittest.TestCase):
         compute_kernels: List[EmbeddingComputeKernel],
         distinct_key: str,
     ) -> None:
-        tables = [
-            ShardedEmbeddingTable(
-                name=f"table_{i}",
-                data_type=(
-                    data_types[i] if distinct_key == "data_type" else data_types[0]
-                ),
-                pooling=(
-                    pooling_types[i]
-                    if distinct_key == "pooling_type"
-                    else pooling_types[0]
-                ),
-                has_feature_processor=(
-                    has_feature_processors[i]
-                    if distinct_key == "has_feature_processor"
-                    else has_feature_processors[0]
-                ),
-                fused_params=fused_params_group,  # can't hash dicts
-                compute_kernel=(
-                    compute_kernels[i]
-                    if distinct_key == "compute_kernel"
-                    else compute_kernels[0]
-                ),
-                embedding_dim=(
-                    embedding_dims[i]
-                    if distinct_key == "embedding_dim"
-                    else embedding_dims[0]
-                ),
-                local_cols=(
-                    local_dim[i] if distinct_key == "local_dim" else local_dim[0]
-                ),
-                num_embeddings=10000,
-            )
-            for i in range(2)
-        ]
+        tables = {
+            0: [
+                ShardedEmbeddingTable(
+                    name=f"table_{i}",
+                    data_type=(
+                        data_types[i] if distinct_key == "data_type" else data_types[0]
+                    ),
+                    pooling=(
+                        pooling_types[i]
+                        if distinct_key == "pooling_type"
+                        else pooling_types[0]
+                    ),
+                    has_feature_processor=(
+                        has_feature_processors[i]
+                        if distinct_key == "has_feature_processor"
+                        else has_feature_processors[0]
+                    ),
+                    fused_params=fused_params_group,  # can't hash dicts
+                    compute_kernel=(
+                        compute_kernels[i]
+                        if distinct_key == "compute_kernel"
+                        else compute_kernels[0]
+                    ),
+                    embedding_dim=(
+                        embedding_dims[i]
+                        if distinct_key == "embedding_dim"
+                        else embedding_dims[0]
+                    ),
+                    local_cols=(
+                        local_dim[i] if distinct_key == "local_dim" else local_dim[0]
+                    ),
+                    num_embeddings=10000,
+                )
+                for i in range(2)
+            ]
+        }
 
         if distinct_key == "compute_kernel" and _get_compute_kernel_type(
             compute_kernels[0]
@@ -399,7 +401,7 @@ class TestGroupTablesPerRank(unittest.TestCase):
             # would be grouped together. But if one of them are related to CACHE,
             # we'll group them separately because we don't want to add the burden of
             # prefetch()
-            if _prefetch_and_cached(tables[0]) != _prefetch_and_cached(tables[1]):
+            if _prefetch_and_cached(tables[0][0]) != _prefetch_and_cached(tables[0][1]):
                 self.assertEqual(
                     sorted(_get_table_names_by_groups(tables)),
                     [["table_0"], ["table_1"]],
@@ -413,7 +415,7 @@ class TestGroupTablesPerRank(unittest.TestCase):
 
         # emb dim bucketizier only in use when computer kernel is caching. Otherwise
         # they shall be grouped into the same bucket even with different dimensions
-        if distinct_key == "local_dim" and not _prefetch_and_cached(tables[0]):
+        if distinct_key == "local_dim" and not _prefetch_and_cached(tables[0][0]):
             self.assertEqual(
                 _get_table_names_by_groups(tables),
                 [["table_0", "table_1"]],
@@ -438,20 +440,22 @@ class TestGroupTablesPerRank(unittest.TestCase):
         self,
     ) -> None:
 
-        tables = [
-            ShardedEmbeddingTable(
-                name=f"table_{i}",
-                data_type=DataType.FP16,
-                pooling=PoolingType.SUM,
-                has_feature_processor=False,
-                fused_params={"use_one_tbe_per_table": i % 2 != 0},
-                compute_kernel=EmbeddingComputeKernel.FUSED_UVM_CACHING,
-                embedding_dim=10,
-                local_cols=5,
-                num_embeddings=10000,
-            )
-            for i in range(5)
-        ]
+        tables = {
+            0: [
+                ShardedEmbeddingTable(
+                    name=f"table_{i}",
+                    data_type=DataType.FP16,
+                    pooling=PoolingType.SUM,
+                    has_feature_processor=False,
+                    fused_params={"use_one_tbe_per_table": i % 2 != 0},
+                    compute_kernel=EmbeddingComputeKernel.FUSED_UVM_CACHING,
+                    embedding_dim=10,
+                    local_cols=5,
+                    num_embeddings=10000,
+                )
+                for i in range(5)
+            ]
+        }
 
         # Even tables should all be grouped in a single TBE, odd tables should be in
         # their own TBEs.
