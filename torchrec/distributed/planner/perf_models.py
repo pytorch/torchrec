@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import cast, List
+from typing import cast, Dict, List
 
 from torchrec.distributed.planner.types import (
     Perf,
@@ -28,13 +28,15 @@ class NoopPerfModel(PerfModel):
         self._topology = topology
 
     def rate(self, plan: List[ShardingOption]) -> float:
-        perfs = [0] * self._topology.world_size
+        device_ranks = self._topology.device_ranks
+        perfs: Dict[int, float] = {rank: 0.0 for rank in device_ranks}
         for sharding_option in plan:
             for shard in sharding_option.shards:
-                # pyre-ignore [6]: Expected `typing_extensions.SupportsIndex`
+                assert shard.rank is not None, f"Unexpected rank none for {shard=}"
+                assert shard.rank in perfs, f"Invalid{shard.rank=}"
                 perfs[shard.rank] += cast(Perf, shard.perf).total
 
-        return max(perfs)
+        return max(perfs.values())
 
 
 class NoopStorageModel(PerfModel):
