@@ -15,7 +15,6 @@ from collections import defaultdict
 from typing import Any, Callable, cast, Dict, Iterable, List, Optional, Tuple, Union
 
 from torch import nn
-
 from torchrec.distributed.planner.constants import BIGINT_DTYPE, NUM_POOLINGS
 from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_sizes
 from torchrec.distributed.planner.storage_reservations import (
@@ -44,6 +43,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
+from torchrec.distributed.utils import none_throws
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class EmbeddingStats(Stats):
         }
         stats: Dict[int, Dict[str, Any]] = {
             rank: {"type": {}, "input_sizes": 0.0, "output_sizes": 0.0}
-            for rank in range(topology.world_size)
+            for rank in topology.device_ranks
         }
 
         used_sharding_types = set()
@@ -167,22 +167,31 @@ class EmbeddingStats(Stats):
                 stats[rank]["input_sizes"] += input_sizes[i]
                 stats[rank]["output_sizes"] += output_sizes[i]
 
-        used_hbm = [0] * topology.world_size
-        used_ddr = [0] * topology.world_size
-        perf = [
-            Perf(fwd_compute=0, fwd_comms=0, bwd_compute=0, bwd_comms=0)
-            for _ in range(topology.world_size)
-        ]
+        used_hbm_and_ddr: Dict[int, Storage] = {
+            rank: Storage(hbm=0, ddr=0) for rank in topology.device_ranks
+        }
+        perf: Dict[int, Perf] = {
+            rank: Perf(fwd_compute=0, fwd_comms=0, bwd_compute=0, bwd_comms=0)
+            for rank in topology.device_ranks
+        }
         for sharding_option in best_plan:
             for shard in sharding_option.shards:
                 shard_storage = cast(Storage, shard.storage)
-                rank = cast(int, shard.rank)
-                used_hbm[rank] += shard_storage.hbm
-                used_ddr[rank] += shard_storage.ddr
+                rank = shard.rank
+                if rank == -1:
+                    continue
+                assert (
+                    rank is not None and rank in used_hbm_and_ddr
+                ), f"Unexpected rank {rank} in plan {best_plan}"
+                mem = cast(Storage, used_hbm_and_ddr.get(rank))
+                mem.hbm += shard_storage.hbm
+                mem.ddr += shard_storage.ddr
                 perf[rank] += cast(Perf, shard.perf)
 
-        used_hbm = [hbm + dense_storage.hbm + kjt_storage.hbm for hbm in used_hbm]
-        used_ddr = [ddr + dense_storage.ddr + kjt_storage.ddr for ddr in used_ddr]
+        # add dense and kjt storage
+        for mem in used_hbm_and_ddr.values():
+            mem.hbm += dense_storage.hbm + kjt_storage.hbm
+            mem.ddr += dense_storage.ddr + kjt_storage.ddr
 
         table: List[List[Union[str, int]]] = [
             [
@@ -205,17 +214,23 @@ class EmbeddingStats(Stats):
             ],
         ]
 
-        for rank, device in enumerate(topology.devices):
-            used_hbm_gb = bytes_to_gb(used_hbm[rank])
+        for device in topology.devices:
+            rank = device.rank
+            assert (
+                rank in used_hbm_and_ddr
+            ), f"Unexpected rank: {rank} is not in {list(used_hbm_and_ddr.keys())}"
+            used_hbm_bytes = none_throws(used_hbm_and_ddr.get(rank)).hbm
+            used_ddr_bytes = none_throws(used_hbm_and_ddr.get(rank)).ddr
+            used_hbm_gb = bytes_to_gb(used_hbm_bytes)
             used_hbm_ratio = (
-                used_hbm[rank] / ((1 - reserved_hbm_percent) * device.storage.hbm)
+                used_hbm_bytes / ((1 - reserved_hbm_percent) * device.storage.hbm)
                 if topology.compute_device == "cuda"
                 and ((1 - reserved_hbm_percent) * device.storage.hbm) != 0
                 else 0
             )
-            used_ddr_gb = bytes_to_gb(used_ddr[rank])
+            used_ddr_gb = bytes_to_gb(used_ddr_bytes)
             used_ddr_ratio = (
-                used_ddr[rank] / device.storage.ddr if device.storage.ddr > 0 else 0
+                used_ddr_bytes / device.storage.ddr if device.storage.ddr > 0 else 0
             )
             for sharding_type in used_sharding_types:
                 if sharding_type not in stats[rank]["type"]:
@@ -420,7 +435,7 @@ class EmbeddingStats(Stats):
 
         if debug:
             if sharding_plan.plan:
-                self._log_max_perf_and_max_hbm(perf, used_hbm)
+                self._log_max_perf_and_max_hbm(perf, used_hbm_and_ddr)
             self._log_storage_reservation_stats(
                 storage_reservation,
                 topology,
@@ -493,21 +508,23 @@ class EmbeddingStats(Stats):
 
         return ranks, input_sizes, output_sizes
 
-    def _log_max_perf_and_max_hbm(self, perfs: List[Perf], used_hbm: List[int]) -> None:
+    def _log_max_perf_and_max_hbm(
+        self, perfs: Dict[int, Perf], used_mem: Dict[int, Storage]
+    ) -> None:
 
-        max_total_perf_text = f"Longest Critical Path (Maximum of Total Perf): {_generate_max_text([perf.total for perf in perfs])}"
-        max_fwd_compute_perf_text = f"Maximum of Forward Compute: {_generate_max_text([perf.fwd_compute for perf in perfs])}"
-        max_fwd_comms_perf_text = f"Maximum of Forward Comms: {_generate_max_text([perf.fwd_comms for perf in perfs])}"
-        max_bwd_compute_perf_text = f"Maximum of Backward Compute: {_generate_max_text([perf.bwd_compute for perf in perfs])}"
-        max_bwd_comms_perf_text = f"Maximum of Backward Comms: {_generate_max_text([perf.bwd_comms for perf in perfs])}"
-        max_prefetch_compute_perf_text = f"Maximum of Prefetch Compute: {_generate_max_text([perf.prefetch_compute for perf in perfs])}"
+        max_total_perf_text = f"Longest Critical Path (Maximum of Total Perf): {_generate_max_text(perfs, lambda p: p.total)}"
+        max_fwd_compute_perf_text = f"Maximum of Forward Compute: {_generate_max_text(perfs, lambda p: p.fwd_compute)}"
+        max_fwd_comms_perf_text = f"Maximum of Forward Comms: {_generate_max_text(perfs, lambda p: p.fwd_comms)}"
+        max_bwd_compute_perf_text = f"Maximum of Backward Compute: {_generate_max_text(perfs, lambda p: p.bwd_compute)}"
+        max_bwd_comms_perf_text = f"Maximum of Backward Comms: {_generate_max_text(perfs, lambda p: p.bwd_comms)}"
+        max_prefetch_compute_perf_text = f"Maximum of Prefetch Compute: {_generate_max_text(perfs, lambda p: p.prefetch_compute)}"
 
         sum_of_maxima = (
-            max(perf.fwd_compute for perf in perfs)
-            + max(perf.fwd_comms for perf in perfs)
-            + max(perf.bwd_compute for perf in perfs)
-            + max(perf.bwd_comms for perf in perfs)
-            + max(perf.prefetch_compute for perf in perfs)
+            max(p.fwd_compute for p in perfs.values())
+            + max(p.fwd_comms for p in perfs.values())
+            + max(p.bwd_compute for p in perfs.values())
+            + max(p.bwd_comms for p in perfs.values())
+            + max(p.prefetch_compute for p in perfs.values())
         )
         sum_of_maxima_text = f"Sum of Maxima: {round(sum_of_maxima, 3)} ms"
 
@@ -522,6 +539,9 @@ class EmbeddingStats(Stats):
         )
         self._stats_table.append(f"# {sum_of_maxima_text : <{self._width-3}}#")
 
+        used_hbm: Dict[int, int] = {
+            rank: storage.hbm for rank, storage in used_mem.items()
+        }
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(
             f"# {'Estimated Sharding Distribution' : <{self._width-2}}#"
@@ -543,36 +563,39 @@ class EmbeddingStats(Stats):
         )
 
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-        per_rank_hbm = copy.copy(used_hbm)
+        per_rank_hbm: Dict[int, int] = copy.copy(used_hbm)
         NUM_PEAK_RANK = 5
         peak_memory_pressure = []
 
-        top_hbm_usage_estimation = f"Top HBM Memory Usage Estimation: {round(bytes_to_gb(max(used_hbm)), 3)} GB"
+        top_hbm_usage_estimation = (
+            "Top HBM Memory Usage Estimation: "
+            f"{round(bytes_to_gb(max(used_hbm.values())), 3)} GB"
+        )
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(f"# {top_hbm_usage_estimation : <{self._width-3}}#")
 
         for top in range(NUM_PEAK_RANK):
             if not per_rank_hbm:
                 break
-            max_hbm = max(per_rank_hbm)
-            max_hbm_indices = [
-                i
-                for i in range(len(per_rank_hbm))
-                if math.isclose(
-                    bytes_to_mb(per_rank_hbm[i]), bytes_to_mb(max_hbm), abs_tol=1.0
-                )
-            ]
+            max_hbm = max(per_rank_hbm.values())
+            max_hbm_indices: List[int] = []
+            remaining: Dict[int, int] = {}
+            for rank, hbm in per_rank_hbm.items():
+                if math.isclose(bytes_to_mb(hbm), bytes_to_mb(max_hbm), abs_tol=1.0):
+                    max_hbm_indices.append(rank)
+                else:
+                    remaining[rank] = hbm
             rank_text = "ranks" if len(max_hbm_indices) > 1 else "rank"
-            max_hbm_indices = _collapse_consecutive_ranks(max_hbm_indices)
-            max_hbm_ranks = f"{rank_text} {','.join(max_hbm_indices)}"
-            peak_memory_pressure.append(
-                f"Top Tier #{top+1} Estimated Peak HBM Pressure: {round(bytes_to_gb(max_hbm), 3)} GB on {max_hbm_ranks}"
+            max_hbm_ranks = (
+                f"{rank_text} {','.join(_collapse_consecutive_ranks(max_hbm_indices))}"
             )
-            per_rank_hbm = [
-                hbm
-                for hbm in per_rank_hbm
-                if not math.isclose(bytes_to_mb(hbm), bytes_to_mb(max_hbm), abs_tol=1.0)
-            ]
+            peak_memory_pressure.append(
+                (
+                    f"Top Tier #{top+1} Estimated Peak HBM Pressure: "
+                    f"{round(bytes_to_gb(max_hbm), 3)} GB on {max_hbm_ranks}"
+                )
+            )
+            per_rank_hbm = remaining
 
         for peak_rank in reversed(peak_memory_pressure):
             self._stats_table.append(f"# {peak_rank : <{self._width-3}}#")
@@ -663,22 +686,24 @@ class EmbeddingStats(Stats):
 
 
 def _generate_rank_hbm_stats(
-    per_rank_hbm: List[int], func: Callable[[Iterable[float]], float]
+    per_rank_hbm: Dict[int, int], func: Callable[[Iterable[float]], float]
 ) -> str:
     stats = round(func(per_rank_hbm))
     stats_indicies = [
-        i
-        for i in range(len(per_rank_hbm))
-        if math.isclose(bytes_to_mb(per_rank_hbm[i]), bytes_to_mb(stats), abs_tol=1.0)
+        rank
+        for rank, hbm in per_rank_hbm.items()
+        if math.isclose(bytes_to_mb(hbm), bytes_to_mb(stats), abs_tol=1.0)
     ]
     rank_text = "ranks" if len(stats_indicies) > 1 else "rank"
     return f"{round(bytes_to_gb(stats), 3)} GB on {rank_text} {stats_indicies}"
 
 
-def _generate_max_text(perfs: List[float]) -> str:
-    max_perf = max(perfs)
+def _generate_max_text(perfs: Dict[int, Perf], getter: Callable[[Perf], float]) -> str:
+    max_perf = max(getter(p) for p in perfs.values())
 
-    max_perf_indices = [i for i in range(len(perfs)) if perfs[i] == max_perf]
+    max_perf_indices = [
+        rank for rank, perf in perfs.items() if getter(perf) == max_perf
+    ]
     rank_text = "ranks" if len(max_perf_indices) > 1 else "rank"
     max_perf_indices = _collapse_consecutive_ranks(max_perf_indices)
     max_perf_ranks = f"{rank_text} {','.join(max_perf_indices)}"

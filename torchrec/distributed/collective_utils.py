@@ -51,7 +51,7 @@ def invoke_on_rank_and_broadcast_result(
 
         id = invoke_on_rank_and_broadcast_result(pg, 0, allocate_id)
     """
-    if pg.rank() == rank:
+    if dist.get_rank() == rank:
         res = func(*args, **kwargs)
         object_list = [res]
     else:

@@ -186,6 +186,7 @@ class Topology:
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
         bwd_compute_multiplier: float = BWD_COMPUTE_MULTIPLIER,
         custom_topology_data: Optional[CustomTopologyData] = None,
+        device_ranks: Optional[List[int]] = None,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -206,7 +207,13 @@ class Topology:
         ddr_cap = ddr_cap if ddr_cap else DDR_CAP
 
         self._devices: List[DeviceHardware] = []
-        for rank in range(world_size):
+        self._device_ranks: List[int] = (
+            device_ranks if device_ranks is not None else list(range(world_size))
+        )
+        assert (
+            len(self._device_ranks) == world_size
+        ), f"Mismatched {world_size=} and device_ranks={len(self._device_ranks)}. Device ranks input: {device_ranks}"
+        for rank in self._device_ranks:
             self._devices.append(
                 DeviceHardware(
                     rank=rank,
@@ -232,6 +239,10 @@ class Topology:
     @property
     def devices(self) -> List[DeviceHardware]:
         return self._devices
+
+    @property
+    def device_ranks(self) -> List[int]:
+        return self._device_ranks
 
     @property
     def world_size(self) -> int:
