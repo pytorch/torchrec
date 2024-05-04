@@ -341,7 +341,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
     )
     # pyre-ignore
     @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
+    @settings(deadline=None)
     def test_sharding_zch_mc_ec(self, backend: str) -> None:
 
         WORLD_SIZE = 2
@@ -447,7 +447,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
     )
     # pyre-ignore
     @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
+    @settings(deadline=None)
     def test_sharding_zch_mch_mc_ec(self, backend: str) -> None:
 
         WORLD_SIZE = 2

@@ -63,8 +63,6 @@ class MetricName(MetricNameBase):
     NDCG = "ndcg"
     XAUC = "xauc"
     SCALAR = "scalar"
-    TOTAL_POSITIVE_EXAMPLES = "total_positive_examples"
-    TOTAL_NEGATIVE_EXAMPLES = "total_negative_examples"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):

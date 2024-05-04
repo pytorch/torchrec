@@ -18,26 +18,8 @@ from torchrec.modules.embedding_configs import (
     EmbeddingConfig,
     pooling_type_to_str,
 )
-from torchrec.modules.utils import register_custom_op
+from torchrec.modules.utils import is_non_strict_exporting, register_custom_op
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
-
-
-try:
-    if torch.jit.is_scripting():
-        raise Exception()
-
-    from torch.compiler import (
-        is_compiling as is_compiler_compiling,
-        is_dynamo_compiling as is_torchdynamo_compiling,
-    )
-
-    def is_non_strict_exporting() -> bool:
-        return not is_torchdynamo_compiling() and is_compiler_compiling()
-
-except Exception:
-
-    def is_non_strict_exporting() -> bool:
-        return False
 
 
 @torch.fx.wrap
@@ -233,7 +215,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             features.weights_or_none(),
             features.lengths_or_none(),
             features.offsets_or_none(),
-        ]
+        ] + [bag.weight for bag in self.embedding_bags.values()]
         dims = [sum(self._lengths_per_embedding)]
         ebc_op = register_custom_op(self, dims)
         outputs = ebc_op(arg_list, batch_size)

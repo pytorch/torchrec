@@ -17,7 +17,6 @@ import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
 
-# pyre-ignore
 from torch.fx.experimental.symbolic_shapes import guard_size_oblivious
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
 
