@@ -74,10 +74,13 @@ class TrainPipelineContext:
         module_contexts (Dict[str, Multistreamable]): Stores module contexts from the
             input dist for the current batch.
         module_contexts_next_batch (Dict[str, Multistreamable]): Stores module contexts
-            from the input dist for the next batch.
+            from the input dist for the next batch. (only for version 0)
         fused_splits_awaitables (List[Tuple[List[str], FusedKJTListSplitsAwaitable]]):
             List of fused splits input dist awaitable and the corresponding module names
             of each awaitable.
+        event: Optional[torch.cuda.Event]: Event to record the completion of this stage
+        index: Optional[int]: Index of the current batch.
+        version: int = 0; support for backward compatiblity
     """
 
     # pyre-ignore [4]
@@ -85,9 +88,16 @@ class TrainPipelineContext:
     # pyre-ignore [4]
     input_dist_tensors_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
     module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
-    module_contexts_next_batch: Dict[str, Multistreamable] = field(default_factory=dict)
+    module_contexts_next_batch: Dict[str, Multistreamable] = field(
+        default_factory=dict
+    )  # deprecated: to support legacy code
     fused_splits_awaitables: List[Tuple[List[str], FusedKJTListSplitsAwaitable]] = (
         field(default_factory=list)
+    )
+    event: Optional[torch.cuda.Event] = None
+    index: Optional[int] = None
+    version: int = (
+        0  # 1 is current version, 0 is deprecated but supported for backward compatibility
     )
 
 
@@ -97,6 +107,11 @@ class PrefetchTrainPipelineContext(TrainPipelineContext):
     module_contexts_post_prefetch: Dict[str, Multistreamable] = field(
         default_factory=dict
     )
+
+
+@dataclass
+class EmbeddingTrainPipelineContext(TrainPipelineContext):
+    embedding_a2a_requests: Dict[str, Multistreamable] = field(default_factory=dict)
 
 
 @dataclass
@@ -162,6 +177,12 @@ class BaseForward:
     def args(self) -> List[ArgInfo]:
         return self._args
 
+    def set_context(self, context: TrainPipelineContext) -> None:
+        self._context = context
+
+    def get_context(self) -> TrainPipelineContext:
+        return self._context
+
 
 class PipelinedForward(BaseForward):
     # pyre-ignore [2, 24]
@@ -192,6 +213,18 @@ class PipelinedForward(BaseForward):
         return self._module.compute_and_output_dist(
             self._context.module_contexts[self._name], data
         )
+
+
+class EmbeddingPipelinedForward(BaseForward):
+    # pyre-ignore [2, 24]
+    def __call__(self, *input, **kwargs) -> Awaitable:
+        if self._stream is not None:
+            torch.cuda.current_stream().wait_stream(self._stream)
+            cur_stream = torch.cuda.current_stream()
+            ctx = self._context.module_contexts[self._name]
+            ctx.record_stream(cur_stream)
+        # pyre-ignore
+        return self._context.embedding_a2a_requests[self._name]
 
 
 class PrefetchPipelinedForward(BaseForward):
@@ -307,9 +340,6 @@ def _to_device(batch: In, device: torch.device, non_blocking: bool) -> In:
 
 
 def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> None:
-    if stream is None:
-        return
-    torch.cuda.current_stream().wait_stream(stream)
     """
     As mentioned in
     https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html, PyTorch
@@ -322,8 +352,25 @@ def _wait_for_batch(batch: In, stream: Optional[torch.cuda.streams.Stream]) -> N
     creator stream. This is a notable programming trick when we write programs using
     multiple CUDA streams.
     """
+    if stream is None:
+        return
+    torch.cuda.current_stream().wait_stream(stream)
 
     cur_stream = torch.cuda.current_stream()
+    assert isinstance(
+        batch, (torch.Tensor, Multistreamable)
+    ), f"{type(batch)} must implement Multistreamable interface"
+    batch.record_stream(cur_stream)
+
+
+def _wait_for_event(batch: In, event: Optional[torch.cuda.Event]) -> None:
+    """
+    Wait for event
+    """
+    if event is not None:
+        event.wait()
+    cur_stream = torch.cuda.current_stream()
+
     assert isinstance(
         batch, (torch.Tensor, Multistreamable)
     ), f"{type(batch)} must implement Multistreamable interface"
@@ -335,13 +382,17 @@ def _start_data_dist(
     batch: In,
     context: TrainPipelineContext,
 ) -> None:
-    context.input_dist_splits_requests.clear()
-    context.module_contexts_next_batch.clear()
-    context.fused_splits_awaitables.clear()
+    if context.version == 0:
+        context.input_dist_splits_requests.clear()
+        context.module_contexts_next_batch.clear()
+        context.fused_splits_awaitables.clear()
+
     for module in pipelined_modules:
         forward = module.forward
-        assert isinstance(forward, PipelinedForward) or isinstance(
-            forward, PrefetchPipelinedForward
+        assert (
+            isinstance(forward, PipelinedForward)
+            or isinstance(forward, PrefetchPipelinedForward)
+            or isinstance(forward, EmbeddingPipelinedForward)
         )
 
         # Retrieve argument for the input_dist of EBC
@@ -367,11 +418,43 @@ def _start_data_dist(
                 args.append(None)
         # Start input distribution.
         module_ctx = module.create_context()
-        context.module_contexts_next_batch[forward.name] = module_ctx
+        if context.version == 0:
+            context.module_contexts_next_batch[forward.name] = module_ctx
+        else:
+            context.module_contexts[forward.name] = module_ctx
         context.input_dist_splits_requests[forward.name] = module.input_dist(
             module_ctx, *args, **kwargs
         )
     _fuse_input_dist_splits(context)
+
+
+def _start_embedding_lookup(
+    pipelined_modules: List[ShardedModule],
+    batch: In,  # not used in this function
+    context: EmbeddingTrainPipelineContext,
+) -> None:
+    cur_stream = torch.cuda.current_stream()
+
+    for module in pipelined_modules:
+        module_name = module.forward.name
+        # this is fused, so look inside fused
+        for names, awaitables in context.fused_splits_awaitables:
+            if module_name in names:
+                resolved_awaitables = awaitables.wait()
+                for name, resolved_awaitable in zip(names, resolved_awaitables):
+                    kjt = resolved_awaitable.wait()
+                    kjt.record_stream(cur_stream)
+                    # pyre-ignore
+                    context.input_dist_tensors_requests[name] = kjt
+                break  # stop searching for awaitable to resolve
+
+        module_context = context.module_contexts[module_name]
+        module_context.record_stream(cur_stream)
+        kjt = context.input_dist_tensors_requests[module_name]
+
+        a2a_awaitable = module.compute_and_output_dist(module_context, kjt)
+        # pyre-ignore
+        context.embedding_a2a_requests[module_name] = a2a_awaitable
 
 
 def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
@@ -395,7 +478,12 @@ def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
                         context.input_dist_splits_requests[name] for name in names
                     ],
                     contexts=[
-                        context.module_contexts_next_batch[name] for name in names
+                        (
+                            context.module_contexts_next_batch[name]
+                            if context.version == 0
+                            else context.module_contexts[name]
+                        )
+                        for name in names
                     ],
                     pg=pg,
                 ),
@@ -771,7 +859,7 @@ class SparseDataDistUtil(Generic[In]):
         self.model = model
         self.stream = stream
         self.apply_jit = apply_jit
-        self.context = TrainPipelineContext()
+        self.context = TrainPipelineContext(version=0)
         self.initialized = False
         self._pipelined_modules: List[ShardedModule] = []
 
