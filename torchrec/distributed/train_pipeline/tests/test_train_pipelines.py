@@ -11,7 +11,7 @@ import copy
 import unittest
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, List, Optional, Tuple
+from typing import cast, List, Optional, Tuple, Type
 from unittest.mock import MagicMock
 
 import torch
@@ -45,14 +45,17 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     PrefetchTrainPipelineSparseDist,
     StagedTrainPipeline,
     TrainPipelineBase,
+    TrainPipelineSemiSync,
     TrainPipelineSparseDist,
 )
 from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
     get_h2d_func,
+    PipelinedForward,
     PipelineStage,
     SparseDataDistUtil,
     StageOut,
+    TrainPipelineContext,
 )
 from torchrec.distributed.types import (
     ModuleSharder,
@@ -418,11 +421,120 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
         )
 
 
+class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    @settings(max_examples=4, deadline=None)
+    # pyre-ignore[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ]
+        ),
+    )
+    def test_equal_to_non_pipelined(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+    ) -> None:
+        """
+        Checks that pipelined training is equivalent to non-pipelined training.
+        """
+        torch.autograd.set_detect_anomaly(True)
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        fused_params = {
+            "stochastic_rounding": False,
+        }
+        fused_params_pipelined = {
+            **fused_params,
+        }
+
+        model = self._setup_model()
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = TrainPipelineSemiSync(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+        )
+
+        prior_sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(
+            data[0].to(self.device)
+        )
+        prior_batch = data[0].to(self.device)
+        prior_stashed_grads = None
+        for batch in data[1:]:
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+
+            loss, pred = sharded_model._dmp_wrapped_module.dense_forward(
+                prior_batch, prior_sparse_out
+            )
+            sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
+            # stash grads:
+            loss.backward()
+            stashed_grads = []
+            for param in optim.param_groups[0]["params"]:
+                stashed_grads.append(
+                    param.grad.clone() if param.grad is not None else None
+                )
+                param.grad = None
+
+            if prior_stashed_grads is not None:
+                for param, stashed_grad in zip(
+                    optim.param_groups[0]["params"], prior_stashed_grads
+                ):
+                    param.grad = stashed_grad
+            optim.step()
+            optim.zero_grad()
+
+            prior_stashed_grads = stashed_grads
+            prior_batch = batch
+            prior_sparse_out = sparse_out
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+
+            self.assertTrue(torch.equal(pred, pred_pipeline))
+
+        # one more batch
+        pred_pipeline = pipeline.progress(dataloader)
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+
+
 class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
+    @settings(max_examples=4, deadline=None)
     # pyre-ignore[56]
     @given(
         execute_all_batches=st.booleans(),
@@ -458,7 +570,6 @@ class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             ]
         ),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_equal_to_non_pipelined(
         self,
         execute_all_batches: bool,
@@ -566,13 +677,20 @@ class EvalPipelineSparseDistTest(unittest.TestCase):
             def __init__(self, model, optimizer, device: torch.device) -> None:
                 super().__init__(model, optimizer, device)
 
-            def _init_pipelined_modules(self, item: Pipelineable) -> None:
+            def _init_pipelined_modules(
+                self,
+                item: Pipelineable,
+                context: TrainPipelineContext,
+                pipelined_forward: Type[PipelinedForward],
+            ) -> None:
                 pass
 
-            def _start_sparse_data_dist(self, item: Pipelineable) -> None:
+            def _start_sparse_data_dist(
+                self, item: Pipelineable, context: TrainPipelineContext
+            ) -> None:
                 pass
 
-            def _wait_sparse_data_dist(self) -> None:
+            def _wait_sparse_data_dist(self, context: TrainPipelineContext) -> None:
                 pass
 
         pipeline = MockPipeline(mock_model, mock_optimizer, torch.device("cpu"))
