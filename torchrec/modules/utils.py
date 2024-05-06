@@ -47,8 +47,11 @@ class OpRegistryState:
     """
 
     op_registry_lock = threading.Lock()
-    # operator schema: op_name: schema
+
+    # operator schema: {class}.{id} => op_name
     op_registry_schema: Dict[str, str] = {}
+    # operator counter: {class} => count
+    op_registry_counter: Dict[str, int] = defaultdict(int)
 
 
 operator_registry_state = OpRegistryState()
@@ -267,6 +270,9 @@ def _permute_indices(indices: List[int], permute: List[int]) -> List[int]:
     return permuted_indices
 
 
+#  register a customized operator that takes a list of tensors as input and returns
+#  a list of tensors as output. The operator is registered with the name of
+#  {module_class_name}_{instance_count}
 def register_custom_op(
     module: torch.nn.Module, dims: List[int]
 ) -> Callable[[List[Optional[torch.Tensor]], int], List[torch.Tensor]]:
@@ -280,47 +286,51 @@ def register_custom_op(
 
     global operator_registry_state
 
-    op_name: str = f"{type(module).__name__}_{id(module)}"
+    m_name: str = type(module).__name__
+    op_id: str = f"{m_name}_{id(module)}"
     with operator_registry_state.op_registry_lock:
-        if op_name in operator_registry_state.op_registry_schema:
-            return getattr(torch.ops.custom, op_name)
-
-    def custom_op(
-        values: List[Optional[torch.Tensor]],
-        batch_size: int,
-    ) -> List[torch.Tensor]:
-        device = None
-        for v in values:
-            if v is not None:
-                device = v.device
-                break
+        if op_id in operator_registry_state.op_registry_schema:
+            op_name: str = operator_registry_state.op_registry_schema[op_id]
         else:
-            raise AssertionError(
-                f"Custom op {op_name} expects at least one input tensor"
+            operator_registry_state.op_registry_counter[m_name] += 1
+            op_name: str = (
+                f"{m_name}_{operator_registry_state.op_registry_counter[m_name]}"
             )
+            operator_registry_state.op_registry_schema[op_id] = op_name
 
-        return [
-            torch.empty(
-                batch_size,
-                dim,
-                device=device,
-            )
-            for dim in dims
-        ]
+            def custom_op(
+                values: List[Optional[torch.Tensor]],
+                batch_size: int,
+            ) -> List[torch.Tensor]:
+                device = None
+                for v in values:
+                    if v is not None:
+                        device = v.device
+                        break
+                else:
+                    raise AssertionError(
+                        f"Custom op {op_name} expects at least one input tensor"
+                    )
 
-    schema_string = f"{op_name}(Tensor?[] values, int batch_size) -> Tensor[]"
-    with operator_registry_state.op_registry_lock:
-        if op_name in operator_registry_state.op_registry_schema:
-            return getattr(torch.ops.custom, op_name)
-        operator_registry_state.op_registry_schema[op_name] = schema_string
-        # Register schema
-        lib.define(schema_string)
+                return [
+                    torch.empty(
+                        batch_size,
+                        dim,
+                        device=device,
+                    )
+                    for dim in dims
+                ]
 
-        # Register implementation
-        lib.impl(op_name, custom_op, "CPU")
-        lib.impl(op_name, custom_op, "CUDA")
+            schema_string = f"{op_name}(Tensor?[] values, int batch_size) -> Tensor[]"
+            operator_registry_state.op_registry_schema[op_name] = schema_string
+            # Register schema
+            lib.define(schema_string)
 
-        # Register meta formula
-        lib.impl(op_name, custom_op, "Meta")
+            # Register implementation
+            lib.impl(op_name, custom_op, "CPU")
+            lib.impl(op_name, custom_op, "CUDA")
 
-    return getattr(torch.ops.custom, op_name)
+            # Register meta formula
+            lib.impl(op_name, custom_op, "Meta")
+
+        return getattr(torch.ops.custom, op_name)
