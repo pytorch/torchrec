@@ -294,34 +294,77 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
+    @settings(max_examples=4, deadline=None)
     # pyre-ignore[56]
-    @given(execute_all_batches=st.booleans())
-    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
-    def test_pipelining(self, execute_all_batches: bool) -> None:
-        pipeline = self._setup_pipeline(
-            TestEBCSharder(
-                sharding_type=ShardingType.TABLE_WISE.value,
-                kernel_type=EmbeddingComputeKernel.FUSED.value,
-            ),
-            execute_all_batches,
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ]
+        ),
+        execute_all_batches=st.booleans(),
+    )
+    def test_equal_to_non_pipelined(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        execute_all_batches: bool,
+    ) -> None:
+        """
+        Checks that pipelined training is equivalent to non-pipelined training.
+        """
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
         )
-        cpu_model, cpu_optimizer = self._setup_cpu_model_and_opt()
-        data = self._generate_data()
         dataloader = iter(data)
+
+        fused_params = {}
+        fused_params_pipelined = {}
+
+        model = self._setup_model()
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=execute_all_batches,
+        )
         if not execute_all_batches:
             data = data[:-2]
 
         for batch in data:
-            cpu_optimizer.zero_grad()
-            loss, pred = cpu_model(batch)
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
             loss.backward()
-            cpu_optimizer.step()
+            optim.step()
 
-            pred_gpu = pipeline.progress(dataloader)
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+            torch.testing.assert_close(pred, pred_pipeline)
 
-            self.assertEqual(len(pipeline._pipelined_modules), 2)
-            self.assertEqual(pred_gpu.device, self.device)
-            self.assertEqual(pred_gpu.cpu().size(), pred.size())
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
 
     @unittest.skipIf(
         not torch.cuda.is_available(),
