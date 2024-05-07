@@ -424,7 +424,6 @@ class ShardedQuantEmbeddingCollection(
             self._generate_permute_coordinates_per_feature_per_sharding()
 
         self._device = device
-        self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params, device)
 
@@ -877,8 +876,6 @@ class ShardedQuantEcInputDist(torch.nn.Module):
         self._input_dists = torch.nn.ModuleList([])
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
-
-        self._has_features_permute: bool = True
 
         feature_names: List[str] = []
         for sharding in sharding_type_to_sharding.values():
