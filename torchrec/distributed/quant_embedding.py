@@ -599,7 +599,7 @@ class ShardedQuantEmbeddingCollection(
         features: KeyedJaggedTensor,
     ) -> ListOfKJTList:
         if self._has_uninitialized_input_dist:
-            self._intput_dist = ShardedQuantEcInputDist(
+            self._input_dist = ShardedQuantEcInputDist(
                 input_feature_names=features.keys() if features is not None else [],
                 sharding_type_to_sharding=self._sharding_type_to_sharding,
                 device=self._device,
@@ -614,7 +614,7 @@ class ShardedQuantEmbeddingCollection(
             input_dist_result_list,
             features_by_sharding,
             unbucketize_permute_tensor_list,
-        ) = self._intput_dist(features)
+        ) = self._input_dist(features)
 
         with torch.no_grad():
             for i in range(len(self._sharding_type_to_sharding)):
