@@ -64,6 +64,11 @@ class MetricName(MetricNameBase):
     XAUC = "xauc"
     SCALAR = "scalar"
 
+    TOTAL_POSITIVE_EXAMPLES = "total_positive_examples"
+    TOTAL_NEGATIVE_EXAMPLES = "total_negative_examples"
+    PRECISION = "precision"
+    RECALL = "recall"
+
 
 class MetricNamespaceBase(StrValueMixin, Enum):
     pass
@@ -97,6 +102,9 @@ class MetricNamespace(MetricNamespaceBase):
     XAUC = "xauc"
 
     SCALAR = "scalar"
+
+    PRECISION = "precision"
+    RECALL = "recall"
 
 
 class MetricPrefix(StrValueMixin, Enum):
