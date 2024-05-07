@@ -215,7 +215,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             features.weights_or_none(),
             features.lengths_or_none(),
             features.offsets_or_none(),
-        ] + [bag.weight for bag in self.embedding_bags.values()]
+        ]  # if want to include the weights: `+ [bag.weight for bag in self.embedding_bags.values()]`
         dims = [sum(self._lengths_per_embedding)]
         ebc_op = register_custom_op(self, dims)
         outputs = ebc_op(arg_list, batch_size)

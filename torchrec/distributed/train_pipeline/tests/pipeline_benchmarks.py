@@ -34,6 +34,7 @@ from torchrec.distributed.train_pipeline import (
     TrainPipelineBase,
     TrainPipelineSparseDist,
 )
+from torchrec.distributed.train_pipeline.train_pipelines import TrainPipelineSemiSync
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
@@ -256,6 +257,7 @@ def runner(
         for pipeline_clazz in [
             TrainPipelineBase,
             TrainPipelineSparseDist,
+            TrainPipelineSemiSync,
         ]:
             pipeline = pipeline_clazz(
                 model=sharded_model,

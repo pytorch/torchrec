@@ -10,7 +10,7 @@
 import copy
 import os
 import unittest
-from typing import Any, cast, Dict, List, Optional, Tuple
+from typing import Any, cast, Dict, List, Optional, Tuple, Type
 
 import torch
 import torch.distributed as dist
@@ -89,9 +89,10 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
 
     def _setup_model(
         self,
+        model_type: Type[nn.Module] = TestSparseNN,
         enable_fsdp: bool = False,
     ) -> nn.Module:
-        unsharded_model = TestSparseNN(
+        unsharded_model = model_type(
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             dense_device=self.device,
