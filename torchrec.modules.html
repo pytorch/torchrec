@@ -1897,6 +1897,11 @@ in each input sample.</p>
 <p>We can only register the op schema once. So if we’re registering multiple
 times we need a lock and check if they’re the same schema</p>
 <dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.modules.utils.OpRegistryState.op_registry_counter">
+<span class="sig-name descname"><span class="pre">op_registry_counter</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></em><a class="headerlink" href="#torchrec.modules.utils.OpRegistryState.op_registry_counter" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.utils.OpRegistryState.op_registry_lock">
 <span class="sig-name descname"><span class="pre">op_registry_lock</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;unlocked</span> <span class="pre">_thread.lock</span> <span class="pre">object&gt;</span></em><a class="headerlink" href="#torchrec.modules.utils.OpRegistryState.op_registry_lock" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
