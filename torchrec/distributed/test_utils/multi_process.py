@@ -32,17 +32,22 @@ class MultiProcessContext:
         backend: str = "gloo",
         local_size: Optional[int] = None,
         use_deterministic_algorithms: bool = True,
+        disable_cuda_tf_32: bool = True,
     ) -> None:
 
         self.rank = rank
         self.world_size = world_size
         self.backend = backend
         self.local_size = local_size
+        self.disable_cuda_tf_32 = disable_cuda_tf_32
 
         if torch.cuda.is_available() and world_size <= torch.cuda.device_count():
             self.device: torch.device = torch.device(f"cuda:{rank}")
             torch.cuda.set_device(self.device)
 
+            if self.disable_cuda_tf_32:
+                torch.backends.cudnn.allow_tf32 = False
+                torch.backends.cuda.matmul.allow_tf32 = False
         else:
             self.device: torch.device = torch.device("cpu")
 
@@ -83,11 +88,12 @@ class MultiProcessContext:
             dist.destroy_process_group(_CROSS_PG)
         dist.destroy_process_group(self.pg)
         torch.use_deterministic_algorithms(False)
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and self.disable_cuda_tf_32:
             torch.backends.cudnn.allow_tf32 = True
 
 
 class MultiProcessTestBase(unittest.TestCase):
+
     @seed_and_log
     def setUp(self) -> None:
         os.environ["MASTER_ADDR"] = str("localhost")
