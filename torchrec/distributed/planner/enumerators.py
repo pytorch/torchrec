@@ -51,6 +51,8 @@ class EmbeddingEnumerator(Enumerator):
         batch_size (int): batch size.
         constraints (Optional[Dict[str, ParameterConstraints]]): dict of parameter names
             to provided ParameterConstraints.
+        estimator (Optional[Union[ShardEstimator, List[ShardEstimator]]]): shard performance estimators.
+        use_exact_enumerate_order (bool): whether to enumerate shardable parameters in the exact name_children enumeration order
     """
 
     def __init__(
@@ -59,6 +61,7 @@ class EmbeddingEnumerator(Enumerator):
         batch_size: int,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         estimator: Optional[Union[ShardEstimator, List[ShardEstimator]]] = None,
+        use_exact_enumerate_order: Optional[bool] = False,
     ) -> None:
         self._compute_device: str = topology.compute_device
         self._world_size: int = topology.world_size
@@ -66,6 +69,9 @@ class EmbeddingEnumerator(Enumerator):
         self._batch_size: int = batch_size
         self._constraints = constraints
         self._sharder_map: Dict[str, ModuleSharder[nn.Module]] = {}
+        self._use_exact_enumerate_order: bool = (
+            use_exact_enumerate_order if use_exact_enumerate_order else False
+        )
         memory_type = "hbm_cap" if topology.compute_device == "cuda" else "ddr_cap"
         self._device_memory_sizes: Optional[
             List[int]
@@ -109,7 +115,10 @@ class EmbeddingEnumerator(Enumerator):
 
         named_modules_queue = [("", module)]
         while named_modules_queue:
-            child_path, child_module = named_modules_queue.pop()
+            if not self._use_exact_enumerate_order:
+                child_path, child_module = named_modules_queue.pop()
+            else:
+                child_path, child_module = named_modules_queue.pop(0)
             sharder_key = sharder_name(type(child_module))
             sharder = self._sharder_map.get(sharder_key, None)
             if not sharder:
