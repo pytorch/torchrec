@@ -188,12 +188,13 @@ def _fbgemm_permute_pooled_embs(
         keys, lengths, groups
     )
     values = torch.concat(values, dim=1)
+    device = values.device
     permuted_values = torch.ops.fbgemm.permute_pooled_embs_auto_grad(
         values,
-        offsets.to(device=values.device),
-        permute.to(device=values.device),
-        inv_offsets.to(device=values.device),
-        inv_permute.to(device=values.device),
+        _pin_and_move(offsets, device),
+        _pin_and_move(permute, device),
+        _pin_and_move(inv_offsets, device),
+        _pin_and_move(inv_permute, device),
     )
     return list(torch.split(permuted_values, splits, dim=1))
 
