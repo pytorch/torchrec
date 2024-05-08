@@ -63,17 +63,13 @@ except Exception:
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     if is_torchdynamo_compiling():
-        # TODO(ivankobzarev): Dynamo trace with pin_memory once FakeTensor supports it.
-        return (
-            tensor
-            if device.type == "cpu"
-            else tensor.to(device=device, non_blocking=True)
-        )
+        # TODO(ivankobzarev): Dynamo trace with pin_memory once FakeTensor supports it
+        return tensor.to(device=device, non_blocking=True)
 
     return (
-        tensor
-        if device.type == "cpu"
-        else tensor.pin_memory().to(device=device, non_blocking=True)
+        tensor.pin_memory().to(device=device, non_blocking=True)
+        if device.type == "cuda" and tensor.device.type == "cpu"
+        else tensor.to(device=device, non_blocking=True)
     )
 
 
