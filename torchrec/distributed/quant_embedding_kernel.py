@@ -149,21 +149,20 @@ def _get_runtime_device(
 @torch.fx.wrap
 def _unwrap_kjt(
     features: KeyedJaggedTensor,
-) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     # Here it should always follow cuda path, runtime device cannot be meta
     return (
         features.values().int(),
         features.offsets().int(),
-        features.weights_or_none(),
     )
 
 
 @torch.fx.wrap
 def _unwrap_kjt_for_cpu(
     features: KeyedJaggedTensor,
-) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     assert features.device().type == "cpu" or features.device().type == "meta"
-    return features.values(), features.offsets(), features.weights_or_none()
+    return features.values(), features.offsets()
 
 
 class QuantBatchedEmbeddingBag(
@@ -263,29 +262,32 @@ class QuantBatchedEmbeddingBag(
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         if self._runtime_device.type == "cpu":
-            indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(features)
+            indices, offsets = _unwrap_kjt_for_cpu(features)
         else:
-            indices, offsets, per_sample_weights = _unwrap_kjt(features)
-        if self._is_weighted:
-            assert per_sample_weights is not None
-        elif self._is_weighted is not None:
-            per_sample_weights = None
+            indices, offsets = _unwrap_kjt(features)
+
         # Conditional call of .forward function for FX:
         # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
         # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
         # For some post processing that requires TBE emb_module copied in fx.GraphModule we need to be call_module, as it will copies this module inside fx.GraphModule unchanged.
         if self._emb_module_registered:
-            return self.emb_module(
-                indices=indices,
-                offsets=offsets,
-                per_sample_weights=per_sample_weights,
-            )
+            if self._is_weighted:
+                return self.emb_module(
+                    indices=indices,
+                    offsets=offsets,
+                    per_sample_weights=features.weights(),
+                )
+            else:
+                return self.emb_module(indices=indices, offsets=offsets)
         else:
-            return self.emb_module.forward(
-                indices=indices,
-                offsets=offsets,
-                per_sample_weights=per_sample_weights,
-            )
+            if self._is_weighted:
+                return self.emb_module.forward(
+                    indices=indices,
+                    offsets=offsets,
+                    per_sample_weights=features.weights(),
+                )
+            else:
+                return self.emb_module.forward(indices=indices, offsets=offsets)
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -439,9 +441,9 @@ class QuantBatchedEmbedding(
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         if self._runtime_device.type == "cpu":
             # To distinguish with QEBC for fx tracing on CPU embedding.
-            values, offsets, _ = _unwrap_kjt_for_cpu(features)
+            values, offsets = _unwrap_kjt_for_cpu(features)
         else:
-            values, offsets, _ = _unwrap_kjt(features)
+            values, offsets = _unwrap_kjt(features)
 
         if self._emb_module_registered:
             return self.emb_module(
