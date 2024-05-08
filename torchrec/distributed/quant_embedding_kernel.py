@@ -238,6 +238,9 @@ class QuantBatchedEmbeddingBag(
                 bounds_check_mode=(
                     bounds_check_mode if bounds_check_mode else BoundsCheckMode.WARNING
                 ),
+                feature_names_per_table=[
+                    table.feature_names for table in config.embedding_tables
+                ],
                 **(tbe_fused_params(fused_params) or {}),
             )
         )
@@ -401,6 +404,9 @@ class QuantBatchedEmbedding(
                 feature_table_map=self._feature_table_map,
                 row_alignment=self._tbe_row_alignment,
                 uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+                feature_names_per_table=[
+                    table.feature_names for table in config.embedding_tables
+                ],
                 **(tbe_fused_params(fused_params) or {}),
             )
         )
