@@ -1434,6 +1434,18 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
         self._lengths_offset_per_key: List[int] = []
 
+        self._init_pt2_checks()
+
+    def _init_pt2_checks(self) -> None:
+        if torch.jit.is_scripting() or not is_torchdynamo_compiling():
+            return
+
+        for s in self._stride_per_key:
+            torch._check_is_size(s)
+        for s in self._stride_per_key_per_rank:
+            for _s in s:
+                torch._check_is_size(_s)
+
     @staticmethod
     def from_offsets_sync(
         keys: List[str],
@@ -2272,22 +2284,30 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
         if variable_stride_per_key:
             assert stride_per_rank_per_key is not None
-            stride_per_key_per_rank: List[List[int]] = stride_per_rank_per_key.view(
+            stride_per_key_per_rank_tensor: torch.Tensor = stride_per_rank_per_key.view(
                 num_workers, len(keys)
-            ).T.tolist()
-            strides_cumsum: List[int] = torch.ops.fbgemm.asynchronous_complete_cumsum(
-                stride_per_rank_per_key
-            ).tolist()
-            cumsum_lengths = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
-            length_per_key = (
-                cumsum_lengths[strides_cumsum[1:]] - cumsum_lengths[strides_cumsum[:-1]]
-            )
-            with record_function("## all2all_data:recat_values ##"):
-                recat_cond: bool = recat is not None
-                if recat_cond and not is_torchdynamo_compiling():
-                    recat_cond = torch.jit._unwrap_optional(recat).numel() > 0
+            ).T.cpu()
 
-                if recat_cond:
+            strides_cumsum: torch.Tensor = (
+                torch.ops.fbgemm.asynchronous_complete_cumsum(stride_per_rank_per_key)
+            ).cpu()
+
+            cumsum_lengths = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
+
+            n = strides_cumsum.size(0)
+            strides_cumsum_from_1 = torch.narrow(
+                strides_cumsum, dim=0, start=1, length=n - 1
+            )
+            strides_cumsum_to_minus_1 = torch.narrow(
+                strides_cumsum, dim=0, start=0, length=n - 1
+            )
+            length_per_key_tensor = (
+                cumsum_lengths[strides_cumsum_from_1]
+                - cumsum_lengths[strides_cumsum_to_minus_1]
+            )
+
+            with record_function("## all2all_data:recat_values ##"):
+                if recat is not None:
                     lengths, _ = _permute_tensor_by_segments(
                         lengths,
                         stride_per_rank_per_key,
@@ -2296,10 +2316,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                     )
                     values, weights = _permute_tensor_by_segments(
                         values,
-                        length_per_key,
+                        length_per_key_tensor,
                         torch.jit._unwrap_optional(recat),
                         weights,
                     )
+
+            stride_per_key_per_rank = torch.jit.annotate(
+                List[List[int]], stride_per_key_per_rank_tensor.tolist()
+            )
+
             if not stride_per_key_per_rank:
                 stride_per_key_per_rank = [[0]] * len(keys)
             if stagger > 1:
@@ -2313,6 +2338,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         )
                     stride_per_key_per_rank_stagger.append(stride_per_rank_stagger)
                 stride_per_key_per_rank = stride_per_key_per_rank_stagger
+
             kjt = KeyedJaggedTensor(
                 keys=keys,
                 values=values,
@@ -2324,17 +2350,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         else:
             assert stride_per_rank is not None
             with record_function("## all2all_data:recat_values ##"):
-                recat_cond: bool = recat is not None
-
-                if not torch.jit.is_scripting() and is_torchdynamo_compiling():
-                    # pyre-ignore
-                    recat_cond = recat_cond and guard_size_oblivious(recat.numel() > 0)
-                else:
-                    recat_cond = (
-                        recat_cond and torch.jit._unwrap_optional(recat).numel() > 0
-                    )
-
-                if recat_cond:
+                if recat is not None:
                     stride = stride_per_rank[0]
 
                     single_batch_per_rank = True
