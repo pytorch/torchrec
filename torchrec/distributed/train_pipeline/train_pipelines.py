@@ -378,6 +378,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 for names, awaitable in context.fused_splits_awaitables:
                     for name, request in zip(names, awaitable.wait()):
                         context.input_dist_tensors_requests[name] = request
+        context.input_dist_splits_requests.clear()
+        context.fused_splits_awaitables.clear()
 
     def _copy_batch_to_gpu(self, dataloader_iter: Iterator[In]) -> Optional[In]:
         """
