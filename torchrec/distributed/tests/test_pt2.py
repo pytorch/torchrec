@@ -9,10 +9,13 @@
 
 import sys
 import unittest
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import torch
-from torchrec.distributed.test_utils.infer_utils import TestQuantFPEBCSharder
+from torchrec.distributed.test_utils.infer_utils import (
+    KJTInputExportDynamicShapeWrapper,
+    TestQuantFPEBCSharder,
+)
 
 try:
     # pyre-ignore
@@ -43,11 +46,13 @@ from torchrec.sparse.jagged_tensor import ComputeKJTToJTDict, KeyedJaggedTensor
 def make_kjt(values: List[int], lengths: List[int]) -> KeyedJaggedTensor:
     values_tensor = torch.tensor(values, dtype=torch.int32)
     lengths_tensor = torch.tensor(lengths, dtype=torch.int32)
+    weights_tensor = torch.randn(len(values), dtype=torch.float32)
     torch._check(torch.sum(lengths_tensor).item() == values_tensor.size(0))
     kjt = KeyedJaggedTensor(
         keys=[f"key{i}" for i in range(len(lengths))],
         values=values_tensor,
         lengths=lengths_tensor,
+        weights=weights_tensor,
     )
     return kjt
 
@@ -125,21 +130,21 @@ class TestPt2(unittest.TestCase):
     def _test_kjt_input_module(
         self,
         kjt_input_module: torch.nn.Module,
-        kjt_keys: List[str],
-        # pyre-ignore
-        inputs,
+        kjt: KeyedJaggedTensor,
+        inputs: Tuple[Any],
         test_dynamo: bool = True,
         test_aot_inductor: bool = True,
         test_pt2_ir_export: bool = False,
     ) -> None:
         with dynamo_skipfiles_allow("torchrec"):
-            EM: torch.nn.Module = KJTInputExportWrapper(kjt_input_module, kjt_keys)
-            eager_output = EM(*inputs)
+            EM: torch.nn.Module = KJTInputExportWrapper(kjt_input_module, kjt.keys())
+            em_inputs = (kjt.values(), kjt.lengths(), kjt.weights_or_none(), *inputs)
+            eager_output = EM(*em_inputs)
             if test_dynamo:
-                x = torch._dynamo.export(EM, same_signature=True)(*inputs)
+                x = torch._dynamo.export(EM, same_signature=True)(*em_inputs)
 
                 export_gm = x.graph_module
-                export_gm_output = export_gm(*inputs)
+                export_gm_output = export_gm(*em_inputs)
 
                 assert_close(eager_output, export_gm_output)
 
@@ -152,12 +157,23 @@ class TestPt2(unittest.TestCase):
                 device = "cuda"
                 # pyre-ignore
                 aot_inductor_module = AOTIRunnerUtil.load(device, so_path)
-                aot_actual_output = aot_inductor_module(*inputs)
+                aot_actual_output = aot_inductor_module(*em_inputs)
                 assert_close(eager_output, aot_actual_output)
 
             if test_pt2_ir_export:
-                pt2_ir = torch.export.export(EM, inputs, {}, strict=False)
-                pt2_ir_output = pt2_ir.module()(*inputs)
+                symint_wrapper = KJTInputExportDynamicShapeWrapper(EM)
+
+                # KJTInputExportDynamicShapeWrapper represents sizes of values/weights
+                # from first element of values/weights respectively (simulate symint)
+                # Need to set as size in order to run a proper forward
+                em_inputs[0][0] = kjt.values().size(0)
+                em_inputs[2][0] = kjt.weights().size(0)
+                eager_output = symint_wrapper(*em_inputs)
+                pt2_ir = torch.export.export(
+                    symint_wrapper, em_inputs, {}, strict=False
+                )
+
+                pt2_ir_output = pt2_ir.module()(*em_inputs)
                 assert_close(eager_output, pt2_ir_output)
 
     def test_kjt_split(self) -> None:
@@ -166,11 +182,11 @@ class TestPt2(unittest.TestCase):
                 return kjt.split([1, 2, 1])
 
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
-        segments: List[int] = [1, 2, 1]
+
         self._test_kjt_input_module(
             M(),
-            kjt.keys(),
-            (kjt._values, kjt._lengths),
+            kjt,
+            (),
             test_aot_inductor=False,
             test_dynamo=False,
             test_pt2_ir_export=True,
@@ -185,8 +201,8 @@ class TestPt2(unittest.TestCase):
         indices: List[int] = [1, 0, 3, 2]
         self._test_kjt_input_module(
             M(),
-            kjt.keys(),
-            (kjt._values, kjt._lengths, indices),
+            kjt,
+            (indices,),
             test_aot_inductor=False,
             test_pt2_ir_export=True,
         )
@@ -200,8 +216,8 @@ class TestPt2(unittest.TestCase):
 
         self._test_kjt_input_module(
             M(),
-            kjt.keys(),
-            (kjt._values, kjt._lengths),
+            kjt,
+            (),
             test_aot_inductor=False,
             test_pt2_ir_export=True,
         )
@@ -215,8 +231,8 @@ class TestPt2(unittest.TestCase):
 
         self._test_kjt_input_module(
             M(),
-            kjt.keys(),
-            (kjt._values, kjt._lengths),
+            kjt,
+            (),
             test_aot_inductor=False,
             test_pt2_ir_export=True,
         )
@@ -230,12 +246,13 @@ class TestPt2(unittest.TestCase):
 
                 return out0, out1
 
+        # First element represents symint for values and weights shape
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
 
         self._test_kjt_input_module(
             M(),
-            kjt.keys(),
-            (kjt._values, kjt._lengths),
+            kjt,
+            (),
             test_dynamo=False,
             test_aot_inductor=False,
             test_pt2_ir_export=True,
@@ -367,8 +384,8 @@ class TestPt2(unittest.TestCase):
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
         self._test_kjt_input_module(
             ComputeKJTToJTDict(),
-            kjt.keys(),
-            (kjt._values, kjt._lengths),
+            kjt,
+            (),
             # TODO: turn on AOT Inductor test once the support is ready
             test_aot_inductor=False,
         )

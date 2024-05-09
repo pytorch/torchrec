@@ -91,6 +91,7 @@ from torchrec.quant.embedding_modules import (
     quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
     quant_prep_enable_register_tbes,
 )
+from torchrec.sparse.jagged_tensor import is_non_strict_exporting
 
 
 @dataclass
@@ -126,6 +127,7 @@ class KJTInputExportWrapper(torch.nn.Module):
         self,
         values: torch.Tensor,
         lengths: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
         # pyre-ignore
         *args,
         # pyre-ignore
@@ -135,10 +137,45 @@ class KJTInputExportWrapper(torch.nn.Module):
             keys=self._kjt_keys,
             values=values,
             lengths=lengths,
+            weights=weights,
         )
         output = self._module_kjt_input(kjt, *args, **kwargs)
         # TODO(ivankobzarev): Support of None leaves in dynamo/export (e.g. KJT offsets)
         return [leaf for leaf in pytree.tree_leaves(output) if leaf is not None]
+
+
+class KJTInputExportDynamicShapeWrapper(torch.nn.Module):
+    def __init__(
+        self,
+        kjt_input_wrapper: KJTInputExportWrapper,
+    ) -> None:
+        super().__init__()
+        self.kjt_input_wrapper = kjt_input_wrapper
+
+    # pyre-ignore
+    def forward(
+        self,
+        values: torch.Tensor,
+        lengths: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
+        # pyre-ignore
+        *args,
+        # pyre-ignore
+        **kwargs,
+    ):
+        # Generate unbacked symints to represent sizes
+        # for values and weights, constrain them reasonably
+        values_size = values[0].item()
+        torch._check_is_size(values_size)
+        torch._check(values_size >= lengths.shape[0])
+        values = torch.ones(values_size).to(values.device)
+        if weights is not None:
+            weights_size = weights.int()[0].item()
+            torch._check_is_size(weights_size)
+            torch._check(weights_size >= lengths.shape[0])
+            weights = torch.ones(weights_size).to(weights.device)
+
+        return self.kjt_input_wrapper(values, lengths, weights, *args, **kwargs)
 
 
 def prep_inputs(
