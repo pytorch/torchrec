@@ -218,13 +218,19 @@ class PipelinedForward(BaseForward):
 class EmbeddingPipelinedForward(BaseForward):
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
+        assert (
+            self._name
+            # pyre-ignore [16]
+            in self._context.embedding_a2a_requests
+        ), "Invalid EmbeddingPipelinedForward usage, please do not directly call model.forward()"
+
+        ctx = self._context.module_contexts.pop(self._name)
         if self._stream is not None:
             torch.cuda.current_stream().wait_stream(self._stream)
             cur_stream = torch.cuda.current_stream()
-            ctx = self._context.module_contexts[self._name]
             ctx.record_stream(cur_stream)
         # pyre-ignore
-        return self._context.embedding_a2a_requests[self._name]
+        return self._context.embedding_a2a_requests.pop(self._name)
 
 
 class PrefetchPipelinedForward(BaseForward):
@@ -243,12 +249,18 @@ class PrefetchPipelinedForward(BaseForward):
             context=context,
             stream=prefetch_stream,
         )
-        self._context: PrefetchTrainPipelineContext = self._context
 
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
-        assert self._name in self._context.module_input_post_prefetch
-        data = self._context.module_input_post_prefetch[self._name]
+
+        assert (
+            self._name
+            # pyre-ignore [16]
+            in self._context.module_input_post_prefetch
+        ), "Invalid PrefetchPipelinedForward usage, please do not directly call model.forward()"
+        data = self._context.module_input_post_prefetch.pop(self._name)
+        # pyre-ignore [16]
+        ctx = self._context.module_contexts_post_prefetch.pop(self._name)
 
         # Make sure that both result of input_dist and context
         # are properly transferred to the current stream.
@@ -261,12 +273,9 @@ class PrefetchPipelinedForward(BaseForward):
             ), f"{type(data)} must implement Multistreamable interface"
             data.record_stream(cur_stream)
 
-            ctx = self._context.module_contexts_post_prefetch[self._name]
             ctx.record_stream(cur_stream)
 
-        return self._module.compute_and_output_dist(
-            self._context.module_contexts_post_prefetch[self._name], data
-        )
+        return self._module.compute_and_output_dist(ctx, data)
 
 
 class KJTAllToAllForward:
