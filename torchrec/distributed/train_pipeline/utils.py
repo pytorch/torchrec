@@ -187,8 +187,10 @@ class BaseForward:
 class PipelinedForward(BaseForward):
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
-        assert self._name in self._context.input_dist_tensors_requests
-        request = self._context.input_dist_tensors_requests[self._name]
+        assert (
+            self._name in self._context.input_dist_tensors_requests
+        ), "Invalid PipelinedForward usage, please do not directly call model.forward()"
+        request = self._context.input_dist_tensors_requests.pop(self._name)
         assert isinstance(request, Awaitable)
         with record_function("## wait_sparse_data_dist ##"):
             # Finish waiting on the dist_stream,
@@ -198,6 +200,8 @@ class PipelinedForward(BaseForward):
 
         # Make sure that both result of input_dist and context
         # are properly transferred to the current stream.
+        ctx = self._context.module_contexts.pop(self._name)
+
         if self._stream is not None:
             torch.cuda.current_stream().wait_stream(self._stream)
             cur_stream = torch.cuda.current_stream()
@@ -206,13 +210,9 @@ class PipelinedForward(BaseForward):
                 data, (torch.Tensor, Multistreamable)
             ), f"{type(data)} must implement Multistreamable interface"
             data.record_stream(cur_stream)
-
-            ctx = self._context.module_contexts[self._name]
             ctx.record_stream(cur_stream)
 
-        return self._module.compute_and_output_dist(
-            self._context.module_contexts[self._name], data
-        )
+        return self._module.compute_and_output_dist(ctx, data)
 
 
 class EmbeddingPipelinedForward(BaseForward):
