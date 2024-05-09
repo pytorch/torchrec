@@ -20,7 +20,10 @@ from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_r
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.planner.constants import BATCH_SIZE, MAX_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
-from torchrec.distributed.planner.partitioners import GreedyPerfPartitioner
+from torchrec.distributed.planner.partitioners import (
+    GreedyPerfPartitioner,
+    MemoryBalancedPartitioner,
+)
 from torchrec.distributed.planner.perf_models import NoopPerfModel
 from torchrec.distributed.planner.proposers import (
     GreedyProposer,
@@ -463,6 +466,7 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                     topology=self._topology_groups[group],
                     batch_size=self._batch_size,
                     constraints=constraints,
+                    use_exact_enumerate_order=True,
                 )
                 for group in self._topology_groups.keys()
             }
@@ -482,7 +486,8 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
             partitioners
             if partitioners
             else {
-                group: GreedyPerfPartitioner() for group in self._topology_groups.keys()
+                group: MemoryBalancedPartitioner()
+                for group in self._topology_groups.keys()
             }
         )
 

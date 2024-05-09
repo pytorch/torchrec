@@ -748,6 +748,42 @@ class ShardedEmbeddingCollection(
         for sharding in self._sharding_type_to_sharding.values():
             self._output_dists.append(sharding.create_output_dist())
 
+    def _dedup_indices(
+        self,
+        input_feature_splits: List[KeyedJaggedTensor],
+        ctx: EmbeddingCollectionContext,
+    ) -> List[KeyedJaggedTensor]:
+        if not self._use_index_dedup:
+            return input_feature_splits
+        with record_function("## dedup_ec_indices ##"):
+            features_by_shards = []
+            for i, input_feature in enumerate(input_feature_splits):
+                hash_size_cumsum = self.get_buffer(f"_hash_size_cumsum_tensor_{i}")
+                hash_size_offset = self.get_buffer(f"_hash_size_offset_tensor_{i}")
+                (
+                    lengths,
+                    offsets,
+                    unique_indices,
+                    reverse_indices,
+                ) = torch.ops.fbgemm.jagged_unique_indices(
+                    hash_size_cumsum,
+                    hash_size_offset,
+                    input_feature.offsets().to(torch.int64),
+                    input_feature.values().to(torch.int64),
+                )
+                dedup_features = KeyedJaggedTensor(
+                    keys=input_feature.keys(),
+                    lengths=lengths,
+                    offsets=offsets,
+                    values=unique_indices,
+                )
+
+                ctx.input_features.append(input_feature)
+                ctx.reverse_indices.append(reverse_indices)
+                features_by_shards.append(dedup_features)
+
+        return features_by_shards
+
     # pyre-ignore [14]
     def input_dist(
         self,
@@ -771,40 +807,7 @@ class ShardedEmbeddingCollection(
             input_feature_splits = features.split(
                 self._feature_splits,
             )
-
-            if not self._use_index_dedup:
-                features_by_shards = input_feature_splits
-            else:
-                with record_function("## dedup_ec_indices ##"):
-                    features_by_shards = []
-                    for i, input_feature in enumerate(input_feature_splits):
-                        hash_size_cumsum = self.get_buffer(
-                            f"_hash_size_cumsum_tensor_{i}"
-                        )
-                        hash_size_offset = self.get_buffer(
-                            f"_hash_size_offset_tensor_{i}"
-                        )
-                        (
-                            lengths,
-                            offsets,
-                            unique_indices,
-                            reverse_indices,
-                        ) = torch.ops.fbgemm.jagged_unique_indices(
-                            hash_size_cumsum,
-                            hash_size_offset,
-                            input_feature.offsets().to(torch.int64),
-                            input_feature.values().to(torch.int64),
-                        )
-                        dedup_features = KeyedJaggedTensor(
-                            keys=input_feature.keys(),
-                            lengths=lengths,
-                            offsets=offsets,
-                            values=unique_indices,
-                        )
-
-                        ctx.input_features.append(input_feature)
-                        ctx.reverse_indices.append(reverse_indices)
-                        features_by_shards.append(dedup_features)
+            features_by_shards = self._dedup_indices(input_feature_splits, ctx)
 
             awaitables = []
             for input_dist, features in zip(self._input_dists, features_by_shards):

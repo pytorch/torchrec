@@ -5,6 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 #!/usr/bin/env python3
 
 import unittest
@@ -52,21 +54,24 @@ from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCo
 from torchrec.pt2.utils import kjt_for_pt2_tracing
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
-torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
-torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
-torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops")
-torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops_cpu")
+try:
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops")
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops_cpu")
 
-torch.ops.load_library(
-    "//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops_cuda_training"
-)
-torch.ops.load_library(
-    "//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops_cpu_training"
-)
-torch.ops.load_library(
-    "//deeplearning/fbgemm/fbgemm_gpu:split_table_batched_embeddings"
-)
-torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:input_combine_cpu")
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops_cuda_training"
+    )
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu/codegen:embedding_ops_cpu_training"
+    )
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:split_table_batched_embeddings"
+    )
+    torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:input_combine_cpu")
+except OSError:
+    pass
 
 
 class NoOpFPC(FeatureProcessorsCollection):
