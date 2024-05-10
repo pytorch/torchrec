@@ -12,6 +12,7 @@ import itertools
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import partial
 from threading import Event, Thread
 from typing import (
     Any,
@@ -36,12 +37,14 @@ from torch.profiler import record_function
 from torchrec.distributed.dist_data import KJTAllToAll
 from torchrec.distributed.embedding_sharding import (
     FusedKJTListSplitsAwaitable,
+    KJTListAwaitable,
     KJTListSplitsAwaitable,
     KJTSplitsAllToAllMeta,
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 
 from torchrec.distributed.types import Awaitable
+from torchrec.distributed.utils import batch_apply_callbacks
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
@@ -469,6 +472,7 @@ def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
     names_per_pg = defaultdict(list)
     for name, request in context.input_dist_splits_requests.items():
         pg = None
+        # TODO: remove if statement which was used to appease pyre
         if isinstance(request, KJTListSplitsAwaitable):
             for awaitable in request.awaitables:
                 if isinstance(awaitable, KJTSplitsAllToAllMeta):
@@ -477,24 +481,33 @@ def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
         names_per_pg[pg].append(name)
 
     for pg, names in names_per_pg.items():
+        fused_splits_awaitable = FusedKJTListSplitsAwaitable(
+            # pyre-ignore[6]
+            requests=[context.input_dist_splits_requests[name] for name in names],
+            contexts=[
+                (
+                    context.module_contexts_next_batch[name]
+                    if context.version == 0
+                    else context.module_contexts[name]
+                )
+                for name in names
+            ],
+            pg=pg,
+        )
+
+        splits_callbacks: List[List[Callable[[KJTListAwaitable], KJTListAwaitable]]] = [
+            (context.input_dist_splits_requests[name].callbacks) for name in names
+        ]
+
+        batch_callback: Callable[[List[KJTListAwaitable]], List[KJTListAwaitable]] = (
+            partial(batch_apply_callbacks, list_callbacks=splits_callbacks)
+        )
+
+        fused_splits_awaitable.callbacks.append(batch_callback)
         context.fused_splits_awaitables.append(
             (
                 names,
-                FusedKJTListSplitsAwaitable(
-                    # pyre-ignore[6]
-                    requests=[
-                        context.input_dist_splits_requests[name] for name in names
-                    ],
-                    contexts=[
-                        (
-                            context.module_contexts_next_batch[name]
-                            if context.version == 0
-                            else context.module_contexts[name]
-                        )
-                        for name in names
-                    ],
-                    pg=pg,
-                ),
+                fused_splits_awaitable,
             )
         )
 
