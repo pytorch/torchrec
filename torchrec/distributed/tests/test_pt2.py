@@ -302,7 +302,9 @@ class TestPt2(unittest.TestCase):
         kjt = kjt.to("meta")
         sharded_model(kjt.values(), kjt.lengths())
 
-        ep = torch.export.export(
+        from torch.export import _trace
+
+        ep = _trace._export(
             sharded_model,
             (
                 kjt.values(),
@@ -310,7 +312,8 @@ class TestPt2(unittest.TestCase):
             ),
             {},
             strict=False,
-        )
+            pre_dispatch=True,
+        ).run_decompositions()
 
         ep.module()(kjt.values(), kjt.lengths())
 
@@ -338,7 +341,9 @@ class TestPt2(unittest.TestCase):
 
         sharded_model(kjt.values(), kjt.lengths())
 
-        ep = torch.export.export(
+        from torch.export import _trace
+
+        ep = _trace._export(
             sharded_model,
             (
                 kjt.values(),
@@ -346,7 +351,8 @@ class TestPt2(unittest.TestCase):
             ),
             {},
             strict=False,
-        )
+            pre_dispatch=True,
+        ).run_decompositions()
         ep.module()(kjt.values(), kjt.lengths())
 
         # PT2 IR autofunctionalizes mutation funcs (bounds_check_indices)
