@@ -518,14 +518,14 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseFeatureProcessor">BaseFeatureProcessor (class in torchrec.modules.feature_processor)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseGroupedFeatureProcessor">BaseGroupedFeatureProcessor (class in torchrec.distributed.embedding_types)</a>
 
       <ul>
         <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor">(class in torchrec.modules.feature_processor)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_embedding_modules.BaseManagedCollisionEmbeddingCollection">BaseManagedCollisionEmbeddingCollection (class in torchrec.modules.mc_embedding_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder">BaseQuantEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
@@ -570,9 +570,13 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ParameterSharding.bounds_check_mode">(torchrec.distributed.types.ParameterSharding attribute)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InputDistOutputs.bucket_mapping_tensor">bucket_mapping_tensor (torchrec.distributed.sharding.rw_sharding.InputDistOutputs attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.bucketize_kjt_before_all2all">bucketize_kjt_before_all2all() (in module torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.bucketize_kjt_inference">bucketize_kjt_inference() (in module torchrec.distributed.embedding_sharding)</a>
+</li>
+      <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InputDistOutputs.bucketized_length">bucketized_length (torchrec.distributed.sharding.rw_sharding.InputDistOutputs attribute)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.build_affine_storage_model">build_affine_storage_model() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer static method)</a>
 </li>
@@ -1326,6 +1330,8 @@
       </ul></li>
       <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.FeatureProcessedEmbeddingBagCollection">FeatureProcessedEmbeddingBagCollection (class in torchrec.quant.embedding_modules)</a>
 </li>
+      <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InputDistOutputs.features">features (torchrec.distributed.sharding.rw_sharding.InputDistOutputs attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn.features_per_rank">features_per_rank() (torchrec.distributed.embedding_types.FeatureShardingMixIn method)</a>
 
       <ul>
@@ -1851,6 +1857,8 @@
 </li>
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.input_tensors">input_tensors (torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InputDistOutputs">InputDistOutputs (class in torchrec.distributed.sharding.rw_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerErrorType.INSUFFICIENT_STORAGE">INSUFFICIENT_STORAGE (torchrec.distributed.planner.types.PlannerErrorType attribute)</a>
 </li>
@@ -2894,6 +2902,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.mc_embeddingbag.ManagedCollisionEmbeddingBagCollectionContext.record_stream">(torchrec.distributed.mc_embeddingbag.ManagedCollisionEmbeddingBagCollectionContext method)</a>
 </li>
+        <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InputDistOutputs.record_stream">(torchrec.distributed.sharding.rw_sharding.InputDistOutputs method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.NullShardedModuleContext.record_stream">(torchrec.distributed.types.NullShardedModuleContext method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.NullShardingContext.record_stream">(torchrec.distributed.types.NullShardingContext method)</a>
@@ -2925,10 +2935,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req">ReduceScatterBase_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait">ReduceScatterBase_Wait (class in torchrec.distributed.comm_ops)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait">ReduceScatterBase_Wait (class in torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo">ReduceScatterBaseInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo">ReduceScatterInfo (class in torchrec.distributed.comm_ops)</a>
@@ -4050,6 +4060,8 @@
 <h2 id="U">U</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.InputDistOutputs.unbucketize_permute_tensor">unbucketize_permute_tensor (torchrec.distributed.sharding.rw_sharding.InputDistOutputs attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingSharding.uncombined_embedding_dims">uncombined_embedding_dims() (torchrec.distributed.embedding_sharding.EmbeddingSharding method)</a>
 
       <ul>
