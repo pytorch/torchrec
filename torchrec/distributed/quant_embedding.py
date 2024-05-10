@@ -921,13 +921,21 @@ class ShardedQuantEcInputDist(torch.nn.Module):
             for i in range(len(self._input_dists)):
                 input_dist = self._input_dists[i]
                 input_dist_result = input_dist(features_by_sharding[i])
-                ret.append(input_dist_result)
-                unbucketize_permute_tensor.append(
-                    input_dist.unbucketize_permute_tensor
-                    if isinstance(input_dist, InferRwSparseFeaturesDist)
-                    or isinstance(input_dist, InferCPURwSparseFeaturesDist)
-                    else None
-                )
+                # TODO: clean up the logic here
+                # Should avoid getting self attributes from input_dists
+                # Intead, use return value to change any LHS
+                if isinstance(input_dist, InferCPURwSparseFeaturesDist):
+                    ret.append(input_dist_result.features)
+                    unbucketize_permute_tensor.append(
+                        input_dist_result.unbucketize_permute_tensor
+                    )
+                else:
+                    ret.append(input_dist_result)
+                    unbucketize_permute_tensor.append(
+                        input_dist.unbucketize_permute_tensor
+                        if isinstance(input_dist, InferRwSparseFeaturesDist)
+                        else None
+                    )
 
             return (
                 ret,

@@ -8,6 +8,8 @@
 # pyre-strict
 
 import math
+
+from dataclasses import dataclass
 from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -102,6 +104,24 @@ def _fx_wrap_block_bucketize_row_pos(
     block_bucketize_row_pos: List[torch.Tensor],
 ) -> Optional[List[torch.Tensor]]:
     return block_bucketize_row_pos if block_bucketize_row_pos else None
+
+
+@dataclass
+class InputDistOutputs(Multistreamable):
+    features: KJTList
+    unbucketize_permute_tensor: Optional[torch.Tensor] = None
+    bucket_mapping_tensor: Optional[torch.Tensor] = None
+    bucketized_length: Optional[torch.Tensor] = None
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        for feature in self.features:
+            feature.record_stream(stream)
+        if self.unbucketize_permute_tensor is not None:
+            self.unbucketize_permute_tensor.record_stream(stream)
+        if self.bucket_mapping_tensor is not None:
+            self.bucket_mapping_tensor.record_stream(stream)
+        if self.bucketized_length is not None:
+            self.bucketized_length.record_stream(stream)
 
 
 class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
@@ -656,7 +676,7 @@ class InferRwPooledEmbeddingSharding(
         )
 
 
-class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
+class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
     def __init__(
         self,
         world_size: int,
@@ -683,15 +703,12 @@ class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
-        self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
-        self.bucket_mapping_tensor: Optional[torch.Tensor] = None
-        self.bucketized_length_tensor: Optional[torch.Tensor] = None
         self._embedding_shard_metadata = emb_sharding
 
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> KJTList:
+    ) -> InputDistOutputs:
         block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
             self.feature_block_sizes,
             sparse_features.device(),
@@ -702,7 +719,7 @@ class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
 
         (
             bucketized_features,
-            self.unbucketize_permute_tensor,
+            unbucketize_permute_tensor,
             bucket_mapping_tensor_opt,
         ) = bucketize_kjt_inference(
             sparse_features,
@@ -716,11 +733,6 @@ class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             ),
             block_bucketize_row_pos=block_bucketize_row_pos,
             return_bucket_mapping=self._is_sequence,
-        )
-        self.bucket_mapping_tensor = bucket_mapping_tensor_opt
-        # 2d requried
-        self.bucketized_length_tensor = bucketized_features.lengths().view(
-            self._world_size * self._num_features, -1
         )
         # KJTOneToAll
         kjt = bucketized_features
@@ -736,6 +748,13 @@ class InferCPURwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             )
             for rank in range(self._world_size)
         ]
-        ret = KJTList(dist_kjts)
+        features = KJTList(dist_kjts)
         fx_marker("KJT_ONE_TO_ALL_FORWARD_END", kjt)
-        return ret
+        return InputDistOutputs(
+            features=features,
+            unbucketize_permute_tensor=unbucketize_permute_tensor,
+            bucket_mapping_tensor=bucket_mapping_tensor_opt,
+            bucketized_length=bucketized_features.lengths().view(
+                self._world_size * self._num_features, -1
+            ),
+        )
