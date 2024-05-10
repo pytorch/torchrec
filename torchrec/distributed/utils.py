@@ -11,7 +11,7 @@ import copy
 import logging
 
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
@@ -19,6 +19,7 @@ from torch import nn
 from torchrec import optim as trec_optim
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.types import (
+    Awaitable,
     DataType,
     ParameterSharding,
     ShardedModule,
@@ -28,6 +29,7 @@ from torchrec.modules.embedding_configs import data_type_to_sparse_type
 from torchrec.types import CopyMixIn
 
 logger: logging.Logger = logging.getLogger(__name__)
+W = TypeVar("W")
 _T = TypeVar("_T")
 
 """
@@ -442,3 +444,33 @@ def init_parameters(module: nn.Module, device: torch.device) -> None:
                     m.reset_parameters()
 
             module.apply(maybe_reset_parameters)
+
+
+def append_callback(
+    awaitable: Awaitable[W], callback: Callable[[W], W]
+) -> Awaitable[W]:
+    """
+    Utility function to append a callback to an awaitable.
+    """
+    awaitable.callbacks.append(callback)
+    return awaitable
+
+
+def apply_callbacks(ret: W, callbacks: List[Callable[[W], W]]) -> W:
+    """
+    Apply a list of callbacks to a value.
+    """
+    for callback in callbacks:
+        ret = callback(ret)
+    return ret
+
+
+def batch_apply_callbacks(
+    rets: List[W], list_callbacks: List[List[Callable[[W], W]]]
+) -> List[W]:
+    """
+    Apply a list of callbacks to a list of values.
+    """
+    for ret, callbacks in zip(rets, list_callbacks):
+        apply_callbacks(ret, callbacks)
+    return rets
