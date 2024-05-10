@@ -715,10 +715,6 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         # batch 2
         self._batch_ip1 = self._copy_batch_to_gpu(dataloader_iter)
         self._start_sparse_data_dist(self._batch_ip1)
-        self._wait_sparse_data_dist()
-
-        # batch 3
-        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         self._fill_pipeline(dataloader_iter)
@@ -730,17 +726,14 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         with record_function("## wait_for_batch ##"):
             _wait_for_batch(cast(In, self._batch_i), self._prefetch_stream)
 
-        self._start_sparse_data_dist(self._batch_ip2)
+        self._batch_ip2 = self._copy_batch_to_gpu(dataloader_iter)
 
-        self._batch_ip3 = self._copy_batch_to_gpu(dataloader_iter)
-
+        self._wait_sparse_data_dist()
         # forward
         with record_function("## forward ##"):
             losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
 
         self._prefetch(self._batch_ip1)
-
-        self._wait_sparse_data_dist()
 
         if self._model.training:
             # backward
@@ -751,9 +744,10 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             with record_function("## optimizer ##"):
                 self._optimizer.step()
 
+        self._start_sparse_data_dist(self._batch_ip2)
+
         self._batch_i = self._batch_ip1
         self._batch_ip1 = self._batch_ip2
-        self._batch_ip2 = self._batch_ip3
 
         return output
 

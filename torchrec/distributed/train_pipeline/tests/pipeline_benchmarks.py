@@ -76,12 +76,19 @@ from torchrec.test_utils import get_free_port
     default=8192,
     help="Batch size.",
 )
+@click.option(
+    "--pooling_factor",
+    type=int,
+    default=100,
+    help="Pooling Factor.",
+)
 def main(
     world_size: int,
     n_features: int,
     dim_emb: int,
     n_batches: int,
     batch_size: int,
+    pooling_factor: int,
 ) -> None:
     """
     Checks that pipelined training is equivalent to non-pipelined training.
@@ -117,6 +124,7 @@ def main(
         num_batches=n_batches,
         batch_size=batch_size,
         world_size=world_size,
+        pooling_factor=pooling_factor,
     )
 
     _run_multi_process_test(
@@ -170,6 +178,7 @@ def _generate_data(
     num_batches: int = 100,
     batch_size: int = 4096,
     world_size: int = 1,
+    pooling_factor: int = 10,
 ) -> List[List[ModelInput]]:
     return [
         ModelInput.generate(
@@ -178,6 +187,7 @@ def _generate_data(
             batch_size=batch_size,
             world_size=world_size,
             num_float_features=num_float_features,
+            pooling_avg=pooling_factor,
         )[1]
         for i in range(num_batches)
     ]
