@@ -561,7 +561,7 @@ def get_block_sizes_runtime_device(
     return tensor_cache[cache_key]
 
 
-class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
+class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
     def __init__(
         self,
         world_size: int,
@@ -592,7 +592,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
-        self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
 
         self._embedding_shard_metadata: Optional[List[List[int]]] = (
             embedding_shard_metadata
@@ -601,7 +600,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> KJTList:
+    ) -> InputDistOutputs:
         block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
             self.feature_block_sizes,
             sparse_features.device(),
@@ -610,7 +609,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         )
         (
             bucketized_features,
-            self.unbucketize_permute_tensor,
+            unbucketize_permute_tensor,
         ) = bucketize_kjt_before_all2all(
             sparse_features,
             num_buckets=self._world_size,
@@ -625,7 +624,12 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
                 block_bucketize_row_pos
             ),
         )
-        return self._dist.forward(bucketized_features)
+        dist_kjt = self._dist.forward(bucketized_features)
+
+        return InputDistOutputs(
+            features=dist_kjt,
+            unbucketize_permute_tensor=unbucketize_permute_tensor,
+        )
 
 
 class InferRwPooledEmbeddingSharding(
