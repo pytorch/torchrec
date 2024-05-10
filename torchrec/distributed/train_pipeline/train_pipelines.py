@@ -768,7 +768,9 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                     assert isinstance(forward, PrefetchPipelinedForward)
 
                     assert forward._name in self._context.input_dist_tensors_requests
-                    request = self._context.input_dist_tensors_requests[forward._name]
+                    request = self._context.input_dist_tensors_requests.pop(
+                        forward._name
+                    )
                     assert isinstance(request, Awaitable)
                     with record_function("## wait_sparse_data_dist ##"):
                         # Finish waiting on the dist_stream,
@@ -797,7 +799,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                     )
                     self._context.module_input_post_prefetch[forward._name] = data
                     self._context.module_contexts_post_prefetch[forward._name] = (
-                        self._context.module_contexts[forward._name]
+                        self._context.module_contexts.pop(forward._name)
                     )
 
 
