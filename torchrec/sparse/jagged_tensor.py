@@ -1865,6 +1865,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                     _lengths = torch.narrow(
                         self.lengths(), 0, lengths_start, lengths_sz
                     )
+
+                    if self.weights_or_none() is not None:
+                        torch._check(start_offset + sz <= self.weights().size(0))
+                        torch._check(start_offset <= self.weights().size(0))
+
                     split_list.append(
                         KeyedJaggedTensor(
                             keys=keys,
@@ -2062,6 +2067,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             torch._check_is_size(sz)
             torch._check(start_offset <= self.values().size(0))
             torch._check(sz <= self.values().size(0))
+
+            if self.weights_or_none() is not None:
+                torch._check(start_offset <= self.weights().size(0))
+                torch._check(sz <= self.weights().size(0))
 
             return JaggedTensor(
                 values=torch.narrow(
