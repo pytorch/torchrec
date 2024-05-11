@@ -36,7 +36,10 @@ from torchrec.distributed.train_pipeline import (
     TrainPipelineBase,
     TrainPipelineSparseDist,
 )
-from torchrec.distributed.train_pipeline.train_pipelines import TrainPipelineSemiSync
+from torchrec.distributed.train_pipeline.train_pipelines import (
+    PrefetchTrainPipelineSparseDist,
+    TrainPipelineSemiSync,
+)
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
@@ -73,12 +76,19 @@ from torchrec.test_utils import get_free_port
     default=8192,
     help="Batch size.",
 )
+@click.option(
+    "--pooling_factor",
+    type=int,
+    default=100,
+    help="Pooling Factor.",
+)
 def main(
     world_size: int,
     n_features: int,
     dim_emb: int,
     n_batches: int,
     batch_size: int,
+    pooling_factor: int,
 ) -> None:
     """
     Checks that pipelined training is equivalent to non-pipelined training.
@@ -114,6 +124,7 @@ def main(
         num_batches=n_batches,
         batch_size=batch_size,
         world_size=world_size,
+        pooling_factor=pooling_factor,
     )
 
     _run_multi_process_test(
@@ -167,6 +178,7 @@ def _generate_data(
     num_batches: int = 100,
     batch_size: int = 4096,
     world_size: int = 1,
+    pooling_factor: int = 10,
 ) -> List[List[ModelInput]]:
     return [
         ModelInput.generate(
@@ -175,6 +187,7 @@ def _generate_data(
             batch_size=batch_size,
             world_size=world_size,
             num_float_features=num_float_features,
+            pooling_avg=pooling_factor,
         )[1]
         for i in range(num_batches)
     ]
@@ -260,6 +273,7 @@ def runner(
             TrainPipelineBase,
             TrainPipelineSparseDist,
             TrainPipelineSemiSync,
+            PrefetchTrainPipelineSparseDist,
         ]:
             pipeline = pipeline_clazz(
                 model=sharded_model,
@@ -297,7 +311,7 @@ def runner(
             )
             if rank == 0:
                 print(
-                    f"  {pipeline_clazz.__name__: <{35}} | Runtime (P90): {result.runtime_percentile(90)/1000:5.1f} s | Memory (P90): {result.max_mem_percentile(90)/1000:5.1f} GB"
+                    f"  {pipeline_clazz.__name__: <{35}} | Runtime (P90): {result.runtime_percentile(90)/1000:5.3f} s | Memory (P90): {result.max_mem_percentile(90)/1000:5.3f} GB"
                 )
 
 
