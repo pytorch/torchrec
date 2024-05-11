@@ -63,8 +63,8 @@ except Exception:
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     if is_torchdynamo_compiling():
-        # TODO(ivankobzarev): Dynamo trace with pin_memory once FakeTensor supports it
-        return tensor.to(device=device, non_blocking=True)
+        # TODO: remove once FakeTensor supports pin_memory() and to(..., non_blocking=True)
+        return tensor.to(device=device)
 
     return (
         tensor.pin_memory().to(device=device, non_blocking=True)
