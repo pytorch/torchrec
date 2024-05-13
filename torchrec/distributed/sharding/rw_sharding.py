@@ -607,6 +607,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
             sparse_features.device(),
             self.tensor_cache,
             self._embedding_shard_metadata,
+            sparse_features.values().dtype,
         )
         (
             bucketized_features,
