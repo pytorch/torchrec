@@ -30,6 +30,7 @@ from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
     InferCPURwSparseFeaturesDist,
     InferRwSparseFeaturesDist,
+    InputDistOutputs,
     RwSparseFeaturesDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import (
@@ -274,7 +275,7 @@ class InferCPURwSequenceEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[KJTList]:
+    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
 
@@ -306,7 +307,7 @@ class InferCPURwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
         return InferCPUGroupedEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,
