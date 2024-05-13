@@ -599,7 +599,7 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
 
             if not search_space:
                 # No shardable parameters
-                return ShardingPlan({})
+                continue
 
             proposal_cache: Dict[
                 Tuple[int, ...],
@@ -715,10 +715,10 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                     if isinstance(
                         self._storage_reservations[group], HeuristicalStorageReservation
                     )
-                    else f"\n\t  Storage reservation percentage: {self._storage_reservation._percentage}, "  # pyre-ignore[16]
+                    else f"\n\t  Storage reservation percentage: {self._storage_reservations[group]._percentage}, "
                 )
                 no_plan_solution = (
-                    f"Planner evaluated {self._num_proposals} proposals."
+                    f"Planner evaluated {self._num_proposals} proposals for device group {group}."
                     "\nPossible solutions:"
                     f"\n  1) Increase the number of devices ({self._topology_groups[group].world_size})"
                     f"\n  2) Reduce the model size ("
@@ -747,7 +747,7 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                         sharding_plan=sharding_plan,
                         topology=self._topology_groups[group],
                         batch_size=self._batch_size,
-                        storage_reservation=self._storage_reservation,
+                        storage_reservation=self._storage_reservations[group],
                         num_proposals=self._num_proposals,
                         num_plans=self._num_plans,
                         run_time=end_time - start_time,
@@ -760,14 +760,14 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                 if not lowest_storage.fits_in(global_storage_constraints):
                     raise PlannerError(
                         error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
-                        message="Unable to find a plan for this model because of insufficient storage. \n"
+                        message="Unable to find a plan for this model in device_group {group}  because of insufficient storage. \n"
                         + no_plan_solution
                         + last_planner_error_info,
                     )
                 else:
                     raise PlannerError(
                         error_type=PlannerErrorType.STRICT_CONSTRAINTS,
-                        message="Unable to find a plan for this model because of the strict constraints. \n"
+                        message=f"Unable to find a plan for this model in device_group {group} because of the strict constraints. \n"
                         + no_plan_solution
                         + last_planner_error_info,
                     )

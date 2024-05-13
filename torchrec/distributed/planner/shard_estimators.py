@@ -847,10 +847,12 @@ class EmbeddingStorageEstimator(ShardEstimator):
         topology: Topology,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         pipeline_type: PipelineType = PipelineType.NONE,
+        is_inference: bool = False,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
         self._pipeline_type = pipeline_type
+        self._is_inference = is_inference
 
     def estimate(
         self,
@@ -917,6 +919,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 pipeline_type=self._pipeline_type,
+                is_inference=self._is_inference,
             )
 
             for shard, storage in zip(sharding_option.shards, shard_storages):
@@ -928,12 +931,15 @@ def calculate_pipeline_io_cost(
     output_size: int,
     prefetch_size: int,
     pipeline_type: PipelineType,
+    is_inference: bool = False,
 ) -> int:
     # These magical number comes from heuristical analysis of memory snapshot during
     # pipelining, and are subject to the actual implementation.
     #
     # Now it's static to make memory estimation more sane for UVM offloading,
     # we need to make this estimation more blackbox-based.
+    if is_inference:
+        return 0
     if pipeline_type == PipelineType.TRAIN_SPARSE_DIST:
         pipelining_hbm_input_factor = 2
         return max(pipelining_hbm_input_factor * input_size, output_size)
@@ -967,6 +973,7 @@ def calculate_shard_storages(
     input_data_type_size: float,
     output_data_type_size: float,
     pipeline_type: PipelineType = PipelineType.NONE,
+    is_inference: bool = False,
 ) -> List[Storage]:
     """
     Calculates estimated storage sizes for each sharded tensor, comprised of input,
@@ -992,6 +999,7 @@ def calculate_shard_storages(
         input_data_type_size (int): number of bytes of input data type.
         output_data_type_size (int): number of bytes of output data type.
         pipeline_type: PipelineType: pipeline type if for training.
+        is_inference: bool, whether the model is for inference.
 
     Returns:
         List[Storage]: storage object for each device in topology.
@@ -1030,6 +1038,7 @@ def calculate_shard_storages(
         shard_sizes=shard_sizes,
         sharding_type=sharding_type,
         optimizer_class=optimizer_class,
+        is_inference=is_inference,
     )
     ddr_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=ddr_storage,
@@ -1037,6 +1046,7 @@ def calculate_shard_storages(
         shard_sizes=shard_sizes,
         sharding_type=sharding_type,
         optimizer_class=optimizer_class,
+        is_inference=is_inference,
     )
 
     hbm_sizes: List[int] = [
@@ -1047,6 +1057,7 @@ def calculate_shard_storages(
                 output_size=output_size,
                 prefetch_size=input_size if table_cached else 0,
                 pipeline_type=pipeline_type,
+                is_inference=is_inference,
             )
             if compute_device == "cuda"
             else 0
@@ -1060,7 +1071,7 @@ def calculate_shard_storages(
     ddr_sizes: List[int] = [
         (
             input_size + output_size + ddr_specific_size
-            if compute_device in {"cpu", "mtia"}
+            if compute_device in {"cpu", "mtia"} and not is_inference
             else ddr_specific_size
         )
         for input_size, output_size, ddr_specific_size in zip(
@@ -1334,6 +1345,7 @@ def _calculate_storage_specific_sizes(
     shard_sizes: List[List[int]],
     sharding_type: str,
     optimizer_class: Optional[Type[torch.optim.Optimizer]] = None,
+    is_inference: bool = False,
 ) -> List[int]:
     tensor_sizes: List[int] = [
         (
@@ -1350,7 +1362,7 @@ def _calculate_storage_specific_sizes(
     ]
 
     return [
-        tensor_size + optimizer_size
+        tensor_size + optimizer_size if not is_inference else tensor_size
         for tensor_size, optimizer_size in zip(tensor_sizes, optimizer_sizes)
     ]
 
