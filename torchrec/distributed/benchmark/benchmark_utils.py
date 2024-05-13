@@ -570,7 +570,9 @@ def benchmark(
 
         with torch.profiler.profile(
             activities=[
+                # pyre-fixme[16]: Module `profiler` has no attribute `ProfilerActivity`.
                 torch.profiler.ProfilerActivity.CPU,
+                # pyre-fixme[16]: Module `profiler` has no attribute `ProfilerActivity`.
                 torch.profiler.ProfilerActivity.CUDA,
             ],
             record_shapes=True,
