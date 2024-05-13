@@ -104,11 +104,6 @@ def calculate_shard_sizes_and_offsets(
 
     (rows, columns) = tensor.shape
 
-    if device_memory_sizes is not None:
-        assert (
-            sharding_type == ShardingType.ROW_WISE.value
-        ), "Currently only support uneven sharding for row_wise sharding"
-
     if sharding_type == ShardingType.DATA_PARALLEL.value:
         return [[rows, columns]] * world_size, [[0, 0]] * world_size
     elif sharding_type == ShardingType.TABLE_WISE.value:

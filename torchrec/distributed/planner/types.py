@@ -200,17 +200,31 @@ class Topology:
         self._compute_device = compute_device
         self._world_size = world_size
 
-        hbm_per_device = 0
+        hbm_per_device = [0] * world_size
         if self._compute_device == "cuda":
-            hbm_per_device = hbm_cap if hbm_cap else HBM_CAP
-        ddr_cap = ddr_cap if ddr_cap else DDR_CAP
+            hbm_per_device = [hbm_cap if hbm_cap else HBM_CAP] * world_size
+        ddr_cap_per_rank = [ddr_cap if ddr_cap else DDR_CAP] * world_size
+
+        if custom_topology_data:
+            if custom_topology_data.has_data("hbm_cap"):
+                hbm_per_device = custom_topology_data.get_data("hbm_cap")
+                assert (
+                    len(hbm_per_device) == world_size
+                ), "Must provide individual hbm_cap for each device"
+            if custom_topology_data.has_data("ddr_cap"):
+                ddr_cap_per_rank = custom_topology_data.get_data("ddr_cap")
+                assert (
+                    len(ddr_cap_per_rank) == world_size
+                ), "Must provide individual ddr_cap for each device"
 
         self._devices: List[DeviceHardware] = []
         for rank in range(world_size):
             self._devices.append(
                 DeviceHardware(
                     rank=rank,
-                    storage=Storage(hbm=hbm_per_device, ddr=ddr_cap),
+                    storage=Storage(
+                        hbm=hbm_per_device[rank], ddr=ddr_cap_per_rank[rank]
+                    ),
                     perf=Perf(fwd_compute=0, fwd_comms=0, bwd_compute=0, bwd_comms=0),
                 )
             )
