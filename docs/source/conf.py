@@ -34,9 +34,15 @@ project = "TorchRec"
 copyright = "2022, Meta"
 author = "Meta"
 
+try:
+    # pyre-ignore
+    version = torchrec.__version__
+except Exception:
+    # when run internally, we don't have a version yet
+    version = "0.0.0"
 # The full version, including alpha/beta/rc tags
 # First 3 as format is 0.x.x.*
-release = ".".join(torchrec.__version__.split(".")[:3])
+release = ".".join(version.split(".")[:3])
 
 # -- General configuration ---------------------------------------------------
 
