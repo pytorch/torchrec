@@ -15,11 +15,14 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import torch
 import torch.distributed as dist
 from torch import nn
+from torch.distributed._tensor import DTensor
 from torchrec.distributed.embedding_types import (
+    DTensorMetadata,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
 )
+from torchrec.distributed.tensor_configs import LocalShardsWrapper
 from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -73,6 +76,8 @@ def get_state_dict(
     """
     key_to_local_shards: Dict[str, List[Shard]] = defaultdict(list)
     key_to_global_metadata: Dict[str, ShardedTensorMetadata] = {}
+    key_to_dtensor_metadata: Dict[str, DTensorMetadata] = {}
+    key_to_local_tensor_shards: Dict[str, List[...]] = defaultdict(list)
 
     def get_key_from_embedding_table(embedding_table: ShardedEmbeddingTable) -> str:
         return prefix + f"{embedding_table.name}.weight"
@@ -98,7 +103,16 @@ def get_state_dict(
         if qscale is not None:
             assert embedding_table.local_cols == param.size(1)  # pyre-ignore[16]
 
-        if embedding_table.global_metadata is not None and pg is not None:
+        if embedding_table.dtensor_metadata is not None and pg is not None:
+            # DTensor path
+            key_to_dtensor_metadata[key] = embedding_table.dtensor_metadata
+            key_to_local_tensor_shards[key].append(
+                [
+                    param,  # pyre-ignore[6]
+                    embedding_table.local_metadata.shard_offsets,  # pyre-ignore[16]
+                ]
+            )
+        elif embedding_table.global_metadata is not None and pg is not None:
             # set additional field of sharded tensor based on local tensor properties
             embedding_table.global_metadata.tensor_properties.dtype = (
                 param.dtype  # pyre-ignore[16]
@@ -133,5 +147,24 @@ def get_state_dict(
                     process_group=pg,
                 )
             )
-
+        # DTensor path
+        for key in key_to_local_tensor_shards:
+            dtensor_metadata = key_to_dtensor_metadata[key]
+            destination[key] = DTensor.from_local(
+                local_tensor=LocalShardsWrapper(
+                    local_shards=[
+                        tensor_shards[0]  # pyre-ignore[16]
+                        for tensor_shards in key_to_local_tensor_shards[key]
+                    ],
+                    local_offsets=[
+                        tensor_shards[1]
+                        for tensor_shards in key_to_local_tensor_shards[key]
+                    ],
+                ),
+                device_mesh=dtensor_metadata.mesh,  # pyre-ignore[16]
+                placements=dtensor_metadata.placements,  # pyre-ignore[16]
+                shape=torch.Size(dtensor_metadata.size),  # pyre-ignore[6]
+                stride=dtensor_metadata.stride,
+                run_check=False,
+            )
     return destination

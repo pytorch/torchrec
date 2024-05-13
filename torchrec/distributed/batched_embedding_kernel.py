@@ -907,6 +907,7 @@ class BatchedFusedEmbeddingBag(
                 **fused_params,
             )
         )
+
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
             config,
             self._emb_module,
@@ -920,6 +921,7 @@ class BatchedFusedEmbeddingBag(
                 pg=pg,
             )
         )
+
         self.init_parameters()
 
     @property

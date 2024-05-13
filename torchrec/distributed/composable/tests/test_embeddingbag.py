@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 
 from hypothesis import assume, given, settings, Verbosity
+from torch.distributed._tensor.api import DTensor
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
@@ -238,7 +239,11 @@ def _test_sharding(  # noqa C901
                     if ctx.rank == 0
                     else None
                 )
-                sharded_state.gather(out=out)
+                if isinstance(sharded_state, DTensor):
+                    out = sharded_state.full_tensor()
+                else:
+                    sharded_state.gather(out=out)
+
                 if ctx.rank == 0:
                     torch.testing.assert_close(
                         unsharded_state,
