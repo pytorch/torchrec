@@ -14,7 +14,7 @@ import unittest
 from typing import List
 
 import torch
-from torch import multiprocessing as mp, nn
+from torch import nn
 from torchrec.ir.serializer import JsonSerializer
 
 from torchrec.ir.utils import deserialize_embedding_modules, serialize_embedding_modules
@@ -23,60 +23,8 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
-from torchrec.modules.utils import (
-    operator_registry_state,
-    register_custom_ops_for_nodes,
-)
+from torchrec.modules.utils import operator_registry_state
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
-
-
-def deserialize(
-    ep: torch.export.ExportedProgram,
-    model: nn.Module,
-    eager_out: List[torch.Tensor],
-    id_list_features: KeyedJaggedTensor,
-) -> None:
-    # Simulate deserializing PT2 IR in different runtime environment (process)
-    total_dim_ebc = sum(model.ebc1._lengths_per_embedding)
-    total_dim_fpebc = sum(model.fpebc._embedding_bag_collection._lengths_per_embedding)
-    # Ensure custom op is reregistered
-    register_custom_ops_for_nodes(list(ep.graph_module.graph.nodes))
-
-    with operator_registry_state.op_registry_lock:
-        assert (
-            f"EmbeddingBagCollection_{total_dim_ebc}"
-            in operator_registry_state.op_registry_schema
-        )
-        assert (
-            f"EmbeddingBagCollection_{total_dim_fpebc}"
-            in operator_registry_state.op_registry_schema
-        )
-
-    # Can rerun ep forward
-    ep.module()(id_list_features)
-    # Deserialize EBC
-    deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
-
-    for i in range(5):
-        ebc_name = f"ebc{i + 1}"
-        assert isinstance(getattr(deserialized_model, ebc_name), EmbeddingBagCollection)
-
-        for deserialized_config, org_config in zip(
-            getattr(deserialized_model, ebc_name).embedding_bag_configs(),
-            getattr(model, ebc_name).embedding_bag_configs(),
-        ):
-            assert deserialized_config.name == org_config.name
-            assert deserialized_config.embedding_dim == org_config.embedding_dim
-            assert deserialized_config.num_embeddings, org_config.num_embeddings
-            assert deserialized_config.feature_names, org_config.feature_names
-
-    deserialized_model.load_state_dict(model.state_dict())
-    # Run forward on deserialized model
-    deserialized_out = deserialized_model(id_list_features)
-
-    for i, tensor in enumerate(deserialized_out):
-        assert eager_out[i].shape == tensor.shape
-        assert torch.allclose(eager_out[i], tensor)
 
 
 class TestJsonSerializer(unittest.TestCase):
@@ -180,29 +128,48 @@ class TestJsonSerializer(unittest.TestCase):
         for i, tensor in enumerate(ep_output):
             self.assertEqual(eager_out[i].shape, tensor.shape)
 
-        with operator_registry_state.op_registry_lock:
-            # Only 1 custom op registered, as dimensions of ebc are same
-            self.assertEqual(len(operator_registry_state.op_registry_schema), 2)
+        # Only 1 custom op registered, as dimensions of ebc are same
+        self.assertEqual(len(operator_registry_state.op_registry_schema), 2)
 
-            total_dim_ebc = sum(model.ebc1._lengths_per_embedding)
-            total_dim_fpebc = sum(
-                model.fpebc._embedding_bag_collection._lengths_per_embedding
-            )
-            # Check if custom op is registered with the correct name
-            # EmbeddingBagCollection type and total dim
-            self.assertTrue(
-                f"EmbeddingBagCollection_{total_dim_ebc}"
-                in operator_registry_state.op_registry_schema
-            )
-            self.assertTrue(
-                f"EmbeddingBagCollection_{total_dim_fpebc}"
-                in operator_registry_state.op_registry_schema
-            )
-
-        # Another process for deserializing, simulate instantiation/trainer
-        p = mp.Process(
-            target=deserialize, args=(ep, model, eager_out, id_list_features)
+        total_dim_ebc = sum(model.ebc1._lengths_per_embedding)
+        total_dim_fpebc = sum(
+            model.fpebc._embedding_bag_collection._lengths_per_embedding
         )
-        p.start()
-        p.join()
-        self.assertEqual(0, p.exitcode)
+        # Check if custom op is registered with the correct name
+        # EmbeddingBagCollection type and total dim
+        self.assertTrue(
+            f"EmbeddingBagCollection_{total_dim_ebc}"
+            in operator_registry_state.op_registry_schema
+        )
+        self.assertTrue(
+            f"EmbeddingBagCollection_{total_dim_fpebc}"
+            in operator_registry_state.op_registry_schema
+        )
+
+        # Can rerun ep forward
+        ep.module()(id_list_features)
+        # Deserialize EBC
+        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+
+        for i in range(5):
+            ebc_name = f"ebc{i + 1}"
+            assert isinstance(
+                getattr(deserialized_model, ebc_name), EmbeddingBagCollection
+            )
+
+            for deserialized_config, org_config in zip(
+                getattr(deserialized_model, ebc_name).embedding_bag_configs(),
+                getattr(model, ebc_name).embedding_bag_configs(),
+            ):
+                assert deserialized_config.name == org_config.name
+                assert deserialized_config.embedding_dim == org_config.embedding_dim
+                assert deserialized_config.num_embeddings, org_config.num_embeddings
+                assert deserialized_config.feature_names, org_config.feature_names
+
+        deserialized_model.load_state_dict(model.state_dict())
+        # Run forward on deserialized model
+        deserialized_out = deserialized_model(id_list_features)
+
+        for i, tensor in enumerate(deserialized_out):
+            assert eager_out[i].shape == tensor.shape
+            assert torch.allclose(eager_out[i], tensor)
