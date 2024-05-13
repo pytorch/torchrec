@@ -12,6 +12,7 @@ from typing import Any, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
+import torch.distributed._functional_collectives as funcol
 
 from torch import Tensor
 from torch.autograd import Function
@@ -417,7 +418,7 @@ def all2all_pooled_sync(
         qcomm_ctx = None
 
     with record_function("## alltoall_fwd_single ##"):
-        sharded_output_embeddings = dist._functional_collectives.all_to_all_single(
+        sharded_output_embeddings = funcol.all_to_all_single(
             sharded_input_embeddings,
             output_split_sizes,
             input_split_sizes,
@@ -525,7 +526,7 @@ def variable_batch_all2all_pooled_sync(
         ]
 
     with record_function("## alltoall_fwd_single ##"):
-        sharded_output_embeddings = dist._functional_collectives.all_to_all_single(
+        sharded_output_embeddings = funcol.all_to_all_single(
             sharded_input_embeddings,
             output_split_sizes=output_split_sizes,
             input_split_sizes=input_split_sizes,
@@ -673,7 +674,7 @@ def all2all_sequence_sync(
         qcomm_ctx = None
 
     with record_function("## alltoall_seq_embedding_fwd_single ##"):
-        sharded_output_embeddings = dist._functional_collectives.all_to_all_single(
+        sharded_output_embeddings = funcol.all_to_all_single(
             sharded_input_embeddings,
             output_split_sizes=output_splits,
             input_split_sizes=input_splits,
@@ -779,7 +780,7 @@ def all2allv_sync(
         input = a2ai.codecs.forward.encode(input)
 
     with record_function("## alltoallv_bwd_single ##"):
-        output = dist._functional_collectives.all_to_all_single(
+        output = funcol.all_to_all_single(
             input,
             output_split_sizes=output_split_sizes,
             input_split_sizes=input_split_sizes,
@@ -846,7 +847,7 @@ def reduce_scatter_sync(
         inputs = [rsi.codecs.forward.encode(input) for input in inputs]
 
     with record_function("## reduce_scatter ##"):
-        output = dist._functional_collectives.reduce_scatter_tensor(
+        output = funcol.reduce_scatter_tensor(
             torch.cat(inputs),
             reduceOp="sum",
             scatter_dim=0,
@@ -907,7 +908,7 @@ def reduce_scatter_base_sync(
         inputs = rsi.codecs.forward.encode(inputs)
 
     with record_function("## reduce_scatter_base ##"):
-        output = dist._functional_collectives.reduce_scatter_tensor(
+        output = funcol.reduce_scatter_tensor(
             inputs,
             reduceOp="sum",
             scatter_dim=0,
@@ -964,7 +965,7 @@ def all_gather_base_sync(
         input = agi.codecs.forward.encode(input)
 
     with record_function("## all_gather_base ##"):
-        outputs = dist._functional_collectives.all_gather_tensor(
+        outputs = funcol.all_gather_tensor(
             input,
             gather_dim=0,
             group=pg,
@@ -1044,7 +1045,7 @@ def reduce_scatter_v_sync(
 
     if rsi.equal_splits:
         with record_function("## reduce_scatter_base ##"):
-            output = dist._functional_collectives.reduce_scatter_tensor(
+            output = funcol.reduce_scatter_tensor(
                 input,
                 reduceOp="sum",
                 scatter_dim=0,
@@ -1054,8 +1055,8 @@ def reduce_scatter_v_sync(
         with record_function("## reduce_scatter_v_via_all_to_all_single ##"):
             input_splits = rsi.input_splits
             output_splits = [rsi.input_splits[rank]] * world_size
-            # TODO(ivankobzarev): Replace with _functional_collectives.reduce_scatter_v when it is added
-            a2a_output = dist._functional_collectives.all_to_all_single(
+            # TODO(ivankobzarev): Replace with funcol.reduce_scatter_v when it is added
+            a2a_output = funcol.all_to_all_single(
                 input,
                 output_splits,
                 input_splits,
