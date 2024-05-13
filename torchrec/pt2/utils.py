@@ -10,7 +10,6 @@
 import torch
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
-
 """
 Prepares KJT for PT2 tracing.
 
@@ -23,8 +22,12 @@ convert_to_vb - If True recreates KJT as Variable Batch.
 
 
 def kjt_for_pt2_tracing(
-    kjt: KeyedJaggedTensor, convert_to_vb: bool = False
+    kjt: KeyedJaggedTensor,
+    convert_to_vb: bool = False,
 ) -> KeyedJaggedTensor:
+    # Breaking dependency cycle
+    from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+
     is_vb = kjt.variable_stride_per_key()
     if convert_to_vb and not is_vb:
         stride: int = kjt.stride()
@@ -39,10 +42,12 @@ def kjt_for_pt2_tracing(
         lengths = kjt.lengths().long()
         # We can mark static lengths dimension as we have fixed batch_size, but using VB path for tracing
         torch._dynamo.decorators.mark_static(lengths, 0)
+        values = kjt.values().long()
+        torch._dynamo.decorators.mark_dynamic(values, 0)
 
         return KeyedJaggedTensor(
             keys=kjt.keys(),
-            values=kjt.values().long(),
+            values=values,
             lengths=lengths,
             stride_per_key_per_rank=[[stride]] * n,
             inverse_indices=(kjt.keys(), inverse_indices_tensor),
@@ -63,11 +68,14 @@ def kjt_for_pt2_tracing(
 
     stride = kjt.stride()
 
+    values = kjt.values().long()
+    torch._dynamo.decorators.mark_dynamic(values, 0)
+
     return KeyedJaggedTensor(
         keys=kjt.keys(),
-        values=kjt.values().long(),
+        values=values,
         lengths=lengths,
-        stride=stride,
-        stride_per_key_per_rank=kjt.stride_per_key_per_rank(),
+        stride=stride if not is_vb else None,
+        stride_per_key_per_rank=kjt.stride_per_key_per_rank() if is_vb else None,
         inverse_indices=inverse_indices,
     )

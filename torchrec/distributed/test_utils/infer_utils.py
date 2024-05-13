@@ -202,6 +202,41 @@ def prep_inputs(
     return inputs
 
 
+class KJTInputExportWrapperWithStrides(torch.nn.Module):
+    """
+    Version of KJTInputExportWrapper with stride_per_key_per_rank_tensor argument for VB path.
+    """
+
+    def __init__(
+        self,
+        module_kjt_input: torch.nn.Module,
+        kjt_keys: List[str],
+    ) -> None:
+        super().__init__()
+        self._module_kjt_input = module_kjt_input
+        self._kjt_keys = kjt_keys
+
+    # pyre-ignore
+    def forward(
+        self,
+        values: torch.Tensor,
+        lengths: torch.Tensor,
+        stride_per_key_per_rank: Optional[List[List[int]]],
+        # pyre-ignore
+        *args,
+        # pyre-ignore
+        **kwargs,
+    ):
+        kjt = KeyedJaggedTensor(
+            keys=self._kjt_keys,
+            values=values,
+            lengths=lengths,
+            stride_per_key_per_rank=stride_per_key_per_rank,
+        )
+        output = self._module_kjt_input(kjt, *args, **kwargs)
+        return [leaf for leaf in pytree.tree_leaves(output) if leaf is not None]
+
+
 def prep_inputs_multiprocess(
     model_info: TestModelInfo, world_size: int, batch_size: int = 1, count: int = 5
 ) -> List[Tuple[ModelInput, List[ModelInput]]]:
