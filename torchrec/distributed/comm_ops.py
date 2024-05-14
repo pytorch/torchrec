@@ -12,6 +12,7 @@ from typing import Any, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist
+import torch.distributed._functional_collectives
 
 from torch import Tensor
 from torch.autograd import Function
