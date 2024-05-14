@@ -450,28 +450,16 @@ def sharded_tbes_weights_spec(
             ] = module.tbes_configs()
             table_shardings: Dict[str, str] = {}
 
-            if is_sqec:
-                sharding_type_device_group_to_sharding_infos: Dict[
-                    Tuple[str, str], List[EmbeddingShardingInfo]
-                ] = module.sharding_type_device_group_to_sharding_infos()
+            sharding_type_device_group_to_sharding_infos: Dict[
+                Tuple[str, str], List[EmbeddingShardingInfo]
+            ] = module.sharding_type_device_group_to_sharding_infos()
 
-                for (
-                    (sharding_type, _),
-                    sharding_infos,
-                ) in sharding_type_device_group_to_sharding_infos.items():
-                    for info in sharding_infos:
-                        table_shardings[info.embedding_config.name] = sharding_type
-            elif is_sqebc:
-                sharding_type_to_sharding_infos: Dict[
-                    str, List[EmbeddingShardingInfo]
-                ] = module.sharding_type_to_sharding_infos()
-
-                for (
-                    sharding_type,
-                    sharding_infos,
-                ) in sharding_type_to_sharding_infos.items():
-                    for info in sharding_infos:
-                        table_shardings[info.embedding_config.name] = sharding_type
+            for (
+                (sharding_type, _),
+                sharding_infos,
+            ) in sharding_type_device_group_to_sharding_infos.items():
+                for info in sharding_infos:
+                    table_shardings[info.embedding_config.name] = sharding_type
 
             for tbe_idx, (_tbe, config) in enumerate(tbes_configs.items()):
                 tables = config.embedding_tables
