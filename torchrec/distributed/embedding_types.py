@@ -117,6 +117,26 @@ class KJTList(Multistreamable):
         )
 
 
+@dataclass
+class InputDistOutputs(Multistreamable):
+    features: KJTList
+    unbucketize_permute_tensor: Optional[torch.Tensor] = (
+        None  # only used in RW sharding
+    )
+    bucket_mapping_tensor: Optional[torch.Tensor] = None  # only used in RW sharding
+    bucketized_length: Optional[torch.Tensor] = None  # only used in RW sharding
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        for feature in self.features:
+            feature.record_stream(stream)
+        if self.unbucketize_permute_tensor is not None:
+            self.unbucketize_permute_tensor.record_stream(stream)
+        if self.bucket_mapping_tensor is not None:
+            self.bucket_mapping_tensor.record_stream(stream)
+        if self.bucketized_length is not None:
+            self.bucketized_length.record_stream(stream)
+
+
 class ListOfKJTList(Multistreamable):
     def __init__(self, features: List[KJTList]) -> None:
         self.features_list = features

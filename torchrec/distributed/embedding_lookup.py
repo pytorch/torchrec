@@ -42,6 +42,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
+    InputDistOutputs,
     KJTList,
 )
 from torchrec.distributed.fused_params import (
@@ -833,9 +834,10 @@ class MetaInferGroupedPooledEmbeddingsLookup(
 class InferGroupedLookupMixin(ABC):
     def forward(
         self,
-        sparse_features: KJTList,
+        input_dist_outputs: InputDistOutputs,
     ) -> List[torch.Tensor]:
         embeddings: List[torch.Tensor] = []
+        sparse_features = input_dist_outputs.features
         # syntax for torchscript
         for i, embedding_lookup in enumerate(
             # pyre-fixme[16]
@@ -895,7 +897,7 @@ class InferGroupedLookupMixin(ABC):
 
 class InferGroupedPooledEmbeddingsLookup(
     InferGroupedLookupMixin,
-    BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
+    BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]],
     TBEToRegisterMixIn,
 ):
     def __init__(
@@ -935,7 +937,7 @@ class InferGroupedPooledEmbeddingsLookup(
 
 class InferGroupedEmbeddingsLookup(
     InferGroupedLookupMixin,
-    BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
+    BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]],
     TBEToRegisterMixIn,
 ):
     def __init__(
@@ -967,7 +969,7 @@ class InferGroupedEmbeddingsLookup(
 
 class InferCPUGroupedEmbeddingsLookup(
     InferGroupedLookupMixin,
-    BaseEmbeddingLookup[KJTList, List[torch.Tensor]],
+    BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]],
     TBEToRegisterMixIn,
 ):
     def __init__(

@@ -24,6 +24,7 @@ from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
     GroupedEmbeddingConfig,
+    InputDistOutputs,
     KJTList,
     ListOfKJTList,
 )
@@ -102,7 +103,9 @@ def create_infer_embedding_bag_sharding(
     sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
-) -> EmbeddingSharding[NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor]:
+) -> EmbeddingSharding[
+    NullShardingContext, InputDistOutputs, List[torch.Tensor], torch.Tensor
+]:
     if sharding_type == ShardingType.TABLE_WISE.value:
         return InferTwEmbeddingSharding(sharding_infos, env, device=None)
     elif sharding_type == ShardingType.ROW_WISE.value:
@@ -149,7 +152,7 @@ class ShardedQuantEmbeddingBagCollection(
             str,
             EmbeddingSharding[
                 NullShardingContext,
-                KJTList,
+                InputDistOutputs,
                 List[torch.Tensor],
                 torch.Tensor,
             ],
@@ -538,7 +541,7 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
             str,
             EmbeddingSharding[
                 NullShardingContext,
-                KJTList,
+                InputDistOutputs,
                 List[torch.Tensor],
                 torch.Tensor,
             ],
@@ -615,7 +618,7 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
             )
             return ListOfKJTList(
                 [
-                    self._input_dists[i].forward(features_by_shards[i])
+                    self._input_dists[i].forward(features_by_shards[i]).features
                     for i in range(len(self._input_dists))
                 ]
             )
