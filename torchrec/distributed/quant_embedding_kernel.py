@@ -158,11 +158,9 @@ def _unwrap_kjt(
     )
 
 
-@torch.fx.wrap
 def _unwrap_kjt_for_cpu(
     features: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    assert features.device().type == "cpu" or features.device().type == "meta"
     return features.values(), features.offsets(), features.weights_or_none()
 
 
