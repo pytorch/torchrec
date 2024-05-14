@@ -69,6 +69,8 @@ class ModelInput(Pipelineable):
         long_indices: bool = True,
         tables_pooling: Optional[List[int]] = None,
         weighted_tables_pooling: Optional[List[int]] = None,
+        randomize_indices: bool = True,
+        device: Optional[torch.device] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
@@ -132,15 +134,16 @@ class ModelInput(Pipelineable):
                         idlist_pooling_factor[idx],
                         idlist_pooling_factor[idx] / 10,
                         [batch_size * world_size],
+                        device=device,
                     ),
-                    torch.tensor(1.0),
+                    torch.tensor(1.0, device=device),
                 ).int()
             else:
                 lengths_ = torch.abs(
-                    torch.randn(batch_size * world_size) + pooling_avg
+                    torch.randn(batch_size * world_size, device=device) + pooling_avg,
                 ).int()
             if variable_batch_size:
-                lengths = torch.zeros(batch_size * world_size).int()
+                lengths = torch.zeros(batch_size * world_size, device=device).int()
                 for r in range(world_size):
                     lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]] = (
                         lengths_[
@@ -150,12 +153,20 @@ class ModelInput(Pipelineable):
             else:
                 lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
-            indices = torch.randint(
-                0,
-                ind_range,
-                (num_indices,),
-                dtype=torch.long if long_indices else torch.int32,
-            )
+            if randomize_indices:
+                indices = torch.randint(
+                    0,
+                    ind_range,
+                    (num_indices,),
+                    dtype=torch.long if long_indices else torch.int32,
+                    device=device,
+                )
+            else:
+                indices = torch.zeros(
+                    (num_indices),
+                    dtype=torch.long if long_indices else torch.int32,
+                    device=device,
+                )
             global_idlist_lengths.append(lengths)
             global_idlist_indices.append(indices)
         global_idlist_kjt = KeyedJaggedTensor(
@@ -167,7 +178,7 @@ class ModelInput(Pipelineable):
         for idx in range(len(idscore_ind_ranges)):
             ind_range = idscore_ind_ranges[idx]
             lengths_ = torch.abs(
-                torch.randn(batch_size * world_size)
+                torch.randn(batch_size * world_size, device=device)
                 + (
                     idscore_pooling_factor[idx]
                     if idscore_pooling_factor
@@ -175,7 +186,7 @@ class ModelInput(Pipelineable):
                 )
             ).int()
             if variable_batch_size:
-                lengths = torch.zeros(batch_size * world_size).int()
+                lengths = torch.zeros(batch_size * world_size, device=device).int()
                 for r in range(world_size):
                     lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]] = (
                         lengths_[
@@ -185,13 +196,21 @@ class ModelInput(Pipelineable):
             else:
                 lengths = lengths_
             num_indices = cast(int, torch.sum(lengths).item())
-            indices = torch.randint(
-                0,
-                ind_range,
-                (num_indices,),
-                dtype=torch.long if long_indices else torch.int32,
-            )
-            weights = torch.rand((num_indices,))
+            if randomize_indices:
+                indices = torch.randint(
+                    0,
+                    ind_range,
+                    (num_indices,),
+                    dtype=torch.long if long_indices else torch.int32,
+                    device=device,
+                )
+            else:
+                indices = torch.zeros(
+                    (num_indices),
+                    dtype=torch.long if long_indices else torch.int32,
+                    device=device,
+                )
+            weights = torch.rand((num_indices,), device=device)
             global_idscore_lengths.append(lengths)
             global_idscore_indices.append(indices)
             global_idscore_weights.append(weights)
@@ -206,8 +225,10 @@ class ModelInput(Pipelineable):
             else None
         )
 
-        global_float = torch.rand((batch_size * world_size, num_float_features))
-        global_label = torch.rand(batch_size * world_size)
+        global_float = torch.rand(
+            (batch_size * world_size, num_float_features), device=device
+        )
+        global_label = torch.rand(batch_size * world_size, device=device)
 
         # Split global batch into local batches.
         local_inputs = []

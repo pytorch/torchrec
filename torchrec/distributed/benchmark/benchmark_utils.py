@@ -106,14 +106,20 @@ class BenchmarkResult:
     max_mem_allocated: List[int]  # megabytes
     rank: int = -1
 
-    def runtime_percentile(self, percentile: int = 50) -> torch.Tensor:
+    def runtime_percentile(
+        self, percentile: int = 50, interpolation: str = "nearest"
+    ) -> torch.Tensor:
         return torch.quantile(
-            self.elapsed_time, percentile / 100.0, interpolation="nearest"
+            self.elapsed_time,
+            percentile / 100.0,
+            interpolation=interpolation,
         )
 
-    def max_mem_percentile(self, percentile: int = 50) -> torch.Tensor:
+    def max_mem_percentile(
+        self, percentile: int = 50, interpolation: str = "nearest"
+    ) -> torch.Tensor:
         max_mem = torch.tensor(self.max_mem_allocated, dtype=torch.float)
-        return torch.quantile(max_mem, percentile / 100.0, interpolation="nearest")
+        return torch.quantile(max_mem, percentile / 100.0, interpolation=interpolation)
 
 
 class ECWrapper(torch.nn.Module):
