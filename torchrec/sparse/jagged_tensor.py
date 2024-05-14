@@ -142,10 +142,15 @@ def _regroup_keyed_tensors(
     indices = [keyed_tensor._key_indices() for keyed_tensor in keyed_tensors]
     key_dim = keyed_tensors[0].key_dim()
 
-    key_to_idx: dict[str, int] = {}
+    key_to_idx: dict[str, List[int]] = {}
     for i, keyed_tensor in enumerate(keyed_tensors):
         for key in keyed_tensor.keys():
-            key_to_idx[key] = i
+            # Same key can exist across KeyedTensors
+            # Track multiple indices
+            if key not in key_to_idx:
+                key_to_idx[key] = [i]
+            else:
+                key_to_idx[key].append(i)
 
     # Rearrange values based on groups with a single torch.cat operation.
     split_lengths: List[int] = []
@@ -153,8 +158,9 @@ def _regroup_keyed_tensors(
     for group in groups:
         group_length = 0
         for name in group:
-            cat_input.append(embedding_dicts[key_to_idx[name]][name])
-            group_length += lengths[key_to_idx[name]][indices[key_to_idx[name]][name]]
+            for idx in key_to_idx[name]:
+                cat_input.append(embedding_dicts[idx][name])
+                group_length += lengths[idx][indices[idx][name]]
         split_lengths.append(group_length)
     rearranged_values = torch.cat(cat_input, key_dim)
 
