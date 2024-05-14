@@ -29,6 +29,7 @@ from torchrec.distributed.embedding_sharding import (
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
+    InputDistOutputs,
     KJTList,
     ShardedEmbeddingTable,
 )
@@ -271,12 +272,12 @@ class CwPooledEmbeddingSharding(
 
 class InferCwPooledEmbeddingSharding(
     BaseCwEmbeddingSharding[
-        NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor
+        NullShardingContext, InputDistOutputs, List[torch.Tensor], torch.Tensor
     ]
 ):
     def create_input_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseSparseFeaturesDist[KJTList]:
+    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
         return InferTwSparseFeaturesDist(
             self.features_per_rank(),
             self._world_size,
@@ -288,7 +289,7 @@ class InferCwPooledEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
         return InferGroupedPooledEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,

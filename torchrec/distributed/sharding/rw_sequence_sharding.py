@@ -25,7 +25,10 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
-from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor, KJTList
+from torchrec.distributed.embedding_types import (
+    BaseGroupedFeatureProcessor,
+    InputDistOutputs,
+)
 from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
     InferCPURwSparseFeaturesDist,
@@ -179,7 +182,10 @@ class InferRwSequenceEmbeddingDist(
 
 class InferRwSequenceEmbeddingSharding(
     BaseRwEmbeddingSharding[
-        InferSequenceShardingContext, KJTList, List[torch.Tensor], List[torch.Tensor]
+        InferSequenceShardingContext,
+        InputDistOutputs,
+        List[torch.Tensor],
+        List[torch.Tensor],
     ]
 ):
     """
@@ -190,7 +196,7 @@ class InferRwSequenceEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[KJTList]:
+    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
 
@@ -220,7 +226,7 @@ class InferRwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
         return InferGroupedEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,
@@ -263,7 +269,10 @@ class InferCPURwSequenceEmbeddingDist(
 
 class InferCPURwSequenceEmbeddingSharding(
     BaseRwEmbeddingSharding[
-        InferSequenceShardingContext, KJTList, List[torch.Tensor], List[torch.Tensor]
+        InferSequenceShardingContext,
+        InputDistOutputs,
+        List[torch.Tensor],
+        List[torch.Tensor],
     ]
 ):
     """
@@ -274,7 +283,7 @@ class InferCPURwSequenceEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[KJTList]:
+    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
 
@@ -290,6 +299,8 @@ class InferCPURwSequenceEmbeddingSharding(
                 shard_split_offsets.append(table.global_metadata.size[0])
                 emb_sharding.extend([shard_split_offsets] * len(table.embedding_names))
 
+        # pyre-fixme[7]: Expected `BaseSparseFeaturesDist[KJTList]` but got
+        #  `InferCPURwSparseFeaturesDist`.
         return InferCPURwSparseFeaturesDist(
             world_size=self._world_size,
             num_features=num_features,
@@ -306,7 +317,7 @@ class InferCPURwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
         return InferCPUGroupedEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,

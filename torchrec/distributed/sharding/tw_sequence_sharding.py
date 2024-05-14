@@ -24,7 +24,10 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
 )
-from torchrec.distributed.embedding_types import BaseGroupedFeatureProcessor, KJTList
+from torchrec.distributed.embedding_types import (
+    BaseGroupedFeatureProcessor,
+    InputDistOutputs,
+)
 from torchrec.distributed.sharding.sequence_sharding import (
     InferSequenceShardingContext,
     SequenceShardingContext,
@@ -193,7 +196,7 @@ class InferTwSequenceEmbeddingDist(
 class InferTwSequenceEmbeddingSharding(
     BaseTwEmbeddingSharding[
         InferSequenceShardingContext,
-        KJTList,
+        InputDistOutputs,
         List[torch.Tensor],
         List[torch.Tensor],
     ]
@@ -205,7 +208,7 @@ class InferTwSequenceEmbeddingSharding(
 
     def create_input_dist(
         self, device: Optional[torch.device] = None
-    ) -> BaseSparseFeaturesDist[KJTList]:
+    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
         return InferTwSparseFeaturesDist(
             features_per_rank=self.features_per_rank(),
             world_size=self._world_size,
@@ -217,7 +220,7 @@ class InferTwSequenceEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
         return InferGroupedEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,

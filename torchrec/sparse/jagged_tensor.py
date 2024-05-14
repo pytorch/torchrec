@@ -16,10 +16,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
-
-from torch.fx.experimental.symbolic_shapes import guard_size_oblivious
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
-
+from torchrec.pt2.checks import pt2_checks_all_is_size, pt2_checks_tensor_slice
 from torchrec.streamable import Pipelineable
 
 try:
@@ -851,15 +849,19 @@ def _use_segment_sum_csr(stride_per_key: List[int]) -> bool:
 def _length_per_key_from_stride_per_key(
     lengths: torch.Tensor, stride_per_key: List[int]
 ) -> List[int]:
+    ret: List[int] = []
     if _use_segment_sum_csr(stride_per_key):
         stride_per_key_offsets = _to_offsets(
             _pin_and_move(
                 torch.tensor(stride_per_key, dtype=torch.int32), lengths.device
             )
         )
-        return torch.ops.fbgemm.segment_sum_csr(
-            1, stride_per_key_offsets, lengths
-        ).tolist()
+        ret = torch.jit.annotate(
+            List[int],
+            torch.ops.fbgemm.segment_sum_csr(
+                1, stride_per_key_offsets, lengths
+            ).tolist(),
+        )
     else:
         tensor_list: List[torch.Tensor] = [
             torch.sum(chunk).view(1) for chunk in torch.split(lengths, stride_per_key)
@@ -867,7 +869,10 @@ def _length_per_key_from_stride_per_key(
         if len(tensor_list) == 0:
             return []
 
-        return torch.cat(tensor_list).tolist()
+        ret = torch.jit.annotate(List[int], torch.cat(tensor_list).tolist())
+
+    pt2_checks_all_is_size(ret)
+    return ret
 
 
 def _maybe_compute_length_per_key(
@@ -1440,11 +1445,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         if torch.jit.is_scripting() or not is_torchdynamo_compiling():
             return
 
-        for s in self._stride_per_key:
-            torch._check_is_size(s)
+        pt2_checks_all_is_size(self._stride_per_key)
         for s in self._stride_per_key_per_rank:
-            for _s in s:
-                torch._check_is_size(_s)
+            pt2_checks_all_is_size(s)
 
     @staticmethod
     def from_offsets_sync(
@@ -1891,14 +1894,14 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         )
                     )
                 else:
-                    if not torch.jit.is_scripting() and is_torchdynamo_compiling():
-                        # Checks for dynamo dynamic shapes tracing
-                        torch._check_is_size(start_offset)
-                        torch._check_is_size(end_offset)
-                        torch._check_is_size(end_offset - start_offset)
-                        torch._check(start_offset <= self._values.size(0))
-                        torch._check(end_offset <= self._values.size(0))
-                        torch._check(end_offset >= start_offset)
+                    pt2_checks_tensor_slice(self._values, start_offset, end_offset)
+
+                    lengths_offset_per_key: List[int] = self.lengths_offset_per_key()
+                    pt2_checks_tensor_slice(
+                        self.lengths(),
+                        lengths_offset_per_key[start],
+                        lengths_offset_per_key[end],
+                    )
 
                     split_list.append(
                         KeyedJaggedTensor(
@@ -1910,9 +1913,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                                 else self.weights()[start_offset:end_offset]
                             ),
                             lengths=self.lengths()[
-                                self.lengths_offset_per_key()[
-                                    start
-                                ] : self.lengths_offset_per_key()[end]
+                                lengths_offset_per_key[start] : lengths_offset_per_key[
+                                    end
+                                ]
                             ],
                             offsets=None,
                             stride=stride,
@@ -1952,8 +1955,13 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 self.stride_per_key_per_rank()[index]
             )
             permuted_length_per_key.append(length_per_key[index])
-            if not is_non_strict_exporting():
-                permuted_length_per_key_sum += length_per_key[index]
+
+        permuted_length_per_key_sum = sum(permuted_length_per_key)
+        if not torch.jit.is_scripting() and is_non_strict_exporting():
+            torch._check_is_size(permuted_length_per_key_sum)
+            torch._check(permuted_length_per_key_sum != -1)
+            torch._check(permuted_length_per_key_sum != 0)
+
         if self.variable_stride_per_key():
             length_per_key_tensor = _pin_and_move(
                 torch.tensor(self.length_per_key()), self.device()
@@ -1974,18 +1982,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 self.weights_or_none(),
             )
         else:
-            if not torch.jit.is_scripting() and is_non_strict_exporting():
-                permuted_length_per_key_sum = torch.sum(
-                    torch._refs.tensor(
-                        permuted_length_per_key,
-                        dtype=torch.int32,
-                        device=torch.device("cpu"),
-                        pin_memory=False,
-                        requires_grad=False,
-                    )
-                ).item()
-
-                torch._check(permuted_length_per_key_sum > 0)
 
             (
                 permuted_lengths,
@@ -2093,6 +2089,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 offsets=None,
             )
         else:
+            pt2_checks_tensor_slice(self._values, start_offset, end_offset)
+
             return JaggedTensor(
                 values=self._values[start_offset:end_offset],
                 weights=(

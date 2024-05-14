@@ -9,7 +9,6 @@
 
 import math
 
-from dataclasses import dataclass
 from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -40,6 +39,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
+    InputDistOutputs,
     KJTList,
     ShardedEmbeddingTable,
 )
@@ -104,24 +104,6 @@ def _fx_wrap_block_bucketize_row_pos(
     block_bucketize_row_pos: List[torch.Tensor],
 ) -> Optional[List[torch.Tensor]]:
     return block_bucketize_row_pos if block_bucketize_row_pos else None
-
-
-@dataclass
-class InputDistOutputs(Multistreamable):
-    features: KJTList
-    unbucketize_permute_tensor: Optional[torch.Tensor] = None
-    bucket_mapping_tensor: Optional[torch.Tensor] = None
-    bucketized_length: Optional[torch.Tensor] = None
-
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        for feature in self.features:
-            feature.record_stream(stream)
-        if self.unbucketize_permute_tensor is not None:
-            self.unbucketize_permute_tensor.record_stream(stream)
-        if self.bucket_mapping_tensor is not None:
-            self.bucket_mapping_tensor.record_stream(stream)
-        if self.bucketized_length is not None:
-            self.bucketized_length.record_stream(stream)
 
 
 class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
@@ -561,7 +543,7 @@ def get_block_sizes_runtime_device(
     return tensor_cache[cache_key]
 
 
-class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
+class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
     def __init__(
         self,
         world_size: int,
@@ -592,7 +574,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         self._is_sequence = is_sequence
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
-        self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
 
         self._embedding_shard_metadata: Optional[List[List[int]]] = (
             embedding_shard_metadata
@@ -601,7 +582,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> KJTList:
+    ) -> InputDistOutputs:
         block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
             self.feature_block_sizes,
             sparse_features.device(),
@@ -610,7 +591,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         )
         (
             bucketized_features,
-            self.unbucketize_permute_tensor,
+            unbucketize_permute_tensor,
         ) = bucketize_kjt_before_all2all(
             sparse_features,
             num_buckets=self._world_size,
@@ -625,18 +606,23 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
                 block_bucketize_row_pos
             ),
         )
-        return self._dist.forward(bucketized_features)
+        dist_kjt = self._dist.forward(bucketized_features)
+
+        return InputDistOutputs(
+            features=dist_kjt,
+            unbucketize_permute_tensor=unbucketize_permute_tensor,
+        )
 
 
 class InferRwPooledEmbeddingSharding(
     BaseRwEmbeddingSharding[
-        NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor
+        NullShardingContext, InputDistOutputs, List[torch.Tensor], torch.Tensor
     ]
 ):
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[KJTList]:
+    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
 
@@ -657,7 +643,7 @@ class InferRwPooledEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
         return InferGroupedPooledEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,

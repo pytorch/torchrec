@@ -35,7 +35,7 @@ from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
-    KJTList,
+    InputDistOutputs,
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.types import (
@@ -402,7 +402,7 @@ class TwPooledEmbeddingSharding(
         )
 
 
-class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
+class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
     """
     Redistributes sparse features to all devices for inference.
 
@@ -428,7 +428,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
-    ) -> KJTList:
+    ) -> InputDistOutputs:
         """
         Performs OnetoAll operation on sparse features.
 
@@ -438,7 +438,7 @@ class InferTwSparseFeaturesDist(BaseSparseFeaturesDist[KJTList]):
         Returns:
             Awaitable[Awaitable[KeyedJaggedTensor]]: awaitable of awaitable of KeyedJaggedTensor.
         """
-        return self._dist.forward(sparse_features)
+        return InputDistOutputs(features=self._dist.forward(sparse_features))
 
 
 class InferTwPooledEmbeddingDist(
@@ -481,7 +481,7 @@ class InferTwPooledEmbeddingDist(
 
 class InferTwEmbeddingSharding(
     BaseTwEmbeddingSharding[
-        NullShardingContext, KJTList, List[torch.Tensor], torch.Tensor
+        NullShardingContext, InputDistOutputs, List[torch.Tensor], torch.Tensor
     ]
 ):
     """
@@ -491,7 +491,7 @@ class InferTwEmbeddingSharding(
     def create_input_dist(
         self,
         device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[KJTList]:
+    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
         return InferTwSparseFeaturesDist(
             features_per_rank=self.features_per_rank(),
             world_size=self._world_size,
@@ -503,7 +503,7 @@ class InferTwEmbeddingSharding(
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[KJTList, List[torch.Tensor]]:
+    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
         return InferGroupedPooledEmbeddingsLookup(
             grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
             world_size=self._world_size,

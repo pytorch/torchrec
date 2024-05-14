@@ -26,6 +26,7 @@ from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
     FeatureShardingMixIn,
     GroupedEmbeddingConfig,
+    InputDistOutputs,
     KJTList,
     ListOfKJTList,
     ShardingType,
@@ -44,10 +45,6 @@ from torchrec.distributed.sharding.cw_sequence_sharding import (
 from torchrec.distributed.sharding.rw_sequence_sharding import (
     InferCPURwSequenceEmbeddingSharding,
     InferRwSequenceEmbeddingSharding,
-)
-from torchrec.distributed.sharding.rw_sharding import (
-    InferCPURwSparseFeaturesDist,
-    InferRwSparseFeaturesDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
 from torchrec.distributed.sharding.tw_sequence_sharding import (
@@ -109,7 +106,7 @@ def create_infer_embedding_sharding(
     device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[
     InferSequenceShardingContext,
-    KJTList,
+    InputDistOutputs,
     List[torch.Tensor],
     List[torch.Tensor],
 ]:
@@ -378,7 +375,7 @@ class ShardedQuantEmbeddingCollection(
             str,
             EmbeddingSharding[
                 InferSequenceShardingContext,
-                KJTList,
+                InputDistOutputs,
                 List[torch.Tensor],
                 List[torch.Tensor],
             ],
@@ -424,7 +421,6 @@ class ShardedQuantEmbeddingCollection(
             self._generate_permute_coordinates_per_feature_per_sharding()
 
         self._device = device
-        self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params, device)
 
@@ -864,7 +860,7 @@ class ShardedQuantEcInputDist(torch.nn.Module):
             str,
             EmbeddingSharding[
                 InferSequenceShardingContext,
-                KJTList,
+                InputDistOutputs,
                 List[torch.Tensor],
                 List[torch.Tensor],
             ],
@@ -877,8 +873,6 @@ class ShardedQuantEcInputDist(torch.nn.Module):
         self._input_dists = torch.nn.ModuleList([])
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
-
-        self._has_features_permute: bool = True
 
         feature_names: List[str] = []
         for sharding in sharding_type_to_sharding.values():
@@ -921,21 +915,12 @@ class ShardedQuantEcInputDist(torch.nn.Module):
             for i in range(len(self._input_dists)):
                 input_dist = self._input_dists[i]
                 input_dist_result = input_dist(features_by_sharding[i])
-                # TODO: clean up the logic here
-                # Should avoid getting self attributes from input_dists
-                # Intead, use return value to change any LHS
-                if isinstance(input_dist, InferCPURwSparseFeaturesDist):
-                    ret.append(input_dist_result.features)
-                    unbucketize_permute_tensor.append(
-                        input_dist_result.unbucketize_permute_tensor
-                    )
-                else:
-                    ret.append(input_dist_result)
-                    unbucketize_permute_tensor.append(
-                        input_dist.unbucketize_permute_tensor
-                        if isinstance(input_dist, InferRwSparseFeaturesDist)
-                        else None
-                    )
+
+                ret.append(input_dist_result.features)
+
+                unbucketize_permute_tensor.append(
+                    input_dist_result.unbucketize_permute_tensor
+                )
 
             return (
                 ret,
