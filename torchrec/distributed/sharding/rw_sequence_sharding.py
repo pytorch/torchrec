@@ -299,8 +299,6 @@ class InferCPURwSequenceEmbeddingSharding(
                 shard_split_offsets.append(table.global_metadata.size[0])
                 emb_sharding.extend([shard_split_offsets] * len(table.embedding_names))
 
-        # pyre-fixme[7]: Expected `BaseSparseFeaturesDist[KJTList]` but got
-        #  `InferCPURwSparseFeaturesDist`.
         return InferCPURwSparseFeaturesDist(
             world_size=self._world_size,
             num_features=num_features,
