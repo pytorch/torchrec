@@ -315,6 +315,9 @@ class Shard:
             )
         )
 
+    def __str__(self) -> str:
+        return f"Shard size: {tuple(self.size)}, offset: {tuple(self.offset)}, storage: {str(self.storage)}, perf: {str(self.perf)}, rank: {self.rank}"
+
 
 class ShardingOption:
     """
@@ -490,6 +493,17 @@ class ShardingOption:
             else:
                 setattr(result, k, deepcopy(v, memo))
         return result
+
+    def __str__(self) -> str:
+        str_obj: str = ""
+        str_obj += f"name: {self.name}"
+        str_obj += f"\nsharding type: {self.sharding_type}"
+        str_obj += f"\ncompute kernel: {self.compute_kernel}"
+        str_obj += f"\nnum shards: {len(self.shards)}"
+        for shard in self.shards:
+            str_obj += f"\n\t{str(shard)}"
+
+        return str_obj
 
 
 class PartitionByType(Enum):
