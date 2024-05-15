@@ -164,6 +164,15 @@ def _unwrap_kjt_for_cpu(
     return features.values(), features.offsets(), features.weights_or_none()
 
 
+@torch.fx.wrap
+def _unwrap_optional_tensor(
+    tensor: Optional[torch.Tensor],
+) -> torch.Tensor:
+    # Typing for TorchScript
+    assert tensor is not None
+    return tensor
+
+
 class QuantBatchedEmbeddingBag(
     BaseBatchedEmbeddingBag[
         Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
@@ -264,26 +273,36 @@ class QuantBatchedEmbeddingBag(
             indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(features)
         else:
             indices, offsets, per_sample_weights = _unwrap_kjt(features)
+
         if self._is_weighted:
-            assert per_sample_weights is not None
-        elif self._is_weighted is not None:
-            per_sample_weights = None
-        # Conditional call of .forward function for FX:
-        # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
-        # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
-        # For some post processing that requires TBE emb_module copied in fx.GraphModule we need to be call_module, as it will copies this module inside fx.GraphModule unchanged.
-        if self._emb_module_registered:
-            return self.emb_module(
-                indices=indices,
-                offsets=offsets,
-                per_sample_weights=per_sample_weights,
-            )
+            weights = _unwrap_optional_tensor(per_sample_weights)
+            if self._emb_module_registered:
+                # Conditional call of .forward function for FX:
+                # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
+                # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
+                # For some post processing that requires TBE emb_module copied in fx.GraphModule we need to be call_module, as it will copies this module inside fx.GraphModule unchanged.
+                return self.emb_module(
+                    indices=indices,
+                    offsets=offsets,
+                    per_sample_weights=weights,
+                )
+            else:
+                return self.emb_module.forward(
+                    indices=indices,
+                    offsets=offsets,
+                    per_sample_weights=weights,
+                )
         else:
-            return self.emb_module.forward(
-                indices=indices,
-                offsets=offsets,
-                per_sample_weights=per_sample_weights,
-            )
+            if self._emb_module_registered:
+                return self.emb_module(
+                    indices=indices,
+                    offsets=offsets,
+                )
+            else:
+                return self.emb_module.forward(
+                    indices=indices,
+                    offsets=offsets,
+                )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
