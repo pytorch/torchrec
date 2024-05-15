@@ -650,6 +650,10 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self.weights(), [self.offsets()], [N], padding_value
         )
 
+    @property
+    def device(self) -> torch.device:
+        return self._values.device
+
     def lengths(self) -> torch.Tensor:
         _lengths = _maybe_compute_lengths(self._lengths, self._offsets)
         self._lengths = _lengths
@@ -2569,6 +2573,10 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     def key_dim(self) -> int:
         return self._key_dim
+
+    @property
+    def device(self) -> torch.device:
+        return self._values.device
 
     def offset_per_key(self) -> List[int]:
         _offset_per_key = _maybe_compute_offset_per_key_kt(

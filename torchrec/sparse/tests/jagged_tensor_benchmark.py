@@ -16,6 +16,7 @@ import click
 
 import torch
 from torchrec.distributed.benchmark.benchmark_utils import benchmark, BenchmarkResult
+from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import (
     _regroup_keyed_tensors,
     KeyedJaggedTensor,
@@ -53,7 +54,10 @@ def bench(
     ) -> None:
         result = fn(**fn_kwargs)
         if run_backward:
-            vectors = [tensor.sum(dim=1) for tensor in result]
+            if isinstance(result, dict):
+                vectors = [tensor.sum(dim=1) for tensor in result.values()]
+            else:
+                vectors = [tensor.sum(dim=1) for tensor in result]
             pred = vectors[0]
             for vector in vectors[1:]:
                 pred.mul(vector)
@@ -215,6 +219,18 @@ def main(
                     run_backward,
                     KeyedTensor.regroup,
                     {"keyed_tensors": kts, "groups": groups},
+                )
+                bench(
+                    "[prod] KTRegroupAsDict",
+                    labels,
+                    batch_size,
+                    n_dense + n_sparse,
+                    device_type,
+                    run_backward,
+                    KTRegroupAsDict(
+                        groups=groups, keys=[str(i) for i in range(n_groups)]
+                    ),
+                    {"keyed_tensors": kts},
                 )
 
 
