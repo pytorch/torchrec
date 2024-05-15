@@ -9,7 +9,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, TypeVar, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
@@ -442,20 +442,37 @@ def sharded_tbes_weights_spec(
         is_sqec: bool = "ShardedQuantEmbeddingCollection" in type_name
 
         if is_sqebc or is_sqec:
+            assert not (
+                is_sqebc and is_sqec
+            ), "Cannot be both ShardedQuantEmbeddingBagCollection and ShardedQuantEmbeddingCollection"
             tbes_configs: Dict[
                 IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
             ] = module.tbes_configs()
-            sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = (
-                module.sharding_type_to_sharding_infos()
-            )
-
             table_shardings: Dict[str, str] = {}
-            for (
-                sharding_type,
-                sharding_infos,
-            ) in sharding_type_to_sharding_infos.items():
-                for info in sharding_infos:
-                    table_shardings[info.embedding_config.name] = sharding_type
+
+            if is_sqec:
+                sharding_type_device_group_to_sharding_infos: Dict[
+                    Tuple[str, str], List[EmbeddingShardingInfo]
+                ] = module.sharding_type_device_group_to_sharding_infos()
+
+                for (
+                    (sharding_type, _),
+                    sharding_infos,
+                ) in sharding_type_device_group_to_sharding_infos.items():
+                    for info in sharding_infos:
+                        table_shardings[info.embedding_config.name] = sharding_type
+            elif is_sqebc:
+                sharding_type_to_sharding_infos: Dict[
+                    str, List[EmbeddingShardingInfo]
+                ] = module.sharding_type_to_sharding_infos()
+
+                for (
+                    sharding_type,
+                    sharding_infos,
+                ) in sharding_type_to_sharding_infos.items():
+                    for info in sharding_infos:
+                        table_shardings[info.embedding_config.name] = sharding_type
+
             for tbe_idx, (_tbe, config) in enumerate(tbes_configs.items()):
                 tables = config.embedding_tables
                 for table_idx, table in enumerate(tables):
