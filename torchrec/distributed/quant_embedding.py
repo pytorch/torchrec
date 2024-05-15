@@ -18,7 +18,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
 )
 from torch import nn
 from torchrec.distributed.embedding import (
-    create_sharding_infos_by_sharding,
+    create_sharding_infos_by_sharding_device_group,
     EmbeddingShardingInfo,
 )
 from torchrec.distributed.embedding_sharding import EmbeddingSharding
@@ -365,14 +365,14 @@ class ShardedQuantEmbeddingCollection(
 
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
 
-        self._sharding_type_to_sharding_infos: Dict[
-            str, List[EmbeddingShardingInfo]
-        ] = create_sharding_infos_by_sharding(
+        self._sharding_type_device_group_to_sharding_infos: Dict[
+            Tuple[str, str], List[EmbeddingShardingInfo]
+        ] = create_sharding_infos_by_sharding_device_group(
             module, table_name_to_parameter_sharding, fused_params
         )
 
-        self._sharding_type_to_sharding: Dict[
-            str,
+        self._sharding_type_device_group_to_sharding: Dict[
+            Tuple[str, str],
             EmbeddingSharding[
                 InferSequenceShardingContext,
                 InputDistOutputs,
@@ -380,7 +380,7 @@ class ShardedQuantEmbeddingCollection(
                 List[torch.Tensor],
             ],
         ] = {
-            sharding_type: create_infer_embedding_sharding(
+            (sharding_type, device_group): create_infer_embedding_sharding(
                 sharding_type,
                 embedding_configs,
                 (
@@ -389,14 +389,17 @@ class ShardedQuantEmbeddingCollection(
                     else env[get_device_from_sharding_infos(embedding_configs)]
                 ),
             )
-            for sharding_type, embedding_configs in self._sharding_type_to_sharding_infos.items()
+            for (
+                sharding_type,
+                device_group,
+            ), embedding_configs in self._sharding_type_device_group_to_sharding_infos.items()
         }
         self._embedding_dim: int = module.embedding_dim()
         self._local_embedding_dim: int = self._embedding_dim
         self._all_embedding_names: Set[str] = set()
         self._embedding_names_per_sharding: List[List[str]] = []
         self._embedding_names_per_rank_per_sharding: List[List[List[str]]] = []
-        for sharding in self._sharding_type_to_sharding.values():
+        for sharding in self._sharding_type_device_group_to_sharding.values():
             self._embedding_names_per_sharding.append(sharding.embedding_names())
             self._all_embedding_names.update(sharding.embedding_names())
             self._embedding_names_per_rank_per_sharding.append(
@@ -406,19 +409,26 @@ class ShardedQuantEmbeddingCollection(
         self._key_to_feature_permuted_coordinates_per_sharding: List[
             Dict[str, torch.Tensor]
         ] = [{} for i in range(len(self._embedding_names_per_rank_per_sharding))]
-        if ShardingType.COLUMN_WISE.value in self._sharding_type_to_sharding:
-            sharding = self._sharding_type_to_sharding[ShardingType.COLUMN_WISE.value]
-            # CW partition must be same for all CW sharded parameters
-            self._local_embedding_dim = cast(
-                ShardMetadata, sharding.embedding_shard_metadata()[0]
-            ).shard_sizes[1]
-            self._features_to_permute_indices = (
-                self._generate_permute_indices_per_feature(
-                    module.embedding_configs(), table_name_to_parameter_sharding
-                )
-            )
 
-            self._generate_permute_coordinates_per_feature_per_sharding()
+        for (
+            sharding_type,
+            device_group,
+        ) in self._sharding_type_device_group_to_sharding.keys():
+            if sharding_type == ShardingType.COLUMN_WISE.value:
+                sharding = self._sharding_type_device_group_to_sharding[
+                    (sharding_type, device_group)
+                ]
+                # CW partition must be same for all CW sharded parameters
+                self._local_embedding_dim = cast(
+                    ShardMetadata, sharding.embedding_shard_metadata()[0]
+                ).shard_sizes[1]
+                self._features_to_permute_indices = (
+                    self._generate_permute_indices_per_feature(
+                        module.embedding_configs(), table_name_to_parameter_sharding
+                    )
+                )
+
+                self._generate_permute_coordinates_per_feature_per_sharding()
 
         self._device = device
         self._lookups: List[nn.Module] = []
@@ -467,7 +477,10 @@ class ShardedQuantEmbeddingCollection(
 
             table_wise_sharded_only: bool = all(
                 sharding_type == ShardingType.TABLE_WISE.value
-                for sharding_type in self._sharding_type_to_sharding.keys()
+                for (
+                    sharding_type,
+                    _,
+                ) in self._sharding_type_device_group_to_sharding.keys()
             )
             assert (
                 table_wise_sharded_only
@@ -478,7 +491,7 @@ class ShardedQuantEmbeddingCollection(
                 self.embeddings[table.name] = torch.nn.Module()
 
             for _sharding_type, lookup in zip(
-                self._sharding_type_to_sharding.keys(), self._lookups
+                self._sharding_type_device_group_to_sharding.keys(), self._lookups
             ):
                 lookup_state_dict = lookup.state_dict()
                 for key in lookup_state_dict:
@@ -493,8 +506,10 @@ class ShardedQuantEmbeddingCollection(
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return self._tbes_configs
 
-    def sharding_type_to_sharding_infos(self) -> Dict[str, List[EmbeddingShardingInfo]]:
-        return self._sharding_type_to_sharding_infos
+    def sharding_type_device_group_to_sharding_infos(
+        self,
+    ) -> Dict[Tuple[str, str], List[EmbeddingShardingInfo]]:
+        return self._sharding_type_device_group_to_sharding_infos
 
     def embedding_configs(self) -> List[EmbeddingConfig]:
         return self._embedding_configs
@@ -575,7 +590,7 @@ class ShardedQuantEmbeddingCollection(
         fused_params: Optional[Dict[str, Any]],
         device: Optional[torch.device] = None,
     ) -> None:
-        for sharding in self._sharding_type_to_sharding.values():
+        for sharding in self._sharding_type_device_group_to_sharding.values():
             self._lookups.append(
                 sharding.create_lookup(fused_params=fused_params, device=device)
             )
@@ -584,7 +599,7 @@ class ShardedQuantEmbeddingCollection(
         self,
         device: Optional[torch.device] = None,
     ) -> None:
-        for sharding in self._sharding_type_to_sharding.values():
+        for sharding in self._sharding_type_device_group_to_sharding.values():
             self._output_dists.append(sharding.create_output_dist(device))
 
     # pyre-ignore [14]
@@ -597,7 +612,7 @@ class ShardedQuantEmbeddingCollection(
         if self._has_uninitialized_input_dist:
             self._input_dist = ShardedQuantEcInputDist(
                 input_feature_names=features.keys() if features is not None else [],
-                sharding_type_to_sharding=self._sharding_type_to_sharding,
+                sharding_type_device_group_to_sharding=self._sharding_type_device_group_to_sharding,
                 device=self._device,
                 feature_device=features.device(),
             )
@@ -613,7 +628,7 @@ class ShardedQuantEmbeddingCollection(
         ) = self._input_dist(features)
 
         with torch.no_grad():
-            for i in range(len(self._sharding_type_to_sharding)):
+            for i in range(len(self._sharding_type_device_group_to_sharding)):
 
                 ctx.sharding_contexts.append(
                     InferSequenceShardingContext(
@@ -689,7 +704,7 @@ class ShardedQuantEmbeddingCollection(
         jt_weights: Dict[str, torch.Tensor] = {}
         jt_dict_res: Dict[str, JaggedTensor] = {}
         for (
-            sharding_type,
+            (sharding_type, _),
             emb_sharding,
             features_sharding,
             embedding_names,
@@ -698,7 +713,7 @@ class ShardedQuantEmbeddingCollection(
             unbucketize_tensor,
             key_to_feature_permuted_coordinates,
         ) in zip(
-            self._sharding_type_to_sharding.keys(),
+            self._sharding_type_device_group_to_sharding.keys(),
             emb_per_sharding,
             features_per_sharding,
             self._embedding_names_per_sharding,
@@ -765,9 +780,9 @@ class ShardedQuantEmbeddingCollection(
         return EmbeddingCollectionContext(sharding_contexts=[])
 
     @property
-    def shardings(self) -> Dict[str, FeatureShardingMixIn]:
+    def shardings(self) -> Dict[Tuple[str, str], FeatureShardingMixIn]:
         # pyre-ignore [7]
-        return self._sharding_type_to_sharding
+        return self._sharding_type_device_group_to_sharding
 
 
 class QuantEmbeddingCollectionSharder(
@@ -856,8 +871,8 @@ class ShardedQuantEcInputDist(torch.nn.Module):
     def __init__(
         self,
         input_feature_names: List[str],
-        sharding_type_to_sharding: Dict[
-            str,
+        sharding_type_device_group_to_sharding: Dict[
+            Tuple[str, str],
             EmbeddingSharding[
                 InferSequenceShardingContext,
                 InputDistOutputs,
@@ -869,13 +884,15 @@ class ShardedQuantEcInputDist(torch.nn.Module):
         feature_device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
-        self._sharding_type_to_sharding = sharding_type_to_sharding
+        self._sharding_type_device_group_to_sharding = (
+            sharding_type_device_group_to_sharding
+        )
         self._input_dists = torch.nn.ModuleList([])
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
 
         feature_names: List[str] = []
-        for sharding in sharding_type_to_sharding.values():
+        for sharding in sharding_type_device_group_to_sharding.values():
             self._input_dists.append(sharding.create_input_dist(device=device))
             feature_names.extend(sharding.feature_names())
             self._feature_splits.append(len(sharding.feature_names()))
