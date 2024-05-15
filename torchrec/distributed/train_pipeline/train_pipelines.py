@@ -780,6 +780,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
 
                     # Make sure that both result of input_dist and context
                     # are properly transferred to the current stream.
+                    module_context = self._context.module_contexts[forward._name]
                     if self._data_dist_stream is not None:
                         torch.cuda.current_stream().wait_stream(self._data_dist_stream)
                         cur_stream = torch.cuda.current_stream()
@@ -790,12 +791,13 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                         data.record_stream(cur_stream)
                         data.record_stream(self._default_stream)
 
-                        ctx = self._context.module_contexts[forward._name]
-                        ctx.record_stream(cur_stream)
-                        ctx.record_stream(self._default_stream)
+                        module_context.record_stream(cur_stream)
+                        module_context.record_stream(self._default_stream)
 
                     sharded_module.prefetch(
-                        dist_input=data, forward_stream=self._default_stream
+                        ctx=module_context,
+                        dist_input=data,
+                        forward_stream=self._default_stream,
                     )
                     self._context.module_input_post_prefetch[forward._name] = data
                     self._context.module_contexts_post_prefetch[forward._name] = (
