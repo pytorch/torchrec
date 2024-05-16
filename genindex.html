@@ -265,7 +265,7 @@
               
               
                 <div class="version">
-                  0.8.0.dev20240515+cpu
+                  0.8.0.dev20240516+cpu
                 </div>
               
             
@@ -788,10 +788,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ComputeKernel">ComputeKernel (class in torchrec.distributed.types)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict">ComputeKJTToJTDict (class in torchrec.sparse.jagged_tensor)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat">concat() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor static method)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.CONSTANT">CONSTANT (torchrec.optim.warmup.WarmupPolicy attribute)</a>
@@ -922,6 +922,12 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.create_sharding_infos_by_sharding">(in module torchrec.distributed.embeddingbag)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.create_sharding_infos_by_sharding_device_group">create_sharding_infos_by_sharding_device_group() (in module torchrec.distributed.embedding)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.create_sharding_infos_by_sharding_device_group">(in module torchrec.distributed.embeddingbag)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.modules.html#torchrec.modules.crossnet.CrossNet">CrossNet (class in torchrec.modules.crossnet)</a>
 </li>
       <li><a href="torchrec.distributed.html#id2">cumsum_dim_sum_per_rank_tensor (torchrec.distributed.comm_ops.All2AllPooledInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllPooledInfo.cumsum_dim_sum_per_rank_tensor">[1]</a>
@@ -1006,8 +1012,14 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device">device() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor.device">device() (torchrec.sparse.jagged_tensor.JaggedTensor method)</a>
+
+      <ul>
+        <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device">(torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
+        <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.device">(torchrec.sparse.jagged_tensor.KeyedTensor method)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.planner.html#id4">device_group (torchrec.distributed.planner.types.ParameterConstraints attribute)</a>, <a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ParameterConstraints.device_group">[1]</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.DeviceHardware">DeviceHardware (class in torchrec.distributed.planner.types)</a>
@@ -1694,8 +1706,14 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.CustomTopologyData.get_data">get_data() (torchrec.distributed.planner.types.CustomTopologyData method)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.get_device_from_parameter_sharding">get_device_from_parameter_sharding() (in module torchrec.distributed.quant_embeddingbag)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.get_device_from_parameter_sharding">get_device_from_parameter_sharding() (in module torchrec.distributed.embedding)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.get_device_from_parameter_sharding">(in module torchrec.distributed.embeddingbag)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.get_device_from_parameter_sharding">(in module torchrec.distributed.quant_embeddingbag)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.get_device_from_sharding_infos">get_device_from_sharding_infos() (in module torchrec.distributed.quant_embeddingbag)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.get_ec_index_dedup">get_ec_index_dedup() (in module torchrec.distributed.embedding)</a>
@@ -1722,10 +1740,10 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.enumerators.get_partition_by_type">get_partition_by_type() (in module torchrec.distributed.planner.enumerators)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.get_plan_for_module">get_plan_for_module() (torchrec.distributed.types.ShardingPlan method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.get_plan_for_module">get_plan_for_module() (torchrec.distributed.types.ShardingPlan method)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup.get_tbes_to_register">get_tbes_to_register() (torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup method)</a>
 
       <ul>
@@ -3201,7 +3219,7 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ParameterSharding.sharding_type">(torchrec.distributed.types.ParameterSharding attribute)</a>
 </li>
       </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.sharding_type_to_sharding_infos">sharding_type_to_sharding_infos() (torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection method)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection.sharding_type_device_group_to_sharding_infos">sharding_type_device_group_to_sharding_infos() (torchrec.distributed.quant_embeddingbag.ShardedQuantEmbeddingBagCollection method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#id12">sharding_types (torchrec.distributed.planner.types.ParameterConstraints attribute)</a>, <a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ParameterConstraints.sharding_types">[1]</a>
 </li>
