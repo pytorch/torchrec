@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import fbgemm_gpu.sparse_ops  # noqa: F401, E402
 
 import torch
+import torchrec
 from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -331,7 +332,9 @@ def _test_compile_rank_fn(
         kjt = local_model_input.idlist_features
         kjt_ft = kjt_for_pt2_tracing(kjt, convert_to_vb=convert_to_vb)
 
+        torchrec.distributed.comm_ops.set_use_sync_collectives(True)
         dmp.train(True)
+
         eager_out = dmp(kjt_ft)
 
         if torch_compile_backend is None:

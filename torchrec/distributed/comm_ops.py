@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple, TypeVar
 
@@ -19,6 +20,7 @@ from torch.autograd import Function
 from torch.autograd.profiler import record_function
 from torchrec.distributed.types import Awaitable, NoWait, QuantizedCommCodecs
 from torchrec.distributed.utils import none_throws
+from torchrec.pt2.checks import is_torchdynamo_compiling
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -34,18 +36,11 @@ except ImportError:
     pass
 
 
-try:
-    from torch.compiler import is_dynamo_compiling as is_torchdynamo_compiling
-except Exception:
-
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
-
-
 W = TypeVar("W")
 
 # TODO: T96382816, NE Parity Backward compatibility
 GRADIENT_DIVISION: bool = True
+USE_SYNC_COLLECTIVES: bool = False
 
 
 def set_gradient_division(val: bool) -> None:
@@ -56,6 +51,25 @@ def set_gradient_division(val: bool) -> None:
 def get_gradient_division() -> bool:
     global GRADIENT_DIVISION
     return GRADIENT_DIVISION
+
+
+def set_use_sync_collectives(val: bool) -> None:
+    global USE_SYNC_COLLECTIVES
+    USE_SYNC_COLLECTIVES = val
+
+
+def get_use_sync_collectives() -> bool:
+    global USE_SYNC_COLLECTIVES
+    return USE_SYNC_COLLECTIVES or is_torchdynamo_compiling()
+
+
+@contextmanager
+# pyre-ignore
+def torchrec_use_sync_collectives():
+    original_use_sync_collectives: bool = get_use_sync_collectives()
+    set_use_sync_collectives(True)
+    yield
+    set_use_sync_collectives(original_use_sync_collectives)
 
 
 """
@@ -368,7 +382,7 @@ def alltoall_pooled(
         codecs=codecs,
     )
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(all2all_pooled_sync(group, a2ai, a2a_pooled_embs_tensor))
 
     myreq = Request(group, device=a2a_pooled_embs_tensor.device)
@@ -458,7 +472,7 @@ def variable_batch_alltoall_pooled(
         codecs=codecs,
     )
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(
             variable_batch_all2all_pooled_sync(group, a2ai, a2a_pooled_embs_tensor)
         )
@@ -602,7 +616,7 @@ def alltoall_sequence(
     )
     # sequence of embeddings, bags are definitely non-uniform
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(all2all_sequence_sync(group, a2ai, a2a_sequence_embs_tensor))
 
     myreq = Request(group, device=a2a_sequence_embs_tensor.device)
@@ -752,7 +766,7 @@ def alltoallv(
         codecs=codecs,
     )
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(all2allv_sync(group, a2ai, inputs))
 
     myreq = Request(group, device=inputs[0].device)
@@ -829,7 +843,7 @@ def reduce_scatter_pooled(
         input_sizes=[tensor.size() for tensor in inputs], codecs=codecs
     )
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(reduce_scatter_sync(group, rsi, *inputs))
 
     myreq = Request(group, device=inputs[0].device)
@@ -889,7 +903,7 @@ def reduce_scatter_base_pooled(
 
     rsi = ReduceScatterBaseInfo(input_sizes=input.size(), codecs=codecs)
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(reduce_scatter_base_sync(group, rsi, input))
 
     myreq = Request(group, device=input.device)
@@ -948,7 +962,7 @@ def all_gather_base_pooled(
     if dist.get_world_size(group) <= 1:
         return NoWait(input)
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(all_gather_base_sync(group, agi, input))
 
     myreq = Request(group, device=input.device)
@@ -1024,7 +1038,7 @@ def reduce_scatter_v_pooled(
         codecs=codecs,
     )
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(reduce_scatter_v_sync(group, rsvi, input))
 
     myreq = Request(group, device=input.device)
@@ -1127,7 +1141,7 @@ def reduce_scatter_v_per_feature_pooled(
         codecs=codecs,
     )
 
-    if is_torchdynamo_compiling():
+    if get_use_sync_collectives():
         return NoWait(reduce_scatter_v_sync(group, rsvi, input))
 
     myreq = Request(group, device=input.device)
