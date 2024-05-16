@@ -327,7 +327,10 @@ class ShardedEmbeddingModule(
         self._output_dists: List[nn.Module] = []
 
     def prefetch(
-        self, dist_input: KJTList, forward_stream: Optional[torch.cuda.Stream] = None
+        self,
+        dist_input: KJTList,
+        forward_stream: Optional[torch.cuda.Stream] = None,
+        ctx: Optional[ShrdCtx] = None,
     ) -> None:
         """
         Prefetch input features for each lookup module.
