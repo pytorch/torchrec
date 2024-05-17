@@ -859,8 +859,6 @@ class ModuleSharder(abc.ABC, Generic[M]):
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
-    # pyre-fixme[56]: Pyre doesn't yet support decorators with ParamSpec applied to
-    #  generic functions Please add # pyre-ignore[56] to `abc.abstractclassmethod`.
     @abc.abstractclassmethod
     # pyre-ignore [3]
     def shard(
