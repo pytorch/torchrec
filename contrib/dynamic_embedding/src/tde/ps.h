@@ -99,6 +99,7 @@ class PS : public torch::CustomClassHolder {
   void Filter(const torch::Tensor& tensor);
 
   std::mutex mu_;
+  std::mutex fetch_notifications_mutex_;
   std::string table_name_;
   c10::intrusive_ptr<LocalShardList> shards_;
   int64_t col_size_;
