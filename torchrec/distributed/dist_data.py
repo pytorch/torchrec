@@ -1022,18 +1022,21 @@ class EmbeddingsAllToOne(nn.Module):
         assert len(tensors) == self._world_size
         is_target_device_cpu: bool = self._device.type == "cpu"
 
-        non_cat_size = tensors[0].size(1 - self._cat_dim)
-        # if src device is cuda, target device is cpu:
-        # 1. merge on first tensor device
-        # 2. move to cpu
-        device = self._device if not is_target_device_cpu else tensors[0].device
-        merge = torch.ops.fbgemm.merge_pooled_embeddings(
-            tensors,
-            non_cat_size,
-            device,
-            self._cat_dim,
-        )
+        if self._world_size == 1:
+            merge = tensors[0]
+        else:
+            non_cat_size = tensors[0].size(1 - self._cat_dim)
+            # if src device is cuda, target device is cpu:
+            # 1. merge on first tensor device
+            # 2. move to cpu
+            device = self._device if not is_target_device_cpu else tensors[0].device
 
+            merge = torch.ops.fbgemm.merge_pooled_embeddings(
+                tensors,
+                non_cat_size,
+                device,
+                self._cat_dim,
+            )
         return merge if not is_target_device_cpu else merge.to(self._device)
 
 
