@@ -659,11 +659,12 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
             elif pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
                 expected_storage = {
                     ("table_0", "fused_uvm_caching", "table_wise"): [
-                        (100 + 1024 * 11, 100)
+                        (100 + 1024 * 10, 100)
                     ],
-                    ("table_1", "fused", "table_wise"): [(100 + 1024 * 4, 100)],
+                    # 1024 * 3 < 3333
+                    ("table_1", "fused", "table_wise"): [(100 + 3333, 100)],
                     ("table_2", "fused_uvm_caching", "table_wise"): [
-                        (100 + 1024 * 4 + int(1024 * 1.6), 100)
+                        (100 + 1024 * 3 + int(1024 * 1.6), 100)
                     ],
                 }
             else:

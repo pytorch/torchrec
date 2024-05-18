@@ -960,7 +960,7 @@ def calculate_pipeline_io_cost(
         return max(pipelining_hbm_input_factor * input_size, output_size)
     if pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
         multipass_prefetch_max_pass = multipass_prefetch_max_pass or 1
-        pipelining_hbm_input_factor = 4
+        pipelining_hbm_input_factor = 3
         prefetch_bursty_hbm_input_factor = 1 + 6 / multipass_prefetch_max_pass
         return max(
             pipelining_hbm_input_factor * input_size
