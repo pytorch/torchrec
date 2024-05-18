@@ -27,6 +27,7 @@ from torchrec.distributed.types import (
     CacheParams,
     DataType,
     ModuleSharder,
+    MultiPassPrefetchConfig,
     ParameterSharding,
 )
 from torchrec.distributed.utils import (
@@ -479,6 +480,7 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
                 algorithm=CacheAlgorithm.LFU,
                 reserved_memory=1.0,
                 prefetch_pipeline=False,
+                multipass_prefetch_config=MultiPassPrefetchConfig(num_passes=2),
             ),
             enforce_hbm=False,
             stochastic_rounding=True,
@@ -497,6 +499,7 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
             "enforce_hbm": False,
             "stochastic_rounding": True,
             "bounds_check_mode": BoundsCheckMode.WARNING,
+            "multipass_prefetch_config": MultiPassPrefetchConfig(num_passes=2),
         }
         self.assertEqual(fused_params, expected_fused_params)
 
@@ -506,6 +509,7 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
             "cache_algorithm": CacheAlgorithm.LRU,
             "stochastic_rounding": False,
             "prefetch_pipeline": True,
+            "multipass_prefetch_config": MultiPassPrefetchConfig(num_passes=5),
         }
         fused_params = add_params_from_parameter_sharding(
             fused_params, self.parameter_sharding
@@ -518,6 +522,7 @@ class AddParamsFromParameterShardingTest(unittest.TestCase):
             "enforce_hbm": False,
             "stochastic_rounding": True,
             "bounds_check_mode": BoundsCheckMode.WARNING,
+            "multipass_prefetch_config": MultiPassPrefetchConfig(num_passes=2),
         }
         self.assertEqual(fused_params, expected_fused_params)
 
