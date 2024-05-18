@@ -40,6 +40,7 @@ from torchrec.distributed.types import (
     CacheParams,
     CacheStatistics,
     ModuleSharder,
+    MultiPassPrefetchConfig,
     PipelineType,
     ShardingType,
 )
@@ -593,6 +594,12 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
                     name="table_1",
                     feature_names=["feature_1"],
                 ),
+                EmbeddingBagConfig(
+                    num_embeddings=100,
+                    embedding_dim=10,
+                    name="table_2",
+                    feature_names=["feature_2"],
+                ),
             ]
             constraints = {
                 "table_0": ParameterConstraints(
@@ -608,6 +615,16 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
                     sharding_types=[ShardingType.TABLE_WISE.value],
                     cache_params=CacheParams(
                         load_factor=None,
+                    ),
+                ),
+                "table_2": ParameterConstraints(
+                    compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
+                    sharding_types=[ShardingType.TABLE_WISE.value],
+                    cache_params=CacheParams(
+                        load_factor=0.1,
+                        multipass_prefetch_config=MultiPassPrefetchConfig(
+                            num_passes=10,
+                        ),
                     ),
                 ),
             }
@@ -637,6 +654,7 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
                 expected_storage = {
                     ("table_0", "fused_uvm_caching", "table_wise"): [(100 + 3333, 100)],
                     ("table_1", "fused", "table_wise"): [(100 + 3333, 100)],
+                    ("table_2", "fused_uvm_caching", "table_wise"): [(100 + 3333, 100)],
                 }
             elif pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
                 expected_storage = {
@@ -644,6 +662,9 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
                         (100 + 1024 * 11, 100)
                     ],
                     ("table_1", "fused", "table_wise"): [(100 + 1024 * 4, 100)],
+                    ("table_2", "fused_uvm_caching", "table_wise"): [
+                        (100 + 1024 * 4 + int(1024 * 1.6), 100)
+                    ],
                 }
             else:
                 expected_storage = {
@@ -651,6 +672,9 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
                         (100 + 3333 + 1024, 100)
                     ],
                     ("table_1", "fused", "table_wise"): [(100 + 3333 + 1024, 100)],
+                    ("table_2", "fused_uvm_caching", "table_wise"): [
+                        (100 + 3333 + 1024, 100)
+                    ],
                 }
             actual_storage = {
                 (
