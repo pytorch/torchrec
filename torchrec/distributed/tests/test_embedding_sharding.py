@@ -104,7 +104,7 @@ class TestGetGroupingFusedParams(unittest.TestCase):
             {"stochastic_rounding": False, "cache_load_factor": 0.4},
         ]
         grouping_fused_params_groups = [
-            _get_grouping_fused_params(fused_params)
+            _get_grouping_fused_params(fused_params, "table_1")
             for fused_params in fused_params_groups
         ]
         expected_grouping_fused_params_groups = [
@@ -453,9 +453,24 @@ class TestGroupTablesPerRank(unittest.TestCase):
             for i in range(5)
         ]
 
+        # table_1 has two shards in the rank
+        tables.append(
+            ShardedEmbeddingTable(
+                name="table_1",
+                data_type=DataType.FP16,
+                pooling=PoolingType.SUM,
+                has_feature_processor=False,
+                fused_params={"use_one_tbe_per_table": True},
+                compute_kernel=EmbeddingComputeKernel.FUSED_UVM_CACHING,
+                embedding_dim=10,
+                local_cols=3,
+                num_embeddings=10000,
+            )
+        )
+
         # Even tables should all be grouped in a single TBE, odd tables should be in
         # their own TBEs.
         self.assertEqual(
             _get_table_names_by_groups(tables),
-            [["table_0", "table_2", "table_4"], ["table_1"], ["table_3"]],
+            [["table_0", "table_2", "table_4"], ["table_1", "table_1"], ["table_3"]],
         )
