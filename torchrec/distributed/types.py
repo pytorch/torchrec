@@ -28,6 +28,7 @@ from typing import (
 from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
     BoundsCheckMode,
     CacheAlgorithm,
+    MultiPassPrefetchConfig,
 )
 
 from torch.autograd.profiler import record_function
@@ -558,6 +559,7 @@ class CacheParams:
     precision: Optional[DataType] = None
     prefetch_pipeline: Optional[bool] = None
     stats: Optional[CacheStatistics] = None
+    multipass_prefetch_config: Optional[MultiPassPrefetchConfig] = None
 
     def __hash__(self) -> int:
         return hash(
@@ -567,6 +569,7 @@ class CacheParams:
                 self.reserved_memory,
                 self.precision,
                 self.prefetch_pipeline,
+                self.multipass_prefetch_config,
             )
         )
 

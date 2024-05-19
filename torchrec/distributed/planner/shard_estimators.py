@@ -902,6 +902,19 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 else sharding_option.tensor.element_size()
             )
 
+            mpp_conf = (
+                sharding_option.cache_params.multipass_prefetch_config
+                if sharding_option.cache_params
+                else None
+            )
+            # TODO: remove after deprecating fused_params in sharder
+            if mpp_conf is None:
+                mpp_conf = (
+                    sharder.fused_params.get("multipass_prefetch_config", None)
+                    if hasattr(sharder, "fused_params") and sharder.fused_params
+                    else None
+                )
+
             shard_storages = calculate_shard_storages(
                 sharder=sharder,
                 sharding_type=sharding_option.sharding_type,
@@ -920,6 +933,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 output_data_type_size=output_data_type_size,
                 pipeline_type=self._pipeline_type,
                 is_inference=self._is_inference,
+                multipass_prefetch_max_pass=mpp_conf.num_passes if mpp_conf else None,
             )
 
             for shard, storage in zip(sharding_option.shards, shard_storages):
@@ -931,6 +945,7 @@ def calculate_pipeline_io_cost(
     output_size: int,
     prefetch_size: int,
     pipeline_type: PipelineType,
+    multipass_prefetch_max_pass: Optional[int],
     is_inference: bool = False,
 ) -> int:
     # These magical number comes from heuristical analysis of memory snapshot during
@@ -944,11 +959,12 @@ def calculate_pipeline_io_cost(
         pipelining_hbm_input_factor = 2
         return max(pipelining_hbm_input_factor * input_size, output_size)
     if pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
-        pipelining_hbm_input_factor = 4
-        prefetch_bursty_hbm_input_factor = 7
+        multipass_prefetch_max_pass = multipass_prefetch_max_pass or 1
+        pipelining_hbm_input_factor = 3
+        prefetch_bursty_hbm_input_factor = 1 + 6 / multipass_prefetch_max_pass
         return max(
             pipelining_hbm_input_factor * input_size
-            + prefetch_bursty_hbm_input_factor * prefetch_size,
+            + int(prefetch_bursty_hbm_input_factor * prefetch_size),
             output_size,
         )
 
@@ -974,6 +990,7 @@ def calculate_shard_storages(
     output_data_type_size: float,
     pipeline_type: PipelineType = PipelineType.NONE,
     is_inference: bool = False,
+    multipass_prefetch_max_pass: Optional[int] = None,
 ) -> List[Storage]:
     """
     Calculates estimated storage sizes for each sharded tensor, comprised of input,
@@ -1057,6 +1074,7 @@ def calculate_shard_storages(
                 output_size=output_size,
                 prefetch_size=input_size if table_cached else 0,
                 pipeline_type=pipeline_type,
+                multipass_prefetch_max_pass=multipass_prefetch_max_pass,
                 is_inference=is_inference,
             )
             if compute_device == "cuda"

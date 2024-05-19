@@ -380,6 +380,10 @@ def add_params_from_parameter_sharding(
             fused_params["cache_precision"] = cache_params.precision
         if cache_params.prefetch_pipeline is not None:
             fused_params["prefetch_pipeline"] = cache_params.prefetch_pipeline
+        if cache_params.multipass_prefetch_config is not None:
+            fused_params["multipass_prefetch_config"] = (
+                cache_params.multipass_prefetch_config
+            )
 
     if parameter_sharding.enforce_hbm is not None:
         fused_params["enforce_hbm"] = parameter_sharding.enforce_hbm

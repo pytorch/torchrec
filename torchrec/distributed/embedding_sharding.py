@@ -274,7 +274,8 @@ def _get_weighted_avg_cache_load_factor(
 
 
 def _get_grouping_fused_params(
-    fused_params: Optional[Dict[str, Any]]
+    fused_params: Optional[Dict[str, Any]],
+    name: str,
 ) -> Optional[Dict[str, Any]]:
     """
     Only shallow copy the fused params we need for grouping tables into TBEs. In
@@ -290,7 +291,9 @@ def _get_grouping_fused_params(
 
     if grouping_fused_params.get(USE_ONE_TBE_PER_TABLE, False):
         # Replace with unique value to force it into singleton group.
-        grouping_fused_params[USE_ONE_TBE_PER_TABLE] = str(uuid.uuid4())
+        # Name is used as unique value so we won't group multiple shard belonging
+        # to the same embedding table separately.
+        grouping_fused_params[USE_ONE_TBE_PER_TABLE] = name
 
     return grouping_fused_params
 
@@ -379,11 +382,13 @@ def group_tables(
         groups = defaultdict(list)
         grouping_keys = []
         for table in embedding_tables:
-            group_fused_params = _get_grouping_fused_params(table.fused_params) or {}
             bucketer = (
                 prefetch_cached_dim_bucketer
                 if _prefetch_and_cached(table)
                 else non_prefetch_cached_dim_bucketer
+            )
+            group_fused_params = (
+                _get_grouping_fused_params(table.fused_params, table.name) or {}
             )
             grouping_key = (
                 table.data_type,
