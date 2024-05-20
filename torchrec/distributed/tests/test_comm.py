@@ -138,7 +138,7 @@ class TestAllToAll(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        torch_compile_args=st.sampled_from([None, ("inductor", True)]),
         specify_pg=st.sampled_from([True]),
     )
     @settings(deadline=None)
@@ -263,7 +263,7 @@ class TestAllToAll(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        torch_compile_args=st.sampled_from([None, ("inductor", True)]),
         specify_pg=st.sampled_from([True]),
     )
     @settings(deadline=None)
@@ -378,7 +378,7 @@ class TestAllToAll(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        torch_compile_args=st.sampled_from([None, ("inductor", True)]),
         specify_pg=st.sampled_from([True]),
     )
     @settings(deadline=None)
@@ -454,7 +454,7 @@ class TestAllToAll(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        torch_compile_args=st.sampled_from([None, ("inductor", True)]),
         specify_pg=st.sampled_from([True]),
     )
     @settings(deadline=None)
@@ -541,7 +541,7 @@ class TestAllToAll(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        torch_compile_args=st.sampled_from([None, ("inductor", True)]),
         specify_pg=st.sampled_from([True]),
     )
     @settings(deadline=None)
@@ -618,7 +618,7 @@ class TestAllToAll(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        torch_compile_args=st.sampled_from([None, ("inductor", True)]),
         specify_pg=st.sampled_from([True]),
     )
     @settings(deadline=None)
@@ -683,7 +683,7 @@ class TestAllToAll(unittest.TestCase):
     )
     # pyre-ignore
     @given(
-        torch_compile_args=st.sampled_from([None, ("eager", True)]),
+        torch_compile_args=st.sampled_from([None, ("inductor", True)]),
         specify_pg=st.sampled_from([True]),
     )
     @settings(deadline=None)
