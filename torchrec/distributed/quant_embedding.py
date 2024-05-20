@@ -38,7 +38,6 @@ from torchrec.distributed.fused_params import (
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
 )
-from torchrec.distributed.global_settings import get_propogate_device
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
 from torchrec.distributed.sharding.cw_sequence_sharding import (
     InferCwSequenceEmbeddingSharding,
@@ -389,7 +388,6 @@ class ShardedQuantEmbeddingCollection(
                     if not isinstance(env, Dict)
                     else env[get_device_from_sharding_infos(embedding_configs)]
                 ),
-                device if get_propogate_device() else None,
             )
             for (
                 sharding_type,
