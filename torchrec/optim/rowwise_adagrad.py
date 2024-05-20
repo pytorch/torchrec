@@ -9,12 +9,15 @@
 
 #!/usr/bin/env python3
 
+import logging
 from typing import Any, Dict, Iterable, List
 
 import torch
 from torch import Tensor
 
 from torch.optim.optimizer import Optimizer
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class RowWiseAdagrad(Optimizer):
@@ -65,6 +68,14 @@ class RowWiseAdagrad(Optimizer):
             )
         if not 0.0 <= eps:
             raise ValueError("Invalid epsilon value: {}".format(eps))
+
+        if weight_decay > 0:
+            logger.warning(
+                "Note that the weight decay mode of this optimizer may produce "
+                "different results compared to the one by FBGEMM TBE. This is "
+                "due to FBGEMM TBE rowwise adagrad is sparse, and will only "
+                "update the optimizer states if that row has nonzero gradients."
+            )
 
         defaults = dict(
             lr=lr,
@@ -211,14 +222,12 @@ def _single_tensor_adagrad(
         step = step_t.item()
         grad = grad if not maximize else -grad
 
-        row_wise_grad = grad.mean(axis=1).view(-1, 1)
         if weight_decay != 0:
-
             grad = grad.add(param, alpha=weight_decay)
-            row_wise_grad = grad.add(param, alpha=weight_decay)
+
+        state_sum += grad.pow(2).mean(axis=1).view(-1, 1)
+        std = state_sum.sqrt().add_(eps)
 
         clr = lr / (1 + (step - 1) * lr_decay)
 
-        state_sum.addcmul_(row_wise_grad, row_wise_grad, value=1)
-        std = state_sum.sqrt().add_(eps)
-        param.addcdiv_(row_wise_grad, std, value=-clr)
+        param.addcdiv_(grad, std, value=-clr)

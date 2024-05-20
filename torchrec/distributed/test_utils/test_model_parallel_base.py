@@ -60,6 +60,7 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.fused_embedding_modules import FusedEmbeddingBagCollection
+from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 from torchrec.test_utils import get_free_port, seed_and_log
 
 
@@ -954,3 +955,85 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
         self._compare_models(
             fused_model, model, is_deterministic=not stochastic_rounding
         )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_rowwise_adagrad_numerical_equivalence(
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+    ) -> None:
+        learning_rate = 0.1
+        fused_params = {
+            "optimizer": EmbOptimType.EXACT_ROWWISE_ADAGRAD,
+            "learning_rate": learning_rate,
+        }
+
+        fused_sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    EmbeddingComputeKernel.FUSED.value,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+        dense_sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    EmbeddingComputeKernel.DENSE.value,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+        (fused_model, _), _ = self._generate_dmps_and_batch(fused_sharders)
+        (dense_model, _), batch = self._generate_dmps_and_batch(dense_sharders)
+
+        dense_opt = RowWiseAdagrad(
+            dense_model.module.sparse.parameters(),
+            lr=learning_rate,
+            eps=1e-8,  # TBE has default eps 1e-8
+        )
+
+        # load the baseline model's state_dict onto the new model
+        dense_model.load_state_dict(
+            cast("OrderedDict[str, torch.Tensor]", fused_model.state_dict())
+        )
+
+        for _ in range(4):
+            dense_opt.zero_grad()
+            loss1, pred1 = fused_model(batch)
+            loss2, pred2 = dense_model(batch)
+            loss1.backward()
+            loss2.backward()
+            dense_opt.step()
+
+        self._eval_models(fused_model, dense_model, batch, is_deterministic=False)
+        self._compare_models(fused_model, dense_model, is_deterministic=False)
