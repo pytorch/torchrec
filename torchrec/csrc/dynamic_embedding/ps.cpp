@@ -25,9 +25,13 @@ c10::intrusive_ptr<FetchHandle> PS::fetch(
     return c10::make_intrusive<FetchHandle>(time, c10::intrusive_ptr<PS>());
   }
 
-  fetch_notifications_.emplace_back(time, c10::make_intrusive<Notification>());
-  c10::intrusive_ptr<Notification> notification =
-      fetch_notifications_.back().second;
+  c10::intrusive_ptr<Notification> notification;
+  {
+    std::unique_lock<std::mutex> lock_fetch(fetch_notifications_mutex_);
+    fetch_notifications_.emplace_back(
+        time, c10::make_intrusive<Notification>());
+    notification = fetch_notifications_.back().second;
+  }
   // Does not support multiple col ids at the moment.
   std::vector<int64_t> col_ids{0};
   uint32_t num_os_ids = os_ids_.size();
@@ -128,13 +132,21 @@ void PS::evict(torch::Tensor ids_to_evict) {
 }
 
 void PS::synchronize_fetch(int64_t time) {
-  while (!fetch_notifications_.empty()) {
-    auto& [t, notification] = fetch_notifications_.front();
-    if (t != time && time >= 0) {
+  std::unique_lock<std::mutex> lock(
+      fetch_notifications_mutex_, std::defer_lock);
+
+  while (true) {
+    lock.lock();
+    if (fetch_notifications_.empty() ||
+        fetch_notifications_.front().first != time && time >= 0) {
+      lock.unlock();
       break;
     }
-    notification->wait();
+    auto notification = fetch_notifications_.front().second;
     fetch_notifications_.pop_front();
+    lock.unlock();
+
+    notification->Wait();
   }
 }
 

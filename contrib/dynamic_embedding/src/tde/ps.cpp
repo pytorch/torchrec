@@ -25,9 +25,13 @@ c10::intrusive_ptr<FetchHandle> PS::Fetch(
   if (cache_ids_to_fetch_or_evict_.empty()) {
     return c10::make_intrusive<FetchHandle>(time, c10::intrusive_ptr<PS>());
   }
-  fetch_notifications_.emplace_back(time, c10::make_intrusive<Notification>());
-  c10::intrusive_ptr<Notification> notification =
-      fetch_notifications_.back().second;
+  c10::intrusive_ptr<Notification> notification;
+  {
+    std::unique_lock<std::mutex> lock_fetch(fetch_notifications_mutex_);
+    fetch_notifications_.emplace_back(
+        time, c10::make_intrusive<Notification>());
+    notification = fetch_notifications_.back().second;
+  }
   uint32_t num_os_ids = os_ids_.size();
   io_.Pull(
       table_name_,
@@ -122,6 +126,9 @@ void PS::Evict(torch::Tensor ids_to_evict) {
     torch::Tensor data = torch::cat(all_tensors, 0).cpu();
     TORCH_CHECK(data.numel() == data_size * col_size_);
 
+    // to prevent the original data from being prematurely recycled
+    auto data_shared_ptr = std::make_shared<torch::Tensor>(data);
+
     offsets[0] = 0;
     for (uint32_t j = 0; j < all_tensors.size(); ++j) {
       offsets[j + 1] =
@@ -136,22 +143,30 @@ void PS::Evict(torch::Tensor ids_to_evict) {
         col_ids,
         os_ids_,
         tcb::span{
-            reinterpret_cast<uint8_t*>(data.data_ptr<float>()),
+            reinterpret_cast<uint8_t*>(data_shared_ptr->data_ptr<float>()),
             data_size * sizeof(float)},
         tcb::span{offsets.data(), offsets_size},
-        [&notification] { notification.Done(); });
+        [&notification, data_shared_ptr] { notification.Done(); });
   }
   notification.Wait();
 }
 
 void PS::SyncFetch(int64_t time) {
-  while (!fetch_notifications_.empty()) {
-    auto& [t, notification] = fetch_notifications_.front();
-    if (t != time && time >= 0) {
+  std::unique_lock<std::mutex> lock(
+      fetch_notifications_mutex_, std::defer_lock);
+
+  while (true) {
+    lock.lock();
+    if (fetch_notifications_.empty() ||
+        fetch_notifications_.front().first != time && time >= 0) {
+      lock.unlock();
       break;
     }
-    notification->Wait();
+    auto notification = fetch_notifications_.front().second;
     fetch_notifications_.pop_front();
+    lock.unlock();
+
+    notification->Wait();
   }
 }
 
