@@ -526,63 +526,63 @@ class ParameterConstraints:
 
     If provided, `pooling_factors`, `num_poolings`, and `batch_sizes` must match in
     length, as per sample.
-
-    Attributes:
-        sharding_types (Optional[List[str]]): sharding types allowed for the table.
-            Values of enum ShardingType.
-        compute_kernels (Optional[List[str]]): compute kernels allowed for the table.
-            Values of enum EmbeddingComputeKernel.
-        min_partition (Optional[int]): lower bound for dimension of column wise shards.
-            Planner will search for the column wise shard dimension in the
-            range of [min_partition, embedding_dim], as long as the column wise
-            shard dimension divides embedding_dim and is divisible by 4. Used
-            for column wise sharding only.
-        pooling_factors (Optional[List[float]]): pooling factors for each feature of the
-            table. This is the average number of values each sample has for
-            the feature. Length of pooling_factors should match the number of
-            features.
-        num_poolings (OptionalList[float]]): number of poolings for each feature of the
-            table. Length of num_poolings should match the number of features.
-        batch_sizes (Optional[List[int]]): batch sizes for each feature of the table. Length
-            of batch_sizes should match the number of features.
-        is_weighted (Optional[bool]): whether the table is weighted.
-        cache_params (Optional[CacheParams]): cache parameters to be used by this table.
-            These are passed to FBGEMM's Split TBE kernel.
-        enforce_hbm (Optional[bool]): whether to place all weights/momentums in HBM when
-            using cache.
-        stochastic_rounding (Optional[bool]): whether to do stochastic rounding. This is
-            passed to FBGEMM's Split TBE kernel. Stochastic rounding is
-            non-deterministic, but important to maintain accuracy in longer
-            term with FP16 embedding tables.
-        bounds_check_mode (Optional[BoundsCheckMode]): bounds check mode to be used by
-            FBGEMM's Split TBE kernel. Bounds check means checking if values
-            (i.e. row id) is within the table size. If row id exceeds table
-            size, it will be set to 0.
-        feature_names (Optional[List[str]]): list of feature names for this table.
-        output_dtype (Optional[DataType]): output dtype to be used by this table.
-            The default is FP32. If not None, the output dtype will also be used
-            by the planner to produce a more balanced plan.
-        device_group (Optional[str]): device group to be used by this table. It can be cpu
-            or cuda. This specifies if the table should be placed on a cpu device
-            or a gpu device.
     """
 
     sharding_types: Optional[List[str]] = None
+    """sharding types allowed for the table. Values of enum ShardingType."""
+
     compute_kernels: Optional[List[str]] = None
-    min_partition: Optional[int] = None  # CW sharding, min CW dim to shard
-    pooling_factors: List[float] = field(
-        default_factory=lambda: [POOLING_FACTOR]
-    )  # average number of embedding lookups required per sample
+    """compute kernels allowed for the table. Values of enum EmbeddingComputeKernel."""
+
+    min_partition: Optional[int] = None
+    """lower bound for dimension of column wise shards. Planner will search for
+    the column wise shard dimension in the range of [min_partition, embedding_dim],
+    as long as the column wise shard dimension divides embedding_dim and is
+    divisible by 4. Used for column wise sharding only."""
+
+    pooling_factors: List[float] = field(default_factory=lambda: [POOLING_FACTOR])
+    """pooling factors for each feature of the table. This is the average number
+    of values each sample has for the feature. Length of pooling_factors should
+    match the number of features."""
+
     num_poolings: Optional[List[float]] = None  # number of poolings per sample in batch
-    batch_sizes: Optional[List[int]] = None  # batch size per input feature
+    """number of poolings for each feature of the table. Length of num_poolings
+    should match the number of features."""
+
+    batch_sizes: Optional[List[int]] = None
+    """batch sizes for each feature of the table. Length of batch_sizes should
+    match the number of features."""
+
     is_weighted: bool = False
+    """whether the table is weighted."""
+
     cache_params: Optional[CacheParams] = None
+    """cache parameters to be used by this table. These are passed to FBGEMM's
+    Split TBE kernel."""
+
     enforce_hbm: Optional[bool] = None
+    """whether to place all weights/momentums in HBM when using cache."""
+
     stochastic_rounding: Optional[bool] = None
+    """whether to do stochastic rounding. This is passed to FBGEMM's Split TBE
+    kernel. Stochastic rounding is non-deterministic, but important to maintain
+    accuracy in longer term with FP16 embedding tables."""
+
     bounds_check_mode: Optional[BoundsCheckMode] = None
+    """bounds check mode to be used by FBGEMM's Split TBE kernel. Bounds check
+    means checking if values (i.e. row id) is within the table size. If row id
+    exceeds table size, it will be set to 0."""
+
     feature_names: Optional[List[str]] = None
+    """list of feature names for this table."""
+
     output_dtype: Optional[DataType] = None
+    """output dtype to be used by this table. The default is FP32. If not None,
+    the output dtype will also be used by the planner to produce a more balanced plan."""
+
     device_group: Optional[str] = None
+    """device group to be used by this table. It can be cpu or cuda. This
+    specifies if the table should be placed on a cpu device or a gpu device."""
 
 
 class PlannerErrorType(Enum):
