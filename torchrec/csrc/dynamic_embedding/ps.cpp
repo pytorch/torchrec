@@ -28,9 +28,10 @@ c10::intrusive_ptr<FetchHandle> PS::fetch(
   c10::intrusive_ptr<Notification> notification;
   {
     std::unique_lock<std::mutex> lock_fetch(fetch_notifications_mutex_);
-    fetch_notifications_.emplace_back(time, c10::make_intrusive<Notification>());
-    notification=fetch_notifications_.back().second;
-  } 
+    fetch_notifications_.emplace_back(
+        time, c10::make_intrusive<Notification>());
+    notification = fetch_notifications_.back().second;
+  }
   // Does not support multiple col ids at the moment.
   std::vector<int64_t> col_ids{0};
   uint32_t num_os_ids = os_ids_.size();
