@@ -49,17 +49,11 @@ from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
     TBEToRegisterMixIn,
 )
-from torchrec.distributed.global_settings import get_propogate_device
 from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
     QuantBatchedEmbeddingBag,
 )
-from torchrec.distributed.types import (
-    DEFAULT_DEVICE_TYPE,
-    rank_device,
-    ShardedTensor,
-    ShardingType,
-)
+from torchrec.distributed.types import ShardedTensor, ShardingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -918,14 +912,19 @@ class InferGroupedPooledEmbeddingsLookup(
             MetaInferGroupedPooledEmbeddingsLookup
         ] = []
 
-        device_type: str = DEFAULT_DEVICE_TYPE if device is None else device.type
-
+        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 # TODO add position weighted module support
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    device=rank_device(device_type, rank),
+                    # syntax for torchscript
+                    # No rank for cpu
+                    device=(
+                        torch.device(type=device_type, index=rank)
+                        if device_type != "cpu"
+                        else torch.device(device_type)
+                    ),
                     fused_params=fused_params,
                 )
             )
@@ -951,17 +950,13 @@ class InferGroupedEmbeddingsLookup(
         super().__init__()
         self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
 
-        if get_propogate_device():
-            device_type: str = DEFAULT_DEVICE_TYPE if device is None else device.type
-        else:
-            device_type = (
-                "meta" if device is not None and device.type == "meta" else "cuda"
-            )
+        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    device=rank_device(device_type, rank),
+                    # syntax for torchscript
+                    device=torch.device(type=device_type, index=rank),
                     fused_params=fused_params,
                 )
             )

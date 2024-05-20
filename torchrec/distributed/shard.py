@@ -21,7 +21,6 @@ from torchrec.distributed.sharding_plan import (
     ParameterShardingGenerator,
 )
 from torchrec.distributed.types import (
-    DEFAULT_DEVICE_TYPE,
     ModuleSharder,
     ModuleShardingPlan,
     ShardingEnv,
@@ -99,7 +98,10 @@ def _shard(
         env = ShardingEnv.from_process_group(pg)
 
     if device is None:
-        device = torch.device(DEFAULT_DEVICE_TYPE)
+        if torch.cuda.is_available():
+            device = torch.device(torch.cuda.current_device())
+        else:
+            device = torch.device("cpu")
 
     if isinstance(plan, ModuleShardingPlan):
         return sharder.shard(module, plan, env, device)
@@ -211,7 +213,10 @@ def _shard_modules(  # noqa: C901
         env = ShardingEnv.from_process_group(pg)
 
     if device is None:
-        device = torch.device(DEFAULT_DEVICE_TYPE)
+        if torch.cuda.is_available():
+            device = torch.device(torch.cuda.current_device())
+        else:
+            device = torch.device("cpu")
 
     sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
         sharder.module_type: sharder for sharder in sharders

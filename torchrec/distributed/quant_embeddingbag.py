@@ -39,7 +39,6 @@ from torchrec.distributed.fused_params import (
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
 )
-from torchrec.distributed.global_settings import get_propogate_device
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
 from torchrec.distributed.sharding.cw_sharding import InferCwPooledEmbeddingSharding
 from torchrec.distributed.sharding.rw_sharding import InferRwPooledEmbeddingSharding
@@ -104,25 +103,16 @@ def create_infer_embedding_bag_sharding(
     sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
-    device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[
     NullShardingContext, InputDistOutputs, List[torch.Tensor], torch.Tensor
 ]:
-    propogate_device: bool = get_propogate_device()
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return InferTwEmbeddingSharding(
-            sharding_infos, env, device=device if propogate_device else None
-        )
+        return InferTwEmbeddingSharding(sharding_infos, env, device=None)
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return InferRwPooledEmbeddingSharding(
-            sharding_infos, env, device=device if propogate_device else None
-        )
+        return InferRwPooledEmbeddingSharding(sharding_infos, env, device=None)
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return InferCwPooledEmbeddingSharding(
-            sharding_infos,
-            env,
-            device=device if propogate_device else None,
-            permute_embeddings=True,
+            sharding_infos, env, device=None, permute_embeddings=True
         )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
@@ -175,7 +165,6 @@ class ShardedQuantEmbeddingBagCollection(
                     if not isinstance(env, Dict)
                     else env[get_device_from_sharding_infos(embedding_configs)]
                 ),
-                device if get_propogate_device() else None,
             )
             for (
                 sharding_type,
