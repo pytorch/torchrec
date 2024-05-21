@@ -814,20 +814,6 @@ def _maybe_compute_stride_kjt(
     return stride
 
 
-# Specialization of _maybe_compute_stride_kjt that is scripted, so it will produce
-# correct results in case of usage with jit.tracing.
-# This module is returning torch.Tensor instead of int, because ji.trace doesn't
-# support int type at the current moment.
-@torch.jit.script
-def _maybe_compute_stride_kjt_scripted(
-    keys: List[str],
-    stride: Optional[int],
-    lengths: Optional[torch.Tensor],
-    offsets: Optional[torch.Tensor],
-) -> torch.Tensor:
-    return torch.tensor([_maybe_compute_stride_kjt(keys, stride, lengths, offsets)])
-
-
 def _use_segment_sum_csr(stride_per_key: List[int]) -> bool:
     """
     `segment_sum_csr` performs poorly for small number of segments and many elements
@@ -1422,12 +1408,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             elif all(s == self.stride_per_key()[0] for s in self.stride_per_key()):
                 self._stride = self.stride_per_key()[0]
         else:
-            if torch.jit.is_tracing():
-                stride = _maybe_compute_stride_kjt_scripted(
-                    keys, stride, lengths, offsets
-                )[0]
-            else:
-                stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
+            stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
             self._stride = stride
             self._stride_per_key_per_rank = [[stride]] * len(self._keys)
             self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
