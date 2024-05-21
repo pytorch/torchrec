@@ -364,6 +364,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     is_pooled=is_pooled,
                     is_weighted=is_weighted,
                     expected_cache_fetches=expected_cache_fetches,
+                    is_inference=is_inference,
                 )
             elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
                 shard_perf = cls._get_twrw_sharding_perf(
@@ -545,6 +546,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         is_pooled: bool,
         is_weighted: bool = False,
         expected_cache_fetches: float = 0,
+        is_inference: bool = False,
     ) -> Perf:
         batch_inputs = (
             sum(
@@ -583,6 +585,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
         fwd_compute = (
             input_read_size + embedding_lookup_size + fwd_output_write_size
         ) / device_bw
+
+        if is_inference:
+            # only consider forward compute and comms for inference
+            return Perf(
+                fwd_compute=fwd_compute, fwd_comms=fwd_comms, bwd_compute=0, bwd_comms=0
+            )
 
         bwd_comms = bwd_output_write_size / comms_bw
 
