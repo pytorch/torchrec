@@ -108,6 +108,7 @@ class EmbeddingStats(Stats):
 
         used_sharding_types = set()
         compute_kernels_to_count = defaultdict(int)
+        compute_kernels_to_storage = defaultdict(lambda: Storage(0, 0))
 
         reserved_hbm_percent = (
             storage_reservation._percentage
@@ -146,6 +147,12 @@ class EmbeddingStats(Stats):
             fqn = sharding_option.fqn
 
             compute_kernels_to_count[sharding_option.compute_kernel] += 1
+            compute_kernels_to_storage[
+                sharding_option.compute_kernel
+            ] += sharding_option.total_storage
+
+            # for shard in sharding_option.shards:
+            # compute_kernels_to_storage[sharding_option.compute_kernel] += shard.hbm
 
             if shard_by_fqn.get(fqn) is None:
                 continue
@@ -416,7 +423,16 @@ class EmbeddingStats(Stats):
             self._stats_table.append(f"#{'' : ^{self._width-2}}#")
             self._stats_table.append(f"# {rank_size_text : <{self._width-3}}#")
 
-        self._log_compute_kernel_stats(compute_kernels_to_count)
+        self._log_compute_kernel_stats(
+            compute_kernels_to_count, description="Compute Kernels Count"
+        )
+        self._log_compute_kernel_stats(
+            {
+                k: f"HBM: {round(bytes_to_gb(s.hbm),3)} GB, DDR: {round(bytes_to_gb(s.ddr),3)} GB"
+                for k, s in compute_kernels_to_storage.items()
+            },
+            description="Compute Kernels Storage",
+        )
 
         if debug:
             if sharding_plan.plan:
@@ -650,14 +666,14 @@ class EmbeddingStats(Stats):
             self._stats_table.append(f"#    {top_table : <{self._width-6}}#")
 
     def _log_compute_kernel_stats(
-        self, compute_kernels_to_count: Dict[str, int]
+        self, compute_kernels_stats: Dict[str, Any], description: str
     ) -> None:
         compute_kernels_count = [
             f"{compute_kernel}: {count}"
-            for compute_kernel, count in sorted(compute_kernels_to_count.items())
+            for compute_kernel, count in sorted(compute_kernels_stats.items())
         ]
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
-        self._stats_table.append(f"# {'Compute Kernels:' : <{self._width-3}}#")
+        self._stats_table.append(f"# {description+':' : <{self._width-3}}#")
         for compute_kernel_count in compute_kernels_count:
             self._stats_table.append(f"#    {compute_kernel_count : <{self._width-6}}#")
 
