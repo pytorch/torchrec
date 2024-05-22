@@ -265,6 +265,18 @@ def _construct_jagged_tensors_cw(
     return ret
 
 
+@torch.fx.wrap
+def input_dist_permute(
+    features: KeyedJaggedTensor,
+    features_order: List[int],
+    features_order_tensor: torch.Tensor,
+) -> KeyedJaggedTensor:
+    return features.permute(
+        features_order,
+        features_order_tensor,
+    )
+
+
 def _construct_jagged_tensors(
     sharding_type: str,
     embeddings: List[torch.Tensor],
@@ -896,9 +908,9 @@ class ShardedQuantEcInputDist(torch.nn.Module):
             self._input_dists.append(sharding.create_input_dist(device=device))
             feature_names.extend(sharding.feature_names())
             self._feature_splits.append(len(sharding.feature_names()))
-
         for f in feature_names:
             self._features_order.append(input_feature_names.index(f))
+
         self._features_order = (
             []
             if self._features_order == list(range(len(self._features_order)))
@@ -919,7 +931,8 @@ class ShardedQuantEcInputDist(torch.nn.Module):
             ret: List[KJTList] = []
             unbucketize_permute_tensor = []
             if self._features_order:
-                features = features.permute(
+                features = input_dist_permute(
+                    features,
                     self._features_order,
                     self._features_order_tensor,
                 )
