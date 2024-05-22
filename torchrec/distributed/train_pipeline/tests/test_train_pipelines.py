@@ -776,8 +776,9 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
+        num_batches = 12
         data = self._generate_data(
-            num_batches=12,
+            num_batches=num_batches,
             batch_size=32,
         )
 
@@ -833,13 +834,128 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
         dataloader = iter(data)
 
         pipelined_out = []
+        num_batches_processed = 0
+
         while model_in := pipeline.progress(dataloader):
+            num_batches_processed += 1
             optim_pipelined.zero_grad()
             loss, pred = sharded_model_pipelined(model_in)
             loss.backward()
             optim_pipelined.step()
             pipelined_out.append(pred)
 
+        self.assertEqual(num_batches_processed, num_batches)
+
         self.assertEqual(len(pipelined_out), len(non_pipelined_outputs))
         for out, ref_out in zip(pipelined_out, non_pipelined_outputs):
             torch.testing.assert_close(out, ref_out)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_flush(self) -> None:
+        model = self._setup_model()
+
+        sharding_type = ShardingType.TABLE_WISE.value
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type
+        )
+
+        def gpu_preproc(x: StageOut) -> StageOut:
+            return x
+
+        sdd = SparseDataDistUtil[ModelInput](
+            model=sharded_model_pipelined,
+            stream=torch.cuda.Stream(),
+            apply_jit=False,
+        )
+
+        pipeline_stages = [
+            PipelineStage(
+                name="data_copy",
+                runnable=partial(get_h2d_func, device=self.device),
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="gpu_preproc",
+                runnable=gpu_preproc,
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="start_sparse_data_dist",
+                runnable=sdd.start_sparse_data_dist,
+                stream=sdd.stream,
+                fill_callback=sdd.wait_sparse_data_dist,
+            ),
+        ]
+
+        flush_end_called: int = 0
+
+        def on_flush_end() -> None:
+            nonlocal flush_end_called
+            flush_end_called += 1
+
+        pipeline = StagedTrainPipeline(
+            pipeline_stages=pipeline_stages,
+            compute_stream=torch.cuda.current_stream(),
+            on_flush_end=on_flush_end,
+        )
+        self.assertEqual(pipeline._flushing, False)
+
+        data = self._generate_data(
+            num_batches=10,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        # Run pipeline for 1 iteration, now internal state should be:
+        # pipeline._stage_outputs = [stage 2 output, stage 1 output, stage 0 output]
+        # and we exhaust 4 batches from dataloader (3 + 1 in _fill_pipeline)
+        out = pipeline.progress(dataloader)
+        self.assertIsNotNone(out)
+
+        # Flush pipeline
+        pipeline.set_flush(True)
+
+        # Run pipeline for 3 iterations
+        # Iteration 1: pipeline returns output from second batch
+        # Iteration 2: pipeline returns output from third batch
+        # Iteration 3: pipeline returns output from fourth batch
+        for _ in range(3):
+            out = pipeline.progress(dataloader)
+            self.assertIsNotNone(out)
+
+        # Flush end not reached
+        self.assertEqual(flush_end_called, 0)
+
+        # After this iteration, pipeline has been completely flushed
+        out = pipeline.progress(dataloader)
+        self.assertEqual(flush_end_called, 1)
+        # output shouldn't be None as we restart pipeline
+        # this should be output from fifth batch
+        self.assertIsNotNone(out)
+
+        # Pipeline internal state
+        self.assertEqual(pipeline._flushing, False)
+        self.assertIsNotNone(pipeline._stage_outputs[0])
+        self.assertIsNotNone(pipeline._stage_outputs[1])
+        self.assertIsNotNone(pipeline._stage_outputs[2])
+
+        # Check that we get 5 more iterations before pipeline exhausts all data
+        for _ in range(5):
+            out = pipeline.progress(dataloader)
+            self.assertIsNotNone(out)
+
+        # Check that pipeline has exhausted all data
+        out = pipeline.progress(dataloader)
+        self.assertIsNone(out)
+
+        # Flush end not called this time
+        self.assertEqual(flush_end_called, 1)
