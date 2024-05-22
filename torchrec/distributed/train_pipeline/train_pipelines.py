@@ -10,7 +10,18 @@
 import abc
 import logging
 from collections import deque
-from typing import cast, Deque, Dict, Generic, Iterator, List, Optional, Tuple, Type
+from typing import (
+    Callable,
+    cast,
+    Deque,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+)
 
 import torch
 from torch.autograd.profiler import record_function
@@ -921,6 +932,8 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         compute_stream (Optional[torch.cuda.Stream]): The main compute stream in which
             model forward is run, usually torch.cuda.default_stream(). Defaults to the
             current cuda stream.
+        on_flush_end (Optional): Callback function that gets invoked after the pipeline
+            has been flushed.
 
     Example::
         train_pipeline = StagedTrainPipeline(
@@ -950,6 +963,7 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         pipeline_stages: List[PipelineStage],
         debug_mode: bool = False,
         compute_stream: Optional[torch.cuda.Stream] = None,
+        on_flush_end: Optional[Callable[[], None]] = None,
     ) -> None:
         self._pipeline_stages = pipeline_stages
         self._debug_mode = debug_mode
@@ -963,6 +977,9 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         self._compute_stream: torch.cuda.streams.Stream = (
             compute_stream or torch.cuda.current_stream()
         )
+
+        self._flushing: bool = False
+        self.on_flush_end = on_flush_end
 
     @property
     def num_stages(self) -> int:
@@ -1005,7 +1022,7 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
             self._dataloader_iter = dataloader_iter
             self._dataloader_exhausted = False
 
-        if self._dataloader_exhausted:
+        if self._dataloader_exhausted or self._flushing:
             batch = None
         else:
             with record_function("## next_batch ##"):
@@ -1095,6 +1112,22 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         if self._debug_mode:
             logger.info("Finished fill pipeline")
 
+    def set_flush(self, flush: bool) -> None:
+        """
+        Sets whether the pipeline should be flushed.
+
+        When the pipeline is in a flushing state, it will stop getting further data from the dataloader and will continue executing the pipeline until all remaining stages are finished. Afterwards, it will invoke a callback and resume the pipeline.
+        """
+        self._flushing = flush
+
+    def flush_end(self) -> None:
+        self.set_flush(False)
+        # Ensure pipeline gets filled again
+        self._initialized = False
+
+        if self.on_flush_end is not None:
+            self.on_flush_end()
+
     def progress(
         self,
         dataloader_iter: Iterator[In],
@@ -1139,5 +1172,10 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
             # we need to explicitly wait for the last stage to finish
             event.wait(self._compute_stream)
             out.record_stream(self._compute_stream)
+
+        if out is None and self._flushing:
+            # We have exhausted all stages due to flushing
+            self.flush_end()
+            return self.progress(dataloader_iter)
 
         return out
