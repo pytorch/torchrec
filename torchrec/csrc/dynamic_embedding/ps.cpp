@@ -146,7 +146,7 @@ void PS::synchronize_fetch(int64_t time) {
     fetch_notifications_.pop_front();
     lock.unlock();
 
-    notification->Wait();
+    notification->wait();
   }
 }
 

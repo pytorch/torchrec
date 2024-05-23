@@ -26,7 +26,7 @@ from typing import (
 import torch
 
 from torch import optim
-from torchrec.distributed.types import ShardedTensor
+from torch.distributed._shard.sharded_tensor import ShardedTensor
 
 
 OptimizerFactory = Callable[[List[Union[torch.Tensor, ShardedTensor]]], optim.Optimizer]
