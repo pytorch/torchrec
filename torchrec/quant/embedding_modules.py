@@ -887,6 +887,42 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
 
+        self._has_uninitialized_kjt_permute_order: bool = True
+        self._has_features_permute: bool = True
+        self._features_order: List[int] = []
+
+    def _permute_kjt_order(
+        self, features: KeyedJaggedTensor
+    ) -> List[KeyedJaggedTensor]:
+        if self._has_uninitialized_kjt_permute_order:
+            kjt_keys = features.keys()
+            for f in self.feature_names:
+                self._features_order.append(kjt_keys.index(f))
+
+            self.register_buffer(
+                "_features_order_tensor",
+                torch.tensor(
+                    self._features_order,
+                    device=features.device(),
+                    dtype=torch.int32,
+                ),
+                persistent=False,
+            )
+
+            self._features_order = (
+                []
+                if self._features_order == list(range(len(self._features_order)))
+                else self._features_order
+            )
+
+            self._has_uninitialized_kjt_permute_order = False
+
+        if self._features_order:
+            kjt_permute = features.permute(
+                self._features_order, self._features_order_tensor
+            )
+        return kjt_permute.split(self._feature_splits)
+
     def forward(
         self,
         features: KeyedJaggedTensor,
@@ -900,10 +936,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         """
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
-        kjt_keys = features.keys()
-        kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
-        kjt_permute = features.permute(kjt_permute_order)
-        kjts_per_key = kjt_permute.split(self._feature_splits)
+        kjts_per_key = self._permute_kjt_order(features)
         for i, (emb_module, key) in enumerate(
             zip(self._emb_modules, self._key_to_tables.keys())
         ):
