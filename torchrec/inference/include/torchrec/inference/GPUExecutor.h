@@ -58,7 +58,7 @@ class GPUExecutor {
       std::shared_ptr<IGPUExecutorObserver>
           observer, // shared_ptr because used in completion executor callback
       std::function<void()> warmupFn = {},
-      c10::optional<size_t> numThreadsPerGPU = c10::nullopt,
+      std::optional<size_t> numThreadsPerGPU = c10::nullopt,
       std::unique_ptr<GCConfig> gcConfig = std::make_unique<GCConfig>());
   GPUExecutor(GPUExecutor&& executor) noexcept = default;
   GPUExecutor& operator=(GPUExecutor&& executor) noexcept = default;
