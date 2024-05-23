@@ -20,7 +20,7 @@ namespace torchrec {
 bool validateSparseFeatures(
     at::Tensor& values,
     at::Tensor& lengths,
-    c10::optional<at::Tensor> maybeWeights = c10::nullopt);
+    std::optional<at::Tensor> maybeWeights = c10::nullopt);
 
 // Returns whether dense features are valid.
 // Currently validates:

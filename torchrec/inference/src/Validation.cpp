@@ -14,7 +14,7 @@ namespace torchrec {
 bool validateSparseFeatures(
     at::Tensor& values,
     at::Tensor& lengths,
-    c10::optional<at::Tensor> maybeWeights) {
+    std::optional<at::Tensor> maybeWeights) {
   auto flatLengths = lengths.view(-1);
 
   // validate sum of lengths equals number of values/weights
