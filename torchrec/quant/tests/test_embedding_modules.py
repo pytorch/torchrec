@@ -447,6 +447,15 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         qebc = QuantEmbeddingBagCollection.from_float(ebc)
 
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2"],
+            values=torch.as_tensor([0, 1]),
+            lengths=torch.as_tensor([1, 1]),
+        )
+
+        # need to first run the model once to initialize lazily modules
+        original_out = qebc(features)
+
         from torchrec.fx import symbolic_trace
 
         gm = symbolic_trace(qebc, leaf_modules=[ComputeKJTToJTDict.__name__])
@@ -459,22 +468,14 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self.assertEqual(
             non_placeholder_nodes[0].op,
-            "call_function",
-            f"First non-placeholder node must be call_function, got {non_placeholder_nodes[0].op} instead",
+            "get_attr",
+            f"First non-placeholder node must be get_attr, got {non_placeholder_nodes[0].op} instead",
         )
         self.assertEqual(
             non_placeholder_nodes[0].name,
-            "_get_kjt_keys",
-            f"First non-placeholder node must be '_get_kjt_keys', got {non_placeholder_nodes[0].name} instead",
+            "_features_order_tensor",
+            f"First non-placeholder node must be '_features_order_tensor', got {non_placeholder_nodes[0].name} instead",
         )
-
-        features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.as_tensor([0, 1]),
-            lengths=torch.as_tensor([1, 1]),
-        )
-
-        original_out = qebc(features)
         traced_out = gm(features)
 
         scripted_module = torch.jit.script(gm)
