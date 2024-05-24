@@ -133,9 +133,6 @@ def _test_async_sync_compile(
                 # Turn off compilation for rank==1 to test compatibility of compiled rank and non-compiled
                 fn_transform = lambda x: x
 
-            torch._dynamo.config.capture_scalar_outputs = True
-            torch._dynamo.config.capture_dynamic_output_shape_ops = True
-
             out = fn_transform(fn)(
                 input_tensor_compile,
                 *args,
@@ -389,7 +386,10 @@ class TestAllToAll(unittest.TestCase):
             backend="nccl",
             # pyre-ignore [6]
             callable=self._test_alltoall_sequence,
-            compile_config=_CompileConfig(),
+            # TODO(ivankobzarev): Add backwards formula for fbgemm::permute_2D_sparse_data
+            compile_config=_CompileConfig(
+                skip_sync_backward=True, skip_compile_backward=True
+            ),
             specify_pg=specify_pg,
             gradient_division=gradient_division,
         )
