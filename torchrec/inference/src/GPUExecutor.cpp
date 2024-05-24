@@ -77,7 +77,7 @@ GPUExecutor::GPUExecutor(
     std::chrono::milliseconds queueTimeout,
     std::shared_ptr<IGPUExecutorObserver> observer,
     std::function<void()> warmupFn,
-    c10::optional<size_t> numThreadsPerGPU,
+    std::optional<size_t> numThreadsPerGPU,
     std::unique_ptr<GCConfig> gcConfig)
     : manager_(manager),
       model_(std::move(model)),
