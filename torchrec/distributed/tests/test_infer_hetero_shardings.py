@@ -24,7 +24,7 @@ from torchrec.distributed.planner.types import CustomTopologyData, Topology
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.shard import _shard_modules
-from torchrec.distributed.sharding.rw_sharding import InferCPURwSparseFeaturesDist
+from torchrec.distributed.sharding.rw_sharding import InferRwSparseFeaturesDist
 from torchrec.distributed.sharding.tw_sharding import InferTwSparseFeaturesDist
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
