@@ -28,6 +28,7 @@ from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.global_settings import get_propogate_device
 from torchrec.distributed.types import Awaitable, QuantizedCommCodecs, rank_device
 from torchrec.fx.utils import fx_marker
+from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 try:
@@ -45,15 +46,6 @@ try:
     pass
 except ImportError:
     pass
-
-
-try:
-    from torch.compiler import is_dynamo_compiling as is_torchdynamo_compiling
-
-except Exception:
-
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
 
 
 logger: logging.Logger = logging.getLogger()

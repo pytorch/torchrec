@@ -49,15 +49,8 @@ from torchrec.distributed.train_pipeline.utils import (
     TrainPipelineContext,
 )
 from torchrec.distributed.types import Awaitable
+from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.streamable import Multistreamable
-
-
-try:
-    from torch._dynamo import is_compiling as is_torchdynamo_compiling
-except Exception:
-
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
 
 
 logger: logging.Logger = logging.getLogger(__name__)

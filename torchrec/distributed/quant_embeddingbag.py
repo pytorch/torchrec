@@ -59,19 +59,13 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
+from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
     MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
-
-try:
-    from torch._dynamo import is_compiling as is_torchdynamo_compiling
-except Exception:
-
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
 
 
 def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
