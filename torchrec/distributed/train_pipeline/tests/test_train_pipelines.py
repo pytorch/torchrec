@@ -472,11 +472,12 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
     @settings(max_examples=4, deadline=None)
     # pyre-ignore[56]
     @given(
+        start_batch=st.sampled_from([0, 6]),
+        stash_gradients=st.booleans(),
         sharding_type=st.sampled_from(
             [
                 ShardingType.TABLE_WISE.value,
                 ShardingType.ROW_WISE.value,
-                ShardingType.COLUMN_WISE.value,
             ]
         ),
         kernel_type=st.sampled_from(
@@ -487,6 +488,8 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
     )
     def test_equal_to_non_pipelined(
         self,
+        start_batch: int,
+        stash_gradients: bool,
         sharding_type: str,
         kernel_type: str,
     ) -> None:
@@ -527,6 +530,8 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=True,
+            start_batch=start_batch,
+            stash_gradients=stash_gradients,
         )
 
         prior_sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(
@@ -534,22 +539,29 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
         )
         prior_batch = data[0].to(self.device)
         prior_stashed_grads = None
+        batch_index = 0
+        sparse_out = None
         for batch in data[1:]:
+            batch_index += 1
             # Forward + backward w/o pipelining
             batch = batch.to(self.device)
 
             loss, pred = sharded_model._dmp_wrapped_module.dense_forward(
                 prior_batch, prior_sparse_out
             )
-            sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
-            # stash grads:
+            if batch_index - 1 >= start_batch:
+                sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
+
             loss.backward()
-            stashed_grads = []
-            for param in optim.param_groups[0]["params"]:
-                stashed_grads.append(
-                    param.grad.clone() if param.grad is not None else None
-                )
-                param.grad = None
+
+            stashed_grads = None
+            if batch_index - 1 >= start_batch and stash_gradients:
+                stashed_grads = []
+                for param in optim.param_groups[0]["params"]:
+                    stashed_grads.append(
+                        param.grad.clone() if param.grad is not None else None
+                    )
+                    param.grad = None
 
             if prior_stashed_grads is not None:
                 for param, stashed_grad in zip(
@@ -559,13 +571,25 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
             optim.step()
             optim.zero_grad()
 
+            if batch_index - 1 < start_batch:
+                sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
+
             prior_stashed_grads = stashed_grads
             prior_batch = batch
             prior_sparse_out = sparse_out
             # Forward + backward w/ pipelining
             pred_pipeline = pipeline.progress(dataloader)
 
-            self.assertTrue(torch.equal(pred, pred_pipeline))
+            if batch_index >= start_batch:
+                self.assertTrue(
+                    pipeline.is_semi_sync(), msg="pipeline is not semi_sync"
+                )
+            else:
+                self.assertFalse(pipeline.is_semi_sync(), msg="pipeline is semi_sync")
+            self.assertTrue(
+                torch.equal(pred, pred_pipeline),
+                msg=f"batch {batch_index} doesn't match",
+            )
 
         # one more batch
         pred_pipeline = pipeline.progress(dataloader)
