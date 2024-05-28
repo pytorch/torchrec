@@ -265,7 +265,7 @@
               
               
                 <div class="version">
-                  0.8.0.dev20240524+cpu
+                  0.8.0.dev20240528+cpu
                 </div>
               
             
@@ -452,19 +452,31 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllSequenceInfo">All2AllSequenceInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2Allv_Req">All2Allv_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all2allv_sync">all2allv_sync() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2Allv_Wait">All2Allv_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo">All2AllVInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_gather_base_pooled">all_gather_base_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_gather_base_sync">all_gather_base_sync() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_gather_into_tensor_backward">all_gather_into_tensor_backward() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_gather_into_tensor_fake">all_gather_into_tensor_fake() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_gather_into_tensor_setup_context">all_gather_into_tensor_setup_context() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_to_all_single_backward">all_to_all_single_backward() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_to_all_single_fake">all_to_all_single_fake() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_to_all_single_setup_context">all_to_all_single_setup_context() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.AllGatherBase_Req">AllGatherBase_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
@@ -1429,8 +1441,6 @@
 </li>
       </ul></li>
       <li><a href="torchrec.models.html#torchrec.models.deepfm.FMInteractionArch">FMInteractionArch (class in torchrec.models.deepfm)</a>
-</li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.fn">fn() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.for_each_module_of_type_do">for_each_module_of_type_do() (in module torchrec.quant.embedding_modules)</a>
 </li>
@@ -2697,6 +2707,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.pg">pg (torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.pg_name">pg_name() (in module torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.pin_memory">pin_memory() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.BatchingMetadata.pinned">pinned (torchrec.inference.modules.BatchingMetadata attribute)</a>
@@ -2985,6 +2997,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_sync">reduce_scatter_sync() (in module torchrec.distributed.comm_ops)</a>
 </li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_tensor_backward">reduce_scatter_tensor_backward() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_tensor_fake">reduce_scatter_tensor_fake() (in module torchrec.distributed.comm_ops)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_tensor_setup_context">reduce_scatter_tensor_setup_context() (in module torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_v_per_feature_pooled">reduce_scatter_v_per_feature_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_v_pooled">reduce_scatter_v_pooled() (in module torchrec.distributed.comm_ops)</a>
@@ -2995,12 +3013,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait">ReduceScatter_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req">ReduceScatterBase_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait">ReduceScatterBase_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo">ReduceScatterBaseInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterInfo">ReduceScatterInfo (class in torchrec.distributed.comm_ops)</a>
