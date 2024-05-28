@@ -11,6 +11,18 @@ from typing import List
 
 import torch
 
+USE_TORCHDYNAMO_COMPILING_PATH: bool = False
+
+
+def set_use_torchdynamo_compiling_path(val: bool) -> None:
+    global USE_TORCHDYNAMO_COMPILING_PATH
+    USE_TORCHDYNAMO_COMPILING_PATH = val
+
+
+def get_use_torchdynamo_compiling_path() -> bool:
+    global USE_TORCHDYNAMO_COMPILING_PATH
+    return USE_TORCHDYNAMO_COMPILING_PATH
+
 
 try:
     if torch.jit.is_scripting():
@@ -18,15 +30,23 @@ try:
 
     from torch.compiler import (
         is_compiling as is_compiler_compiling,
-        is_dynamo_compiling as is_torchdynamo_compiling,
+        is_dynamo_compiling as _is_torchdynamo_compiling,
     )
+
+    def is_torchdynamo_compiling() -> bool:
+        if torch.jit.is_scripting():
+            return False
+
+        # Can not use global variable here, as it is not supported in TorchScript
+        # (It parses full method src even there is a guard torch.jit.is_scripting())
+        return get_use_torchdynamo_compiling_path() or _is_torchdynamo_compiling()
 
     def is_non_strict_exporting() -> bool:
         return not is_torchdynamo_compiling() and is_compiler_compiling()
 
 except Exception:
     # BC for torch versions without compiler and torch deploy path
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
+    def is_torchdynamo_compiling() -> bool:
         return False
 
     def is_non_strict_exporting() -> bool:

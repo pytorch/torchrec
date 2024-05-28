@@ -17,6 +17,7 @@ import fbgemm_gpu.sparse_ops  # noqa: F401, E402
 
 import torch
 import torchrec
+import torchrec.pt2.checks
 from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -92,6 +93,11 @@ class _ModelType(Enum):
 class _InputType(Enum):
     SINGLE_BATCH = 1
     VARIABLE_BATCH = 2
+
+
+class _ConvertToVariableBatch(Enum):
+    FALSE = 0
+    TRUE = 1
 
 
 class EBCSharderFixedShardingType(EmbeddingBagCollectionSharder):
@@ -333,6 +339,8 @@ def _test_compile_rank_fn(
         kjt_ft = kjt_for_pt2_tracing(kjt, convert_to_vb=convert_to_vb)
 
         torchrec.distributed.comm_ops.set_use_sync_collectives(True)
+        torchrec.pt2.checks.set_use_torchdynamo_compiling_path(True)
+
         dmp.train(True)
 
         eager_out = dmp(kjt_ft)
@@ -385,14 +393,14 @@ class TestPt2Train(MultiProcessTestBase):
                     _ModelType.EBC,
                     ShardingType.TABLE_WISE.value,
                     _InputType.SINGLE_BATCH,
-                    True,
+                    _ConvertToVariableBatch.TRUE,
                     "eager",
                 ),
                 (
                     _ModelType.EBC,
                     ShardingType.COLUMN_WISE.value,
                     _InputType.SINGLE_BATCH,
-                    True,
+                    _ConvertToVariableBatch.TRUE,
                     "eager",
                 ),
             ]
@@ -406,7 +414,7 @@ class TestPt2Train(MultiProcessTestBase):
             _ModelType,
             str,
             _InputType,
-            bool,
+            _ConvertToVariableBatch,
             str,
         ],
     ) -> None:
@@ -421,6 +429,6 @@ class TestPt2Train(MultiProcessTestBase):
             sharding_type=sharding_type,
             kernel_type=kernel_type,
             input_type=input_type,
-            convert_to_vb=tovb,
+            convert_to_vb=tovb == _ConvertToVariableBatch.TRUE,
             torch_compile_backend=compile_backend,
         )

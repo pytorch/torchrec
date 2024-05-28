@@ -17,7 +17,12 @@ import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
-from torchrec.pt2.checks import pt2_checks_all_is_size, pt2_checks_tensor_slice
+from torchrec.pt2.checks import (
+    is_non_strict_exporting,
+    is_torchdynamo_compiling,
+    pt2_checks_all_is_size,
+    pt2_checks_tensor_slice,
+)
 from torchrec.streamable import Pipelineable
 
 try:
@@ -37,26 +42,6 @@ try:
     pass
 except ImportError:
     pass
-
-try:
-    if torch.jit.is_scripting():
-        raise Exception()
-
-    from torch.compiler import (
-        is_compiling as is_compiler_compiling,
-        is_dynamo_compiling as is_torchdynamo_compiling,
-    )
-
-    def is_non_strict_exporting() -> bool:
-        return not is_torchdynamo_compiling() and is_compiler_compiling()
-
-except Exception:
-    # BC for torch versions without compiler and torch deploy path
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
-
-    def is_non_strict_exporting() -> bool:
-        return False
 
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
