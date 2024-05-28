@@ -14,6 +14,7 @@ import torch.distributed as dist
 from torch import nn
 from torch.distributed._composable.contract import contract
 from torchrec.distributed.comm import get_local_size
+from torchrec.distributed.global_settings import get_propogate_device
 from torchrec.distributed.model_parallel import get_default_sharders
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.sharding_plan import (
@@ -98,10 +99,15 @@ def _shard(
         env = ShardingEnv.from_process_group(pg)
 
     if device is None:
-        if torch.cuda.is_available():
-            device = torch.device(torch.cuda.current_device())
+        if get_propogate_device():
+            device = torch.device(
+                "cpu"
+            )  # TODO: replace hardcoded cpu with DEFAULT_DEVICE_TYPE in torchrec.distributed.types when torch package issue resolved
         else:
-            device = torch.device("cpu")
+            if torch.cuda.is_available():
+                device = torch.device(torch.cuda.current_device())
+            else:
+                device = torch.device("cpu")
 
     if isinstance(plan, ModuleShardingPlan):
         return sharder.shard(module, plan, env, device)
@@ -213,10 +219,15 @@ def _shard_modules(  # noqa: C901
         env = ShardingEnv.from_process_group(pg)
 
     if device is None:
-        if torch.cuda.is_available():
-            device = torch.device(torch.cuda.current_device())
+        if get_propogate_device():
+            device = torch.device(
+                "cpu"
+            )  # TODO: replace hardcoded cpu with DEFAULT_DEVICE_TYPE in torchrec.distributed.types when torch package issue resolved
         else:
-            device = torch.device("cpu")
+            if torch.cuda.is_available():
+                device = torch.device(torch.cuda.current_device())
+            else:
+                device = torch.device("cpu")
 
     sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
         sharder.module_type: sharder for sharder in sharders

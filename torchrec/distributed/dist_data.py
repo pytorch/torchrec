@@ -25,7 +25,8 @@ from torchrec.distributed.comm_ops import (
     variable_batch_alltoall_pooled,
 )
 from torchrec.distributed.embedding_types import KJTList
-from torchrec.distributed.types import Awaitable, QuantizedCommCodecs
+from torchrec.distributed.global_settings import get_propogate_device
+from torchrec.distributed.types import Awaitable, QuantizedCommCodecs, rank_device
 from torchrec.fx.utils import fx_marker
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -652,12 +653,18 @@ class KJTOneToAll(nn.Module):
         super().__init__()
         self._splits = splits
         self._world_size = world_size
-        # If no device is provided, use "cuda".
-        self._device_type: str = (
-            device.type
-            if device is not None and device.type in {"meta", "cuda", "mtia"}
-            else "cuda"
-        )
+
+        if get_propogate_device():
+            self._device_type: str = (
+                "cpu" if device is None else device.type
+            )  # TODO: replace hardcoded cpu with DEFAULT_DEVICE_TYPE in torchrec.distributed.types when torch package issue resolved
+        else:
+            # If no device is provided, use "cuda".
+            self._device_type: str = (
+                device.type
+                if device is not None and device.type in {"meta", "cuda", "mtia"}
+                else "cuda"
+            )
         assert self._world_size == len(splits)
 
     def forward(self, kjt: KeyedJaggedTensor) -> KJTList:
@@ -677,7 +684,8 @@ class KJTOneToAll(nn.Module):
                 kjts[rank]
                 if self._device_type == "meta"
                 else kjts[rank].to(
-                    torch.device(self._device_type, rank), non_blocking=True
+                    rank_device(self._device_type, rank),
+                    non_blocking=True,
                 )
             )
             for rank in range(self._world_size)
