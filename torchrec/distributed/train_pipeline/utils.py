@@ -33,7 +33,7 @@ from torch import distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.fx.node import Node
 from torch.profiler import record_function
-from torchrec.distributed.dist_data import KJTAllToAll
+from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
 from torchrec.distributed.embedding_sharding import (
     FusedKJTListSplitsAwaitable,
     KJTListSplitsAwaitable,
@@ -671,6 +671,7 @@ def _jit_modules(module: torch.nn.Module, path: str, optional: bool = True) -> b
     return len(sharded_children) > 0
 
 
+# pyre-ignore[3]
 def _rewrite_model(  # noqa C901
     model: torch.nn.Module,
     context: TrainPipelineContext,
@@ -678,7 +679,7 @@ def _rewrite_model(  # noqa C901
     batch: Optional[In] = None,
     apply_jit: bool = False,
     pipelined_forward: Type[BaseForward] = PipelinedForward,
-) -> Tuple[List[ShardedModule], torch.nn.Module]:
+) -> Tuple[List[ShardedModule], torch.nn.Module, List[Callable[..., Any]]]:
     input_model = model
     # Get underlying nn.Module
     if isinstance(model, DistributedModelParallel):
@@ -714,6 +715,7 @@ def _rewrite_model(  # noqa C901
     # Select sharded modules, which are top-level in the forward call graph,
     # i.e. don't have input transformations, i.e. rely only on 'builtins.getattr'.
     pipelined_forwards = []
+    original_forwards = []
     for node in graph.nodes:
         if node.op == "call_module" and node.target in sharded_modules:
             total_num_args = len(node.args) + len(node.kwargs)
@@ -724,6 +726,7 @@ def _rewrite_model(  # noqa C901
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
                 child = sharded_modules[node.target]
+                original_forwards.append(child.forward)
                 child.forward = pipelined_forward(
                     node.target,
                     arg_info_list,
@@ -744,14 +747,17 @@ def _rewrite_model(  # noqa C901
         if isinstance(input_model, DistributedModelParallel):
             input_model.module = graph_model
 
-    return pipelined_forwards, input_model
+    return pipelined_forwards, input_model, original_forwards
 
 
-def _override_input_dist_forwards(pipelined_modules: List[ShardedModule]) -> None:
+def _override_input_dist_forwards(
+    pipelined_modules: List[ShardedModule],
+) -> List[Callable[[KeyedJaggedTensor], Awaitable[KJTAllToAllTensorsAwaitable]]]:
     """
     Overrides each input dist forward to support fusing the splits collective.
     NOTE: this can only be called after the input dists are initialized.
     """
+    original_kjt_dist_forwards = []
     for module in pipelined_modules:
         for child_fqn, child_module in module.named_modules():
             if hasattr(child_module, "_has_uninitialized_input_dist"):
@@ -765,11 +771,13 @@ def _override_input_dist_forwards(pipelined_modules: List[ShardedModule]) -> Non
             for input_dist in child_module._input_dists:
                 if hasattr(input_dist, "_dist"):
                     assert isinstance(input_dist._dist, KJTAllToAll)
+                    original_kjt_dist_forwards.append(input_dist._dist.forward)
                     input_dist._dist.forward = KJTAllToAllForward(
                         pg=input_dist._dist._pg,
                         splits=input_dist._dist._splits,
                         stagger=input_dist._dist._stagger,
                     )
+    return original_kjt_dist_forwards
 
 
 def get_h2d_func(batch: In, device: torch.device) -> Pipelineable:
@@ -870,31 +878,70 @@ class SparseDataDistUtil(Generic[In]):
         self.context = TrainPipelineContext(version=0)
         self.initialized = False
         self._pipelined_modules: List[ShardedModule] = []
+        # pyre-ignore
+        self.fwd_hook = None
 
         # pyre-ignore
-        self.original_forward = self.model.forward
+        self._original_forwards: List[Callable[..., Any]] = []
+        self._original_kjt_dist_forwards: List[
+            Callable[[KeyedJaggedTensor], Awaitable[KJTAllToAllTensorsAwaitable]]
+        ] = []
 
-        def forward_hook(
-            module: torch.nn.Module,
-            input: Union[torch.Tensor, Tuple[torch.Tensor]],
-            output: Union[torch.Tensor, Tuple[torch.Tensor]],
-        ) -> None:
-            self.wait_sparse_data_dist()
+    def detach(self) -> torch.nn.Module:
+        """
+        Removes sparse data dist (SDD) pipelining from the model forward.
+        Returns the original model.
 
-        self.model.register_forward_hook(forward_hook)
+        To pipeline SDD again, call attach_model(model)
+        """
+        if self.initialized:
+            assert self.fwd_hook is not None
+            self.fwd_hook.remove()
+
+            kjt_dist_fwds = iter(self._original_kjt_dist_forwards)
+            for mod, original_fwd in zip(
+                self._pipelined_modules, self._original_forwards
+            ):
+                # pyre-ignore
+                mod.forward = original_fwd
+                for _, child_module in mod.named_modules():
+                    if not hasattr(child_module, "_input_dists"):
+                        continue
+                    for input_dist in child_module._input_dists:
+                        if hasattr(input_dist, "_dist"):
+                            input_dist._dist.forward = next(kjt_dist_fwds)
+
+        self.initialized = False
+        return self.model
 
     def start_sparse_data_dist(self, batch: In) -> In:
         if not self.initialized:
-            self._pipelined_modules, self.model = _rewrite_model(
-                model=self.model,
-                context=self.context,
-                dist_stream=self.stream,
-                batch=batch,
-                apply_jit=self.apply_jit,
+            # Step 1: Pipeline input dist in trec sharded modules
+            self._pipelined_modules, self.model, self._original_forwards = (
+                _rewrite_model(
+                    model=self.model,
+                    context=self.context,
+                    dist_stream=self.stream,
+                    batch=batch,
+                    apply_jit=self.apply_jit,
+                )
             )
             # initializes input dist, so we can override input dist forwards
             _start_data_dist(self._pipelined_modules, batch, self.context)
-            _override_input_dist_forwards(self._pipelined_modules)
+            self._original_kjt_dist_forwards = _override_input_dist_forwards(
+                self._pipelined_modules
+            )
+
+            # Step 2: Register post-forward hook to wait SDD
+            def forward_hook(
+                module: torch.nn.Module,
+                input: Union[torch.Tensor, Tuple[torch.Tensor]],
+                output: Union[torch.Tensor, Tuple[torch.Tensor]],
+            ) -> None:
+                self.wait_sparse_data_dist()
+
+            self.fwd_hook = self.model.register_forward_hook(forward_hook)
+
             self.initialized = True
 
         _start_data_dist(self._pipelined_modules, batch, self.context)

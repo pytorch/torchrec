@@ -309,7 +309,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self.start_sparse_data_dist(batch, context)
             return
 
-        self._pipelined_modules, self._model = _rewrite_model(
+        self._pipelined_modules, self._model, _ = _rewrite_model(
             model=self._model,
             context=context,
             dist_stream=self._data_dist_stream,
