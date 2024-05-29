@@ -9,7 +9,7 @@
 
 #!/usr/bin/env python3
 
-from typing import List, Tuple, Type
+from typing import List, Optional, Tuple, Type
 
 import torch
 
@@ -45,6 +45,7 @@ def serialize_embedding_modules(
 def deserialize_embedding_modules(
     ep: ExportedProgram,
     serializer_cls: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
+    device: Optional[torch.device] = None,
 ) -> nn.Module:
     """
     Takes ExportedProgram (IR) and looks for ir_metadata buffer.
@@ -72,7 +73,9 @@ def deserialize_embedding_modules(
                 )
 
             deserialized_module = serializer_cls.deserialize(
-                serialized_module, module_type_dict[fqn]
+                serialized_module,
+                module_type_dict[fqn],
+                device,
             )
             fqn_to_new_module[fqn] = deserialized_module
 
