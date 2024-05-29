@@ -49,11 +49,12 @@ from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
     TBEToRegisterMixIn,
 )
+from torchrec.distributed.global_settings import get_propogate_device
 from torchrec.distributed.quant_embedding_kernel import (
     QuantBatchedEmbedding,
     QuantBatchedEmbeddingBag,
 )
-from torchrec.distributed.types import ShardedTensor, ShardingType
+from torchrec.distributed.types import rank_device, ShardedTensor, ShardingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -911,20 +912,21 @@ class InferGroupedPooledEmbeddingsLookup(
         self._embedding_lookups_per_rank: List[
             MetaInferGroupedPooledEmbeddingsLookup
         ] = []
+        if get_propogate_device():
+            device_type: str = (
+                "cpu" if device is None else device.type
+            )  # TODO: replace hardcoded cpu with DEFAULT_DEVICE_TYPE in torchrec.distributed.types when torch package issue resolved
+        else:
+            device_type = (
+                "meta" if device is not None and device.type == "meta" else "cuda"
+            )
 
-        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 # TODO add position weighted module support
                 MetaInferGroupedPooledEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    # syntax for torchscript
-                    # No rank for cpu
-                    device=(
-                        torch.device(type=device_type, index=rank)
-                        if device_type != "cpu"
-                        else torch.device(device_type)
-                    ),
+                    device=rank_device(device_type, rank),
                     fused_params=fused_params,
                 )
             )
@@ -950,13 +952,19 @@ class InferGroupedEmbeddingsLookup(
         super().__init__()
         self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
 
-        device_type = "meta" if device is not None and device.type == "meta" else "cuda"
+        if get_propogate_device():
+            device_type: str = (
+                "cpu" if device is None else device.type
+            )  # TODO: replace hardcoded cpu with DEFAULT_DEVICE_TYPE in torchrec.distributed.types when torch package issue resolved
+        else:
+            device_type = (
+                "meta" if device is not None and device.type == "meta" else "cuda"
+            )
         for rank in range(world_size):
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    # syntax for torchscript
-                    device=torch.device(type=device_type, index=rank),
+                    device=rank_device(device_type, rank),
                     fused_params=fused_params,
                 )
             )

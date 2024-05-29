@@ -49,15 +49,8 @@ from torchrec.distributed.train_pipeline.utils import (
     TrainPipelineContext,
 )
 from torchrec.distributed.types import Awaitable
+from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.streamable import Multistreamable
-
-
-try:
-    from torch._dynamo import is_compiling as is_torchdynamo_compiling
-except Exception:
-
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -468,6 +461,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         execute_all_batches (bool): executes remaining batches in pipeline after
             exhausting dataloader iterator.
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+        start_batch (int): batch to begin semi-sync training.
+        stash_gradients (bool): if True, will store gradients for each parameter to insure true "Semi-Sync"
+            training.  If False, will update dense optimizer as soon as gradients available (naive "Semi-Sync)
     """
 
     def __init__(
@@ -477,6 +473,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         device: torch.device,
         execute_all_batches: bool = True,
         apply_jit: bool = False,
+        start_batch: int = 0,
+        stash_gradients: bool = True,
     ) -> None:
         super().__init__(
             model=model,
@@ -486,6 +484,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             apply_jit=apply_jit,
             context_type=EmbeddingTrainPipelineContext,
         )
+        self._start_batch = start_batch
+        self._stash_gradients = stash_gradients
 
         # use two data streams to support two concurrent batches
         self._embedding_odd_stream: Optional[torch.cuda.streams.Stream] = (
@@ -540,6 +540,22 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if not self.enqueue_batch(dataloader_iter):
             return
 
+    def is_semi_sync(self) -> bool:
+        if len(self.batches) >= 1:
+            # pyre-ignore [58]
+            return self.contexts[0].index >= self._start_batch
+        return False
+
+    def _mlp_optimizer_step(self) -> None:
+        # special case: not all optimizers support optim.step() on null gradidents
+        if (
+            len(self.batches) >= 1
+            and self.contexts[0].index == self._start_batch
+            and self._stash_gradients
+        ):
+            return
+        self._optimizer.step()
+
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         self.fill_pipeline(dataloader_iter)
         if not self.batches:
@@ -556,7 +572,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         # batch i+3
         self.enqueue_batch(dataloader_iter)
 
-        if len(self.batches) >= 2:
+        if len(self.batches) >= 2 and self.is_semi_sync():
             # pyre-ignore [6]
             self.start_embedding_lookup(self.batches[1], self.contexts[1])
 
@@ -569,13 +585,18 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                 with record_function(
                     f"## optimizer {cast(int, self.contexts[0].index) - 1} ##"
                 ):
-                    self._grad_swap()
-                    self._optimizer.step()
+                    if self.is_semi_sync() and self._stash_gradients:
+                        self._grad_swap()
+                    self._mlp_optimizer_step()
 
                 with record_function(
                     f"## zero_grad {cast(int, self.contexts[0].index) - 1} ##"
                 ):
                     self._optimizer.zero_grad()
+
+        if len(self.batches) >= 2 and not self.is_semi_sync():
+            # pyre-ignore [6]
+            self.start_embedding_lookup(self.batches[1], self.contexts[1])
 
         self.dequeue_batch()
         return output
@@ -583,10 +604,6 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
     def _mlp_forward(
         self, batch: In, context: TrainPipelineContext
     ) -> Tuple[torch.Tensor, Out]:
-        if self._model.training:
-            with record_function(f"## zero_grad {context.index} ##"):
-                self._optimizer.zero_grad()
-
         with record_function(f"## forward {context.index} ##"):
             with torch.cuda.stream(self._overarch_stream):
                 _wait_for_event(batch, context.event)

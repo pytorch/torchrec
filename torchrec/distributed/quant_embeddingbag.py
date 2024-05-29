@@ -39,6 +39,7 @@ from torchrec.distributed.fused_params import (
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
 )
+from torchrec.distributed.global_settings import get_propogate_device
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
 from torchrec.distributed.sharding.cw_sharding import InferCwPooledEmbeddingSharding
 from torchrec.distributed.sharding.rw_sharding import InferRwPooledEmbeddingSharding
@@ -58,19 +59,13 @@ from torchrec.modules.embedding_configs import (
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
 from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
+from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
     MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
-
-try:
-    from torch._dynamo import is_compiling as is_torchdynamo_compiling
-except Exception:
-
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
 
 
 def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
@@ -103,16 +98,25 @@ def create_infer_embedding_bag_sharding(
     sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
+    device: Optional[torch.device] = None,
 ) -> EmbeddingSharding[
     NullShardingContext, InputDistOutputs, List[torch.Tensor], torch.Tensor
 ]:
+    propogate_device: bool = get_propogate_device()
     if sharding_type == ShardingType.TABLE_WISE.value:
-        return InferTwEmbeddingSharding(sharding_infos, env, device=None)
+        return InferTwEmbeddingSharding(
+            sharding_infos, env, device=device if propogate_device else None
+        )
     elif sharding_type == ShardingType.ROW_WISE.value:
-        return InferRwPooledEmbeddingSharding(sharding_infos, env, device=None)
+        return InferRwPooledEmbeddingSharding(
+            sharding_infos, env, device=device if propogate_device else None
+        )
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return InferCwPooledEmbeddingSharding(
-            sharding_infos, env, device=None, permute_embeddings=True
+            sharding_infos,
+            env,
+            device=device if propogate_device else None,
+            permute_embeddings=True,
         )
     else:
         raise ValueError(f"Sharding type not supported {sharding_type}")
@@ -165,6 +169,7 @@ class ShardedQuantEmbeddingBagCollection(
                     if not isinstance(env, Dict)
                     else env[get_device_from_sharding_infos(embedding_configs)]
                 ),
+                device if get_propogate_device() else None,
             )
             for (
                 sharding_type,

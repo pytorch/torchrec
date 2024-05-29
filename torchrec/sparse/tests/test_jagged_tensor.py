@@ -2150,6 +2150,17 @@ class TestKeyedTensor(unittest.TestCase):
         for key in keys:
             self.assertTrue(torch.equal(kt[key], d[key]))
 
+    def test_regroup_empty_list(self) -> None:
+        keyed_tensors = []
+        groups = []
+
+        grouped_tensors = KeyedTensor.regroup(
+            keyed_tensors=keyed_tensors,
+            groups=groups,
+        )
+
+        self.assertEqual([], grouped_tensors)
+
     def test_regroup_single_kt(self) -> None:
         tensor_list = [torch.randn(2, 3) for i in range(5)]
         key_dim = 1

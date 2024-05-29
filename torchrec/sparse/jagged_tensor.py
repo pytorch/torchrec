@@ -17,7 +17,12 @@ import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
-from torchrec.pt2.checks import pt2_checks_all_is_size, pt2_checks_tensor_slice
+from torchrec.pt2.checks import (
+    is_non_strict_exporting,
+    is_torchdynamo_compiling,
+    pt2_checks_all_is_size,
+    pt2_checks_tensor_slice,
+)
 from torchrec.streamable import Pipelineable
 
 try:
@@ -37,26 +42,6 @@ try:
     pass
 except ImportError:
     pass
-
-try:
-    if torch.jit.is_scripting():
-        raise Exception()
-
-    from torch.compiler import (
-        is_compiling as is_compiler_compiling,
-        is_dynamo_compiling as is_torchdynamo_compiling,
-    )
-
-    def is_non_strict_exporting() -> bool:
-        return not is_torchdynamo_compiling() and is_compiler_compiling()
-
-except Exception:
-    # BC for torch versions without compiler and torch deploy path
-    def is_torchdynamo_compiling() -> bool:  # type: ignore[misc]
-        return False
-
-    def is_non_strict_exporting() -> bool:
-        return False
 
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
@@ -175,6 +160,21 @@ def _all_keys_used_once(
     key_set: Dict[str, int] = {key: 1 for key in flat_keys}
     group_set: Dict[str, int] = {key: 1 for key in flat_groups}
     return len(key_set) == len(group_set) == len(flat_keys) == len(flat_groups)
+
+
+@torch.fx.wrap
+def _regroup(
+    keyed_tensors: List["KeyedTensor"],
+    groups: List[List[str]],
+) -> List[torch.Tensor]:
+    if len(keyed_tensors) == 0:
+        return []
+
+    # Fast path, one-to-one correspondence between keyed_tensors and groups
+    if _all_keys_used_once(keyed_tensors, groups) is True:
+        return _fbgemm_permute_pooled_embs(keyed_tensors, groups)
+    else:  # Fallback to slow path otherwise
+        return _regroup_keyed_tensors(keyed_tensors, groups)
 
 
 @torch.fx.wrap
@@ -2592,11 +2592,10 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def regroup(
         keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
     ) -> List[torch.Tensor]:
-        # Fast path, one-to-one correspondence between keyed_tensors and groups
-        if _all_keys_used_once(keyed_tensors, groups) is True:
-            return _fbgemm_permute_pooled_embs(keyed_tensors, groups)
-        else:  # Fallback to slow path otherwise
-            return _regroup_keyed_tensors(keyed_tensors, groups)
+        return _regroup(
+            keyed_tensors=keyed_tensors,
+            groups=groups,
+        )
 
     @staticmethod
     def regroup_as_dict(

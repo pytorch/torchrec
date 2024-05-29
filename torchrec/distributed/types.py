@@ -977,3 +977,10 @@ class ShardingPlanner(abc.ABC):
             ShardingPlan: the computed sharding plan.
         """
         ...
+
+
+def rank_device(device_type: str, rank: int) -> torch.device:
+    if device_type == "cpu":
+        return torch.device("cpu")
+
+    return torch.device(f"{device_type}:{rank}")
