@@ -760,7 +760,7 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                 if not lowest_storage.fits_in(global_storage_constraints):
                     raise PlannerError(
                         error_type=PlannerErrorType.INSUFFICIENT_STORAGE,
-                        message="Unable to find a plan for this model in device_group {group}  because of insufficient storage. \n"
+                        message=f"Unable to find a plan for this model in device_group {group}  because of insufficient storage. \n"
                         + no_plan_solution
                         + last_planner_error_info,
                     )
