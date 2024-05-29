@@ -10,7 +10,9 @@
 #!/usr/bin/env python3
 
 import abc
-from typing import Any, Dict, Type
+from typing import Any, Dict, Optional, Type
+
+import torch
 
 from torch import nn
 
@@ -38,7 +40,12 @@ class SerializerInterface(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    # pyre-ignore [2]: Parameter `input` must have a type other than `Any`.
-    def deserialize(cls, input: Any, typename: str) -> nn.Module:
+    def deserialize(
+        cls,
+        # pyre-ignore [2]: Parameter `input` must have a type other than `Any`.
+        input: Any,
+        typename: str,
+        device: Optional[torch.device] = None,
+    ) -> nn.Module:
         # Take the bytes in the buffer and regenerate the eager embedding module
         pass

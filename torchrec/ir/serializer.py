@@ -8,7 +8,8 @@
 # pyre-strict
 
 import json
-from typing import Dict, Type
+import logging
+from typing import Dict, Optional, Type
 
 import torch
 
@@ -18,6 +19,8 @@ from torchrec.ir.schema import EBCMetadata, EmbeddingBagConfigMetadata
 from torchrec.ir.types import SerializerInterface
 from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def embedding_bag_config_to_metadata(
@@ -50,6 +53,20 @@ def embedding_metadata_to_config(
         need_pos=table_config.need_pos,
         pooling=PoolingType(table_config.pooling),
     )
+
+
+def get_deserialized_device(
+    config_device: Optional[str], device: Optional[torch.device]
+) -> Optional[torch.device]:
+    if config_device:
+        original_device = torch.device(config_device)
+        if device is None:
+            device = original_device
+        elif original_device.type != device.type:
+            logger.warning(
+                f"deserialized device={device} overrides the original device={original_device}"
+            )
+    return device
 
 
 class EBCJsonSerializer(SerializerInterface):
@@ -86,7 +103,9 @@ class EBCJsonSerializer(SerializerInterface):
         )
 
     @classmethod
-    def deserialize(cls, input: torch.Tensor, typename: str) -> nn.Module:
+    def deserialize(
+        cls, input: torch.Tensor, typename: str, device: Optional[torch.device] = None
+    ) -> nn.Module:
         if typename != "EmbeddingBagCollection":
             raise ValueError(
                 f"Expected typename to be EmbeddingBagCollection, got {typename}"
@@ -99,16 +118,13 @@ class EBCJsonSerializer(SerializerInterface):
             for table_config in ebc_metadata_dict["tables"]
         ]
 
+        device = get_deserialized_device(ebc_metadata_dict.get("device"), device)
         return EmbeddingBagCollection(
             tables=[
                 embedding_metadata_to_config(table_config) for table_config in tables
             ],
             is_weighted=ebc_metadata_dict["is_weighted"],
-            device=(
-                torch.device(ebc_metadata_dict["device"])
-                if ebc_metadata_dict["device"]
-                else None
-            ),
+            device=device,
         )
 
 
@@ -135,10 +151,14 @@ class JsonSerializer(SerializerInterface):
         return cls.module_to_serializer_cls[typename].serialize(module)
 
     @classmethod
-    def deserialize(cls, input: torch.Tensor, typename: str) -> nn.Module:
+    def deserialize(
+        cls, input: torch.Tensor, typename: str, device: Optional[torch.device] = None
+    ) -> nn.Module:
         if typename not in cls.module_to_serializer_cls:
             raise ValueError(
                 f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
             )
 
-        return cls.module_to_serializer_cls[typename].deserialize(input, typename)
+        return cls.module_to_serializer_cls[typename].deserialize(
+            input, typename, device
+        )

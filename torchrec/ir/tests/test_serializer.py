@@ -128,7 +128,7 @@ class TestJsonSerializer(unittest.TestCase):
         for i, tensor in enumerate(ep_output):
             self.assertEqual(eager_out[i].shape, tensor.shape)
 
-        # Only 1 custom op registered, as dimensions of ebc are same
+        # Only 2 custom op registered, as dimensions of ebc are same
         self.assertEqual(len(operator_registry_state.op_registry_schema), 2)
 
         total_dim_ebc = sum(model.ebc1._lengths_per_embedding)
@@ -173,3 +173,39 @@ class TestJsonSerializer(unittest.TestCase):
         for i, tensor in enumerate(deserialized_out):
             assert eager_out[i].shape == tensor.shape
             assert torch.allclose(eager_out[i], tensor)
+
+    def test_deserialized_device(self) -> None:
+        model = self.generate_model()
+        id_list_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+        )
+
+        # Serialize EBC
+        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        ep = torch.export.export(
+            model,
+            (id_list_features,),
+            {},
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=(tuple(sparse_fqns)),
+        )
+
+        # Deserialize EBC on different devices (<cpu>, <cuda>, <meta>)
+        for device in ["cpu", "cuda", "meta"]:
+            if device == "cuda" and not torch.cuda.is_available():
+                continue
+            device = torch.device(device)
+            deserialized_model = deserialize_embedding_modules(
+                ep, JsonSerializer, device
+            )
+            for name, m in deserialized_model.named_modules():
+                if hasattr(m, "device"):
+                    assert m.device.type == device.type, f"{name} should be on {device}"
+            for name, param in deserialized_model.named_parameters():
+                # TODO: we don't support FPEBC yet, so we skip the FPEBC params
+                if "_feature_processors" in name:
+                    continue
+                assert param.device.type == device.type, f"{name} should be on {device}"
