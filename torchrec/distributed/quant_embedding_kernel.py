@@ -338,7 +338,9 @@ class QuantBatchedEmbeddingBag(
         ]
 
     @classmethod
-    def from_float(cls, module: BaseEmbedding) -> "QuantBatchedEmbeddingBag":
+    def from_float(
+        cls, module: BaseEmbedding, use_precomputed_fake_quant: bool = False
+    ) -> "QuantBatchedEmbeddingBag":
         assert hasattr(
             module, "qconfig"
         ), "BaseEmbedding input float module must have qconfig defined"
@@ -490,7 +492,9 @@ class QuantBatchedEmbedding(
                 yield append_prefix(prefix, f"{config.name}.weight_qbias"), weight_qbias
 
     @classmethod
-    def from_float(cls, module: BaseEmbedding) -> "QuantBatchedEmbedding":
+    def from_float(
+        cls, module: BaseEmbedding, use_precomputed_fake_quant: bool = False
+    ) -> "QuantBatchedEmbedding":
         assert hasattr(
             module, "qconfig"
         ), "BaseEmbedding input float module must have qconfig defined"
