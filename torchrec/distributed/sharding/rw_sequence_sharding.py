@@ -31,7 +31,6 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
-    InferCPURwSparseFeaturesDist,
     InferRwSparseFeaturesDist,
     RwSparseFeaturesDist,
 )
@@ -299,7 +298,7 @@ class InferCPURwSequenceEmbeddingSharding(
                 shard_split_offsets.append(table.global_metadata.size[0])
                 emb_sharding.extend([shard_split_offsets] * len(table.embedding_names))
 
-        return InferCPURwSparseFeaturesDist(
+        return InferRwSparseFeaturesDist(
             world_size=self._world_size,
             num_features=num_features,
             feature_hash_sizes=feature_hash_sizes,
@@ -307,7 +306,7 @@ class InferCPURwSequenceEmbeddingSharding(
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
             need_pos=False,
-            emb_sharding=emb_sharding,
+            embedding_shard_metadata=emb_sharding,
         )
 
     def create_lookup(
