@@ -514,7 +514,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
 
     @classmethod
     def from_float(
-        cls, module: OriginalEmbeddingBagCollection
+        cls,
+        module: OriginalEmbeddingBagCollection,
+        use_precomputed_fake_quant: bool = False,
     ) -> "EmbeddingBagCollection":
         assert hasattr(
             module, "qconfig"
@@ -617,7 +619,9 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
     @classmethod
     # pyre-ignore
     def from_float(
-        cls, module: OriginalFeatureProcessedEmbeddingBagCollection
+        cls,
+        module: OriginalFeatureProcessedEmbeddingBagCollection,
+        use_precomputed_fake_quant: bool = False,
     ) -> "FeatureProcessedEmbeddingBagCollection":
         fp_ebc = module
         ebc = module._embedding_bag_collection
@@ -903,7 +907,11 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         return feature_embeddings
 
     @classmethod
-    def from_float(cls, module: OriginalEmbeddingCollection) -> "EmbeddingCollection":
+    def from_float(
+        cls,
+        module: OriginalEmbeddingCollection,
+        use_precomputed_fake_quant: bool = False,
+    ) -> "EmbeddingCollection":
         assert hasattr(
             module, "qconfig"
         ), "EmbeddingCollection input float module must have qconfig defined"
