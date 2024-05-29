@@ -603,6 +603,80 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
         ),
         sharding_type=st.sampled_from(
             [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_optimizer_load_state_dict(
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+    ) -> None:
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    fused_params={
+                        "optimizer": EmbOptimType.EXACT_ROWWISE_ADAGRAD,
+                    },
+                ),
+            ),
+        ]
+        models, batch = self._generate_dmps_and_batch(sharders)
+        m1, m2 = models
+
+        # train m1 a bit, to make sure the optimizer state is not zero
+        self._train_models(m1, m1, batch)
+        # sync the state dict
+        m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
+        # train both models, so they should diverage
+        self._train_models(m1, m2, batch)
+        # expect eval models to fail, since one model starts with non-zero optimizer state
+        with self.assertRaises(AssertionError):
+            self._eval_models(m1, m2, batch)
+
+        # sync state dict again
+        m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
+        # load state dict for optimizer as well
+        opt1 = m1.fused_optimizer
+        opt2 = m2.fused_optimizer
+        opt1.load_state_dict(opt2.state_dict())
+
+        self._train_models(m1, m2, batch)
+        self._eval_models(m1, m2, batch)
+        self._compare_models(m1, m2)
+
+    # pyre-ignore[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
                 ShardingType.DATA_PARALLEL.value,
             ]
         ),
