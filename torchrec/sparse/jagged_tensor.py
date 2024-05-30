@@ -307,6 +307,7 @@ def _permute_tensor_by_segments(
     segment_sizes: torch.Tensor,
     recat: torch.Tensor,
     weights: Optional[torch.Tensor] = None,
+    output_size: Optional[int] = None,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     """
     Permutes a tensor by segments according to recat tensor.
@@ -321,12 +322,13 @@ def _permute_tensor_by_segments(
     """
     if tensor.device.type == "cuda":
         output = torch.ops.fbgemm.keyed_jagged_index_select_dim1(
-            tensor,
-            segment_sizes,
-            _to_offsets(segment_sizes),
-            recat,
-            segment_sizes.numel(),
-            weights,
+            values=tensor,
+            lengths=segment_sizes,
+            offsets=_to_offsets(segment_sizes),
+            indices=recat,
+            batch_size=segment_sizes.numel(),
+            weights=weights,
+            selected_lengths_sum=output_size,
         )
         permuted_tensor = output[0]
         permuted_weights = None if weights is None else output[2]
