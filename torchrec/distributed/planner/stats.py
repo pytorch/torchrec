@@ -51,6 +51,67 @@ logger: logging.Logger = logging.getLogger(__name__)
 MIN_WIDTH = 90
 
 
+def _normalize_float(p: List[float]) -> List[float]:
+    p_total = sum(p)
+    return [p_i / p_total for p_i in p]
+
+
+def _normalize_int(p: List[int]) -> List[float]:
+    p_total = sum(p)
+    return [p_i * 1.0 / p_total for p_i in p]
+
+
+def _total_variation(p: List[float]) -> float:
+    k = len(p)
+    if not k:
+        return -1.0
+    return max(abs(pi - 1.0 / k) for pi in p)
+
+
+def _total_distance(p: List[float]) -> float:
+    k = len(p)
+    if not k:
+        return -1.0
+    return sum(abs(pi - 1.0 / k) for pi in p)
+
+
+def _chi_divergence(p: List[float], alpha: float = 1.0) -> float:
+    assert alpha >= 1
+    k = len(p)
+    if not k:
+        return -1.0
+    return sum(abs(pi - 1.0 / k) ** alpha * k ** (alpha - 1.0) for pi in p)
+
+
+def _kl_divergence(p: List[float]) -> float:
+    k = len(p)
+    if not k:
+        return -1.0
+    return sum(pi * math.log(k * pi) for pi in p if pi > 0)
+
+
+def _calc_max_chi_divergence(N: int, alpha: float) -> float:
+    assert N > 0
+    # Upper bound for chi divergence in our case given sample size of distribution (N) and alpha
+    return (N - 1) ** alpha * (1.0 / N) + (N - 1) * (1.0 / N)
+
+
+def _calc_max_kl_divergence(N: int) -> float:
+    assert N > 0
+    # Upper bound for KL divergence in our case given sample size of distribution (N)
+    return math.log(N)
+
+
+CHI_DIVERGENCE_ALPHA = 1.0
+
+IMBALANCE_STAT_MEASURE: Dict[str, Tuple[Callable[..., float], Dict[str, Any]]] = {
+    "Total Variation": (_total_variation, {}),
+    "Total Distance": (_total_distance, {}),
+    "Chi Divergence": (_chi_divergence, {"alpha": CHI_DIVERGENCE_ALPHA}),
+    "KL Divergence": (_kl_divergence, {}),
+}
+
+
 class EmbeddingStats(Stats):
     """
     Stats for a sharding planner execution.
@@ -436,6 +497,14 @@ class EmbeddingStats(Stats):
 
         if debug:
             if sharding_plan.plan:
+                # Plan imbalance stats for perf and storage
+                self._log_plan_imbalance_stats(
+                    perf,
+                    used_hbm,
+                    used_ddr,
+                )
+
+                # Max perf and HBM to help root cause imbalance
                 self._log_max_perf_and_max_hbm(perf, used_hbm)
             self._log_storage_reservation_stats(
                 storage_reservation,
@@ -508,6 +577,74 @@ class EmbeddingStats(Stats):
         output_sizes = [bytes_to_mb(output_size) for output_size in output_sizes]
 
         return ranks, input_sizes, output_sizes
+
+    def _log_dist_imbalance_stats(
+        self,
+        normalized_dist: List[float],
+    ) -> None:
+        for name, (measure, kwargs) in IMBALANCE_STAT_MEASURE.items():
+            result_txt = f"{name}: {measure(normalized_dist, **kwargs):.3f}"
+            self._stats_table.append(f"# {result_txt : <{self._width-3}}#")
+
+    def _log_plan_imbalance_stats(
+        self, perf: List[Perf], used_hbm: List[int], used_ddr: List[int]
+    ) -> None:
+        imbalance_logged = False
+        total_perfs = [perf_i.total for perf_i in perf]
+
+        # Can extend with fwd/bwd perfs if needed
+        perf_dists = [
+            ("Total", total_perfs),
+        ]
+
+        for name, perf_dist in perf_dists:
+            if sum(perf_dist) > 0:
+                imbalance_logged = True
+                self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+                self._stats_table.append(
+                    f"# {name + ' Perf Imbalance Statistics' : <{self._width-3}}#"
+                )
+                normalized_perf_dist = _normalize_float(perf_dist)
+                self._log_dist_imbalance_stats(normalized_perf_dist)
+
+        if sum(used_hbm) > 0:
+            imbalance_logged = True
+            normalized_used_hbm = _normalize_int(used_hbm)
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(
+                f"# {'HBM Imbalance Statistics' : <{self._width-3}}#"
+            )
+            self._log_dist_imbalance_stats(normalized_used_hbm)
+
+        if sum(used_ddr) > 0:
+            imbalance_logged = True
+            normalized_used_ddr = _normalize_int(used_ddr)
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(
+                f"# {'DDR Imbalance Statistics' : <{self._width-3}}#"
+            )
+            self._log_dist_imbalance_stats(normalized_used_ddr)
+
+        if imbalance_logged:
+            self._stats_table.append(f"#{'' : ^{self._width-2}}#")
+            self._stats_table.append(
+                f"# {'Total Variation: higher means more imbalanced (ranges 0 to 1)' : <{self._width-3}}#"
+            )
+            self._stats_table.append(
+                f"# {'Total Distance: higher means more imbalanced (ranges 0 to 1)' : <{self._width-3}}#"
+            )
+            N = len(perf)  # world size
+            if N > 0:
+                max_chi_divergence = _calc_max_chi_divergence(
+                    N=N, alpha=CHI_DIVERGENCE_ALPHA
+                )
+                self._stats_table.append(
+                    f"# {f'Chi Divergence: higher means more imbalanced (ranges 0 to {max_chi_divergence:.3f})' : <{self._width-3}}#"
+                )
+                max_kl_divergence = _calc_max_kl_divergence(N)
+                self._stats_table.append(
+                    f"# {f'KL Divergence: higher means more imbalanced (ranges 0 to {max_kl_divergence:.3f})' : <{self._width-3}}#"
+                )
 
     def _log_max_perf_and_max_hbm(self, perfs: List[Perf], used_hbm: List[int]) -> None:
 
