@@ -114,21 +114,19 @@ def _fx_wrap_opt_to_nonopt_tensor(optional: Optional[torch.Tensor]) -> torch.Ten
 
 
 @torch.fx.wrap
-def _fx_wrap_block_bucketize_sparse_features_inference(
+def _fx_wrap_seq_block_bucketize_sparse_features_inference(
     kjt: KeyedJaggedTensor,
     num_buckets: int,
     block_sizes: torch.Tensor,
-    output_permute: bool = False,
     bucketize_pos: bool = False,
     block_bucketize_pos: Optional[List[torch.Tensor]] = None,
-    return_bucket_mapping: bool = False,
 ) -> Tuple[
     torch.Tensor,
     torch.Tensor,
+    Optional[torch.Tensor],
+    Optional[torch.Tensor],
     torch.Tensor,
-    Optional[torch.Tensor],
-    Optional[torch.Tensor],
-    Optional[torch.Tensor],
+    torch.Tensor,
 ]:
     (
         bucketized_lengths,
@@ -141,22 +139,63 @@ def _fx_wrap_block_bucketize_sparse_features_inference(
         kjt.lengths().view(-1),
         kjt.values(),
         bucketize_pos=bucketize_pos,
-        sequence=output_permute,
+        sequence=True,
         block_sizes=block_sizes,
         my_size=num_buckets,
         weights=kjt.weights_or_none(),
         max_B=_fx_wrap_max_B(kjt),
         block_bucketize_pos=block_bucketize_pos,
-        return_bucket_mapping=return_bucket_mapping,
+        return_bucket_mapping=True,
     )
 
     return (
         bucketized_lengths,
         bucketized_indices,
-        _fx_wrap_opt_to_nonopt_tensor(unbucketize_permute),
         bucketized_weights,
         pos,
-        bucket_mapping,
+        _fx_wrap_opt_to_nonopt_tensor(unbucketize_permute),
+        _fx_wrap_opt_to_nonopt_tensor(bucket_mapping),
+    )
+
+
+@torch.fx.wrap
+def _fx_wrap_none_seq_block_bucketize_sparse_features_inference(
+    kjt: KeyedJaggedTensor,
+    num_buckets: int,
+    block_sizes: torch.Tensor,
+    bucketize_pos: bool = False,
+    block_bucketize_pos: Optional[List[torch.Tensor]] = None,
+) -> Tuple[
+    torch.Tensor,
+    torch.Tensor,
+    Optional[torch.Tensor],
+    Optional[torch.Tensor],
+]:
+    (
+        bucketized_lengths,
+        bucketized_indices,
+        bucketized_weights,
+        pos,
+        _,
+        _,
+    ) = torch.ops.fbgemm.block_bucketize_sparse_features_inference(
+        kjt.lengths().view(-1),
+        kjt.values(),
+        bucketize_pos=bucketize_pos,
+        sequence=False,
+        block_sizes=block_sizes,
+        my_size=num_buckets,
+        weights=kjt.weights_or_none(),
+        max_B=_fx_wrap_max_B(kjt),
+        block_bucketize_pos=block_bucketize_pos,
+        return_bucket_mapping=False,
+    )
+
+    return (
+        bucketized_lengths,
+        bucketized_indices,
+        bucketized_weights,
+        pos,
     )
 
 
@@ -235,11 +274,10 @@ def bucketize_kjt_inference(
     kjt: KeyedJaggedTensor,
     num_buckets: int,
     block_sizes: torch.Tensor,
-    output_permute: bool = False,
     bucketize_pos: bool = False,
     block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
-    return_bucket_mapping: bool = False,
-) -> Tuple[KeyedJaggedTensor, torch.Tensor, Optional[torch.Tensor]]:
+    is_sequence: bool = False,
+) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
     """
     Bucketizes the `values` in KeyedJaggedTensor into `num_buckets` buckets,
     `lengths` are readjusted based on the bucketization results.
@@ -250,11 +288,10 @@ def bucketize_kjt_inference(
     Args:
         num_buckets (int): number of buckets to bucketize the values into.
         block_sizes: (torch.Tensor): bucket sizes for the keyed dimension.
-        output_permute (bool): output the memory location mapping from the unbucketized
-            values to bucketized values or not.
         bucketize_pos (bool): output the changed position of the bucketized values or
             not.
         block_bucketize_row_pos (Optional[List[torch.Tensor]]): The offsets of shard size for each feature.
+        is_sequence (bool): whether the input is a sequence feature or not.
 
     Returns:
         Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]: the bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized value.
@@ -266,23 +303,36 @@ def bucketize_kjt_inference(
         f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received.",
     )
     block_sizes_new_type = _fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values())
-
-    (
-        bucketized_lengths,
-        bucketized_indices,
-        unbucketize_permute,
-        bucketized_weights,
-        pos,
-        bucket_mapping,
-    ) = _fx_wrap_block_bucketize_sparse_features_inference(
-        kjt,
-        num_buckets=num_buckets,
-        block_sizes=block_sizes_new_type,
-        output_permute=output_permute,
-        bucketize_pos=bucketize_pos,
-        block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
-        return_bucket_mapping=return_bucket_mapping,
-    )
+    unbucketize_permute = None
+    bucket_mapping = None
+    if is_sequence:
+        (
+            bucketized_lengths,
+            bucketized_indices,
+            bucketized_weights,
+            pos,
+            unbucketize_permute,
+            bucket_mapping,
+        ) = _fx_wrap_seq_block_bucketize_sparse_features_inference(
+            kjt,
+            num_buckets=num_buckets,
+            block_sizes=block_sizes_new_type,
+            bucketize_pos=bucketize_pos,
+            block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
+        )
+    else:
+        (
+            bucketized_lengths,
+            bucketized_indices,
+            bucketized_weights,
+            pos,
+        ) = _fx_wrap_none_seq_block_bucketize_sparse_features_inference(
+            kjt,
+            num_buckets=num_buckets,
+            block_sizes=block_sizes_new_type,
+            bucketize_pos=bucketize_pos,
+            block_bucketize_pos=block_bucketize_row_pos,
+        )
 
     return (
         KeyedJaggedTensor(
