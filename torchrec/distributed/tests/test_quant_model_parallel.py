@@ -383,7 +383,6 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
     def test_copy_mixin(self) -> None:
         device = torch.device("cuda:0")
         device_1 = torch.device("cuda:1")
