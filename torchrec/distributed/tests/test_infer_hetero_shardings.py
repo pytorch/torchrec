@@ -10,22 +10,18 @@
 #!/usr/bin/env python3
 
 import unittest
-from typing import List
 
 import hypothesis.strategies as st
 
 import torch
 from hypothesis import given, settings
 from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
-from torchrec.distributed.embedding_types import ShardingType
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
-from torchrec.distributed.planner.types import CustomTopologyData, Topology
+from torchrec.distributed.planner.types import Topology
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.shard import _shard_modules
-from torchrec.distributed.sharding.rw_sharding import InferCPURwSparseFeaturesDist
-from torchrec.distributed.sharding.tw_sharding import InferTwSparseFeaturesDist
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     row_wise,
