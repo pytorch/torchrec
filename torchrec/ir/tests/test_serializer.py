@@ -17,7 +17,11 @@ import torch
 from torch import nn
 from torchrec.ir.serializer import JsonSerializer
 
-from torchrec.ir.utils import deserialize_embedding_modules, serialize_embedding_modules
+from torchrec.ir.utils import (
+    deserialize_embedding_modules,
+    mark_dynamic_kjt,
+    serialize_embedding_modules,
+)
 
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -172,6 +176,52 @@ class TestJsonSerializer(unittest.TestCase):
 
         for i, tensor in enumerate(deserialized_out):
             assert eager_out[i].shape == tensor.shape
+            assert torch.allclose(eager_out[i], tensor)
+
+    def test_dynamic_shape_ebc(self) -> None:
+        model = self.generate_model()
+        feature1 = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+        )
+
+        feature2 = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3, 4]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7]),
+        )
+        eager_out = model(feature2)
+
+        # Serialize EBC
+        collection = mark_dynamic_kjt(feature1)
+        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        ep = torch.export.export(
+            model,
+            (feature1,),
+            {},
+            dynamic_shapes=collection.dynamic_shapes(model, (feature1,)),
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=(tuple(sparse_fqns)),
+        )
+
+        # Run forward on ExportedProgram
+        ep_output = ep.module()(feature2)
+
+        # other asserts
+        for i, tensor in enumerate(ep_output):
+            self.assertEqual(eager_out[i].shape, tensor.shape)
+
+        # Deserialize EBC
+        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+
+        deserialized_model.load_state_dict(model.state_dict())
+        # Run forward on deserialized model
+        deserialized_out = deserialized_model(feature2)
+
+        for i, tensor in enumerate(deserialized_out):
+            self.assertEqual(eager_out[i].shape, tensor.shape)
             assert torch.allclose(eager_out[i], tensor)
 
     def test_deserialized_device(self) -> None:
