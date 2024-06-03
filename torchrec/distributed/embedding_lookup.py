@@ -742,11 +742,10 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 torch.empty(
                     [0],
                     dtype=self.output_dtype,
-                    device=self.device,
                 ),
                 sparse_features.stride(),
                 0,
-            )
+            ).to(sparse_features.device())
 
         embeddings: List[torch.Tensor] = []
         features_by_group = (
