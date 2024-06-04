@@ -225,6 +225,72 @@ def _get_recat_tensor_compute(
             return torch.tensor(recat, device=device, dtype=torch.int32)
 
 
+class _MergePooledEmbeddingsModuleImpl(torch.nn.Module):
+    """
+    Does the merge_pooled_embeddings operation. Separate module necessary for lowering.
+
+    Args:
+        device (torch.device): device for fbgemm.merge_pooled_embeddings
+    """
+
+    current_device: torch.device
+
+    def __init__(
+        self,
+        device: torch.device,
+    ) -> None:
+        super().__init__()
+        self.current_device = device
+
+    # the method will be used by inference application to update the
+    # device information
+    @torch.jit.export
+    def set_device(self, device_str: str) -> None:
+        self.current_device = torch.device(device_str)
+
+    def forward(self, tensors: List[torch.Tensor], cat_dim: int) -> torch.Tensor:
+        """
+        Here we assume input tensors are:
+        [TBE_output_0, ..., TBE_output_(n-1)]
+        """
+        B = tensors[0].size(1 - cat_dim)
+        return torch.ops.fbgemm.merge_pooled_embeddings(
+            tensors,
+            B,
+            self.current_device,
+            cat_dim,
+        )
+
+
+class MergePooledEmbeddingsModule(torch.nn.Module):
+    """
+    This module is used for merge_pooled_embedding_optimization.
+    _MergePooledEmbeddingsModuleImpl provides the `set_device` API
+    to set device at model loading time.
+
+    Args:
+        device (torch.device): device for fbgemm.merge_pooled_embeddings
+    """
+
+    def __init__(self, device: torch.device) -> None:
+        super().__init__()
+        self.impl = _MergePooledEmbeddingsModuleImpl(device)
+
+    def forward(self, tensors: List[torch.Tensor], cat_dim: int) -> torch.Tensor:
+        """
+        Calls _MergePooledEmbeddingsModuleImpl with tensors and cat_dim.
+
+        Args:
+            tensors (List[torch.Tensor]): list of embedding tensors.
+            cat_dim (int): which dimension you would like to concatenate on.
+
+        Returns:
+            torch.Tensor: merged embeddings.
+        """
+        merged_embeddings = self.impl(tensors, cat_dim)
+        return merged_embeddings
+
+
 class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
     """
     Awaitable for splits AlltoAll.
@@ -1003,9 +1069,10 @@ class EmbeddingsAllToOne(nn.Module):
         cat_dim: int,
     ) -> None:
         super().__init__()
-        self._device = device
+        self.merge_pooled_embeddings = MergePooledEmbeddingsModule(device)
         self._world_size = world_size
         self._cat_dim = cat_dim
+        self._device = device
 
     # This method can be used by an inference runtime to update the
     # device information for this module.
@@ -1024,23 +1091,17 @@ class EmbeddingsAllToOne(nn.Module):
             Awaitable[torch.Tensor]: awaitable of the merged embeddings.
         """
         assert len(tensors) == self._world_size
+
         is_target_device_cpu: bool = self._device.type == "cpu"
 
         if self._world_size == 1:
             merge = tensors[0]
         else:
-            non_cat_size = tensors[0].size(1 - self._cat_dim)
-            # if src device is cuda, target device is cpu:
-            # 1. merge on first tensor device
-            # 2. move to cpu
-            device = self._device if not is_target_device_cpu else tensors[0].device
-
-            merge = torch.ops.fbgemm.merge_pooled_embeddings(
+            merge = self.merge_pooled_embeddings(
                 tensors,
-                non_cat_size,
-                device,
                 self._cat_dim,
             )
+
         return merge if not is_target_device_cpu else merge.to(self._device)
 
 
