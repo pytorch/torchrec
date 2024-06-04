@@ -216,6 +216,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 intra_host_bw=self._topology.intra_host_bw,
                 inter_host_bw=self._topology.inter_host_bw,
                 bwd_compute_multiplier=self._topology.bwd_compute_multiplier,
+                weighted_feature_bwd_compute_multiplier=self._topology.weighted_feature_bwd_compute_multiplier,
                 is_pooled=sharding_option.is_pooled,
                 is_weighted=is_weighted,
                 is_inference=self._is_inference,
@@ -251,6 +252,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         intra_host_bw: float,
         inter_host_bw: float,
         bwd_compute_multiplier: float,
+        weighted_feature_bwd_compute_multiplier: float,
         is_pooled: bool,
         is_weighted: bool = False,
         caching_ratio: Optional[float] = None,
@@ -336,6 +338,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     inter_host_bw=inter_host_bw,
                     intra_host_bw=intra_host_bw,
                     bwd_compute_multiplier=bwd_compute_multiplier,
+                    weighted_feature_bwd_compute_multiplier=weighted_feature_bwd_compute_multiplier,
                     is_pooled=is_pooled,
                     is_weighted=is_weighted,
                     is_inference=is_inference,
@@ -447,6 +450,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         inter_host_bw: float,
         intra_host_bw: float,
         bwd_compute_multiplier: float,
+        weighted_feature_bwd_compute_multiplier: float,
         is_pooled: bool,
         is_weighted: bool = False,
         is_inference: bool = False,
@@ -507,6 +511,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
         # includes fused optimizers
         bwd_compute = fwd_compute * bwd_compute_multiplier
+        if is_weighted:
+            bwd_compute = bwd_compute * weighted_feature_bwd_compute_multiplier
 
         prefetch_compute = cls._get_expected_cache_prefetch_time(
             ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
