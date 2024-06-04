@@ -528,6 +528,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             # pyre-ignore [6]
             EmbeddingPipelinedForward,
         )
+        self.wait_sparse_data_dist(self.contexts[0])
         # pyre-ignore [6]
         self.start_embedding_lookup(self.batches[0], self.contexts[0])
 
@@ -535,6 +536,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if not self.enqueue_batch(dataloader_iter):
             return
         self.start_sparse_data_dist(self.batches[1], self.contexts[1])
+        self.wait_sparse_data_dist(self.contexts[1])
 
         # batch i+2
         if not self.enqueue_batch(dataloader_iter):
@@ -561,13 +563,13 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if not self.batches:
             raise StopIteration
 
-        losses, output = self._mlp_forward(cast(In, self.batches[0]), self.contexts[0])
-
         if len(self.batches) >= 3:
             self.start_sparse_data_dist(
                 self.batches[2],
                 self.contexts[2],
             )
+
+        losses, output = self._mlp_forward(cast(In, self.batches[0]), self.contexts[0])
 
         # batch i+3
         self.enqueue_batch(dataloader_iter)
@@ -575,6 +577,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if len(self.batches) >= 2 and self.is_semi_sync():
             # pyre-ignore [6]
             self.start_embedding_lookup(self.batches[1], self.contexts[1])
+
+        if len(self.batches) >= 3:
+            self.wait_sparse_data_dist(self.contexts[2])
 
         if self._model.training:
             with torch.cuda.stream(self._bwd_sync_stream):
