@@ -11,6 +11,7 @@ import abc
 import logging
 from collections import deque
 from typing import (
+    Any,
     Callable,
     cast,
     Deque,
@@ -25,9 +26,11 @@ from typing import (
 
 import torch
 from torch.autograd.profiler import record_function
+from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
 from torchrec.distributed.model_parallel import ShardedModule
 from torchrec.distributed.train_pipeline.utils import (
     _override_input_dist_forwards,
+    _pipeline_detach_model,
     _rewrite_model,
     _start_data_dist,
     _start_embedding_lookup,
@@ -50,10 +53,15 @@ from torchrec.distributed.train_pipeline.utils import (
 )
 from torchrec.distributed.types import Awaitable
 from torchrec.pt2.checks import is_torchdynamo_compiling
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+class ModelDetachedException(Exception):
+    pass
 
 
 class TrainPipeline(abc.ABC, Generic[In, Out]):
@@ -187,6 +195,15 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             (torch.cuda.Stream(priority=-1)) if device.type == "cuda" else None
         )
 
+        # pyre-ignore
+        self._original_forwards: List[Callable[..., Any]] = []
+
+        self._original_kjt_dist_forwards: List[
+            Callable[[KeyedJaggedTensor], Awaitable[KJTAllToAllTensorsAwaitable]]
+        ] = []
+
+        self._model_attached = True
+
         self._next_index: int = 0
         self.contexts: Deque[TrainPipelineContext] = deque()
         self._pipelined_modules: List[ShardedModule] = []
@@ -200,6 +217,42 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_ip1: Optional[In] = None
         self._batch_ip2: Optional[In] = None
         self._context: TrainPipelineContext = context_type(version=0)
+
+    def detach(self) -> torch.nn.Module:
+        """
+        Detaches the model from sparse data dist (SDD) pipeline.
+        To use the pipeline after detaching the model, pipeline.attach(model)
+        needs to be called.
+        Inflight batches are kept so pipeline.progress(data_iter) can be resumed normally.
+
+        Returns the original model.
+        """
+        if self._pipelined_modules:
+            _pipeline_detach_model(
+                pipelined_modules=self._pipelined_modules,
+                original_forwards=self._original_forwards,
+                original_kjt_dist_forwards=self._original_kjt_dist_forwards,
+            )
+
+        self._model_attached = False
+        return self._model
+
+    def attach(self, model: Optional[torch.nn.Module] = None) -> None:
+        if model:
+            self._model = model
+
+        self._model_attached = True
+        if self.contexts:
+            self._pipeline_model(
+                batch=self.batches[0],
+                context=self.contexts[0],
+                pipelined_forward=PipelinedForward,
+            )
+        else:
+            # attaching the model after end of train pipeline
+            # model rewrite for SDD needs context but self.contexts is empty
+            # reset _pipelined_modules so _fill_pipeline will rewrite model on progress()
+            self._pipelined_modules = []
 
     def _set_module_context(self, context: TrainPipelineContext) -> None:
         for module in self._pipelined_modules:
@@ -247,6 +300,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             return
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        if not self._model_attached:
+            self.attach(self._model)
+
         self.fill_pipeline(dataloader_iter)
         if not self.batches:
             raise StopIteration
@@ -293,6 +349,26 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._next_index += 1
         return context
 
+    def _pipeline_model(
+        self,
+        batch: Optional[In],
+        context: TrainPipelineContext,
+        pipelined_forward: Type[PipelinedForward] = PipelinedForward,
+    ) -> None:
+        self._pipelined_modules, self._model, self._original_forwards = _rewrite_model(
+            model=self._model,
+            context=context,
+            dist_stream=self._data_dist_stream,
+            batch=batch,
+            apply_jit=self._apply_jit,
+            pipelined_forward=pipelined_forward,
+        )
+        # initializes input dist, so we can override input dist forwards
+        self.start_sparse_data_dist(batch, context)
+        self._original_kjt_dist_forwards = _override_input_dist_forwards(
+            self._pipelined_modules
+        )
+
     def _init_pipelined_modules(
         self,
         batch: In,
@@ -309,17 +385,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self.start_sparse_data_dist(batch, context)
             return
 
-        self._pipelined_modules, self._model, _ = _rewrite_model(
-            model=self._model,
-            context=context,
-            dist_stream=self._data_dist_stream,
-            batch=batch,
-            apply_jit=self._apply_jit,
-            pipelined_forward=pipelined_forward,
-        )
-        # initializes input dist, so we can override input dist forwards
-        self.start_sparse_data_dist(batch, context)
-        _override_input_dist_forwards(self._pipelined_modules)
+        self._pipeline_model(batch, context, pipelined_forward)
 
     def copy_batch_to_gpu(
         self,
