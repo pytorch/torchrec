@@ -497,9 +497,6 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._overarch_stream: Optional[torch.cuda.streams.Stream] = (
             (torch.cuda.Stream(priority=-1)) if device.type == "cuda" else None
         )
-        self._bwd_sync_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream(priority=0)) if device.type == "cuda" else None
-        )
         self._gradients: Dict[str, torch.Tensor] = {}
 
     def _grad_swap(self) -> None:
@@ -582,11 +579,12 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             self.wait_sparse_data_dist(self.contexts[2])
 
         if self._model.training:
-            with torch.cuda.stream(self._bwd_sync_stream):
+            # backward would put an implicit sync point in stream called from, ideally
+            # this would different from optimizer so it could start earilier, but currently not safe to do so.
+            with torch.cuda.stream(self._overarch_stream):
                 with record_function(f"## backward {self.contexts[0].index} ##"):
                     torch.sum(losses, dim=0).backward()
 
-            with torch.cuda.stream(self._overarch_stream):
                 with record_function(
                     f"## optimizer {cast(int, self.contexts[0].index) - 1} ##"
                 ):
