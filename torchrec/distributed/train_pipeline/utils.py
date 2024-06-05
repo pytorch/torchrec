@@ -442,26 +442,18 @@ def _start_embedding_lookup(
     context: EmbeddingTrainPipelineContext,
 ) -> None:
     cur_stream = torch.cuda.current_stream()
-
+    kjts_per_module = []
     for module in pipelined_modules:
+        kjts = context.input_dist_tensors_requests[module.forward.name].wait()
+        kjts.record_stream(cur_stream)
+        kjts_per_module.append(kjts)
+
+    for module, kjts in zip(pipelined_modules, kjts_per_module):
         module_name = module.forward.name
-        # this is fused, so look inside fused
-        for names, awaitables in context.fused_splits_awaitables:
-            if module_name in names:
-                resolved_awaitables = awaitables.wait()
-                for name, resolved_awaitable in zip(names, resolved_awaitables):
-                    kjt = resolved_awaitable.wait()
-                    kjt.record_stream(cur_stream)
-                    # pyre-ignore
-                    context.input_dist_tensors_requests[name] = kjt
-                break  # stop searching for awaitable to resolve
-
-        module_context = context.module_contexts[module_name]
+        module_context = context.module_contexts[module.forward.name]
         module_context.record_stream(cur_stream)
-        kjt = context.input_dist_tensors_requests[module_name]
-
-        a2a_awaitable = module.compute_and_output_dist(module_context, kjt)
-        # pyre-ignore
+        a2a_awaitable = module.compute_and_output_dist(module_context, kjts)
+        # pyre-ignore[6]
         context.embedding_a2a_requests[module_name] = a2a_awaitable
 
 
