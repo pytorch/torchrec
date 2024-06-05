@@ -983,3 +983,137 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
 
         # Flush end not called this time
         self.assertEqual(flush_end_called, 1)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_model_detach(self) -> None:
+        model = self._setup_model()
+
+        sharding_type = ShardingType.TABLE_WISE.value
+        fused_params = {}
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type
+        )
+
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        sdd = SparseDataDistUtil[ModelInput](
+            model=sharded_model_pipelined,
+            stream=torch.cuda.Stream(),
+            apply_jit=False,
+        )
+
+        pipeline_stages = [
+            PipelineStage(
+                name="data_copy",
+                runnable=partial(get_h2d_func, device=self.device),
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="start_sparse_data_dist",
+                runnable=sdd.start_sparse_data_dist,
+                stream=sdd.stream,
+                fill_callback=sdd.wait_sparse_data_dist,
+            ),
+        ]
+
+        pipeline = StagedTrainPipeline(
+            pipeline_stages=pipeline_stages,
+            compute_stream=torch.cuda.current_stream(),
+        )
+
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        for i in range(5):
+            batch = data[i]
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            model_in = pipeline.progress(dataloader)
+            optim_pipelined.zero_grad()
+            loss_pred, pred_pipelined = sharded_model_pipelined(model_in)
+            loss_pred.backward()
+            optim_pipelined.step()
+
+            self.assertTrue(torch.equal(pred, pred_pipelined))
+
+        # Check internal states
+        ebcs = [
+            sharded_model_pipelined.module.sparse.ebc,
+            sharded_model_pipelined.module.sparse.weighted_ebc,
+        ]
+        for ebc in ebcs:
+            self.assertIsInstance(ebc.forward, PipelinedForward)
+        self.assertEqual(len(sharded_model_pipelined._forward_hooks.items()), 1)
+
+        detached_model = sdd.detach()
+
+        # Check internal states
+        for ebc in ebcs:
+            self.assertNotIsInstance(ebc.forward, PipelinedForward)
+        self.assertEqual(len(sharded_model_pipelined._forward_hooks.items()), 0)
+
+        # Check we can run backward and optimizer ond detached model
+        batch = data[5].to(self.device)
+        loss_detached, detached_out = detached_model(batch)
+        loss_sharded, out = sharded_model(batch)
+        self.assertTrue(torch.equal(detached_out, out))
+        loss_detached.backward()
+        loss_sharded.backward()
+        optim.step()
+        optim_pipelined.step()
+
+        # Check fwd of detached model is same as non-pipelined model
+        with torch.no_grad():
+            batch = data[6].to(self.device)
+            _, detached_out = detached_model(batch)
+            _, out = sharded_model(batch)
+            self.assertTrue(torch.equal(detached_out, out))
+
+        # Check that pipeline re-attaches the model again without issues
+        for i in range(5, 12):
+            batch = data[i]
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            model_in = pipeline.progress(dataloader)
+            optim_pipelined.zero_grad()
+            loss_pred, pred_pipelined = sharded_model_pipelined(model_in)
+            loss_pred.backward()
+            optim_pipelined.step()
+
+            self.assertTrue(torch.equal(pred, pred_pipelined))
+
+        for ebc in ebcs:
+            self.assertIsInstance(ebc.forward, PipelinedForward)
+        self.assertEqual(len(sharded_model_pipelined._forward_hooks.items()), 1)
+
+        # Check pipeline exhausted
+        preproc_input = pipeline.progress(dataloader)
+        self.assertIsNone(preproc_input)
