@@ -418,6 +418,203 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             self.assertEqual(pred_gpu.device, self.device)
             self.assertEqual(pred_gpu.cpu().size(), pred.size())
 
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_model_detach_during_train(self) -> None:
+        """
+        Test the scenario in which:
+        1) Model training with pipeline.progress()
+        2) Mid-training, model is detached
+        3) Check that fwd of detached model is same as non-pipelined model
+        4) Pipeline progress() re-attaches the model and we can continue progressing
+        """
+        data = self._generate_data(
+            num_batches=7,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        sharding_type = ShardingType.TABLE_WISE.value
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+        fused_params = {}
+
+        model = self._setup_model()
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+        )
+
+        for i in range(3):
+            batch = data[i]
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            pred_pipelined = pipeline.progress(dataloader)
+            self.assertTrue(torch.equal(pred, pred_pipelined))
+
+        # Check internal states
+        ebcs = [
+            sharded_model_pipelined.module.sparse.ebc,
+            sharded_model_pipelined.module.sparse.weighted_ebc,
+        ]
+        for ebc in ebcs:
+            self.assertIsInstance(ebc.forward, PipelinedForward)
+
+        detached_model = pipeline.detach()
+
+        # Check internal states
+        for ebc in ebcs:
+            self.assertNotIsInstance(ebc.forward, PipelinedForward)
+
+        # Check fwd of detached model is same as non-pipelined model
+        with torch.no_grad():
+            batch = data[3].to(self.device)
+            _, detached_out = detached_model(batch)
+            _, out = sharded_model(batch)
+            self.assertTrue(torch.equal(detached_out, out))
+
+        # Check that pipeline re-attaches the model again without issues
+        for i in range(3, 7):
+            batch = data[i]
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            pred_pipelined = pipeline.progress(dataloader)
+            self.assertTrue(torch.equal(pred, pred_pipelined))
+
+        for ebc in ebcs:
+            self.assertIsInstance(ebc.forward, PipelinedForward)
+
+        # Check pipeline exhausted
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_model_detach_after_train(self) -> None:
+        """
+        Test the scenario in which:
+        1) Model training with pipeline.progress()
+        2) Pipeline exhausts dataloader and raises StopIteration
+        4) Model is detached
+        5) Check that fwd of detached model is same as non-pipelined model
+        6) Pipeline progress() with new dataloader re-attaches model
+        """
+        data = self._generate_data(
+            num_batches=7,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        sharding_type = ShardingType.TABLE_WISE.value
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+        fused_params = {}
+
+        model = self._setup_model()
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+        )
+
+        for i in range(7):
+            batch = data[i]
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            pred_pipelined = pipeline.progress(dataloader)
+            self.assertTrue(torch.equal(pred, pred_pipelined))
+
+        # Check pipeline exhausted
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+
+        detached_model = pipeline.detach()
+
+        # Check internal states
+        ebcs = [
+            sharded_model_pipelined.module.sparse.ebc,
+            sharded_model_pipelined.module.sparse.weighted_ebc,
+        ]
+        for ebc in ebcs:
+            self.assertNotIsInstance(ebc.forward, PipelinedForward)
+
+        # Check fwd of detached model is same as non-pipelined model
+        with torch.no_grad():
+            for i in range(2):
+                batch = data[i].to(self.device)
+                _, detached_out = detached_model(batch)
+                _, out = sharded_model(batch)
+                self.assertTrue(torch.equal(detached_out, out))
+
+        # Provide new loaded dataloader and check model is re-attached
+        data = self._generate_data(
+            num_batches=4,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        for i in range(4):
+            batch = data[i]
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            pred_pipelined = pipeline.progress(dataloader)
+            self.assertTrue(torch.equal(pred, pred_pipelined))
+
+        # Check pipeline exhausted
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         not torch.cuda.is_available(),
