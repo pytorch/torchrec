@@ -34,6 +34,7 @@ FULL_BLOCK_EMB_DIM: int = 128  # FBGEMM Kernel, 32 threads X 4D-Vector
 HALF_BLOCK_PENALTY: float = 1.15  # empirical studies
 QUARTER_BLOCK_PENALTY: float = 1.75  # empirical studies
 BWD_COMPUTE_MULTIPLIER: float = 2  # empirical studies
+WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER: float = 1  # empirical studies
 WEIGHTED_KERNEL_MULTIPLIER: float = 1.1  # empirical studies
 DP_ELEMENTWISE_KERNELS_PERF_FACTOR: float = 9.22  # empirical studies
 

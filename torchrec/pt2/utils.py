@@ -49,6 +49,7 @@ def kjt_for_pt2_tracing(
             keys=kjt.keys(),
             values=values,
             lengths=lengths,
+            weights=kjt.weights_or_none(),
             stride_per_key_per_rank=[[stride]] * n,
             inverse_indices=(kjt.keys(), inverse_indices_tensor),
         )
@@ -75,6 +76,7 @@ def kjt_for_pt2_tracing(
         keys=kjt.keys(),
         values=values,
         lengths=lengths,
+        weights=kjt.weights_or_none(),
         stride=stride if not is_vb else None,
         stride_per_key_per_rank=kjt.stride_per_key_per_rank() if is_vb else None,
         inverse_indices=inverse_indices,

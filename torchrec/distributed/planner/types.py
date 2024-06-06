@@ -25,6 +25,7 @@ from torchrec.distributed.planner.constants import (
     HBM_MEM_BW,
     INTRA_NODE_BANDWIDTH,
     POOLING_FACTOR,
+    WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER,
 )
 from torchrec.distributed.types import (
     BoundsCheckMode,
@@ -186,6 +187,7 @@ class Topology:
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
         bwd_compute_multiplier: float = BWD_COMPUTE_MULTIPLIER,
         custom_topology_data: Optional[CustomTopologyData] = None,
+        weighted_feature_bwd_compute_multiplier: float = WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -238,6 +240,9 @@ class Topology:
         self._inter_host_bw = inter_host_bw
         self._bwd_compute_multiplier = bwd_compute_multiplier
         self._custom_topology_data = custom_topology_data
+        self._weighted_feature_bwd_compute_multiplier = (
+            weighted_feature_bwd_compute_multiplier
+        )
 
     @property
     def compute_device(self) -> str:
@@ -274,6 +279,10 @@ class Topology:
     @property
     def bwd_compute_multiplier(self) -> float:
         return self._bwd_compute_multiplier
+
+    @property
+    def weighted_feature_bwd_compute_multiplier(self) -> float:
+        return self._weighted_feature_bwd_compute_multiplier
 
     def __repr__(self) -> str:
         topology_repr: str = f"world_size={self._world_size} \n"

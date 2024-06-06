@@ -319,6 +319,9 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
                     input_split_sizes=None,
                     group=pg,
                 )
+            # To avoid hasattr in _wait_impl to check self._splits_awaitable
+            # pyre-ignore
+            self._splits_awaitable = None
         else:
             with record_function("## all2all_data:kjt splits ##"):
                 self._output_tensor: torch.Tensor = torch.empty(
@@ -335,7 +338,8 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
                 )
 
     def _wait_impl(self) -> List[List[int]]:
-        if not is_torchdynamo_compiling():
+        # Can not use is_torchdynamo_compiling(), as every such condition should be independent for compilation with graph breaks.
+        if isinstance(self._splits_awaitable, dist.Work):
             self._splits_awaitable.wait()
 
         ret = self._output_tensor.view(self.num_workers, -1).T.tolist()
