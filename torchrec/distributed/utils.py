@@ -9,6 +9,8 @@
 
 import copy
 import logging
+import pdb  # noqa
+import sys
 
 from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
@@ -452,3 +454,26 @@ def init_parameters(module: nn.Module, device: torch.device) -> None:
                     m.reset_parameters()
 
             module.apply(maybe_reset_parameters)
+
+
+class ForkedPdb(pdb.Pdb):
+    """A Pdb subclass that may be used from a forked multiprocessing child.
+    Useful in debugging multiprocessed code
+
+    Example::
+
+        from torchrec.multiprocessing_utils import ForkedPdb
+
+        if dist.get_rank() == 0:
+            ForkedPdb().set_trace()
+        dist.barrier()
+    """
+
+    # pyre-ignore
+    def interaction(self, *args, **kwargs) -> None:
+        _stdin = sys.stdin
+        try:
+            sys.stdin = open("/dev/stdin")  # noqa
+            pdb.Pdb.interaction(self, *args, **kwargs)
+        finally:
+            sys.stdin = _stdin
