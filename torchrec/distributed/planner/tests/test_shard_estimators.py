@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import cast
+from typing import cast, Dict, List, Tuple
 
 from unittest.mock import Mock, patch
 
@@ -525,6 +525,95 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             for sharding_option in sharding_options
         }
         self.assertEqual(expected_prefetch_computes, prefetch_computes)
+
+    def test_weighted_feature_bwd_compute_multiplier(self) -> None:
+        def _get_bwd_computes(
+            model: torch.nn.Module,
+            weighted_feature_bwd_compute_multiplier: float,
+        ) -> Dict[Tuple[str, str, str], List[float]]:
+            topology = Topology(
+                world_size=2,
+                compute_device="cuda",
+                weighted_feature_bwd_compute_multiplier=weighted_feature_bwd_compute_multiplier,
+            )
+            estimator = EmbeddingPerfEstimator(topology=topology)
+            enumerator = EmbeddingEnumerator(
+                topology=topology, batch_size=BATCH_SIZE, estimator=estimator
+            )
+            sharding_options = enumerator.enumerate(
+                module=model,
+                sharders=[
+                    cast(
+                        ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder()
+                    )
+                ],
+            )
+            bwd_computes = {
+                (
+                    sharding_option.name,
+                    sharding_option.compute_kernel,
+                    sharding_option.sharding_type,
+                ): [
+                    shard.perf.bwd_compute if shard.perf else -1
+                    for shard in sharding_option.shards
+                ]
+                for sharding_option in sharding_options
+            }
+            return bwd_computes
+
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=10,
+                name="table_0",
+                feature_names=["feature_0"],
+            )
+        ]
+        weighted_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=10,
+                name="weighted_table_0",
+                feature_names=["weighted_feature_0"],
+            )
+        ]
+        model = TestSparseNN(tables=tables, weighted_tables=weighted_tables)
+
+        MULTIPLIER = 7
+        bwd_computes_1 = _get_bwd_computes(
+            model, weighted_feature_bwd_compute_multiplier=1
+        )
+        bwd_computes_2 = _get_bwd_computes(
+            model,
+            weighted_feature_bwd_compute_multiplier=2,
+        )
+        bwd_computes_n = _get_bwd_computes(
+            model,
+            weighted_feature_bwd_compute_multiplier=MULTIPLIER,
+        )
+        self.assertEqual(bwd_computes_1.keys(), bwd_computes_2.keys())
+        self.assertEqual(bwd_computes_1.keys(), bwd_computes_n.keys())
+        for key in bwd_computes_1.keys():
+            table_name, _, sharding_type = key
+            if table_name.startswith("weighted"):
+                self.assertEqual(len(bwd_computes_1), len(bwd_computes_2))
+                self.assertEqual(len(bwd_computes_1), len(bwd_computes_n))
+                for bwd_compute_1, bwd_compute_2, bwd_compute_n in zip(
+                    bwd_computes_1[key], bwd_computes_2[key], bwd_computes_n[key]
+                ):
+                    # bwd_compute_1 = base_bwd_compute + offset
+                    # bwd_compute_2 = base_bwd_compute * 2 + offset
+                    # bwd_compute_n = base_bwd_compute * MULTIPLIER + offset
+                    # (where offset = bwd_grad_indice_weights_kernel in production
+                    # https://fburl.com/code/u9hq6vhf)
+                    base_bwd_compute = bwd_compute_2 - bwd_compute_1
+                    offset = bwd_compute_1 - base_bwd_compute
+                    self.assertAlmostEqual(
+                        base_bwd_compute * MULTIPLIER,
+                        bwd_compute_n - offset,
+                    )
+            else:
+                self.assertEqual(bwd_computes_1[key], bwd_computes_2[key])
 
 
 # pyre-ignore[3]
