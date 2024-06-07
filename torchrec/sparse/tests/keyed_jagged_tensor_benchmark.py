@@ -138,7 +138,6 @@ def gen_dist_split_input(
         num_splits=num_workers,
         device=device,
         batch_size_per_rank=batch_size_per_rank,
-        use_tensor_compute=False,
     )
 
     return (kjt_lengths, kjt_values, batch_size_per_rank, recat)
