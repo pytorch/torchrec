@@ -563,6 +563,26 @@ def _get_node_args_helper(
                 # pyre-fixme[16]
                 and child_node.target.__name__ == "KeyedJaggedTensor"
             ):
+                call_module_found = False
+                for arg_node in child_node.args:
+                    if (
+                        isinstance(arg_node, torch.fx.Node)
+                        and arg_node.op == "call_module"
+                    ):
+                        call_module_found = True
+                        break
+
+                for arg_node in child_node.kwargs.values():
+                    if (
+                        isinstance(arg_node, torch.fx.Node)
+                        and arg_node.op == "call_module"
+                    ):
+                        call_module_found = True
+                        break
+
+                if call_module_found:
+                    break
+
                 if "values" in child_node.kwargs:
                     arg = child_node.kwargs["values"]
                 else:
