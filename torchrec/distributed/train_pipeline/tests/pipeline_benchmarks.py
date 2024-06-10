@@ -275,11 +275,20 @@ def runner(
             TrainPipelineSemiSync,
             PrefetchTrainPipelineSparseDist,
         ]:
-            pipeline = pipeline_clazz(
-                model=sharded_model,
-                optimizer=optimizer,
-                device=ctx.device,
-            )
+            if pipeline_clazz == TrainPipelineSemiSync:
+                # pyre-ignore [28]
+                pipeline = pipeline_clazz(
+                    model=sharded_model,
+                    optimizer=optimizer,
+                    device=ctx.device,
+                    start_batch=0,
+                )
+            else:
+                pipeline = pipeline_clazz(
+                    model=sharded_model,
+                    optimizer=optimizer,
+                    device=ctx.device,
+                )
             pipeline.progress(iter(bench_inputs))
 
             def _func_to_benchmark(
