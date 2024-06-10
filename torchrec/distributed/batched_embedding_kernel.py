@@ -776,7 +776,11 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         if weights is not None and not torch.is_floating_point(weights):
             weights = None
         if features.variable_stride_per_key() and isinstance(
-            self.emb_module, SplitTableBatchedEmbeddingBagsCodegen
+            self.emb_module,
+            (
+                SplitTableBatchedEmbeddingBagsCodegen,
+                DenseTableBatchedEmbeddingBagsCodegen,
+            ),
         ):
             return self.emb_module(
                 indices=features.values().long(),
