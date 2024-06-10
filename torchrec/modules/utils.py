@@ -10,11 +10,17 @@
 import copy
 import threading
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from torch.profiler import record_function
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import (
+    _permute_tensor_by_segments,
+    JaggedTensor,
+    KeyedJaggedTensor,
+)
+from torchrec.streamable import Multistreamable
 
 
 lib = torch.library.Library("custom", "FRAGMENT")
@@ -53,6 +59,22 @@ class OpRegistryState:
 
 
 operator_registry_state = OpRegistryState()
+
+
+@dataclass
+class SequenceVBEContext(Multistreamable):
+    recat: torch.Tensor
+    unpadded_lengths: torch.Tensor
+    reindexed_lengths: torch.Tensor
+    reindexed_length_per_key: List[int]
+    reindexed_values: Optional[torch.Tensor] = None
+
+    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+        self.recat.record_stream(stream)
+        self.unpadded_lengths.record_stream(stream)
+        self.reindexed_lengths.record_stream(stream)
+        if self.reindexed_values is not None:
+            self.reindexed_values.record_stream(stream)
 
 
 @torch.fx.wrap
@@ -163,6 +185,36 @@ def convert_list_of_modules_to_modulelist(
         )
 
 
+def _vbe_reindex(
+    embeddings: torch.Tensor,
+    seq_vbe_ctx: SequenceVBEContext,
+) -> Tuple[torch.Tensor, torch.Tensor, List[int], Optional[torch.Tensor]]:
+    """
+    Reindexes embeddings for variable batch size per feature scenarios.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor, List[int], torch.Tensor]: the reindexed
+            embeddings, lengths, length_per_key, and values
+    """
+    dim = embeddings.shape[1]
+    output_size = sum(seq_vbe_ctx.reindexed_length_per_key) * dim
+    reindexed_embeddings, _ = _permute_tensor_by_segments(
+        tensor=embeddings.flatten(),
+        segment_sizes=seq_vbe_ctx.unpadded_lengths * dim,
+        recat=seq_vbe_ctx.recat,
+        weights=None,
+        output_size=output_size,
+    )
+    reindexed_embeddings = reindexed_embeddings.view(-1, dim)
+    assert len(seq_vbe_ctx.reindexed_lengths.shape) == 2
+    return (
+        reindexed_embeddings,
+        seq_vbe_ctx.reindexed_lengths,
+        seq_vbe_ctx.reindexed_length_per_key,
+        seq_vbe_ctx.reindexed_values,
+    )
+
+
 def construct_jagged_tensors(
     embeddings: torch.Tensor,
     features: KeyedJaggedTensor,
@@ -171,6 +223,7 @@ def construct_jagged_tensors(
     features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
     original_features: Optional[KeyedJaggedTensor] = None,
     reverse_indices: Optional[torch.Tensor] = None,
+    seq_vbe_ctx: Optional[SequenceVBEContext] = None,
 ) -> Dict[str, JaggedTensor]:
     with record_function("## construct_jagged_tensors ##"):
         if original_features is not None:
@@ -179,16 +232,24 @@ def construct_jagged_tensors(
             embeddings = torch.index_select(
                 embeddings, 0, reverse_indices.to(torch.int32)
             )
-
         ret: Dict[str, JaggedTensor] = {}
-        stride = features.stride()
-        length_per_key = features.length_per_key()
-        values = features.values()
 
-        lengths = features.lengths().view(-1, stride)
-        lengths_tuple = torch.unbind(lengths.view(-1, stride), dim=0)
+        if seq_vbe_ctx is not None:
+            embeddings, lengths, length_per_key, values = _vbe_reindex(
+                embeddings=embeddings, seq_vbe_ctx=seq_vbe_ctx
+            )
+        else:
+            lengths = features.lengths().view(-1, features.stride())
+            length_per_key = features.length_per_key()
+            values = features.values()
+
+        lengths_tuple = torch.unbind(lengths, dim=0)
         embeddings_list = torch.split(embeddings, length_per_key, dim=0)
-        values_list = torch.split(values, length_per_key) if need_indices else None
+        values_list = (
+            torch.split(values, length_per_key)
+            if need_indices and values is not None
+            else None
+        )
 
         key_indices = defaultdict(list)
         for i, key in enumerate(embedding_names):
@@ -207,8 +268,11 @@ def construct_jagged_tensors(
                     if len(indices) == 1
                     else torch.cat([embeddings_list[i] for i in indices], dim=1)
                 ),
-                # pyre-ignore
-                weights=values_list[indices[0]] if need_indices else None,
+                weights=(
+                    values_list[indices[0]]
+                    if need_indices and values_list is not None
+                    else None
+                ),
             )
         return ret
 
