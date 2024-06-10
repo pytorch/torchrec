@@ -353,7 +353,9 @@ def _test_compile_rank_fn(
             torch._dynamo.config.capture_scalar_outputs = True
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
             opt_fn = torch.compile(
-                dmp, backend=torch_compile_backend, fullgraph=True, dynamic=True
+                dmp,
+                backend=torch_compile_backend,
+                fullgraph=True,
             )
             compile_out = opt_fn(kjt_for_pt2_tracing(kjt, convert_to_vb=convert_to_vb))
             torch.testing.assert_close(eager_out, compile_out)
@@ -401,6 +403,13 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.COLUMN_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.TRUE,
+                    "eager",
+                ),
+                (
+                    _ModelType.EBC,
+                    ShardingType.TABLE_WISE.value,
+                    _InputType.SINGLE_BATCH,
+                    _ConvertToVariableBatch.FALSE,
                     "eager",
                 ),
             ]
