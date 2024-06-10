@@ -153,36 +153,20 @@ class TestFPEBCSharder(FeatureProcessedEmbeddingBagCollectionSharder):
         return [self._kernel_type]
 
 
-def get_configs_and_kjt_inputs() -> (
-    Tuple[List[EmbeddingBagConfig], List[KeyedJaggedTensor]]
-):
-    embedding_bag_config = [
+def get_configs() -> List[EmbeddingBagConfig]:
+    dims = [3 * 16, 8, 8, 3 * 16]
+    return [
         EmbeddingBagConfig(
-            name="table_0",
-            feature_names=["feature_0"],
-            embedding_dim=3 * 16,
+            name=f"table_{i}",
+            feature_names=[f"feature_{i}"],
+            embedding_dim=dim,
             num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_1",
-            feature_names=["feature_1"],
-            embedding_dim=8,
-            num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_2",
-            feature_names=["feature_2"],
-            embedding_dim=8,
-            num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_3",
-            feature_names=["feature_3"],
-            embedding_dim=3 * 16,
-            num_embeddings=16,
-        ),
+        )
+        for i, dim in enumerate(dims)
     ]
 
+
+def get_kjt_inputs() -> List[KeyedJaggedTensor]:
     # Rank 0
     #             instance 0   instance 1  instance 2
     # "feature_0"   [0, 1]       None        [2]
@@ -235,5 +219,4 @@ def get_configs_and_kjt_inputs() -> (
             ),
         ),
     ]
-
-    return embedding_bag_config, kjt_input_per_rank
+    return kjt_input_per_rank
