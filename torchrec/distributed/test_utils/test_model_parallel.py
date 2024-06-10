@@ -245,15 +245,11 @@ class ModelParallelBase(ModelParallelTestShared):
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
             ]
         ),
-        kernel_type=st.sampled_from(
-            [
-                EmbeddingComputeKernel.DENSE.value,
-            ],
-        ),
-        apply_optimizer_in_backward_config=st.sampled_from([None]),
+        kernel_type=st.just(EmbeddingComputeKernel.DENSE.value),
+        apply_optimizer_in_backward_config=st.just(None),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_dp(
         self,
         sharder_type: str,
@@ -591,12 +587,13 @@ class ModelParallelBase(ModelParallelTestShared):
                 ShardingType.TABLE_WISE.value,
                 ShardingType.COLUMN_WISE.value,
                 ShardingType.ROW_WISE.value,
+                ShardingType.DATA_PARALLEL.value,
             ]
         ),
         global_constant_batch=st.booleans(),
         pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
     def test_sharding_variable_batch(
         self,
         sharding_type: str,
@@ -608,13 +605,18 @@ class ModelParallelBase(ModelParallelTestShared):
             self.skipTest(
                 "bounds_check_indices on CPU does not support variable length (batch size)"
             )
+        kernel = (
+            EmbeddingComputeKernel.DENSE.value
+            if sharding_type == ShardingType.DATA_PARALLEL.value
+            else EmbeddingComputeKernel.FUSED.value
+        )
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[
                 create_test_sharder(
                     sharder_type=SharderType.EMBEDDING_BAG_COLLECTION.value,
                     sharding_type=sharding_type,
-                    kernel_type=EmbeddingComputeKernel.FUSED.value,
+                    kernel_type=kernel,
                     device=self.device,
                 ),
             ],
