@@ -513,7 +513,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
     """
     Novel method for RecSys model training by leveraging "Semi-Synchronous" training,
-    where the model is still synchorous but each batch prediction is calculated
+    where the model is still synchronous but each batch prediction is calculated
     on parameters which were last updated B-2, instead of the batch prior (ie. B-1).  This
     allows the Embedding All-to-All from B to be fully overlapped with forward pass of B-1; dramatically
     improving peak training performance.
@@ -527,7 +527,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         execute_all_batches (bool): executes remaining batches in pipeline after
             exhausting dataloader iterator.
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
-        start_batch (int): batch to begin semi-sync training.
+        start_batch (int): batch to begin semi-sync training.  Typically small period of synchronous training reduces early stage NEX.
         stash_gradients (bool): if True, will store gradients for each parameter to insure true "Semi-Sync"
             training.  If False, will update dense optimizer as soon as gradients available (naive "Semi-Sync)
     """
@@ -539,8 +539,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         device: torch.device,
         execute_all_batches: bool = True,
         apply_jit: bool = False,
-        start_batch: int = 0,
-        stash_gradients: bool = True,
+        start_batch: int = 900,
+        stash_gradients: bool = False,
     ) -> None:
         super().__init__(
             model=model,
