@@ -178,20 +178,28 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             def forward(self, model_input) -> Tuple[torch.Tensor, torch.Tensor]:
                 return self.m(model_input.idlist_features)
 
+        feature_names = [
+            feature_name
+            for table in self.tables
+            for feature_name in table.feature_names
+        ]
+        max_feature_lengths = [12] * len(feature_names)
         sparse_arch = DummyWrapper(
             create_module_and_freeze(
                 tables=self.tables,
                 device=self.device,
                 use_fp_collection=False,
+                max_feature_lengths=max_feature_lengths,
             )
         )
+        compute_kernel = EmbeddingComputeKernel.FUSED.value
         module_sharding_plan = construct_module_sharding_plan(
             sparse_arch.m._fp_ebc,
             per_param_sharding={
-                "table_0": table_wise(rank=0),
-                "table_1": table_wise(rank=0),
-                "table_2": table_wise(rank=0),
-                "table_3": table_wise(rank=0),
+                "table_0": table_wise(rank=0, compute_kernel=compute_kernel),
+                "table_1": table_wise(rank=0, compute_kernel=compute_kernel),
+                "table_2": table_wise(rank=0, compute_kernel=compute_kernel),
+                "table_3": table_wise(rank=0, compute_kernel=compute_kernel),
             },
             local_size=1,
             world_size=1,
@@ -219,7 +227,9 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_sparse_arch_pipeline.state_dict(),
         )
 
-        data = self._generate_data(num_batches=5, batch_size=1)
+        data = self._generate_data(
+            num_batches=5, batch_size=1, max_feature_lengths=max_feature_lengths
+        )
         dataloader = iter(data)
 
         optimizer_no_pipeline = optim.SGD(
@@ -236,6 +246,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
         )
 
         for batch in data[:-2]:
+            batch = batch.to(self.device)
             optimizer_no_pipeline.zero_grad()
             loss, pred = sharded_sparse_arch_no_pipeline(batch)
             loss.backward()
