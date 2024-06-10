@@ -305,6 +305,7 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig] = None,
         fused_params: Optional[Dict[str, Any]] = None,
+        use_index_dedup: bool = False,
     ) -> None:
         self._sharding_type = sharding_type
         self._kernel_type = kernel_type
@@ -321,6 +322,7 @@ class TestEmbeddingCollectionSharder(EmbeddingCollectionSharder):
         super().__init__(
             fused_params=fused_params,
             qcomm_codecs_registry=qcomm_codecs_registry,
+            use_index_dedup=use_index_dedup,
         )
 
     """
