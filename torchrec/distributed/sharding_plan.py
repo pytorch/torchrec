@@ -397,6 +397,7 @@ def data_parallel() -> ParameterShardingGenerator:
 def table_wise(
     rank: int,
     device: Optional[str] = None,
+    compute_kernel: Optional[str] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::TABLE_WISE` for construct_module_sharding_plan.
@@ -404,6 +405,7 @@ def table_wise(
     Args:
     rank (int): rank to place table when doing table wise
     device (Optional[str]): device to place table when doing table_wise sharding
+    compute_kernel (Optional[str]): embedding compute kernel to use for the table
 
     Example::
 
@@ -441,7 +443,7 @@ def table_wise(
             device_type,
             sharder,
             placements=([placement_helper(device, rank)] if device else None),
-            compute_kernel=(EmbeddingComputeKernel.QUANT.value if device else None),
+            compute_kernel=compute_kernel,
         )
 
     return _parameter_sharding_generator
