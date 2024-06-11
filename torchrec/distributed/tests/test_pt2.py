@@ -150,6 +150,41 @@ class _TestType(Enum):
 
 
 class TestPt2(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+
+        @torch._library.register_fake_class("fbgemm::AtomicCounter")
+        class FakeAtomicCounter:
+            def __init__(self, counter_):
+                self.counter_ = counter_
+
+            @classmethod
+            def __obj_unflatten__(cls, flat_obj):
+                return cls(**dict(flat_obj))
+
+            def increment(self) -> int:
+                self.counter_ += 1
+                return self.counter_
+
+            def decrement(self) -> int:
+                self.counter_ -= 1
+                return self.counter_
+
+            def reset(self):
+                self.counter_ = 0
+
+            def get(self) -> int:
+                return self.counter_
+
+            def set(self, val):
+                self.counter_ = val
+
+    def tearDown(self):
+        torch._library.fake_class_registry.deregister_fake_class(
+            "fbgemm::AtomicCounter"
+        )
+        super().tearDown()
+
     def _test_kjt_input_module(
         self,
         kjt_input_module: torch.nn.Module,

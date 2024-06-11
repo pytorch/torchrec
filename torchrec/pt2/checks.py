@@ -11,6 +11,8 @@ from typing import List
 
 import torch
 
+from torch.fx.experimental.symbolic_shapes import guard_size_oblivious
+
 USE_TORCHDYNAMO_COMPILING_PATH: bool = False
 
 
@@ -74,3 +76,19 @@ def pt2_checks_all_is_size(list: List[int]) -> List[int]:
     for i in list:
         torch._check_is_size(i)
     return list
+
+
+def pt2_check_size_nonzero(x: torch.Tensor) -> torch.Tensor:
+    if torch.jit.is_scripting() or not is_torchdynamo_compiling():
+        return x
+
+    for i in range(x.dim()):
+        torch._check(x.size(i) > 0)
+    return x
+
+
+def pt2_guard_size_oblivious(x: bool) -> bool:
+    if torch.jit.is_scripting() or not is_torchdynamo_compiling():
+        return x
+
+    return guard_size_oblivious(x)
