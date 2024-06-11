@@ -9,7 +9,11 @@
 
 import abc
 import copy
+import inspect
 import itertools
+import logging
+import tempfile
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -36,6 +40,10 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     PoolingMode,
     SparseType,
     SplitTableBatchedEmbeddingBagsCodegen,
+)
+from fbgemm_gpu.ssd_split_table_batched_embeddings_ops import (
+    ASSOC,
+    SSDTableBatchedEmbeddingBags,
 )
 from torch import nn
 from torchrec.distributed.composable.table_batched_embedding_slice import (
@@ -65,6 +73,108 @@ from torchrec.optim.fused import (
     FusedOptimizerModule,
 )
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+
+def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
+    """
+    Construct SSD TBE params dict from config and fused params dict.
+    """
+    fused_params = config.fused_params or {}
+
+    ssd_tbe_params: Dict[str, Any] = {}
+
+    # drop the non-ssd tbe fused params
+    ssd_tbe_signature = inspect.signature(
+        SSDTableBatchedEmbeddingBags.__init__
+    ).parameters.keys()
+    invalid_keys: List[str] = []
+    for key, value in fused_params.items():
+        if key not in ssd_tbe_signature:
+            invalid_keys.append(key)
+        else:
+            ssd_tbe_params[key] = value
+    logger.warning(f"Dropping {invalid_keys} since they are not valid SSD TBE params.")
+
+    # populate number cache sets, aka number of rows of the cache space
+    if "cache_sets" not in ssd_tbe_params:
+        cache_load_factor = fused_params.get("cache_load_factor")
+        if cache_load_factor:
+            cache_load_factor = fused_params.get("cache_load_factor")
+            logger.info(
+                f"Using cache load factor from fused params dict: {cache_load_factor}"
+            )
+        else:
+            cache_load_factor = 0.2
+
+        local_rows_sum: int = sum(table.local_rows for table in config.embedding_tables)
+        ssd_tbe_params["cache_sets"] = int(cache_load_factor * local_rows_sum / ASSOC)
+
+    # populate init min and max
+    if (
+        "ssd_uniform_init_lower" not in ssd_tbe_params
+        or "ssd_uniform_init_upper" not in ssd_tbe_params
+    ):
+        # Right now we do not support a per table init max and min. To use
+        # per table init max and min, either we allow it in SSD TBE, or we
+        # create one SSD TBE per table.
+        # TODO: Solve the init problem
+        mins = [table.get_weight_init_min() for table in config.embedding_tables]
+        maxs = [table.get_weight_init_max() for table in config.embedding_tables]
+        ssd_tbe_params["ssd_uniform_init_lower"] = sum(mins) / len(
+            config.embedding_tables
+        )
+        ssd_tbe_params["ssd_uniform_init_upper"] = sum(maxs) / len(
+            config.embedding_tables
+        )
+
+    if "ssd_storage_directory" not in ssd_tbe_params:
+        ssd_tbe_params["ssd_storage_directory"] = tempfile.mkdtemp()
+
+    if "weights_precision" not in ssd_tbe_params:
+        weights_precision = data_type_to_sparse_type(config.data_type)
+        ssd_tbe_params["weights_precision"] = weights_precision
+
+    return ssd_tbe_params
+
+
+class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        emb_module: SSDTableBatchedEmbeddingBags,
+        pg: Optional[dist.ProcessGroup] = None,
+    ) -> None:
+        """
+        Fused optimizer for SSD TBE. Right now it only supports tuning learning
+        rate.
+        """
+        self._emb_module: SSDTableBatchedEmbeddingBags = emb_module
+        self._pg = pg
+
+        # TODO: support optimizer states checkpointing once FBGEMM support
+        # split_optimizer_states API
+
+        # pyre-ignore [33]
+        state: Dict[Any, Any] = {}
+        param_group: Dict[str, Any] = {
+            "params": [],
+            "lr": emb_module.optimizer_args.learning_rate,
+        }
+
+        params: Dict[str, Union[torch.Tensor, ShardedTensor]] = {}
+
+        super().__init__(params, state, [param_group])
+
+    def zero_grad(self, set_to_none: bool = False) -> None:
+        # pyre-ignore [16]
+        self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
+
+    # pyre-ignore [2]
+    def step(self, closure: Any = None) -> None:
+        # pyre-ignore [16]
+        self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
 class EmbeddingFusedOptimizer(FusedOptimizer):
@@ -376,6 +486,24 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
+def _gen_named_parameters_by_table_ssd(
+    emb_module: SSDTableBatchedEmbeddingBags,
+    table_name_to_count: Dict[str, int],
+    config: GroupedEmbeddingConfig,
+    pg: Optional[dist.ProcessGroup] = None,
+) -> Iterator[Tuple[str, nn.Parameter]]:
+    """
+    Return an empty tensor to indicate that the table is on remote device.
+    """
+    for table in config.embedding_tables:
+        table_name = table.name
+        # placeholder
+        weight: nn.Parameter = nn.Parameter(torch.empty(0))
+        # pyre-ignore
+        weight._in_backward_optimizers = [EmptyFusedOptimizer()]
+        yield (table_name, weight)
+
+
 def _gen_named_parameters_by_table_fused(
     emb_module: SplitTableBatchedEmbeddingBagsCodegen,
     table_name_to_count: Dict[str, int],
@@ -561,6 +689,129 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
         """
         for name, param in self._param_per_table.items():
             yield name, param
+
+
+class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        pg: Optional[dist.ProcessGroup] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(config, pg, device)
+
+        assert (
+            len(config.embedding_tables) > 0
+        ), "Expected to see at least one table in SSD TBE, but found 0."
+        assert (
+            len({table.embedding_dim for table in config.embedding_tables}) == 1
+        ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+
+        ssd_tbe_params = _populate_ssd_tbe_params(config)
+        compute_kernel = config.embedding_tables[0].compute_kernel
+        embedding_location = compute_kernel_to_embedding_location(compute_kernel)
+
+        self._emb_module: SSDTableBatchedEmbeddingBags = SSDTableBatchedEmbeddingBags(
+            embedding_specs=list(zip(self._local_rows, self._local_cols)),
+            feature_table_map=self._feature_table_map,
+            ssd_cache_location=embedding_location,
+            pooling_mode=PoolingMode.NONE,
+            **ssd_tbe_params,
+        ).to(device)
+
+        self._optim: KeyValueEmbeddingFusedOptimizer = KeyValueEmbeddingFusedOptimizer(
+            config,
+            self._emb_module,
+            pg,
+        )
+        self._param_per_table: Dict[str, nn.Parameter] = dict(
+            _gen_named_parameters_by_table_ssd(
+                emb_module=self._emb_module,
+                table_name_to_count=self.table_name_to_count.copy(),
+                config=self._config,
+                pg=pg,
+            )
+        )
+        self.init_parameters()
+
+    def init_parameters(self) -> None:
+        """
+        An advantage of SSD TBE is that we don't need to init weights. Hence skipping.
+        """
+        pass
+
+    @property
+    def emb_module(
+        self,
+    ) -> SSDTableBatchedEmbeddingBags:
+        return self._emb_module
+
+    @property
+    def fused_optimizer(self) -> FusedOptimizer:
+        """
+        SSD Embedding fuses backward with backward.
+        """
+        return self._optim
+
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        if destination is None:
+            destination = OrderedDict()
+
+        return destination
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        """
+        Only allowed ways to get state_dict.
+        """
+        for name, tensor in self.named_split_embedding_weights(
+            prefix, recurse, remove_duplicate
+        ):
+            # hack before we support optimizer on sharded parameter level
+            # can delete after PEA deprecation
+            param = nn.Parameter(tensor)
+            # pyre-ignore
+            param._in_backward_optimizers = [EmptyFusedOptimizer()]
+            yield name, param
+
+    def named_split_embedding_weights(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
+        for config, tensor in zip(
+            self._config.embedding_tables,
+            self.split_embedding_weights(),
+        ):
+            key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, tensor
+
+    def flush(self) -> None:
+        """
+        Flush the embeddings in cache back to SSD. Should be pretty expensive.
+        """
+        self.emb_module.flush()
+
+    def purge(self) -> None:
+        """
+        Reset the cache space. This is needed when we load state dict.
+        """
+        # TODO: move the following to SSD TBE.
+        self.emb_module.lxu_cache_weights.zero_()
+        self.emb_module.lxu_cache_state.fill_(-1)
+
+    def split_embedding_weights(self) -> List[torch.Tensor]:
+        """
+        Return fake tensors.
+        """
+        return [param.data for param in self._param_per_table.values()]
 
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule):
@@ -862,6 +1113,131 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         """
         for name, param in self._param_per_table.items():
             yield name, param
+
+
+class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizerModule):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        pg: Optional[dist.ProcessGroup] = None,
+        device: Optional[torch.device] = None,
+        sharding_type: Optional[ShardingType] = None,
+    ) -> None:
+        super().__init__(config, pg, device, sharding_type)
+
+        assert (
+            len(config.embedding_tables) > 0
+        ), "Expected to see at least one table in SSD TBE, but found 0."
+        assert (
+            len({table.embedding_dim for table in config.embedding_tables}) == 1
+        ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+
+        ssd_tbe_params = _populate_ssd_tbe_params(config)
+        compute_kernel = config.embedding_tables[0].compute_kernel
+        embedding_location = compute_kernel_to_embedding_location(compute_kernel)
+
+        self._emb_module: SSDTableBatchedEmbeddingBags = SSDTableBatchedEmbeddingBags(
+            embedding_specs=list(zip(self._local_rows, self._local_cols)),
+            feature_table_map=self._feature_table_map,
+            ssd_cache_location=embedding_location,
+            pooling_mode=self._pooling,
+            **ssd_tbe_params,
+        ).to(device)
+
+        self._optim: KeyValueEmbeddingFusedOptimizer = KeyValueEmbeddingFusedOptimizer(
+            config,
+            self._emb_module,
+            pg,
+        )
+        self._param_per_table: Dict[str, nn.Parameter] = dict(
+            _gen_named_parameters_by_table_ssd(
+                emb_module=self._emb_module,
+                table_name_to_count=self.table_name_to_count.copy(),
+                config=self._config,
+                pg=pg,
+            )
+        )
+        self.init_parameters()
+
+    def init_parameters(self) -> None:
+        """
+        An advantage of SSD TBE is that we don't need to init weights. Hence
+        skipping.
+        """
+        pass
+
+    @property
+    def emb_module(
+        self,
+    ) -> SSDTableBatchedEmbeddingBags:
+        return self._emb_module
+
+    @property
+    def fused_optimizer(self) -> FusedOptimizer:
+        """
+        SSD Embedding fuses backward with backward.
+        """
+        return self._optim
+
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        if destination is None:
+            destination = OrderedDict()
+
+        return destination
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        """
+        Only allowed ways to get state_dict.
+        """
+        for name, tensor in self.named_split_embedding_weights(
+            prefix, recurse, remove_duplicate
+        ):
+            # hack before we support optimizer on sharded parameter level
+            # can delete after PEA deprecation
+            param = nn.Parameter(tensor)
+            # pyre-ignore
+            param._in_backward_optimizers = [EmptyFusedOptimizer()]
+            yield name, param
+
+    def named_split_embedding_weights(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
+        for config, tensor in zip(
+            self._config.embedding_tables,
+            self.split_embedding_weights(),
+        ):
+            key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, tensor
+
+    def flush(self) -> None:
+        """
+        Flush the embeddings in cache back to SSD. Should be pretty expensive.
+        """
+        self.emb_module.flush()
+
+    def purge(self) -> None:
+        """
+        Reset the cache space. This is needed when we load state dict.
+        """
+        # TODO: move the following to SSD TBE.
+        self.emb_module.lxu_cache_weights.zero_()
+        self.emb_module.lxu_cache_state.fill_(-1)
+
+    def split_embedding_weights(self) -> List[torch.Tensor]:
+        """
+        Return fake tensors.
+        """
+        return [param.data for param in self._param_per_table.values()]
 
 
 class BatchedFusedEmbeddingBag(

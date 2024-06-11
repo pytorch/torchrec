@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import (
     Any,
-    Callable,
     cast,
     Dict,
     Iterator,
@@ -805,6 +804,10 @@ class ShardedEmbeddingBagCollection(
                     self.embedding_bags[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
+            if model_parallel_name_to_compute_kernel[table_name] in {
+                EmbeddingComputeKernel.KEY_VALUE.value
+            }:
+                continue
             # created ShardedTensors once in init, use in post_state_dict_hook
             self._model_parallel_name_to_sharded_tensor[table_name] = (
                 ShardedTensor._init_from_local_shards(
@@ -841,6 +844,10 @@ class ShardedEmbeddingBagCollection(
 
         # Initialize embedding bags weights with init_fn
         for table_config in self._embedding_bag_configs:
+            if self.module_sharding_plan[table_config.name].compute_kernel in {
+                EmbeddingComputeKernel.KEY_VALUE.value,
+            }:
+                continue
             assert table_config.init_fn is not None
             param = self.embedding_bags[f"{table_config.name}"].weight
             # pyre-ignore

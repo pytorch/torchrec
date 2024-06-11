@@ -8,7 +8,7 @@
 # pyre-strict
 
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -39,6 +39,11 @@ from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerColle
 
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+# compute kernels that should only be used if users specified them
+GUARDED_COMPUTE_KERNELS: Set[EmbeddingComputeKernel] = {
+    EmbeddingComputeKernel.KEY_VALUE
+}
 
 
 class EmbeddingEnumerator(Enumerator):
@@ -256,22 +261,29 @@ class EmbeddingEnumerator(Enumerator):
         allowed_compute_kernels: List[str],
         sharding_type: str,
     ) -> List[str]:
-        # for the log message only
-        constrained_compute_kernels: List[str] = [
-            compute_kernel.value for compute_kernel in EmbeddingComputeKernel
-        ]
-        if not self._constraints or not self._constraints.get(name):
-            filtered_compute_kernels = allowed_compute_kernels
+        # setup constrained_compute_kernels
+        if (
+            self._constraints
+            and self._constraints.get(name)
+            and self._constraints[name].compute_kernels
+        ):
+            # pyre-ignore
+            constrained_compute_kernels: List[str] = self._constraints[
+                name
+            ].compute_kernels
         else:
-            constraints: ParameterConstraints = self._constraints[name]
-            if not constraints.compute_kernels:
-                filtered_compute_kernels = allowed_compute_kernels
-            else:
-                constrained_compute_kernels = constraints.compute_kernels
-                filtered_compute_kernels = list(
-                    set(constrained_compute_kernels) & set(allowed_compute_kernels)
-                )
+            constrained_compute_kernels: List[str] = [
+                compute_kernel.value
+                for compute_kernel in EmbeddingComputeKernel
+                if compute_kernel not in GUARDED_COMPUTE_KERNELS
+            ]
 
+        # setup filtered_compute_kernels
+        filtered_compute_kernels = list(
+            set(constrained_compute_kernels) & set(allowed_compute_kernels)
+        )
+
+        # special rules
         if EmbeddingComputeKernel.DENSE.value in filtered_compute_kernels:
             if (
                 EmbeddingComputeKernel.FUSED.value in filtered_compute_kernels

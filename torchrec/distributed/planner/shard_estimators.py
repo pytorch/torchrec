@@ -1069,9 +1069,12 @@ def calculate_shard_storages(
     if compute_kernel in {
         EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
         EmbeddingComputeKernel.QUANT_UVM_CACHING.value,
+        EmbeddingComputeKernel.KEY_VALUE.value,
     }:
         hbm_storage = round(ddr_storage * caching_ratio)
         table_cached = True
+    if compute_kernel in {EmbeddingComputeKernel.KEY_VALUE.value}:
+        ddr_storage = 0
 
     optimizer_class = getattr(tensor, "_optimizer_class", None)
 
