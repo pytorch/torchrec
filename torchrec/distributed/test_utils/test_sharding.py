@@ -61,7 +61,7 @@ class SharderType(Enum):
 def create_test_sharder(
     sharder_type: str,
     sharding_type: str,
-    kernel_type: str,
+    kernel_type: Union[str, List[str]],
     fused_params: Optional[Dict[str, Any]] = None,
     qcomms_config: Optional[QCommsConfig] = None,
     device: Optional[torch.device] = None,
@@ -74,6 +74,7 @@ def create_test_sharder(
     if "learning_rate" not in fused_params:
         fused_params["learning_rate"] = 0.1
     if sharder_type == SharderType.EMBEDDING_BAG.value:
+        assert type(kernel_type) is str
         return TestEBSharder(
             sharding_type, kernel_type, fused_params, qcomm_codecs_registry
         )
@@ -85,10 +86,12 @@ def create_test_sharder(
             qcomm_codecs_registry,
         )
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
+        assert type(kernel_type) is str
         return TestETSharder(
             sharding_type, kernel_type, fused_params, qcomm_codecs_registry
         )
     elif sharder_type == SharderType.EMBEDDING_TOWER_COLLECTION.value:
+        assert type(kernel_type) is str
         return TestETCSharder(
             sharding_type, kernel_type, fused_params, qcomm_codecs_registry
         )

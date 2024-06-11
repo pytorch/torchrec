@@ -38,6 +38,7 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingShardingInfo,
     KJTListSplitsAwaitable,
     Multistreamable,
+    USE_ONE_TBE_PER_TABLE,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -142,7 +143,6 @@ def replace_placement_with_meta_device(
 
 
 def create_embedding_bag_sharding(
-    sharding_type: str,
     sharding_infos: List[EmbeddingShardingInfo],
     env: ShardingEnv,
     device: Optional[torch.device] = None,
@@ -151,6 +151,7 @@ def create_embedding_bag_sharding(
 ) -> EmbeddingSharding[
     EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
 ]:
+    sharding_type = sharding_infos[0].param_sharding.sharding_type
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(sharding_infos)
     if sharding_type == ShardingType.TABLE_WISE.value:
@@ -196,12 +197,49 @@ def create_embedding_bag_sharding(
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
 
-def create_sharding_infos_by_sharding(
+def _get_sharding_group(
+    config: EmbeddingBagConfig,
+    param_sharding: ParameterSharding,
+    fused_params: Optional[Dict[str, Any]] = None,
+) -> str:
+    if fused_params and fused_params.get(USE_ONE_TBE_PER_TABLE, False):
+        return config.name
+    if param_sharding.sharding_type in {
+        ShardingType.COLUMN_WISE.value,
+        ShardingType.TABLE_COLUMN_WISE.value,
+    }:
+        assert param_sharding.ranks
+        num_ranks = len(param_sharding.ranks)
+        assert config.embedding_dim % num_ranks == 0
+        dim = config.embedding_dim // num_ranks
+    else:
+        dim = config.embedding_dim
+
+    group = f"{param_sharding.sharding_type}$${param_sharding.compute_kernel}"
+    if (
+        param_sharding.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+        and (
+            (fused_params and fused_params.get("prefetch_pipeline", False))
+            or (
+                param_sharding.cache_params
+                and param_sharding.cache_params.prefetch_pipeline is not None
+                and param_sharding.cache_params.prefetch_pipeline
+            )
+        )
+    ):
+        group += f"$${dim}"
+    return group
+
+
+def create_sharding_infos_by_group(
     module: EmbeddingBagCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
     prefix: str,
     fused_params: Optional[Dict[str, Any]],
     suffix: Optional[str] = "weight",
+    group_fn: Optional[
+        Callable[[EmbeddingBagConfig, ParameterSharding, Optional[Dict[str, Any]]], str]
+    ] = None,
 ) -> Dict[str, List[EmbeddingShardingInfo]]:
 
     if fused_params is None:
@@ -217,7 +255,7 @@ def create_sharding_infos_by_sharding(
             else:
                 shared_feature[feature_name] = True
 
-    sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = {}
+    group_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = defaultdict(list)
 
     # state_dict returns parameter.Tensor, which loses parameter level attributes
     parameter_by_name = dict(module.named_parameters())
@@ -250,9 +288,6 @@ def create_sharding_infos_by_sharding(
         assert param_name in parameter_by_name or param_name in state_dict
         param = parameter_by_name.get(param_name, state_dict[param_name])
 
-        if parameter_sharding.sharding_type not in sharding_type_to_sharding_infos:
-            sharding_type_to_sharding_infos[parameter_sharding.sharding_type] = []
-
         optimizer_params = getattr(param, "_optimizer_kwargs", [{}])
         optimizer_classes = getattr(param, "_optimizer_classes", [None])
 
@@ -274,28 +309,32 @@ def create_sharding_infos_by_sharding(
         )
         per_table_fused_params = convert_to_fbgemm_types(per_table_fused_params)
 
-        sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
-            EmbeddingShardingInfo(
-                embedding_config=EmbeddingTableConfig(
-                    num_embeddings=config.num_embeddings,
-                    embedding_dim=config.embedding_dim,
-                    name=config.name,
-                    data_type=config.data_type,
-                    feature_names=copy.deepcopy(config.feature_names),
-                    pooling=config.pooling,
-                    is_weighted=module.is_weighted(),
-                    has_feature_processor=False,
-                    embedding_names=embedding_names,
-                    weight_init_max=config.weight_init_max,
-                    weight_init_min=config.weight_init_min,
-                    pruning_indices_remapping=config.pruning_indices_remapping,
-                ),
-                param_sharding=parameter_sharding,
-                param=param,
-                fused_params=per_table_fused_params,
-            )
+        group = (
+            group_fn(config, parameter_sharding, fused_params)
+            if group_fn is not None
+            else parameter_sharding.sharding_type
         )
-    return sharding_type_to_sharding_infos
+        sharding_info = EmbeddingShardingInfo(
+            embedding_config=EmbeddingTableConfig(
+                num_embeddings=config.num_embeddings,
+                embedding_dim=config.embedding_dim,
+                name=config.name,
+                data_type=config.data_type,
+                feature_names=copy.deepcopy(config.feature_names),
+                pooling=config.pooling,
+                is_weighted=module.is_weighted(),
+                has_feature_processor=False,
+                embedding_names=embedding_names,
+                weight_init_max=config.weight_init_max,
+                weight_init_min=config.weight_init_min,
+                pruning_indices_remapping=config.pruning_indices_remapping,
+            ),
+            param_sharding=parameter_sharding,
+            param=param,
+            fused_params=per_table_fused_params,
+        )
+        group_to_sharding_infos[group].append(sharding_info)
+    return group_to_sharding_infos
 
 
 def create_sharding_infos_by_sharding_device_group(
@@ -572,31 +611,30 @@ class ShardedEmbeddingBagCollection(
         )
         self._env = env
 
-        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
+        group_to_sharding_infos = create_sharding_infos_by_group(
             module,
             table_name_to_parameter_sharding,
             "embedding_bags.",
             fused_params,
+            group_fn=_get_sharding_group,
         )
-        self._sharding_type_to_sharding: Dict[
-            str,
+        self._embedding_shardings: List[
             EmbeddingSharding[
                 EmbeddingShardingContext,
                 KeyedJaggedTensor,
                 torch.Tensor,
                 torch.Tensor,
-            ],
-        ] = {
-            sharding_type: create_embedding_bag_sharding(
-                sharding_type,
+            ]
+        ] = [
+            create_embedding_bag_sharding(
                 embedding_configs,
                 env,
                 device,
                 permute_embeddings=True,
                 qcomm_codecs_registry=self.qcomm_codecs_registry,
             )
-            for sharding_type, embedding_configs in sharding_type_to_sharding_infos.items()
-        }
+            for embedding_configs in group_to_sharding_infos.values()
+        ]
 
         self._is_weighted: bool = module.is_weighted()
         self._device = device
@@ -641,15 +679,12 @@ class ShardedEmbeddingBagCollection(
                     optims.append(("", tbe_module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
 
-        for index, (sharding, lookup) in enumerate(
-            zip(
-                self._sharding_type_to_sharding.values(),
-                self._lookups,
-            )
+        for i, (sharding, lookup) in enumerate(
+            zip(self._embedding_shardings, self._lookups)
         ):
             # TODO: can move this into DpPooledEmbeddingSharding once all modules are composable
             if isinstance(sharding, DpPooledEmbeddingSharding):
-                self._lookups[index] = DistributedDataParallel(
+                self._lookups[i] = DistributedDataParallel(
                     module=lookup,
                     device_ids=(
                         [device]
@@ -771,10 +806,8 @@ class ShardedEmbeddingBagCollection(
                 table.embedding_dim,
             )
 
-        for sharding_type, lookup in zip(
-            self._sharding_type_to_sharding.keys(), self._lookups
-        ):
-            if sharding_type == ShardingType.DATA_PARALLEL.value:
+        for lookup, sharding in zip(self._lookups, self._embedding_shardings):
+            if isinstance(sharding, DpPooledEmbeddingSharding):
                 # unwrap DDP
                 lookup = lookup.module
             else:
@@ -857,7 +890,7 @@ class ShardedEmbeddingBagCollection(
         input_feature_names: List[str],
     ) -> None:
         feature_names: List[str] = []
-        for sharding in self._sharding_type_to_sharding.values():
+        for sharding in self._embedding_shardings:
             self._input_dists.append(sharding.create_input_dist())
             feature_names.extend(sharding.feature_names())
             self._feature_splits.append(len(sharding.feature_names()))
@@ -883,7 +916,7 @@ class ShardedEmbeddingBagCollection(
         # account for shared features
         feature_names: List[str] = [
             feature_name
-            for sharding in self._sharding_type_to_sharding.values()
+            for sharding in self._embedding_shardings
             for feature_name in sharding.feature_names()
         ]
 
@@ -910,12 +943,12 @@ class ShardedEmbeddingBagCollection(
     def _create_lookups(
         self,
     ) -> None:
-        for sharding in self._sharding_type_to_sharding.values():
+        for sharding in self._embedding_shardings:
             self._lookups.append(sharding.create_lookup())
 
     def _create_output_dist(self) -> None:
         embedding_shard_metadata: List[Optional[ShardMetadata]] = []
-        for sharding in self._sharding_type_to_sharding.values():
+        for sharding in self._embedding_shardings:
             self._output_dists.append(sharding.create_output_dist(device=self._device))
             self._embedding_names.extend(sharding.embedding_names())
             self._embedding_dims.extend(sharding.embedding_dims())
@@ -1229,7 +1262,6 @@ class ShardedEmbeddingBag(
         self._embedding_sharding: EmbeddingSharding[
             EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
         ] = create_embedding_bag_sharding(
-            sharding_type=self.parameter_sharding.sharding_type,
             sharding_infos=[
                 EmbeddingShardingInfo(
                     embedding_config=embedding_table_config,

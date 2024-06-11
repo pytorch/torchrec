@@ -1212,7 +1212,7 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
     def __init__(
         self,
         sharding_type: str,
-        kernel_type: str,
+        kernel_type: Union[str, List[str]],
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
@@ -1237,7 +1237,11 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [self._kernel_type]
+        return (
+            [self._kernel_type]
+            if type(self._kernel_type) is str
+            else cast(List[str], self._kernel_type)
+        )
 
 
 class TestFusedEBCSharder(FusedEmbeddingBagCollectionSharder):

@@ -630,3 +630,41 @@ class ModelParallelBase(ModelParallelTestShared):
             global_constant_batch=global_constant_batch,
             pooling=pooling,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(sharding_type=st.just(ShardingType.COLUMN_WISE.value))
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_sharding_multiple_kernels(self, sharding_type: str) -> None:
+        constraints = {
+            table.name: ParameterConstraints(
+                min_partition=4,
+                compute_kernels=(
+                    [EmbeddingComputeKernel.FUSED.value]
+                    if i % 2 == 0
+                    else [EmbeddingComputeKernel.FUSED_UVM_CACHING.value]
+                ),
+            )
+            for i, table in enumerate(self.tables)
+        }
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type=SharderType.EMBEDDING_BAG_COLLECTION.value,
+                    sharding_type=sharding_type,
+                    kernel_type=[
+                        EmbeddingComputeKernel.FUSED.value,
+                        EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                    ],
+                    device=self.device,
+                ),
+            ],
+            backend=self.backend,
+            constraints=constraints,
+            variable_batch_per_feature=True,
+            has_weighted_tables=False,
+        )
