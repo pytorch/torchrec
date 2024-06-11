@@ -68,6 +68,7 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
         self,
         num_batches: int = 5,
         batch_size: int = 1,
+        max_feature_lengths: Optional[List[int]] = None,
     ) -> List[ModelInput]:
         return [
             ModelInput.generate(
@@ -76,6 +77,7 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
                 batch_size=batch_size,
                 world_size=1,
                 num_float_features=10,
+                max_feature_lengths=max_feature_lengths,
             )[0]
             for i in range(num_batches)
         ]
