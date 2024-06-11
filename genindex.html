@@ -265,7 +265,7 @@
               
               
                 <div class="version">
-                  0.8.0.dev20240610+cpu
+                  0.8.0.dev20240611+cpu
                 </div>
               
             
@@ -2643,6 +2643,8 @@
 <h2 id="P">P</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.pad_vbe_kjt_lengths">pad_vbe_kjt_lengths() (in module torchrec.distributed.embedding)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingInfo.param">param (torchrec.distributed.embedding_sharding.EmbeddingShardingInfo attribute)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.ShardingOptionGroup.param_count">param_count (torchrec.distributed.planner.partitioners.ShardingOptionGroup attribute)</a>
@@ -2747,10 +2749,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">PooledEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">PooledEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">[1]</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">PooledEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">[1]</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter">PooledEmbeddingsReduceScatter (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.GroupedEmbeddingConfig.pooling">pooling (torchrec.distributed.embedding_types.GroupedEmbeddingConfig attribute)</a>
@@ -2953,6 +2955,8 @@
         <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.rebuild_with_output_id_range">(torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.recat">recat (torchrec.modules.utils.SequenceVBEContext attribute)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.DistanceLFU_EvictionPolicy.record_history_metadata">record_history_metadata() (torchrec.modules.mc_modules.DistanceLFU_EvictionPolicy method)</a>
 
       <ul>
@@ -2983,6 +2987,8 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.NullShardedModuleContext.record_stream">(torchrec.distributed.types.NullShardedModuleContext method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.NullShardingContext.record_stream">(torchrec.distributed.types.NullShardingContext method)</a>
+</li>
+        <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.record_stream">(torchrec.modules.utils.SequenceVBEContext method)</a>
 </li>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor.record_stream">(torchrec.sparse.jagged_tensor.JaggedTensor method)</a>
 </li>
@@ -3038,6 +3044,12 @@
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.regroup">regroup() (torchrec.sparse.jagged_tensor.KeyedTensor static method)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.regroup_as_dict">regroup_as_dict() (torchrec.sparse.jagged_tensor.KeyedTensor static method)</a>
+</li>
+      <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.reindexed_length_per_key">reindexed_length_per_key (torchrec.modules.utils.SequenceVBEContext attribute)</a>
+</li>
+      <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.reindexed_lengths">reindexed_lengths (torchrec.modules.utils.SequenceVBEContext attribute)</a>
+</li>
+      <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.reindexed_values">reindexed_values (torchrec.modules.utils.SequenceVBEContext attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.remap">remap() (torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
 </li>
@@ -3124,6 +3136,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll">SequenceEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAllToAll">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable">SequenceEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SequenceEmbeddingsAwaitable">[1]</a>
+</li>
+      <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext">SequenceVBEContext (class in torchrec.modules.utils)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.set_device">set_device() (torchrec.distributed.dist_data.EmbeddingsAllToOne method)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.EmbeddingsAllToOne.set_device">[1]</a>
 
@@ -4171,6 +4185,8 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.LuusJaakolaSearch.uniform">uniform() (torchrec.distributed.planner.utils.LuusJaakolaSearch method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.UniformProposer">UniformProposer (class in torchrec.distributed.planner.proposers)</a>
+</li>
+      <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.unpadded_lengths">unpadded_lengths (torchrec.modules.utils.SequenceVBEContext attribute)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.unsync">unsync() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
