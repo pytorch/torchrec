@@ -11,7 +11,7 @@ import copy
 import unittest
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, List, Optional, Tuple, Type
+from typing import cast, List, Optional, Tuple, Type, Union
 from unittest.mock import MagicMock
 
 import torch
@@ -83,7 +83,9 @@ class ModelInputSimple(Pipelineable):
             label=self.label.to(device=device, non_blocking=non_blocking),
         )
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         self.float_features.record_stream(stream)
         self.label.record_stream(stream)
 

@@ -686,7 +686,9 @@ ShardedModuleContext = Multistreamable
 
 
 class NullShardedModuleContext(Multistreamable):
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Optional[Union[torch.cuda.streams.Stream, torch.mtia.Stream]]
+    ) -> None:
         pass
 
     # pyre-ignore [2]
@@ -732,7 +734,9 @@ class ShardingEnv:
 
 
 class NullShardingContext(Multistreamable):
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         pass
 
 

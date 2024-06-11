@@ -9,7 +9,19 @@
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type, TypeVar
+from typing import (
+    Any,
+    cast,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import torch
 import torch.distributed as dist
@@ -87,7 +99,9 @@ class TowerLazyAwaitable(LazyAwaitable[torch.Tensor]):
 class EmbeddingTowerCollectionContext(Multistreamable):
     embedding_contexts: List[NullShardedModuleContext] = field(default_factory=list)
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         for ctx in self.embedding_contexts:
             ctx.record_stream(stream)
 

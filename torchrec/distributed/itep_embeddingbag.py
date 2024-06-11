@@ -8,7 +8,7 @@
 # pyre-strict
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, Union
 
 import torch
 
@@ -86,7 +86,7 @@ class ShardedITEPEmbeddingBagCollection(
     def prefetch(
         self,
         dist_input: KJTList,
-        forward_stream: Optional[torch.cuda.Stream] = None,
+        forward_stream: Optional[Union[torch.cuda.Stream, torch.mtia.Stream]] = None,
         ctx: Optional[ITEPEmbeddingBagCollectionContext] = None,
     ) -> None:
         assert (

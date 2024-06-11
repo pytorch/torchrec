@@ -9,7 +9,7 @@
 
 #!/usr/bin/env python3
 
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, Union
 
 import torch
 
@@ -51,7 +51,9 @@ class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
         )
         self.remapped_kjt: Optional[KJTList] = remapped_kjt
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         super().record_stream(stream)
         if self.evictions_per_table:
             #  pyre-ignore

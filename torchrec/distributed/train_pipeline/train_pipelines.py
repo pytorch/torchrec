@@ -22,6 +22,7 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    Union,
 )
 
 import torch
@@ -87,8 +88,19 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._model = model
         self._optimizer = optimizer
         self._device = device
-        self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
-            torch.cuda.Stream() if device.type == "cuda" else None
+        self._memcpy_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            torch.get_device_module(device).Stream()
+            if device.type in ["cuda", "mtia"]
+            else None
+        )
+
+        # pyre-ignore
+        self._stream_context = (
+            torch.get_device_module(self._device).stream
+            if self._device.type in ["cuda", "mtia"]
+            else torch.cuda.stream
         )
         self._cur_batch: Optional[In] = None
         self._connected = False
@@ -96,7 +108,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         cur_batch = next(dataloader_iter)
         self._cur_batch = cur_batch
-        with torch.cuda.stream(self._memcpy_stream):
+        with self._stream_context(self._memcpy_stream):
             self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
         self._connected = True
 
@@ -127,7 +139,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         # Copy the next batch to GPU
         self._cur_batch = cur_batch = next_batch
         with record_function("## copy_batch_to_gpu ##"):
-            with torch.cuda.stream(self._memcpy_stream):
+            with self._stream_context(self._memcpy_stream):
                 self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
 
         # Update
@@ -188,11 +200,26 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 not is_torchdynamo_compiling()
             ), "Train Pipelines rely on cuda streams, which is not supported by Dynamo"
 
-        self._memcpy_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream(priority=-1)) if device.type == "cuda" else None
+        # pyre-ignore
+        self._stream_context = (
+            torch.get_device_module(self._device).stream
+            if self._device.type in ["cuda", "mtia"]
+            else torch.cuda.stream
         )
-        self._data_dist_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream(priority=-1)) if device.type == "cuda" else None
+
+        self._memcpy_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(device).Stream(priority=-1))
+            if device.type in ["cuda", "mtia"]
+            else None
+        )
+        self._data_dist_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(device).Stream(priority=-1))
+            if device.type in ["cuda", "mtia"]
+            else None
         )
 
         # pyre-ignore
@@ -400,7 +427,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
         context = None
         with record_function(f"## copy_batch_to_gpu {self._next_index} ##"):
-            with torch.cuda.stream(self._memcpy_stream):
+            with self._stream_context(self._memcpy_stream):
                 batch = self._next_batch(dataloader_iter)
                 if batch is not None:
                     batch = _to_device(batch, self._device, non_blocking=True)
@@ -436,7 +463,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if batch is None:
             return
         with record_function(f"## start_sparse_data_dist {context.index} ##"):
-            with torch.cuda.stream(self._data_dist_stream):
+            with self._stream_context(self._data_dist_stream):
                 _wait_for_batch(batch, self._memcpy_stream)
                 _start_data_dist(self._pipelined_modules, batch, context)
 
@@ -446,7 +473,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         and populates the context with them.
         """
         with record_function(f"## wait_sparse_data_dist {context.index} ##"):
-            with torch.cuda.stream(self._data_dist_stream):
+            with self._stream_context(self._data_dist_stream):
                 for names, awaitable in context.fused_splits_awaitables:
                     for name, request in zip(names, awaitable.wait()):
                         context.input_dist_tensors_requests[name] = request
@@ -477,7 +504,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
         self._set_module_context(self._context)
         with record_function("## wait_sparse_data_dist ##"):
-            with torch.cuda.stream(self._data_dist_stream):
+            with self._stream_context(self._data_dist_stream):
                 self._context.module_contexts = (
                     self._context.module_contexts_next_batch.copy()
                 )
@@ -554,14 +581,33 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._stash_gradients = stash_gradients
 
         # use two data streams to support two concurrent batches
-        self._embedding_odd_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream(priority=0)) if device.type == "cuda" else None
+        self._embedding_odd_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(self._device).Stream(priority=0))
+            if device.type in ["cuda", "mtia"]
+            else None
         )
-        self._embedding_even_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream(priority=0)) if device.type == "cuda" else None
+        self._embedding_even_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(self._device).Stream(priority=0))
+            if device.type in ["cuda", "mtia"]
+            else None
         )
-        self._overarch_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream(priority=-1)) if device.type == "cuda" else None
+        self._overarch_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(self._device).Stream(priority=-1))
+            if device.type in ["cuda", "mtia"]
+            else None
+        )
+        self._bwd_sync_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(self._device).Stream(priority=0))
+            if device.type in ["cuda", "mtia"]
+            else None
         )
         self._gradients: Dict[str, torch.Tensor] = {}
 
@@ -647,10 +693,11 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if self._model.training:
             # backward would put an implicit sync point in stream called from, ideally
             # this would different from optimizer so it could start earilier, but currently not safe to do so.
-            with torch.cuda.stream(self._overarch_stream):
+            with self._stream_context(self._overarch_stream):
                 with record_function(f"## backward {self.contexts[0].index} ##"):
                     torch.sum(losses, dim=0).backward()
 
+            with self._stream_context(self._overarch_stream):
                 with record_function(
                     f"## optimizer {cast(int, self.contexts[0].index) - 1} ##"
                 ):
@@ -674,8 +721,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self, batch: In, context: TrainPipelineContext
     ) -> Tuple[torch.Tensor, Out]:
         with record_function(f"## forward {context.index} ##"):
-            with torch.cuda.stream(self._overarch_stream):
-                _wait_for_event(batch, context.event)
+            with self._stream_context(self._overarch_stream):
+                _wait_for_event(batch, self._device, context.event)
                 context.event = None
                 return cast(Tuple[torch.Tensor, Out], self._model(batch))
 
@@ -685,12 +732,12 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
     ) -> Tuple[Optional[In], Optional[TrainPipelineContext]]:
         context = None
         with record_function(f"## copy_batch_to_gpu {self._next_index} ##"):
-            with torch.cuda.stream(self._memcpy_stream):
+            with self._stream_context(self._memcpy_stream):
                 batch = self._next_batch(dataloader_iter)
                 if batch is not None:
                     batch = _to_device(batch, self._device, non_blocking=True)
                     context = self._create_context()
-                    context.event = torch.cuda.Event()
+                    context.event = torch.get_device_module(self._device).Event()
                     context.event.record()
                 return batch, context
 
@@ -705,10 +752,10 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if batch is None:
             return
         with record_function(f"## start_sparse_data_dist {context.index} ##"):
-            with torch.cuda.stream(self._data_dist_stream):
-                _wait_for_event(batch, context.event)
+            with self._stream_context(self._data_dist_stream):
+                _wait_for_event(batch, self._device, context.event)
                 _start_data_dist(self._pipelined_modules, batch, context)
-                context.event = torch.cuda.Event()
+                context.event = torch.get_device_module(self._device).Event()
                 context.event.record()
 
     def start_embedding_lookup(
@@ -722,14 +769,16 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if batch is None:
             return
         with record_function(f"## start_embedding_lookup {context.index} ##"):
-            with torch.cuda.stream(
+            with self._stream_context(
                 self._embedding_even_stream
                 if cast(int, context.index) % 2 == 0
                 else self._embedding_odd_stream
             ):
-                _wait_for_event(batch, context.event)
-                _start_embedding_lookup(self._pipelined_modules, batch, context)
-                context.event = torch.cuda.Event()
+                _wait_for_event(batch, self._device, context.event)
+                _start_embedding_lookup(
+                    self._pipelined_modules, batch, context, self._device
+                )
+                context.event = torch.get_device_module(self._device).Event()
                 context.event.record()
 
 
@@ -778,11 +827,19 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             context_type=PrefetchTrainPipelineContext,
         )
         self._context = PrefetchTrainPipelineContext(version=0)
-        self._prefetch_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream()) if self._device.type == "cuda" else None
+        self._prefetch_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(device).Stream())
+            if self._device.type in ["cuda", "mtia"]
+            else None
         )
-        self._default_stream: Optional[torch.cuda.streams.Stream] = (
-            (torch.cuda.Stream()) if self._device.type == "cuda" else None
+        self._default_stream: Optional[
+            Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+        ] = (
+            (torch.get_device_module(self._device).Stream())
+            if self._device.type in ["cuda", "mtia"]
+            else None
         )
         self._batch_ip3: Optional[In] = None
 
@@ -858,8 +915,10 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         self._context.module_contexts_post_prefetch.clear()
 
         with record_function("## sharded_module_prefetch ##"):
-            with torch.cuda.stream(self._prefetch_stream):
-                batch.record_stream(torch.cuda.current_stream())
+            with self._stream_context(self._prefetch_stream):
+                batch.record_stream(
+                    torch.get_device_module(self._device).current_stream()
+                )
                 for sharded_module in self._pipelined_modules:
                     forward = sharded_module.forward
                     assert isinstance(forward, PrefetchPipelinedForward)
@@ -872,15 +931,19 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                     with record_function("## wait_sparse_data_dist ##"):
                         # Finish waiting on the dist_stream,
                         # in case some delayed stream scheduling happens during the wait() call.
-                        with torch.cuda.stream(self._data_dist_stream):
+                        with self._stream_context(self._data_dist_stream):
                             data = request.wait()
 
                     # Make sure that both result of input_dist and context
                     # are properly transferred to the current stream.
                     module_context = self._context.module_contexts[forward._name]
                     if self._data_dist_stream is not None:
-                        torch.cuda.current_stream().wait_stream(self._data_dist_stream)
-                        cur_stream = torch.cuda.current_stream()
+                        torch.get_device_module(
+                            self._device
+                        ).current_stream().wait_stream(self._data_dist_stream)
+                        cur_stream = torch.get_device_module(
+                            self._device
+                        ).current_stream()
 
                         assert isinstance(
                             data, (torch.Tensor, Multistreamable)
@@ -1048,7 +1111,7 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         self,
         pipeline_stages: List[PipelineStage],
         debug_mode: bool = False,
-        compute_stream: Optional[torch.cuda.Stream] = None,
+        compute_stream: Optional[Union[torch.cuda.Stream, torch.mtia.Stream]] = None,
         on_flush_end: Optional[Callable[[], None]] = None,
     ) -> None:
         self._pipeline_stages = pipeline_stages
@@ -1060,8 +1123,18 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         self._num_steps = 0
         self._dataloader_iter: Optional[Iterator[In]] = None
         self._dataloader_exhausted: bool = False
-        self._compute_stream: torch.cuda.streams.Stream = (
-            compute_stream or torch.cuda.current_stream()
+        self._compute_stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream] = (
+            compute_stream
+            or torch.get_device_module(
+                self._pipeline_stages[0].stream.device
+            ).current_stream()
+        )
+
+        # pyre-ignore
+        self._stream_context = (
+            torch.get_device_module(self._compute_stream.device).stream
+            if self._compute_stream.device.type in ["cuda", "mtia"]
+            else torch.cuda.stream
         )
 
         self._flushing: bool = False
@@ -1082,20 +1155,20 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
     def _run_with_event(
         self,
         runnable: RunnableType,
-        event: Optional[torch.cuda.Event],
+        event: Optional[Union[torch.cuda.Event, torch.mtia.Event]],
         inputs: Optional[In],
-        stream: torch.cuda.streams.Stream,
+        stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream],
     ) -> StageOutputWithEvent:
         if inputs is None:
             return (None, None)
-        with torch.cuda.stream(stream):
+        with self._stream_context(stream):
             # If there is no previous event, data is entering the pipeline
             if event is not None:
                 event.wait(stream)
                 inputs.record_stream(stream)
 
             output = runnable(inputs)
-            new_event = torch.cuda.Event()
+            new_event = torch.get_device_module(stream.device).Event()
             new_event.record(stream)
             return (output, new_event)
 

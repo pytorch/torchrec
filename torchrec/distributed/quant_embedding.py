@@ -77,7 +77,9 @@ except OSError:
 class EmbeddingCollectionContext(Multistreamable):
     sharding_contexts: List[InferSequenceShardingContext]
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         for ctx in self.sharding_contexts:
             ctx.record_stream(stream)
 

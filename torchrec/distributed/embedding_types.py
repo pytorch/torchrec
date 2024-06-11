@@ -10,7 +10,7 @@
 import abc
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar
+from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLocation
@@ -127,7 +127,9 @@ class InputDistOutputs(Multistreamable):
     bucket_mapping_tensor: Optional[torch.Tensor] = None  # only used in RW sharding
     bucketized_length: Optional[torch.Tensor] = None  # only used in RW sharding
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         for feature in self.features:
             feature.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
@@ -156,7 +158,9 @@ class ListOfKJTList(Multistreamable):
         return iter(self.features_list)
 
     @torch.jit._drop
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         for feature in self.features_list:
             feature.record_stream(stream)
 
@@ -330,7 +334,7 @@ class ShardedEmbeddingModule(
     def prefetch(
         self,
         dist_input: KJTList,
-        forward_stream: Optional[torch.cuda.Stream] = None,
+        forward_stream: Optional[Union[torch.cuda.Stream, torch.mtia.Stream]] = None,
         ctx: Optional[ShrdCtx] = None,
     ) -> None:
         """

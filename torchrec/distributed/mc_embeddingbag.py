@@ -9,7 +9,7 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Type
+from typing import Dict, Optional, Type, Union
 
 import torch
 from torchrec.distributed.embedding_types import KJTList
@@ -36,7 +36,9 @@ class ManagedCollisionEmbeddingBagCollectionContext(EmbeddingBagCollectionContex
     evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = None
     remapped_kjt: Optional[KJTList] = None
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         super().record_stream(stream)
         if self.evictions_per_table:
             #  pyre-ignore

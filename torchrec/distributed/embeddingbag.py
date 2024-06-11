@@ -507,7 +507,9 @@ class EmbeddingBagCollectionContext(Multistreamable):
     variable_batch_per_feature: bool = False
     divisor: Optional[torch.Tensor] = None
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         for ctx in self.sharding_contexts:
             if ctx:
                 ctx.record_stream(stream)

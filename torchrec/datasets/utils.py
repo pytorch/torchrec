@@ -13,7 +13,17 @@ import random
 from dataclasses import dataclass
 from functools import partial
 from io import IOBase
-from typing import Any, Callable, Iterable, Iterator, List, Sequence, Tuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    List,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import torch
 from iopath.common.file_io import PathManager, PathManagerFactory
@@ -41,7 +51,9 @@ class Batch(Pipelineable):
             labels=self.labels.to(device=device, non_blocking=non_blocking),
         )
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         self.dense_features.record_stream(stream)
         self.sparse_features.record_stream(stream)
         self.labels.record_stream(stream)

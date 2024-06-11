@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+from typing import Union
 
 import torch
 
@@ -20,7 +21,9 @@ class Multistreamable(abc.ABC):
     """
 
     @abc.abstractmethod
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(
+        self, stream: Union[torch.cuda.streams.Stream, torch.mtia.Stream]
+    ) -> None:
         """
         See https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html
         """
