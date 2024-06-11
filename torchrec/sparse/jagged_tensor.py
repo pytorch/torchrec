@@ -20,8 +20,10 @@ from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
 from torchrec.pt2.checks import (
     is_non_strict_exporting,
     is_torchdynamo_compiling,
+    pt2_check_size_nonzero,
     pt2_checks_all_is_size,
     pt2_checks_tensor_slice,
+    pt2_guard_size_oblivious,
 )
 from torchrec.streamable import Pipelineable
 
@@ -878,8 +880,10 @@ def _maybe_compute_length_per_key(
                 _length_per_key_from_stride_per_key(lengths, stride_per_key)
                 if variable_stride_per_key
                 else (
-                    torch.sum(lengths.view(-1, stride), dim=1).tolist()
-                    if lengths.numel() != 0
+                    torch.sum(
+                        pt2_check_size_nonzero(lengths.view(len(keys), stride)), dim=1
+                    ).tolist()
+                    if pt2_guard_size_oblivious(lengths.numel() != 0)
                     else [0] * len(keys)
                 )
             )
