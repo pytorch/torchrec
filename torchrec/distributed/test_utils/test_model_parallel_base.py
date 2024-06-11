@@ -266,10 +266,96 @@ class ModelParallelSingleRankBase(unittest.TestCase):
 
         dist.init_process_group(backend=backend)
 
+        self.batch_size = 20
+        self.num_float_features = 10
+        self.tables = []
+        self.weighted_tables = []
+
+        self._create_tables()
+
     def tearDown(self) -> None:
         dist.destroy_process_group()
         del os.environ["NCCL_SOCKET_IFNAME"]
         super().tearDown()
+
+    def _create_tables(self) -> None:
+        pass
+
+    def _set_table_weights_precision(self, dtype: DataType) -> None:
+        for table in self.tables:
+            table.data_type = dtype
+
+        for weighted_table in self.weighted_tables:
+            weighted_table.data_type = dtype
+
+    def _create_model(self) -> nn.Module:
+        return TestSparseNN(
+            tables=self.tables,
+            num_float_features=self.num_float_features,
+            weighted_tables=self.weighted_tables,
+            dense_device=self.device,
+            sparse_device=torch.device("meta"),
+        )
+
+    def _generate_batch(self) -> ModelInput:
+        _, local_batch = ModelInput.generate(
+            batch_size=self.batch_size,
+            world_size=1,
+            num_float_features=self.num_float_features,
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+        )
+        batch = local_batch[0].to(self.device)
+        return batch
+
+    def _generate_dmps_and_batch(
+        self,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        constraints: Optional[Dict[str, trec_dist.planner.ParameterConstraints]] = None,
+    ) -> Tuple[List[DistributedModelParallel], ModelInput]:
+
+        if constraints is None:
+            constraints = {}
+        if sharders is None:
+            sharders = get_default_sharders()
+
+        batch = self._generate_batch()
+
+        dmps = []
+        pg = dist.GroupMember.WORLD
+        assert pg is not None, "Process group is not initialized"
+        env = ShardingEnv.from_process_group(pg)
+
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(
+                local_world_size=trec_dist.comm.get_local_size(env.world_size),
+                world_size=env.world_size,
+                compute_device=self.device.type,
+            ),
+            constraints=constraints,
+        )
+
+        for _ in range(2):
+            # Create two identical models, wrap both in DMP
+            m = self._create_model()
+            if pg is not None:
+                plan = planner.collective_plan(m, sharders, pg)
+            else:
+                plan = planner.plan(m, sharders)
+
+            dmp = DistributedModelParallel(
+                module=m,
+                init_data_parallel=False,
+                device=self.device,
+                sharders=sharders,
+                plan=plan,
+            )
+
+            with torch.no_grad():
+                dmp(batch)
+                dmp.init_data_parallel()
+            dmps.append(dmp)
+        return (dmps, batch)
 
     def _train_models(
         self,
@@ -333,15 +419,11 @@ class ModelParallelSingleRankBase(unittest.TestCase):
 
 
 class ModelParallelStateDictBase(ModelParallelSingleRankBase):
-    def setUp(self, backend: str = "nccl") -> None:
-        super().setUp(backend=backend)
-
+    def _create_tables(self) -> None:
         num_features = 4
         num_weighted_features = 2
-        self.batch_size = 20
-        self.num_float_features = 10
 
-        self.tables = [
+        self.tables += [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 1) * 4,
@@ -350,7 +432,7 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
             )
             for i in range(num_features)
         ]
-        self.weighted_tables = [
+        self.weighted_tables += [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 1) * 4,
@@ -359,75 +441,6 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
             )
             for i in range(num_weighted_features)
         ]
-
-    def _generate_dmps_and_batch(
-        self,
-        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
-        constraints: Optional[Dict[str, trec_dist.planner.ParameterConstraints]] = None,
-    ) -> Tuple[List[DistributedModelParallel], ModelInput]:
-
-        if constraints is None:
-            constraints = {}
-        if sharders is None:
-            sharders = get_default_sharders()
-
-        _, local_batch = ModelInput.generate(
-            batch_size=self.batch_size,
-            world_size=1,
-            num_float_features=self.num_float_features,
-            tables=self.tables,
-            weighted_tables=self.weighted_tables,
-        )
-        batch = local_batch[0].to(self.device)
-
-        dmps = []
-        pg = dist.GroupMember.WORLD
-        assert pg is not None, "Process group is not initialized"
-        env = ShardingEnv.from_process_group(pg)
-
-        planner = EmbeddingShardingPlanner(
-            topology=Topology(
-                local_world_size=trec_dist.comm.get_local_size(env.world_size),
-                world_size=env.world_size,
-                compute_device=self.device.type,
-            ),
-            constraints=constraints,
-        )
-
-        for _ in range(2):
-            # Create two TestSparseNN modules, wrap both in DMP
-            m = TestSparseNN(
-                tables=self.tables,
-                num_float_features=self.num_float_features,
-                weighted_tables=self.weighted_tables,
-                dense_device=self.device,
-                sparse_device=torch.device("meta"),
-            )
-            if pg is not None:
-                plan = planner.collective_plan(m, sharders, pg)
-            else:
-                plan = planner.plan(m, sharders)
-
-            dmp = DistributedModelParallel(
-                module=m,
-                init_data_parallel=False,
-                device=self.device,
-                sharders=sharders,
-                plan=plan,
-            )
-
-            with torch.no_grad():
-                dmp(batch)
-                dmp.init_data_parallel()
-            dmps.append(dmp)
-        return (dmps, batch)
-
-    def _set_table_weights_precision(self, dtype: DataType) -> None:
-        for table in self.tables:
-            table.data_type = dtype
-
-        for weighted_table in self.weighted_tables:
-            weighted_table.data_type = dtype
 
     def test_parameter_init(self) -> None:
         class MyModel(nn.Module):
@@ -471,12 +484,7 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
         #  `Optional[ProcessGroup]`.
         env = ShardingEnv.from_process_group(dist.GroupMember.WORLD)
 
-        m1 = TestSparseNN(
-            tables=self.tables,
-            num_float_features=self.num_float_features,
-            weighted_tables=self.weighted_tables,
-            dense_device=self.device,
-        )
+        m1 = self._create_model()
         # dmp with real device
         dmp1 = DistributedModelParallel(
             module=m1,
@@ -492,12 +500,7 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
             ).plan(m1, get_default_sharders()),
         )
 
-        m2 = TestSparseNN(
-            tables=self.tables,
-            num_float_features=self.num_float_features,
-            weighted_tables=self.weighted_tables,
-            dense_device=self.device,
-        )
+        m2 = self._create_model()
         # dmp with meta device
         dmp2 = DistributedModelParallel(
             module=m2,

@@ -8,27 +8,23 @@
 # pyre-strict
 
 import unittest
-from typing import cast, Dict, List, Optional, OrderedDict, Tuple
+from typing import cast, OrderedDict
 
 import torch
 import torch.nn as nn
 from hypothesis import given, settings, strategies as st, Verbosity
-from torch import distributed as dist
-from torchrec import distributed as trec_dist
-from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.model_parallel import get_default_sharders
-from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.test_utils.test_model import ModelInput
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelSingleRankBase,
 )
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
-    get_configs_and_kjt_inputs,
+    get_configs,
+    get_kjt_inputs,
     TestFPEBCSharder,
 )
-from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
+from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import DataType
 
 
@@ -36,67 +32,23 @@ class FPModelParallelStateDictTest(ModelParallelSingleRankBase):
     def setUp(self, backend: str = "nccl") -> None:
         super().setUp(backend=backend)
 
-        self.tables, self.kjt_input_per_rank = get_configs_and_kjt_inputs()
+        self.use_fp_collection = True
 
-    def _set_table_weights_precision(self, dtype: DataType) -> None:
-        for table in self.tables:
-            table.data_type = dtype
+    def _create_tables(self) -> None:
+        self.tables += get_configs()
 
-    def _generate_dmps_and_batch(
-        self,
-        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
-        constraints: Optional[Dict[str, trec_dist.planner.ParameterConstraints]] = None,
-        use_fp_collection: bool = True,
-    ) -> Tuple[List[DistributedModelParallel], ModelInput]:
-        """
-        Generate two DMPs based on Sequence Sparse NN and one batch of data.
-        """
-        if constraints is None:
-            constraints = {}
-        if sharders is None:
-            sharders = get_default_sharders()
+    def _generate_batch(self) -> ModelInput:
+        kjt_input_per_rank = get_kjt_inputs()
+        batch = kjt_input_per_rank[0].to(self.device)
+        # pyre-ignore
+        return batch
 
-        batch = self.kjt_input_per_rank[0].to(self.device)
-
-        dmps = []
-        pg = dist.GroupMember.WORLD
-        assert pg is not None, "Process group is not initialized"
-        env = ShardingEnv.from_process_group(pg)
-
-        planner = EmbeddingShardingPlanner(
-            topology=Topology(
-                local_world_size=trec_dist.comm.get_local_size(env.world_size),
-                world_size=env.world_size,
-                compute_device=self.device.type,
-            ),
-            constraints=constraints,
+    def _create_model(self) -> nn.Module:
+        return create_module_and_freeze(
+            tables=self.tables,
+            use_fp_collection=self.use_fp_collection,
+            device=torch.device("meta"),
         )
-
-        for _ in range(2):
-            # Create two TestSparseNN modules, wrap both in DMP
-            m = create_module_and_freeze(
-                tables=self.tables,
-                use_fp_collection=use_fp_collection,
-                device=torch.device("meta"),
-            )
-            if pg is not None:
-                plan = planner.collective_plan(m, sharders, pg)
-            else:
-                plan = planner.plan(m, sharders)
-
-            dmp = DistributedModelParallel(
-                module=m,
-                init_data_parallel=False,
-                device=self.device,
-                sharders=sharders,
-                plan=plan,
-            )
-
-            with torch.no_grad():
-                dmp(batch)
-                dmp.init_data_parallel()
-            dmps.append(dmp)
-        return (dmps, batch)
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,
@@ -129,6 +81,7 @@ class FPModelParallelStateDictTest(ModelParallelSingleRankBase):
         is_training: bool,
         use_fp_collection: bool,
     ) -> None:
+        self.use_fp_collection = use_fp_collection
         sharders = [
             cast(
                 ModuleSharder[nn.Module],
@@ -139,7 +92,7 @@ class FPModelParallelStateDictTest(ModelParallelSingleRankBase):
             ),
         ]
         models, batch = self._generate_dmps_and_batch(
-            sharders=sharders, use_fp_collection=use_fp_collection
+            sharders=sharders,
         )
         m1, m2 = models
 

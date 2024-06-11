@@ -25,7 +25,7 @@ from torchrec.distributed.planner import (
     Topology,
 )
 from torchrec.distributed.sharding_plan import get_default_sharders
-from torchrec.distributed.test_utils.test_model import ModelInput, TestSparseNN
+from torchrec.distributed.test_utils.test_model import ModelInput
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelSingleRankBase,
 )
@@ -39,21 +39,17 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class ApplyOptmizerDenseTBETest(ModelParallelSingleRankBase):
-    def setUp(self, backend: str = "nccl") -> None:
-        super().setUp(backend=backend)
+    def _create_tables(self) -> None:
+        num_features = 4
 
-        self.num_features = 4
-        self.batch_size = 20
-        self.num_float_features = 10
-
-        self.tables = [
+        self.tables += [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 1) * 4,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
             )
-            for i in range(self.num_features)
+            for i in range(num_features)
         ]
 
     @unittest.skipIf(
@@ -73,18 +69,11 @@ class ApplyOptmizerDenseTBETest(ModelParallelSingleRankBase):
         non_fused_learning_rate: float,
         dense_learning_rate: float,
     ) -> None:
-        unsharded_model = TestSparseNN(
-            tables=self.tables,
-            num_float_features=self.num_float_features,
-            weighted_tables=[],
-            dense_device=self.device,
-            sparse_device=torch.device("meta"),
-        )
+        unsharded_model = self._create_model()
 
         # torchrec sharding
         constraints = {
-            "table_"
-            + str(i): ParameterConstraints(
+            table.name: ParameterConstraints(
                 sharding_types=[
                     (
                         ShardingType.TABLE_WISE.value
@@ -100,7 +89,7 @@ class ApplyOptmizerDenseTBETest(ModelParallelSingleRankBase):
                     )
                 ],
             )
-            for i in range(self.num_features)
+            for i, table in enumerate(self.tables)
         }
         sharders = get_default_sharders()
         pg = dist.GroupMember.WORLD
