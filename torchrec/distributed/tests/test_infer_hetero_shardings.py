@@ -16,6 +16,7 @@ import hypothesis.strategies as st
 import torch
 from hypothesis import given, settings
 from torchrec import EmbeddingBagConfig, EmbeddingCollection, EmbeddingConfig
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
 from torchrec.distributed.planner.types import Topology
@@ -71,12 +72,17 @@ class InferHeteroShardingsTest(unittest.TestCase):
             weight_dtype=torch.qint8,
         )
         sharder = QuantEmbeddingCollectionSharder()
+        compute_kernel = EmbeddingComputeKernel.QUANT.value
         module_plan = construct_module_sharding_plan(
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(([20, 10, 100], "cpu")),
-                "table_1": table_wise(rank=0, device="cuda"),
-                "table_2": table_wise(rank=1, device="cuda"),
+                "table_1": table_wise(
+                    rank=0, device="cuda", compute_kernel=compute_kernel
+                ),
+                "table_2": table_wise(
+                    rank=1, device="cuda", compute_kernel=compute_kernel
+                ),
             },
             # pyre-ignore
             sharder=sharder,
@@ -165,12 +171,17 @@ class InferHeteroShardingsTest(unittest.TestCase):
             weight_dtype=torch.qint8,
         )
         sharder = QuantEmbeddingBagCollectionSharder()
+        compute_kernel = EmbeddingComputeKernel.QUANT.value
         module_plan = construct_module_sharding_plan(
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(([20, 10, 100], "cpu")),
-                "table_1": table_wise(rank=0, device="cuda"),
-                "table_2": table_wise(rank=1, device="cuda"),
+                "table_1": table_wise(
+                    rank=0, device="cuda", compute_kernel=compute_kernel
+                ),
+                "table_2": table_wise(
+                    rank=1, device="cuda", compute_kernel=compute_kernel
+                ),
             },
             # pyre-ignore
             sharder=sharder,
