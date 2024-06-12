@@ -12,6 +12,8 @@ import itertools
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+
+from itertools import chain
 from threading import Event, Thread
 from typing import (
     Any,
@@ -491,6 +493,22 @@ def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
         )
 
 
+def _check_args_for_call_module(
+    node: torch.fx.Node,
+) -> bool:
+    """
+    Recursively checks if args to a node is the result of a call_module.
+    """
+    if node.op == "call_module":
+        return True
+
+    for arg in node.args:
+        if isinstance(arg, torch.fx.Node) and _check_args_for_call_module(arg):
+            return True
+
+    return False
+
+
 def _get_node_args_helper(
     # pyre-ignore
     arguments,
@@ -563,6 +581,18 @@ def _get_node_args_helper(
                 # pyre-fixme[16]
                 and child_node.target.__name__ == "KeyedJaggedTensor"
             ):
+                call_module_found = False
+
+                for arg_node in chain(child_node.args, child_node.kwargs.values()):
+                    if isinstance(
+                        arg_node, torch.fx.Node
+                    ) and _check_args_for_call_module(arg_node):
+                        call_module_found = True
+                        break
+
+                if call_module_found:
+                    break
+
                 if "values" in child_node.kwargs:
                     arg = child_node.kwargs["values"]
                 else:
