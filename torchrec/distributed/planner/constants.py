@@ -88,6 +88,7 @@ def kernel_bw_lookup(
             caching_ratio * hbm_mem_bw + (1 - caching_ratio) * ddr_mem_bw
         )
         / 10,
+        ("cuda", EmbeddingComputeKernel.KEY_VALUE.value): ddr_mem_bw,
     }
 
     if (

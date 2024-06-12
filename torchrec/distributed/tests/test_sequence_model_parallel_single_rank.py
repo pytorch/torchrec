@@ -34,11 +34,13 @@ from torchrec.modules.embedding_configs import DataType, EmbeddingConfig
 
 class SequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
     def setUp(self, backend: str = "nccl") -> None:
+        self.shared_features = []
+        self.embedding_groups = {}
+
         super().setUp(backend=backend)
 
+    def _create_tables(self) -> None:
         num_features = 4
-        self.num_float_features = 16
-        self.batch_size = 20
         shared_features = 2
 
         initial_tables = [
@@ -61,88 +63,23 @@ class SequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
             for i in range(shared_features)
         ]
 
-        self.tables = initial_tables + shared_features_tables
-        self.shared_features = [f"feature_{i}" for i in range(shared_features)]
+        self.tables += initial_tables + shared_features_tables
+        self.shared_features += [f"feature_{i}" for i in range(shared_features)]
 
-        self.embedding_groups = {
-            "group_0": [
-                (
-                    f"{feature}@{table.name}"
-                    if feature in self.shared_features
-                    else feature
-                )
-                for table in self.tables
-                for feature in table.feature_names
-            ]
-        }
+        self.embedding_groups["group_0"] = [
+            (f"{feature}@{table.name}" if feature in self.shared_features else feature)
+            for table in self.tables
+            for feature in table.feature_names
+        ]
 
-    def _set_table_weights_precision(self, dtype: DataType) -> None:
-        for table in self.tables:
-            table.data_type = dtype
-
-    def _generate_dmps_and_batch(
-        self,
-        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
-        constraints: Optional[Dict[str, trec_dist.planner.ParameterConstraints]] = None,
-    ) -> Tuple[List[DistributedModelParallel], ModelInput]:
-        """
-        Generate two DMPs based on Sequence Sparse NN and one batch of data.
-        """
-        if constraints is None:
-            constraints = {}
-        if sharders is None:
-            sharders = get_default_sharders()
-
-        _, local_batch = ModelInput.generate(
-            batch_size=self.batch_size,
-            world_size=1,
+    def _create_model(self) -> nn.Module:
+        return TestSequenceSparseNN(
             tables=self.tables,
             num_float_features=self.num_float_features,
-            weighted_tables=[],
+            embedding_groups=self.embedding_groups,
+            dense_device=self.device,
+            sparse_device=torch.device("meta"),
         )
-        batch = local_batch[0].to(self.device)
-
-        dmps = []
-        pg = dist.GroupMember.WORLD
-        assert pg is not None, "Process group is not initialized"
-        env = ShardingEnv.from_process_group(pg)
-
-        planner = EmbeddingShardingPlanner(
-            topology=Topology(
-                local_world_size=trec_dist.comm.get_local_size(env.world_size),
-                world_size=env.world_size,
-                compute_device=self.device.type,
-            ),
-            constraints=constraints,
-        )
-
-        for _ in range(2):
-            # Create two TestSparseNN modules, wrap both in DMP
-            m = TestSequenceSparseNN(
-                tables=self.tables,
-                num_float_features=self.num_float_features,
-                embedding_groups=self.embedding_groups,
-                dense_device=self.device,
-                sparse_device=torch.device("meta"),
-            )
-            if pg is not None:
-                plan = planner.collective_plan(m, sharders, pg)
-            else:
-                plan = planner.plan(m, sharders)
-
-            dmp = DistributedModelParallel(
-                module=m,
-                init_data_parallel=False,
-                device=self.device,
-                sharders=sharders,
-                plan=plan,
-            )
-
-            with torch.no_grad():
-                dmp(batch)
-                dmp.init_data_parallel()
-            dmps.append(dmp)
-        return (dmps, batch)
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 0,

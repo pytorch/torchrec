@@ -38,7 +38,8 @@ from torchrec.distributed.test_utils.multi_process import (
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
-    get_configs_and_kjt_inputs,
+    get_configs,
+    get_kjt_inputs,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingPlan
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -236,7 +237,8 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         hypothesis.assume(not xor(use_dmp, use_fp_collection))
 
         WORLD_SIZE = 2
-        embedding_bag_config, kjt_input_per_rank = get_configs_and_kjt_inputs()
+        embedding_bag_config = get_configs()
+        kjt_input_per_rank = get_kjt_inputs()
 
         self._run_multi_process_test(
             callable=_test_sharding,
@@ -264,7 +266,7 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     def test_sharding_fp_ebc_from_meta(
         self, use_fp_collection: bool, backend: str
     ) -> None:
-        embedding_bag_config, kjt_input_per_rank = get_configs_and_kjt_inputs()
+        embedding_bag_config = get_configs()
         self._run_multi_process_test(
             callable=_test_sharding_from_meta,
             world_size=2,

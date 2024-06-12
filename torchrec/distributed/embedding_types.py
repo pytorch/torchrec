@@ -61,6 +61,7 @@ class EmbeddingComputeKernel(Enum):
     QUANT = "quant"
     QUANT_UVM = "quant_uvm"
     QUANT_UVM_CACHING = "quant_uvm_caching"
+    KEY_VALUE = "key_value"
 
 
 def compute_kernel_to_embedding_location(
@@ -70,6 +71,7 @@ def compute_kernel_to_embedding_location(
         EmbeddingComputeKernel.DENSE,
         EmbeddingComputeKernel.FUSED,
         EmbeddingComputeKernel.QUANT,
+        EmbeddingComputeKernel.KEY_VALUE,  # use hbm for cache
     ]:
         return EmbeddingLocation.DEVICE
     elif compute_kernel in [
@@ -413,6 +415,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                 ret += [
                     EmbeddingComputeKernel.FUSED_UVM.value,
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                    EmbeddingComputeKernel.KEY_VALUE.value,
                 ]
         else:
             # TODO re-enable model parallel and dense

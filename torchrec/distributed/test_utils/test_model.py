@@ -71,6 +71,7 @@ class ModelInput(Pipelineable):
         weighted_tables_pooling: Optional[List[int]] = None,
         randomize_indices: bool = True,
         device: Optional[torch.device] = None,
+        max_feature_lengths: Optional[List[int]] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
@@ -102,11 +103,17 @@ class ModelInput(Pipelineable):
 
         idlist_features_to_num_embeddings = {}
         idlist_features_to_pooling_factor = {}
+        idlist_features_to_max_length = {}
+        feature_idx = 0
         for idx in range(len(tables)):
             for feature in tables[idx].feature_names:
                 idlist_features_to_num_embeddings[feature] = tables[idx].num_embeddings
+                idlist_features_to_max_length[feature] = (
+                    max_feature_lengths[feature_idx] if max_feature_lengths else None
+                )
                 if tables_pooling is not None:
                     idlist_features_to_pooling_factor[feature] = tables_pooling[idx]
+                feature_idx += 1
 
         idlist_features = list(idlist_features_to_num_embeddings.keys())
         idscore_features = [
@@ -118,6 +125,8 @@ class ModelInput(Pipelineable):
 
         idlist_pooling_factor = list(idlist_features_to_pooling_factor.values())
         idscore_pooling_factor = weighted_tables_pooling
+
+        idlist_max_lengths = list(idlist_features_to_max_length.values())
 
         # Generate global batch.
         global_idlist_lengths = []
@@ -142,6 +151,10 @@ class ModelInput(Pipelineable):
                 lengths_ = torch.abs(
                     torch.randn(batch_size * world_size, device=device) + pooling_avg,
                 ).int()
+
+            if idlist_max_lengths[idx]:
+                lengths_ = torch.clamp(lengths_, max=idlist_max_lengths[idx])
+
             if variable_batch_size:
                 lengths = torch.zeros(batch_size * world_size, device=device).int()
                 for r in range(world_size):
@@ -152,6 +165,7 @@ class ModelInput(Pipelineable):
                     )
             else:
                 lengths = lengths_
+
             num_indices = cast(int, torch.sum(lengths).item())
             if randomize_indices:
                 indices = torch.randint(

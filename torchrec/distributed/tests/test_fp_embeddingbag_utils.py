@@ -28,6 +28,8 @@ from torchrec.modules.feature_processor_ import (
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
+DEFAULT_MAX_FEATURE_LENGTH = 12
+
 
 class SparseArch(nn.Module):
     def __init__(
@@ -35,8 +37,20 @@ class SparseArch(nn.Module):
         tables: List[EmbeddingBagConfig],
         use_fp_collection: bool,
         device: torch.device,
+        max_feature_lengths: Optional[List[int]] = None,
     ) -> None:
         super().__init__()
+
+        feature_names = [
+            feature_name for table in tables for feature_name in table.feature_names
+        ]
+
+        if max_feature_lengths is None:
+            max_feature_lengths = [DEFAULT_MAX_FEATURE_LENGTH] * len(feature_names)
+
+        assert len(max_feature_lengths) == len(
+            feature_names
+        ), "Expect max_feature_lengths to have the same number of items as feature_names"
 
         self._fp_ebc: FeatureProcessedEmbeddingBagCollection = (
             FeatureProcessedEmbeddingBagCollection(
@@ -49,20 +63,19 @@ class SparseArch(nn.Module):
                     cast(
                         Dict[str, FeatureProcessor],
                         {
-                            "feature_0": PositionWeightedModule(max_feature_length=10),
-                            "feature_1": PositionWeightedModule(max_feature_length=10),
-                            "feature_2": PositionWeightedModule(max_feature_length=12),
-                            "feature_3": PositionWeightedModule(max_feature_length=12),
+                            feature_name: PositionWeightedModule(
+                                max_feature_length=max_feature_length
+                            )
+                            for feature_name, max_feature_length in zip(
+                                feature_names, max_feature_lengths
+                            )
                         },
                     )
                     if not use_fp_collection
                     else PositionWeightedModuleCollection(
-                        max_feature_lengths={
-                            "feature_0": 10,
-                            "feature_1": 10,
-                            "feature_2": 12,
-                            "feature_3": 12,
-                        }
+                        max_feature_lengths=dict(
+                            zip(feature_names, max_feature_lengths)
+                        ),
                     )
                 ),
             ).to(device)
@@ -85,9 +98,10 @@ def create_module_and_freeze(
     tables: List[EmbeddingBagConfig],
     use_fp_collection: bool,
     device: torch.device,
+    max_feature_lengths: Optional[List[int]] = None,
 ) -> SparseArch:
 
-    sparse_arch = SparseArch(tables, use_fp_collection, device)
+    sparse_arch = SparseArch(tables, use_fp_collection, device, max_feature_lengths)
 
     torch.manual_seed(0)
     for param in sparse_arch.parameters():
@@ -139,36 +153,20 @@ class TestFPEBCSharder(FeatureProcessedEmbeddingBagCollectionSharder):
         return [self._kernel_type]
 
 
-def get_configs_and_kjt_inputs() -> (
-    Tuple[List[EmbeddingBagConfig], List[KeyedJaggedTensor]]
-):
-    embedding_bag_config = [
+def get_configs() -> List[EmbeddingBagConfig]:
+    dims = [3 * 16, 8, 8, 3 * 16]
+    return [
         EmbeddingBagConfig(
-            name="table_0",
-            feature_names=["feature_0"],
-            embedding_dim=3 * 16,
+            name=f"table_{i}",
+            feature_names=[f"feature_{i}"],
+            embedding_dim=dim,
             num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_1",
-            feature_names=["feature_1"],
-            embedding_dim=8,
-            num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_2",
-            feature_names=["feature_2"],
-            embedding_dim=8,
-            num_embeddings=16,
-        ),
-        EmbeddingBagConfig(
-            name="table_3",
-            feature_names=["feature_3"],
-            embedding_dim=3 * 16,
-            num_embeddings=16,
-        ),
+        )
+        for i, dim in enumerate(dims)
     ]
 
+
+def get_kjt_inputs() -> List[KeyedJaggedTensor]:
     # Rank 0
     #             instance 0   instance 1  instance 2
     # "feature_0"   [0, 1]       None        [2]
@@ -221,5 +219,4 @@ def get_configs_and_kjt_inputs() -> (
             ),
         ),
     ]
-
-    return embedding_bag_config, kjt_input_per_rank
+    return kjt_input_per_rank
