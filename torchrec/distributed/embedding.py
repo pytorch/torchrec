@@ -703,6 +703,10 @@ class ShardedEmbeddingCollection(
                     self.embeddings[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
+            if model_parallel_name_to_compute_kernel[table_name] in {
+                EmbeddingComputeKernel.KEY_VALUE.value
+            }:
+                continue
             # created ShardedTensors once in init, use in post_state_dict_hook
             self._model_parallel_name_to_sharded_tensor[table_name] = (
                 ShardedTensor._init_from_local_shards(
@@ -739,6 +743,10 @@ class ShardedEmbeddingCollection(
             return
         # Initialize embedding weights with init_fn
         for table_config in self._embedding_configs:
+            if self.module_sharding_plan[table_config.name].compute_kernel in {
+                EmbeddingComputeKernel.KEY_VALUE.value,
+            }:
+                continue
             assert table_config.init_fn is not None
             param = self.embeddings[f"{table_config.name}"].weight
             # pyre-ignore

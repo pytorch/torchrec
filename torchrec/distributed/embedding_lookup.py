@@ -31,6 +31,8 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedDenseEmbeddingBag,
     BatchedFusedEmbedding,
     BatchedFusedEmbeddingBag,
+    KeyValueEmbedding,
+    KeyValueEmbeddingBag,
 )
 from torchrec.distributed.comm_ops import get_gradient_division
 from torchrec.distributed.composable.table_batched_embedding_slice import (
@@ -164,6 +166,14 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
                 )
             elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbedding(
+                    config=config,
+                    pg=pg,
+                    device=device,
+                )
+            elif config.compute_kernel in {
+                EmbeddingComputeKernel.KEY_VALUE,
+            }:
+                return KeyValueEmbedding(
                     config=config,
                     pg=pg,
                     device=device,
@@ -363,6 +373,15 @@ class GroupedPooledEmbeddingsLookup(
                 )
             elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbeddingBag(
+                    config=config,
+                    pg=pg,
+                    device=device,
+                    sharding_type=sharding_type,
+                )
+            elif config.compute_kernel in {
+                EmbeddingComputeKernel.KEY_VALUE,
+            }:
+                return KeyValueEmbeddingBag(
                     config=config,
                     pg=pg,
                     device=device,
