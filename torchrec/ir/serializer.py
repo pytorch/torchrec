@@ -9,7 +9,7 @@
 
 import json
 import logging
-from typing import Dict, Optional, Type
+from typing import Any, Dict, Optional, Type
 
 import torch
 
@@ -69,21 +69,66 @@ def get_deserialized_device(
     return device
 
 
-class EBCJsonSerializer(SerializerInterface):
-    """
-    Serializer for torch.export IR using thrift.
-    """
+class JsonSerializerBase(SerializerInterface):
+    _module_cls: Optional[Type[nn.Module]] = None
+
+    @classmethod
+    def serialize_to_dict(cls, module: nn.Module) -> Dict[str, Any]:
+        raise NotImplementedError()
+
+    @classmethod
+    def deserialize_from_dict(
+        cls,
+        metadata_dict: Dict[str, Any],
+        device: Optional[torch.device] = None,
+    ) -> nn.Module:
+        raise NotImplementedError()
 
     @classmethod
     def serialize(
         cls,
         module: nn.Module,
     ) -> torch.Tensor:
-        if not isinstance(module, EmbeddingBagCollection):
+        if cls._module_cls is None:
             raise ValueError(
-                f"Expected module to be of type EmbeddingBagCollection, got {type(module)}"
+                "Must assign a nn.Module to class static variable _module_cls"
             )
+        if not isinstance(module, cls._module_cls):
+            raise ValueError(
+                f"Expected module to be of type {cls._module_cls.__name__}, got {type(module)}"
+            )
+        metadata_dict = cls.serialize_to_dict(module)
+        return torch.frombuffer(json.dumps(metadata_dict).encode(), dtype=torch.uint8)
 
+    @classmethod
+    def deserialize(
+        cls,
+        input: torch.Tensor,
+        typename: str,
+        device: Optional[torch.device] = None,
+    ) -> nn.Module:
+        raw_bytes = input.numpy().tobytes()
+        metadata_dict = json.loads(raw_bytes.decode())
+        module = cls.deserialize_from_dict(metadata_dict, device)
+        if cls._module_cls is None:
+            raise ValueError(
+                "Must assign a nn.Module to class static variable _module_cls"
+            )
+        if not isinstance(module, cls._module_cls):
+            raise ValueError(
+                f"Expected module to be of type {cls._module_cls.__name__}, got {type(module)}"
+            )
+        return module
+
+
+class EBCJsonSerializer(JsonSerializerBase):
+    _module_cls = EmbeddingBagCollection
+
+    @classmethod
+    def serialize_to_dict(
+        cls,
+        module: nn.Module,
+    ) -> Dict[str, Any]:
         ebc_metadata = EBCMetadata(
             tables=[
                 embedding_bag_config_to_metadata(table_config)
@@ -92,45 +137,36 @@ class EBCJsonSerializer(SerializerInterface):
             is_weighted=module.is_weighted(),
             device=str(module.device),
         )
-
         ebc_metadata_dict = ebc_metadata.__dict__
         ebc_metadata_dict["tables"] = [
             table_config.__dict__ for table_config in ebc_metadata_dict["tables"]
         ]
-
-        return torch.frombuffer(
-            json.dumps(ebc_metadata_dict).encode(), dtype=torch.uint8
-        )
+        return ebc_metadata_dict
 
     @classmethod
-    def deserialize(
-        cls, input: torch.Tensor, typename: str, device: Optional[torch.device] = None
+    def deserialize_from_dict(
+        cls,
+        metadata_dict: Dict[str, Any],
+        device: Optional[torch.device] = None,
     ) -> nn.Module:
-        if typename != "EmbeddingBagCollection":
-            raise ValueError(
-                f"Expected typename to be EmbeddingBagCollection, got {typename}"
-            )
-
-        raw_bytes = input.numpy().tobytes()
-        ebc_metadata_dict = json.loads(raw_bytes.decode())
         tables = [
             EmbeddingBagConfigMetadata(**table_config)
-            for table_config in ebc_metadata_dict["tables"]
+            for table_config in metadata_dict["tables"]
         ]
 
-        device = get_deserialized_device(ebc_metadata_dict.get("device"), device)
+        device = get_deserialized_device(metadata_dict.get("device"), device)
         return EmbeddingBagCollection(
             tables=[
                 embedding_metadata_to_config(table_config) for table_config in tables
             ],
-            is_weighted=ebc_metadata_dict["is_weighted"],
+            is_weighted=metadata_dict["is_weighted"],
             device=device,
         )
 
 
 class JsonSerializer(SerializerInterface):
     """
-    Serializer for torch.export IR using thrift.
+    Serializer for torch.export IR using json.
     """
 
     module_to_serializer_cls: Dict[str, Type[SerializerInterface]] = {
@@ -152,7 +188,10 @@ class JsonSerializer(SerializerInterface):
 
     @classmethod
     def deserialize(
-        cls, input: torch.Tensor, typename: str, device: Optional[torch.device] = None
+        cls,
+        input: torch.Tensor,
+        typename: str,
+        device: Optional[torch.device] = None,
     ) -> nn.Module:
         if typename not in cls.module_to_serializer_cls:
             raise ValueError(
