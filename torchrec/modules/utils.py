@@ -379,7 +379,7 @@ def register_custom_op(
                 for dim in dims
             ]
 
-        schema_string = f"{op_name}(Tensor?[] values, int batch_size) -> Tensor[]"
+        schema_string = f"{op_name}(Tensor?[] values, SymInt batch_size) -> Tensor[]"
         operator_registry_state.op_registry_schema[op_name] = schema_string
         # Register schema
         lib.define(schema_string)
