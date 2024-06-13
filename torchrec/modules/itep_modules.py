@@ -17,34 +17,45 @@ from torchrec.modules.embedding_modules import reorder_inverse_indices
 from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJaggedTensor
 
 
-torch.ops.load_library(
-    "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_gpu"
-)
+try:
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_gpu"
+    )
+except OSError:
+    pass
+
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
 class GenericITEPModule(nn.Module):
     """
-    A generic Module for applying In-Training Embedding Pruning (ITEP).
-    This module can be hooked into the forward() of EmbeddingBagCollection.
-    It will prune the embedding tables during-training, by applying a remapping transform to the embedding lookup indices.
+    A generic module for applying In-Training Embedding Pruning (ITEP).
+    This module can be hooked into the forward() of `EmbeddingBagCollection`.
+    It will prune the embedding tables during training by applying a remapping transform
+    to the embedding lookup indices.
 
     Args:
-        table_name_to_unpruned_hash_sizes (Dict[str, int]): Map of table name to unpruned hash size.
-        lookups (List[nn.Module], optional): List of lookups in the EBC. Defaults to None.
-        enable_pruning (bool, optional): Enable pruning or not. Defaults to True.
-        pruning_interval (int, optional): Pruning interval. Defaults to 1001.
-    Example:
+        table_name_to_unpruned_hash_sizes (Dict[str, int]): Map of table name to
+            unpruned hash size.
+        lookups (Optional[List[nn.Module]]): List of lookups in the EBC. Defaults to
+            `None`.
+        enable_pruning (Optional[bool]): Enable pruning or not. Defaults to `True`.
+        pruning_interval (Optional[int]): Pruning interval. Defaults to `1001`.
+
+    NOTE:
+        The `lookups` argument is optional and is used in the sharded case. If not
+        provided, the module will skip initialization for the dummy module.
+        The `table_name_to_unpruned_hash_sizes` argument must not be empty. It is a map
+        of table names to their unpruned hash sizes.
+
+    Example::
         itep_module = GenericITEPModule(
             table_name_to_unpruned_hash_sizes={"table1": 1000, "table2": 2000},
             lookups=ShardedEmbeddingBagCollection._lookups,
             enable_pruning=True,
             pruning_interval=1001
         )
-    Note:
-        The `lookups` argument is optional and is used in the sharded case. If not provided, the module will skip initialization for the dummy module.
-        The `table_name_to_unpruned_hash_sizes` argument must not be empty. It is a map of table names to their unpruned hash sizes.
     """
 
     def __init__(
@@ -147,11 +158,13 @@ class GenericITEPModule(nn.Module):
         emb_sizes: List[int],
     ) -> None:
         """
-        Register ITEP specific buffer in a way that it can be accessed by torch.ops.fbgemm.init_address_lookup, and also in checkpoint is invididual
+        Registers ITEP specific buffers in a way that can be accessed by
+        `torch.ops.fbgemm.init_address_lookup` and can be individually checkpointed.
         """
         # Buffers do not enter backward pass
         with torch.no_grad():
-            # Don't use register_buffer for buffer_offsets and emb_sizes. Because they may change as sharding plan change between preemption/resume
+            # Don't use register_buffer for buffer_offsets and emb_sizes because they
+            # may change as the sharding plan changes between preemption/resumption
             self.buffer_offsets = torch.tensor(
                 buffer_offsets, dtype=torch.int64, device=self.current_device
             )
