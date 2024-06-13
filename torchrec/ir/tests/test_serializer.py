@@ -11,11 +11,11 @@
 
 import copy
 import unittest
-from typing import List
+from typing import Callable, List, Optional
 
 import torch
 from torch import nn
-from torchrec.ir.serializer import JsonSerializer
+from torchrec.ir.serializer import JsonSerializer, SerializerInterface
 
 from torchrec.ir.utils import (
     deserialize_embedding_modules,
@@ -29,6 +29,24 @@ from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.modules.utils import operator_registry_state
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+
+
+class CompoundModule(nn.Module):
+    def __init__(
+        self, ebc: EmbeddingBagCollection, comp: Optional["CompoundModule"] = None
+    ) -> None:
+        super().__init__()
+        self.ebc = ebc
+        self.comp = comp
+
+    def forward(self, features: KeyedJaggedTensor) -> List[torch.Tensor]:
+        res = self.comp(features) if self.comp else []
+        res.append(self.ebc(features).values())
+        return res
+
+
+class CompoundModuleSerializer(SerializerInterface):
+    pass
 
 
 class TestJsonSerializer(unittest.TestCase):
@@ -150,8 +168,6 @@ class TestJsonSerializer(unittest.TestCase):
             in operator_registry_state.op_registry_schema
         )
 
-        # Can rerun ep forward
-        ep.module()(id_list_features)
         # Deserialize EBC
         deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
 
@@ -259,3 +275,61 @@ class TestJsonSerializer(unittest.TestCase):
                 if "_feature_processors" in name:
                     continue
                 assert param.device.type == device.type, f"{name} should be on {device}"
+
+    def test_compound_module(self) -> None:
+        tb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f1"],
+        )
+        tb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+        tb3_config = EmbeddingBagConfig(
+            name="t3",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f3"],
+        )
+        ebc: Callable[[], EmbeddingBagCollection] = lambda: EmbeddingBagCollection(
+            tables=[tb1_config, tb2_config, tb3_config],
+            is_weighted=False,
+        )
+
+        model = CompoundModule(ebc(), CompoundModule(ebc(), CompoundModule(ebc())))
+        id_list_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+        )
+
+        eager_out = model(id_list_features)
+
+        # Serialize
+        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        ep = torch.export.export(
+            model,
+            (id_list_features,),
+            {},
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=(tuple(sparse_fqns)),
+        )
+
+        ep_output = ep.module()(id_list_features)
+        self.assertEqual(len(ep_output), len(eager_out))
+        for x, y in zip(ep_output, eager_out):
+            self.assertEqual(x.shape, y.shape)
+
+        # Deserialize
+        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+        deserialized_model.load_state_dict(model.state_dict())
+        # Run forward on deserialized model
+        deserialized_out = deserialized_model(id_list_features)
+        self.assertEqual(len(deserialized_out), len(eager_out))
+        for x, y in zip(deserialized_out, eager_out):
+            self.assertTrue(torch.allclose(x, y))
