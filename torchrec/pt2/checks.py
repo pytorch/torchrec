@@ -55,10 +55,14 @@ except Exception:
         return False
 
 
+def is_pt2_compiling() -> bool:
+    return is_torchdynamo_compiling() or is_compiler_compiling()
+
+
 def pt2_checks_tensor_slice(
     tensor: torch.Tensor, start_offset: int, end_offset: int, dim: int = 0
 ) -> None:
-    if torch.jit.is_scripting() or not is_torchdynamo_compiling():
+    if torch.jit.is_scripting() or not is_pt2_compiling():
         return
 
     torch._check_is_size(start_offset)
@@ -70,7 +74,7 @@ def pt2_checks_tensor_slice(
 
 
 def pt2_checks_all_is_size(list: List[int]) -> List[int]:
-    if torch.jit.is_scripting() or not is_torchdynamo_compiling():
+    if torch.jit.is_scripting() or not is_pt2_compiling():
         return list
 
     for i in list:
@@ -79,7 +83,7 @@ def pt2_checks_all_is_size(list: List[int]) -> List[int]:
 
 
 def pt2_check_size_nonzero(x: torch.Tensor) -> torch.Tensor:
-    if torch.jit.is_scripting() or not is_torchdynamo_compiling():
+    if torch.jit.is_scripting() or not is_pt2_compiling():
         return x
 
     for i in range(x.dim()):
@@ -88,7 +92,7 @@ def pt2_check_size_nonzero(x: torch.Tensor) -> torch.Tensor:
 
 
 def pt2_guard_size_oblivious(x: bool) -> bool:
-    if torch.jit.is_scripting() or not is_torchdynamo_compiling():
+    if torch.jit.is_scripting() or not is_pt2_compiling():
         return x
 
     return guard_size_oblivious(x)

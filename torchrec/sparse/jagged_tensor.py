@@ -890,6 +890,8 @@ def _maybe_compute_length_per_key(
         else:
             _length: List[int] = []
         length_per_key = _length
+        pt2_checks_all_is_size(length_per_key)
+
     return length_per_key
 
 
