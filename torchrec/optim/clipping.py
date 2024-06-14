@@ -11,6 +11,9 @@ from enum import Enum, unique
 from typing import Any, List
 
 import torch
+
+from torch.distributed._tensor.api import DTensor
+
 from torchrec.optim.keyed import KeyedOptimizer, OptimizerWrapper
 
 
@@ -45,6 +48,26 @@ class GradientClippingOptimizer(OptimizerWrapper):
         self._params: List[torch.Tensor] = []
         for param_group in self.param_groups:
             self._params += list(param_group["params"])
+
+        # Convert dtensors to local tensors for performance reason;
+        # otherwise, it needs to go thru dtensor dispatch, which is
+        # quite slow currently.
+        with torch.autograd.profiler.record_function(
+            "Dtensors => Tensors in GradientClippingOptimizer::init()"
+        ):
+            with torch.no_grad():
+                # Under no_grad(), p.to_local() will be as cheap as p._local_tensor.
+                for i, p in enumerate(self._params):
+                    if not isinstance(p, DTensor):
+                        continue
+                    local_p = p.to_local()
+                    if p.grad is None:
+                        local_p.grad = None
+                    else:
+                        # if p is a DTensor, so should be p.grad
+                        assert isinstance(p.grad, DTensor)
+                        local_p.grad = p.grad.to_local()
+                    self._params[i] = local_p
 
     # pyre-ignore [2]
     def step(self, closure: Any = None) -> None:
