@@ -133,13 +133,14 @@ class ShardedManagedCollisionCollection(
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: torch.device,
-        embedding_shardings: List[
+        sharding_type_to_sharding: Dict[
+            str,
             EmbeddingSharding[
                 EmbeddingShardingContext,
                 KeyedJaggedTensor,
                 torch.Tensor,
                 torch.Tensor,
-            ]
+            ],
         ],
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
@@ -151,13 +152,13 @@ class ShardedManagedCollisionCollection(
             copy.deepcopy(table_name_to_parameter_sharding)
         )
         # TODO: create a MCSharding type instead of leveraging EmbeddingSharding
-        self._embedding_shardings = embedding_shardings
+        self._sharding_type_to_sharding = sharding_type_to_sharding
 
         self._embedding_names_per_sharding: List[List[str]] = []
-        for sharding in self._embedding_shardings:
+        for sharding_type, sharding in self._sharding_type_to_sharding.items():
             # TODO: support TWRW sharding
-            assert isinstance(
-                sharding, BaseRwEmbeddingSharding
+            assert (
+                sharding_type == ShardingType.ROW_WISE.value
             ), "Only ROW_WISE sharding is supported."
             self._embedding_names_per_sharding.append(sharding.embedding_names())
 
@@ -262,70 +263,71 @@ class ShardedManagedCollisionCollection(
         ] = defaultdict(lambda: defaultdict(list))
         self._feature_to_offset: Dict[str, int] = {}
 
-        for sharding in self._embedding_shardings:
-            assert isinstance(sharding, BaseRwEmbeddingSharding)
+        for sharding_type, sharding in self._sharding_type_to_sharding.items():
+            if sharding_type == ShardingType.ROW_WISE.value:
+                assert isinstance(sharding, BaseRwEmbeddingSharding)
 
-            grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
-                sharding._grouped_embedding_configs
-            )
-            for group_config in grouped_embedding_configs:
-                for table in group_config.embedding_tables:
-                    # pyre-ignore [16]
-                    new_min_output_id = table.local_metadata.shard_offsets[0]
-                    # pyre-ignore [16]
-                    new_range_size = table.local_metadata.shard_sizes[0]
+                grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
+                    sharding._grouped_embedding_configs
+                )
+                for group_config in grouped_embedding_configs:
+                    for table in group_config.embedding_tables:
+                        # pyre-ignore [16]
+                        new_min_output_id = table.local_metadata.shard_offsets[0]
+                        # pyre-ignore [16]
+                        new_range_size = table.local_metadata.shard_sizes[0]
 
-                    mc_module = module._managed_collision_modules[table.name]
+                        mc_module = module._managed_collision_modules[table.name]
 
-                    # TODO:
-                    #  1) need to make TBE accept global indices for now force to local indices
-                    #  2) MCH is particularly nasty with a portion of each shard; ideally dont do this
-                    #  3) now create a feature_to_offset and pass into awaitable callbacks to act as raw id adder
-                    self._managed_collision_modules[table.name] = (
-                        mc_module.rebuild_with_output_id_range(
-                            output_id_range=(
-                                0,  # new_min_output_id,
-                                new_range_size,  # new_min_output_id + new_range_size,
-                            ),
-                            device=self._device,
+                        # TODO:
+                        #  1) need to make TBE accept global indices for now force to local indices
+                        #  2) MCH is particularly nasty with a portion of each shard; ideally dont do this
+                        #  3) now create a feature_to_offset and pass into awaitable callbacks to act as raw id adder
+                        self._managed_collision_modules[table.name] = (
+                            mc_module.rebuild_with_output_id_range(
+                                output_id_range=(
+                                    0,  # new_min_output_id,
+                                    new_range_size,  # new_min_output_id + new_range_size,
+                                ),
+                                device=self._device,
+                            )
                         )
-                    )
-                    zch_size = self._managed_collision_modules[table.name]._zch_size
+                        zch_size = self._managed_collision_modules[table.name]._zch_size
 
-                    zch_size_by_rank = [
-                        torch.zeros(1, dtype=torch.int64, device=self._device)
-                        for _ in range(self._env.world_size)
-                    ]
-                    if self._env.world_size > 1:
-                        dist.all_gather(
-                            zch_size_by_rank,
-                            torch.tensor(
+                        zch_size_by_rank = [
+                            torch.zeros(1, dtype=torch.int64, device=self._device)
+                            for _ in range(self._env.world_size)
+                        ]
+                        if self._env.world_size > 1:
+                            dist.all_gather(
+                                zch_size_by_rank,
+                                torch.tensor(
+                                    [zch_size], dtype=torch.int64, device=self._device
+                                ),
+                                group=self._env.process_group,
+                            )
+                        else:
+                            zch_size_by_rank[0] = torch.tensor(
                                 [zch_size], dtype=torch.int64, device=self._device
-                            ),
-                            group=self._env.process_group,
+                            )
+
+                        # Calculate the sum of all ZCH sizes from rank 0 to list
+                        # index. The last item is the sum of all elements in zch_size_by_rank
+                        zch_size_cumsum = torch.cumsum(
+                            torch.cat(zch_size_by_rank), dim=0
+                        ).tolist()
+
+                        zch_size_sum_before_this_rank = (
+                            zch_size_cumsum[self._env.rank] - zch_size
                         )
-                    else:
-                        zch_size_by_rank[0] = torch.tensor(
-                            [zch_size], dtype=torch.int64, device=self._device
+
+                        self._mc_module_name_shard_metadata[table.name] = (
+                            zch_size_sum_before_this_rank,
+                            zch_size,
+                            zch_size_cumsum[-1],
                         )
-
-                    # Calculate the sum of all ZCH sizes from rank 0 to list
-                    # index. The last item is the sum of all elements in zch_size_by_rank
-                    zch_size_cumsum = torch.cumsum(
-                        torch.cat(zch_size_by_rank), dim=0
-                    ).tolist()
-
-                    zch_size_sum_before_this_rank = (
-                        zch_size_cumsum[self._env.rank] - zch_size
-                    )
-
-                    self._mc_module_name_shard_metadata[table.name] = (
-                        zch_size_sum_before_this_rank,
-                        zch_size,
-                        zch_size_cumsum[-1],
-                    )
-                    for feature in table.feature_names:
-                        self._feature_to_offset[feature] = new_min_output_id
+                        for feature in table.feature_names:
+                            self._feature_to_offset[feature] = new_min_output_id
 
     def _create_input_dists(
         self,
@@ -333,26 +335,31 @@ class ShardedManagedCollisionCollection(
     ) -> None:
         feature_names: List[str] = []
         self._feature_splits: List[int] = []
-        for sharding in self._embedding_shardings:
-            assert isinstance(sharding, BaseRwEmbeddingSharding)
-            feature_hash_sizes: List[int] = [
-                self._managed_collision_modules[self._feature_to_table[f]].input_size()
-                for f in sharding.feature_names()
-            ]
+        for sharding_type, sharding in self._sharding_type_to_sharding.items():
+            if sharding_type == ShardingType.ROW_WISE.value:
+                feature_hash_sizes: List[int] = [
+                    self._managed_collision_modules[
+                        self._feature_to_table[f]
+                    ].input_size()
+                    for f in sharding.feature_names()
+                ]
 
-            input_dist = RwSparseFeaturesDist(
-                # pyre-ignore [6]
-                pg=sharding._pg,
-                num_features=sharding._get_num_features(),
-                feature_hash_sizes=feature_hash_sizes,
-                device=sharding._device,
-                is_sequence=True,
-                has_feature_processor=sharding._has_feature_processor,
-                need_pos=False,
-            )
-            self._input_dists.append(input_dist)
-            feature_names.extend(sharding.feature_names())
-            self._feature_splits.append(len(sharding.feature_names()))
+                input_dist = RwSparseFeaturesDist(
+                    # pyre-ignore [16]
+                    pg=sharding._pg,
+                    # pyre-ignore [16]
+                    num_features=sharding._get_num_features(),
+                    feature_hash_sizes=feature_hash_sizes,
+                    # pyre-ignore [16]
+                    device=sharding._device,
+                    is_sequence=True,
+                    # pyre-ignore [16]
+                    has_feature_processor=sharding._has_feature_processor,
+                    need_pos=False,
+                )
+                self._input_dists.append(input_dist)
+                feature_names.extend(sharding.feature_names())
+                self._feature_splits.append(len(sharding.feature_names()))
 
         self._features_order: List[int] = []
         for f in feature_names:
@@ -371,16 +378,18 @@ class ShardedManagedCollisionCollection(
     def _create_output_dists(
         self,
     ) -> None:
-        for sharding in self._embedding_shardings:
-            assert isinstance(sharding, BaseRwEmbeddingSharding)
-            self._output_dists.append(
-                RwSequenceEmbeddingDist(
-                    # pyre-ignore [6]
-                    sharding._pg,
-                    sharding._get_num_features(),
-                    sharding._device,
+        for sharding_type, sharding in self._sharding_type_to_sharding.items():
+            if sharding_type == ShardingType.ROW_WISE.value:
+                self._output_dists.append(
+                    RwSequenceEmbeddingDist(
+                        # pyre-ignore [16]
+                        sharding._pg,
+                        # pyre-ignore [16]
+                        sharding._get_num_features(),
+                        # pyre-ignore [16]
+                        sharding._device,
+                    )
                 )
-            )
 
     # pyre-ignore [14]
     def input_dist(
@@ -532,13 +541,14 @@ class ManagedCollisionCollectionSharder(
         module: ManagedCollisionCollection,
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
-        embedding_shardings: List[
+        sharding_type_to_sharding: Dict[
+            str,
             EmbeddingSharding[
                 EmbeddingShardingContext,
                 KeyedJaggedTensor,
                 torch.Tensor,
                 torch.Tensor,
-            ]
+            ],
         ],
         device: Optional[torch.device] = None,
     ) -> ShardedManagedCollisionCollection:
@@ -551,7 +561,7 @@ class ManagedCollisionCollectionSharder(
             params,
             env=env,
             device=device,
-            embedding_shardings=embedding_shardings,
+            sharding_type_to_sharding=sharding_type_to_sharding,
         )
 
     def shardable_parameters(
