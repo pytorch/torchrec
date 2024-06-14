@@ -15,7 +15,7 @@ from torchrec.distributed.train_pipeline.utils import _get_node_args
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
-class TestUtils(unittest.TestCase):
+class TestTrainPipelineUtils(unittest.TestCase):
     def test_get_node_args_helper_call_module_kjt(self) -> None:
         graph = torch.fx.Graph()
         kjt_args = []
