@@ -179,10 +179,37 @@ class TestPt2(unittest.TestCase):
             def set(self, val):
                 self.counter_ = val
 
+        @torch._library.register_fake_class("fbgemm::TensorQueue")
+        class FakeTensorQueue:
+            def __init__(self, queue, init_tensor):
+                self.queue = queue
+                self.init_tensor = init_tensor
+
+            @classmethod
+            def __obj_unflatten__(cls, flattened_ctx):
+                return cls(**dict(flattened_ctx))
+
+            def push(self, x):
+                self.queue.append(x)
+
+            def pop(self):
+                if len(self.queue) == 0:
+                    return self.init_tensor
+                return self.queue.pop(0)
+
+            def top(self):
+                if len(self.queue) == 0:
+                    return self.init_tensor
+                return self.queue[0]
+
+            def size(self):
+                return len(self.queue)
+
     def tearDown(self):
         torch._library.fake_class_registry.deregister_fake_class(
             "fbgemm::AtomicCounter"
         )
+        torch._library.fake_class_registry.deregister_fake_class("fbgemm::TensorQueue")
         super().tearDown()
 
     def _test_kjt_input_module(
@@ -517,7 +544,7 @@ class TestPt2(unittest.TestCase):
             {},
             strict=False,
             pre_dispatch=True,
-        ).run_decompositions()
+        )
 
         ep.module()(kjt.values(), kjt.lengths())
 
@@ -556,7 +583,7 @@ class TestPt2(unittest.TestCase):
             {},
             strict=False,
             pre_dispatch=True,
-        ).run_decompositions()
+        )
         ep.module()(kjt.values(), kjt.lengths())
 
         # PT2 IR autofunctionalizes mutation funcs (bounds_check_indices)
@@ -564,8 +591,9 @@ class TestPt2(unittest.TestCase):
         for n in ep.graph_module.graph.nodes:
             self.assertFalse("auto_functionalized" in str(n.name))
 
-        # TODO: Fix Unflatten
-        # torch.export.unflatten(ep)
+        torch.export.unflatten(ep)
+
+        ep(kjt.values(), kjt.lengths())
 
     def test_maybe_compute_kjt_to_jt_dict(self) -> None:
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
