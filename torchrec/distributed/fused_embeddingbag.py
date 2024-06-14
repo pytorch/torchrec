@@ -65,7 +65,7 @@ class ShardedFusedEmbeddingBagCollection(
         )
 
         for index, (sharding, lookup) in enumerate(
-            zip(self._embedding_shardings, self._lookups)
+            zip(self._sharding_type_to_sharding.values(), self._lookups)
         ):
             if isinstance(sharding, DpPooledEmbeddingSharding):
                 self._lookups[index] = DistributedDataParallel(
