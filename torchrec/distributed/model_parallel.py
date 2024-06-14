@@ -77,11 +77,13 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         static_graph: bool = True,
         find_unused_parameters: bool = False,
         allreduce_comm_precision: Optional[str] = None,
+        params_to_ignore: Optional[List[str]] = None,
     ) -> None:
         self._bucket_cap_mb: int = bucket_cap_mb
         self._static_graph: bool = static_graph
         self._find_unused_parameters: bool = find_unused_parameters
         self._allreduce_comm_precision = allreduce_comm_precision
+        self._additional_params_to_ignore: Set[str] = set(params_to_ignore or [])
 
     def _ddp_wrap(
         self,
@@ -136,7 +138,10 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         sharded_parameter_names = set(
             DistributedModelParallel._sharded_parameter_names(dmp._dmp_wrapped_module)
         )
-        self._ddp_wrap(dmp, env, device, sharded_parameter_names)
+        params_to_ignore = sharded_parameter_names.union(
+            self._additional_params_to_ignore
+        )
+        self._ddp_wrap(dmp, env, device, params_to_ignore)
 
 
 def get_unwrapped_module(module: nn.Module) -> nn.Module:
