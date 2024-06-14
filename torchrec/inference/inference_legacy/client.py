@@ -5,12 +5,16 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# @nolint
+# pyre-ignore-all-errors
+
+
 import argparse
 import logging
 
 import grpc
-import predictor_pb2, predictor_pb2_grpc
 import torch
+from gen.torchrec.inference import predictor_pb2, predictor_pb2_grpc
 from torch.utils.data import DataLoader
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.datasets.random import RandomRecDataset
@@ -20,13 +24,18 @@ from torchrec.datasets.utils import Batch
 def create_training_batch(args: argparse.Namespace) -> Batch:
     return next(
         iter(
-            RandomRecDataset(
-                keys=DEFAULT_CAT_NAMES,
-                batch_size=args.batch_size,
-                hash_size=args.num_embedding_features,
-                ids_per_feature=1,
-                num_dense=len(DEFAULT_INT_NAMES),
-            ),
+            DataLoader(
+                RandomRecDataset(
+                    keys=DEFAULT_CAT_NAMES,
+                    batch_size=args.batch_size,
+                    hash_size=args.num_embedding_features,
+                    ids_per_feature=1,
+                    num_dense=len(DEFAULT_INT_NAMES),
+                ),
+                batch_sampler=None,
+                pin_memory=False,
+                num_workers=0,
+            )
         )
     )
 
