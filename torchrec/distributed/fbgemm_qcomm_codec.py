@@ -34,6 +34,7 @@ class CommType(Enum):
     BF16 = "bf16"
     FP8 = "fp8"
     INT8 = "int8"
+    MX4 = "mx4"
 
     def __str__(self) -> str:
         return self.value
@@ -46,6 +47,7 @@ def comm_type_to_sparse_type(comm_type: CommType) -> SparseType:
         CommType.BF16: SparseType.BF16,
         CommType.FP8: SparseType.FP8,
         CommType.INT8: SparseType.INT8,
+        CommType.MX4: SparseType.MX4,
     }[comm_type]
 
 

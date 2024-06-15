@@ -194,15 +194,14 @@ class DDPTest(unittest.TestCase):
         "Not enough GPUs, this test requires at least two GPUs",
     )
     def test_checkpoint(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as path:
+        with tempfile.TemporaryDirectory() as path:
             lc = LaunchConfig(
                 min_nodes=1,
                 max_nodes=1,
                 nproc_per_node=2,
                 run_id=str(uuid.uuid4()),
                 rdzv_backend="c10d",
-                rdzv_endpoint=os.path.join(tmpdir, "rdzv"),
-                rdzv_configs={"store_type": "file"},
+                rdzv_endpoint="localhost:0",
                 start_method="spawn",
                 monitor_interval=1,
                 max_restarts=0,
@@ -217,15 +216,13 @@ class DDPTest(unittest.TestCase):
         "Not enough GPUs, this test requires at least two GPUs",
     )
     def test_init_params(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as path:
+        with tempfile.TemporaryDirectory() as path:
             lc = LaunchConfig(
                 min_nodes=1,
                 max_nodes=1,
                 nproc_per_node=2,
                 run_id=str(uuid.uuid4()),
                 rdzv_backend="c10d",
-                rdzv_endpoint=os.path.join(tmpdir, "rdzv"),
-                rdzv_configs={"store_type": "file"},
                 start_method="spawn",
                 monitor_interval=1,
                 max_restarts=0,
