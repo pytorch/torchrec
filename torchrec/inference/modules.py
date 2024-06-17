@@ -16,9 +16,9 @@ import torch
 import torch.nn as nn
 import torch.quantization as quant
 import torchrec as trec
+import torchrec.distributed as trec_dist
 import torchrec.quant as trec_quant
 from torch.fx.passes.split_utils import getattr_recursive
-from torchrec import distributed as trec_dist, inference as trec_infer
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fused_params import (
     FUSED_PARAM_BOUNDS_CHECK_MODE,
@@ -357,7 +357,7 @@ def quantize_inference_model(model: torch.nn.Module) -> torch.nn.Module:
             _quantize_fp_module(model, m, n)
 
     quant_prep_enable_register_tbes(model, list(additional_mapping.keys()))
-    trec_infer.modules.quantize_embeddings(
+    quantize_embeddings(
         model,
         dtype=DEFAULT_QUANTIZATION_DTYPE,
         additional_qconfig_spec_keys=additional_qconfig_spec_keys,
