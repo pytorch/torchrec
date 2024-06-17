@@ -414,3 +414,42 @@ def register_custom_ops_for_nodes(
                 op_name.split("_")[0],
                 [int(dim) for dim in op_name.split("_")[1:]],
             )
+
+
+@torch.fx.wrap
+def jagged_index_select_with_empty(
+    values: torch.Tensor,
+    ids: torch.Tensor,
+    offsets: torch.Tensor,
+    output_offsets: torch.Tensor,
+) -> torch.Tensor:
+    if ids.size()[0] == 0:
+        return torch.empty(0, device=values.device, dtype=values.dtype)
+    output_values = torch.ops.fbgemm.jagged_index_select_2d_forward_v2(
+        values.flatten().unsqueeze(-1),
+        ids,
+        offsets.long(),
+        output_offsets.long(),
+    )
+    return output_values
+
+
+def deterministic_dedup(ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    To remove race condition in conflict update, remove duplicated IDs. Only the last existence of duplicated ID will be kept.
+    Return sorted unique ids and the position of the last existence
+    """
+    sorted_id_values, sorted_id_indices = ids.sort()
+    sorted_unique_ids, sorted_unique_inverses = sorted_id_values.unique_consecutive(
+        return_counts=False,
+        return_inverse=True,
+    )
+    last_existence_index = torch.scatter_reduce(
+        input=torch.zeros_like(sorted_unique_ids, dtype=torch.int64),
+        dim=0,
+        index=sorted_unique_inverses,
+        src=sorted_id_indices,
+        reduce="amax",
+    )
+
+    return sorted_unique_ids.view(-1), last_existence_index.flatten()

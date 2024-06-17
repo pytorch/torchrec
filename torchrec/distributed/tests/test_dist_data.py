@@ -19,6 +19,7 @@ from hypothesis import given, settings
 
 from torchrec.distributed.dist_data import (
     _get_recat,
+    JaggedTensorAllToAll,
     KJTAllToAll,
     KJTAllToAllSplitsAwaitable,
     PooledEmbeddingsAllGather,
@@ -33,8 +34,11 @@ from torchrec.distributed.fbgemm_qcomm_codec import (
     QCommsConfig,
 )
 
-from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.distributed.test_utils.multi_process import (
+    MultiProcessContext,
+    MultiProcessTestBase,
+)
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 
 T = TypeVar("T", int, float, List[int])
@@ -1414,4 +1418,91 @@ class VariableBatchPooledEmbeddingsAllToAllTest(MultiProcessTestBase):
             callable=self._run_test_dist,
             world_size=world_size,
             kwargs_per_rank=kwargs_per_rank,
+        )
+
+
+class TestJaggedTensorAllToAll(MultiProcessTestBase):
+    @staticmethod
+    def _test_jt_all_to_all(
+        rank: int,
+        world_size: int,
+    ) -> None:
+        backend = "nccl"
+        with MultiProcessContext(
+            rank, world_size, backend, local_size=world_size
+        ) as ctx:
+            device = ctx.device
+            if ctx.rank == 0:
+                # [
+                #   [1], [2,2], [3,3,3], [4,4,4,4]
+                # ]
+                jt = JaggedTensor(
+                    values=torch.tensor(
+                        [1, 2, 2, 3, 3, 3, 4, 4, 4, 4], dtype=torch.int, device=device
+                    ),
+                    lengths=torch.tensor(
+                        [1, 2, 3, 4], dtype=torch.int32, device=device
+                    ),
+                )
+                input_splits = torch.tensor([3, 1], dtype=torch.int32, device=device)
+                output_splits = torch.tensor([3, 2], dtype=torch.int32, device=device)
+            else:
+                # [
+                #   [5,5,5,5,5], [6,6,6,6,6,6], [7,7,7,7,7,7,7]
+                # ]
+                jt = JaggedTensor(
+                    values=torch.tensor(
+                        [5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7],
+                        device=device,
+                        dtype=torch.int,
+                    ),
+                    lengths=torch.tensor([5, 6, 7], dtype=torch.int, device=device),
+                )
+                input_splits = torch.tensor([2, 1], dtype=torch.int32, device=device)
+                output_splits = torch.tensor([1, 1], dtype=torch.int32, device=device)
+
+        jt_all_to_all = JaggedTensorAllToAll(
+            jt,
+            num_items_to_send=input_splits,
+            num_items_to_receive=output_splits,
+            # pyre-fixme[6]: For 4th argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            pg=ctx.pg,
+        )
+
+        jt_out = jt_all_to_all.wait()
+
+        torch.testing.assert_close(
+            jt_out.values(),
+            torch.tensor(
+                (
+                    [1, 2, 2, 3, 3, 3, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6]
+                    if ctx.rank == 0
+                    else [4, 4, 4, 4, 7, 7, 7, 7, 7, 7, 7]
+                ),
+                dtype=torch.int,
+                device=device,
+            ),
+        )
+
+        torch.testing.assert_close(
+            jt_out.lengths(),
+            torch.tensor(
+                [1, 2, 3, 5, 6] if ctx.rank == 0 else [4, 7],
+                dtype=torch.int,
+                device=device,
+            ),
+        )
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_jt_all_to_all(
+        self,
+    ) -> None:
+        world_size = 2
+        self._run_multi_process_test(
+            callable=self._test_jt_all_to_all, world_size=world_size
         )
