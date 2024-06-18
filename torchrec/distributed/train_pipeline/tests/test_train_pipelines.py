@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import torch
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
+from torch._dynamo.testing import reduce_to_scalar_loss
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -45,6 +46,7 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     PrefetchTrainPipelineSparseDist,
     StagedTrainPipeline,
     TrainPipelineBase,
+    TrainPipelinePT2,
     TrainPipelineSemiSync,
     TrainPipelineSparseDist,
 )
@@ -63,10 +65,13 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import DataType
+from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 from torchrec.optim.keyed import KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
+from torchrec.pt2.utils import kjt_for_pt2_tracing
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
 
 
@@ -93,6 +98,7 @@ class TestModule(nn.Module):
         super().__init__()
         self.model = nn.Linear(10, 1)
         self.loss_fn = nn.BCEWithLogitsLoss()
+        self._dummy_setting: str = "dummy"
 
     def forward(
         self, model_input: ModelInputSimple
@@ -154,6 +160,154 @@ class TrainPipelineBaseTest(unittest.TestCase):
             # Results will be close but not exactly equal as one model is on CPU and other on GPU
             # If both were on GPU, the results will be exactly the same
             self.assertTrue(torch.isclose(pred_gpu.cpu(), pred))
+
+
+class TrainPipelinePT2Test(unittest.TestCase):
+    def setUp(self) -> None:
+        self.device = torch.device("cuda:0")
+        torch.backends.cudnn.allow_tf32 = False
+        torch.backends.cuda.matmul.allow_tf32 = False
+
+    def gen_eb_conf_list(self, is_weighted: bool = False) -> List[EmbeddingBagConfig]:
+        weighted_prefix = "weighted_" if is_weighted else ""
+
+        return [
+            EmbeddingBagConfig(
+                num_embeddings=256,
+                embedding_dim=12,
+                name=weighted_prefix + "table_0",
+                feature_names=[weighted_prefix + "f0"],
+            ),
+            EmbeddingBagConfig(
+                num_embeddings=256,
+                embedding_dim=12,
+                name=weighted_prefix + "table_1",
+                feature_names=[weighted_prefix + "f1"],
+            ),
+        ]
+
+    def gen_model(
+        self, device: torch.device, ebc_list: List[EmbeddingBagConfig]
+    ) -> nn.Module:
+        class M_ebc(torch.nn.Module):
+            def __init__(self, vle: EmbeddingBagCollection) -> None:
+                super().__init__()
+                self.model = vle
+
+            def forward(self, x: KeyedJaggedTensor) -> List[JaggedTensor]:
+                kt: KeyedTensor = self.model(x)
+                return list(kt.to_dict().values())
+
+        return M_ebc(
+            EmbeddingBagCollection(
+                device=device,
+                tables=ebc_list,
+            )
+        )
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_equal_to_non_pipelined(self) -> None:
+        model_cpu = TestModule()
+        model_gpu = TestModule().to(self.device)
+        model_gpu.load_state_dict(model_cpu.state_dict())
+        optimizer_cpu = optim.SGD(model_cpu.model.parameters(), lr=0.01)
+        optimizer_gpu = optim.SGD(model_gpu.model.parameters(), lr=0.01)
+        data = [
+            ModelInputSimple(
+                float_features=torch.rand((10,)),
+                label=torch.randint(2, (1,), dtype=torch.float32),
+            )
+            for b in range(5)
+        ]
+        dataloader = iter(data)
+        pipeline = TrainPipelinePT2(model_gpu, optimizer_gpu, self.device)
+
+        for batch in data[:-1]:
+            optimizer_cpu.zero_grad()
+            loss, pred = model_cpu(batch)
+            loss.backward()
+            optimizer_cpu.step()
+
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(pred_gpu.device, self.device)
+            self.assertTrue(torch.isclose(pred_gpu.cpu(), pred))
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pre_compile_fn(self) -> None:
+        model_cpu = TestModule()
+        model_gpu = TestModule().to(self.device)
+        model_gpu.load_state_dict(model_cpu.state_dict())
+        optimizer_gpu = optim.SGD(model_gpu.model.parameters(), lr=0.01)
+        data = [
+            ModelInputSimple(
+                float_features=torch.rand((10,)),
+                label=torch.randint(2, (1,), dtype=torch.float32),
+            )
+            for b in range(5)
+        ]
+
+        def pre_compile_fn(model: nn.Module) -> None:
+            model._dummy_setting = "dummy modified"
+
+        dataloader = iter(data)
+        pipeline = TrainPipelinePT2(
+            model_gpu, optimizer_gpu, self.device, pre_compile_fn=pre_compile_fn
+        )
+        self.assertEqual(model_gpu._dummy_setting, "dummy")
+        for _ in range(len(data)):
+            pipeline.progress(dataloader)
+        self.assertEqual(model_gpu._dummy_setting, "dummy modified")
+
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_equal_to_non_pipelined_with_input_transformer(self) -> None:
+        cpu = torch.device("cpu:0")
+        eb_conf_list = self.gen_eb_conf_list()
+        eb_conf_list_weighted = self.gen_eb_conf_list(is_weighted=True)
+
+        model_cpu = self.gen_model(cpu, eb_conf_list)
+        model_gpu = self.gen_model(self.device, eb_conf_list).to(self.device)
+
+        _, local_model_inputs = ModelInput.generate(
+            batch_size=10,
+            world_size=4,
+            num_float_features=8,
+            tables=eb_conf_list,
+            weighted_tables=eb_conf_list_weighted,
+            variable_batch_size=False,
+        )
+
+        model_gpu.load_state_dict(model_cpu.state_dict())
+        optimizer_cpu = optim.SGD(model_cpu.model.parameters(), lr=0.01)
+        optimizer_gpu = optim.SGD(model_gpu.model.parameters(), lr=0.01)
+
+        data = [i.idlist_features for i in local_model_inputs]
+        dataloader = iter(data)
+        pipeline = TrainPipelinePT2(
+            model_gpu, optimizer_gpu, self.device, input_transformer=kjt_for_pt2_tracing
+        )
+
+        for batch in data[:-1]:
+            optimizer_cpu.zero_grad()
+            loss, pred = model_cpu(batch)
+            loss = reduce_to_scalar_loss(loss)
+            loss.backward()
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(pred_gpu.device, self.device)
+            torch.testing.assert_close(pred_gpu.cpu(), pred)
 
 
 class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):

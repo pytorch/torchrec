@@ -984,3 +984,20 @@ def rank_device(device_type: str, rank: int) -> torch.device:
         return torch.device("cpu")
 
     return torch.device(f"{device_type}:{rank}")
+
+
+class ObjectPoolShardingType(Enum):
+    """
+    Sharding type for object pool
+    """
+
+    ROW_WISE = "row_wise"
+    # across nodes, state will be replicated. On lookup, all2alls will happen intranode.
+    # State is synced via update a2a being global internode.
+    REPLICATED_ROW_WISE = "replicated_row_wise"
+
+
+@dataclass
+class ObjectPoolShardingPlan(ModuleShardingPlan):
+    sharding_type: ObjectPoolShardingType
+    inference: bool = False

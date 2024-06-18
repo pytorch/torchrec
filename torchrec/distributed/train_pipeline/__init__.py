@@ -14,6 +14,7 @@ from torchrec.distributed.train_pipeline.train_pipelines import (  # noqa
     StagedTrainPipeline,  # noqa
     TrainPipeline,  # noqa
     TrainPipelineBase,  # noqa
+    TrainPipelinePT2,  # noqa
     TrainPipelineSparseDist,  # noqa
 )
 from torchrec.distributed.train_pipeline.utils import (  # noqa

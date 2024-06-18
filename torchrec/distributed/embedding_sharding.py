@@ -425,6 +425,10 @@ def _prefetch_and_cached(
     Return if this embedding use hbm as cache. In this case we might want to use
     bucketizer to group by dimension for memory efficiency.
     """
+    if table.compute_kernel in {
+        EmbeddingComputeKernel.KEY_VALUE,
+    }:
+        return True
 
     return (
         table.compute_kernel

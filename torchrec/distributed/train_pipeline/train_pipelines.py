@@ -10,6 +10,7 @@
 import abc
 import logging
 from collections import deque
+from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
@@ -68,6 +69,25 @@ class TrainPipeline(abc.ABC, Generic[In, Out]):
     @abc.abstractmethod
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         pass
+
+
+@dataclass
+class TorchCompileConfig:
+    """
+    Configs for torch.compile
+
+    fullgraph: bool = False, whether to compile the whole graph or not
+    dynamic: bool = False, whether to use dynamic shapes or not
+    backend: str = "inductor", which compiler to use (either inductor or aot)
+    compile_on_iter: int = 3, compile the model on which iteration
+        this is useful when we want to profile the first few iterations of training
+        and then start using compiled model from iteration #3 onwards
+    """
+
+    fullgraph: bool = False
+    dynamic: bool = False
+    backend: str = "inductor"
+    compile_on_iter: int = 3
 
 
 class TrainPipelineBase(TrainPipeline[In, Out]):
@@ -132,6 +152,82 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
         # Update
         if self._model.training:
+            with record_function("## optimizer ##"):
+                self._optimizer.step()
+
+        return output
+
+
+class TrainPipelinePT2(TrainPipelineBase[In, Out]):
+    """
+    This pipeline uses PT2 compiler to compile the model and run it in a single stream (default)
+    Args:
+        model (torch.nn.Module): model to pipeline.
+        optimizer (torch.optim.Optimizer): optimizer to use.
+        device (torch.device): device where the model is run
+        compile_configs (TorchCompileConfig): configs for compling the model
+        pre_compile_fn (Callable[[torch.nn.Module], [None]]): Optional callable to execute before compiling the model
+        post_compile_fn (Callable[[torch.nn.Module], [None]]): Optional callable to execute after compiling the model
+        input_transformer (Callable[[In], In]): transforms the input before passing it to the model.
+            This is useful when we want to transform KJT parameters for PT2 tracing
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        compile_configs: Optional[TorchCompileConfig] = None,
+        pre_compile_fn: Optional[Callable[[torch.nn.Module], None]] = None,
+        post_compile_fn: Optional[Callable[[torch.nn.Module], None]] = None,
+        input_transformer: Optional[Callable[[In], In]] = None,
+    ) -> None:
+        self._model = model
+        self._optimizer = optimizer
+        self._device = device
+        self._compile_configs: TorchCompileConfig = (
+            compile_configs or TorchCompileConfig()
+        )
+        self._pre_compile_fn = pre_compile_fn
+        self._post_compile_fn = post_compile_fn
+        self._input_transformer = input_transformer
+        self._iter = 0
+        self._cur_batch: Optional[In] = None
+
+    def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        cc = self._compile_configs
+
+        with record_function("## load_batch ##"):
+            cur_batch = next(dataloader_iter)
+
+        if self._input_transformer:
+            cur_batch = self._input_transformer(cur_batch)
+
+        with record_function("## copy_batch_to_gpu ##"):
+            self._cur_batch = _to_device(cur_batch, self._device, non_blocking=False)
+
+        if self._model.training:
+            with record_function("## zero_grad ##"):
+                self._optimizer.zero_grad()
+
+        with record_function("## forward ##"):
+            if self._iter == cc.compile_on_iter:
+                logger.info("Compiling model...")
+                if self._pre_compile_fn:
+                    self._pre_compile_fn(self._model)
+                self._model.compile(
+                    fullgraph=cc.fullgraph, dynamic=cc.dynamic, backend=cc.backend
+                )
+                if self._post_compile_fn:
+                    self._post_compile_fn(self._model)
+
+            (losses, output) = self._model(self._cur_batch)
+            self._iter += 1
+
+        if self._model.training:
+            with record_function("## backward ##"):
+                torch.sum(losses).backward()
+
             with record_function("## optimizer ##"):
                 self._optimizer.step()
 

@@ -16,14 +16,17 @@ from torchrec.distributed.embedding_types import ShardedEmbeddingTable
 from torchrec.modules.embedding_modules import reorder_inverse_indices
 from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJaggedTensor
 
-
 try:
-    torch.ops.load_library(
-        "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_gpu"
-    )
+    if torch.version.hip:
+        torch.ops.load_library(
+            "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_hip"
+        )
+    else:
+        torch.ops.load_library(
+            "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_cuda"
+        )
 except OSError:
     pass
-
 
 logger: logging.Logger = logging.getLogger(__name__)
 
