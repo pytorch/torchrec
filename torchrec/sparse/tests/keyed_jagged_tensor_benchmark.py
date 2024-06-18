@@ -196,7 +196,8 @@ def benchmark_kjt(
     transform_type: TransformType,
     is_vb: bool = False,
     is_baseline: bool = False,
-) -> None:
+    print_formatted: bool = True,
+) -> BenchmarkResult:
     for _ in range(num_warmup):
         # Reset cached states
         kjt.unsync()
@@ -225,14 +226,17 @@ def benchmark_kjt(
     if is_baseline:
         bench_formatter.set_baseline(test_name, p50_runtime, p90_runtime)
 
-    bench_formatter.print_formatted(
-        method_name=test_name,
-        transform_type=transform_type,
-        is_vb=is_vb,
-        p50_runtime=p50_runtime,
-        p90_runtime=p90_runtime,
-        is_baseline=is_baseline,
-    )
+    if print_formatted:
+        bench_formatter.print_formatted(
+            method_name=test_name,
+            transform_type=transform_type,
+            is_vb=is_vb,
+            p50_runtime=p50_runtime,
+            p90_runtime=p90_runtime,
+            is_baseline=is_baseline,
+        )
+
+    return result
 
 
 def get_k_splits(n: int, k: int) -> List[int]:
@@ -330,7 +334,7 @@ def bench(
     mean_pooling_factor: int,
     num_workers: int,
     test_pt2: bool,
-) -> None:
+) -> List[BenchmarkResult]:
     # TODO: support CUDA benchmark
     device: torch.device = torch.device("cpu")
 
@@ -393,10 +397,12 @@ def bench(
     )
     bench_formatter.print_headers()
 
+    all_results: List[BenchmarkResult] = []
+
     for method_name, fn_kwargs, kjt_module in benchmarked_methods:
         # Test Eager
-        benchmark_kjt(
-            test_name=method_name,
+        result = benchmark_kjt(
+            test_name=f"{method_name}-eager",
             kjt=kjt,
             test_module=kjt_module,
             num_repeat=num_repeat,
@@ -406,10 +412,11 @@ def bench(
             bench_formatter=bench_formatter,
             is_baseline=True,
         )
+        all_results.append(result)
 
         # Test JIT script
-        benchmark_kjt(
-            test_name=method_name,
+        result = benchmark_kjt(
+            test_name=f"{method_name}-jitscript",
             kjt=kjt,
             test_module=torch.jit.script(kjt_module),
             num_repeat=num_repeat,
@@ -418,6 +425,8 @@ def bench(
             transform_type=TransformType.JIT_SCRIPT,
             bench_formatter=bench_formatter,
         )
+
+        all_results.append(result)
 
         # Test Eager VBE
         vbe_kjt = KeyedJaggedTensor(
@@ -430,8 +439,8 @@ def bench(
         if "kjt" in fn_kwargs:
             vbe_fn_kwargs["kjt"] = vbe_kjt
 
-        benchmark_kjt(
-            test_name=method_name,
+        result = benchmark_kjt(
+            test_name=f"{method_name}-vbe",
             kjt=vbe_kjt,
             test_module=kjt_module,
             num_repeat=num_repeat,
@@ -441,6 +450,7 @@ def bench(
             is_vb=True,
             bench_formatter=bench_formatter,
         )
+        all_results.append(result)
 
         # PT2 (Eager Inductor)
         if test_pt2:
@@ -452,8 +462,8 @@ def bench(
                 fn_kwargs=vbe_fn_kwargs,
             )
 
-            benchmark_kjt(
-                test_name=method_name,
+            result = benchmark_kjt(
+                test_name=f"{method_name}-aot-eager",
                 kjt=vbe_kjt,
                 test_module=dynamo_compiled_mod,
                 num_repeat=num_repeat,
@@ -465,8 +475,10 @@ def bench(
                 bench_formatter=bench_formatter,
             )
 
+            all_results.append(result)
         # Leave a gap between methods
         print("")
+    return all_results
 
 
 @click.command()
