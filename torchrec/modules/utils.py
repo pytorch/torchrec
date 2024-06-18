@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
+from torch.library import register_fake
 from torch.profiler import record_function
 from torchrec.sparse.jagged_tensor import (
     _permute_tensor_by_segments,
@@ -320,7 +321,8 @@ def _permute_indices(indices: List[int], permute: List[int]) -> List[int]:
 def register_custom_op(
     module_name: str,
     dims: List[int],
-) -> Callable[[List[Optional[torch.Tensor]], int], List[torch.Tensor]]:
+    dynamic: bool = False,
+) -> Callable[[List[Optional[torch.Tensor]], int, bool], List[torch.Tensor]]:
     """
     Register a customized operator.
 
@@ -335,33 +337,64 @@ def register_custom_op(
     with operator_registry_state.op_registry_lock:
         op_name: str = f"{module_name}_{dims_str}"
 
+        if dynamic:
+            op_name += "_dynamic"
+
         if op_name in operator_registry_state.op_registry_schema:
             return getattr(torch.ops.custom, op_name)
 
-        def custom_op(
-            values: List[Optional[torch.Tensor]],
-            batch_size: int,
-        ) -> List[torch.Tensor]:
-            device = None
-            for v in values:
-                if v is not None:
-                    device = v.device
-                    break
-            else:
-                raise AssertionError(
-                    f"Custom op {op_name} expects at least one input tensor"
-                )
+        if not dynamic:
 
-            return [
-                torch.empty(
-                    batch_size,
-                    dim,
-                    device=device,
-                )
-                for dim in dims
-            ]
+            def non_dynamic_custom_op(
+                values: List[Optional[torch.Tensor]],
+                batch_size: int,
+            ) -> List[torch.Tensor]:
+                device = None
+                for v in values:
+                    if v is not None:
+                        device = v.device
+                        break
+                else:
+                    raise AssertionError(
+                        f"Custom op {op_name} expects at least one input tensor"
+                    )
 
-        schema_string = f"{op_name}(Tensor?[] values, SymInt batch_size) -> Tensor[]"
+                return [
+                    torch.empty(
+                        batch_size,
+                        dim,
+                        device=device,
+                    )
+                    for dim in dims
+                ]
+
+            schema_string = f"{op_name}(Tensor?[] values, int batch_size) -> Tensor[]"
+            operator_registry_state.op_registry_schema[op_name] = schema_string
+            custom_op = non_dynamic_custom_op
+        else:
+
+            def dynamic_custom_op(
+                values: List[Optional[torch.Tensor]],
+            ) -> List[torch.Tensor]:
+                ctx = torch.library.get_ctx()
+                sz = ctx.new_dynamic_size()
+                for v in values:
+                    if v is not None:
+                        device = v.device
+                        break
+
+                return [
+                    torch.empty(
+                        sz,
+                        dim,
+                        device=device,
+                    )
+                    for dim in dims
+                ]
+
+            schema_string = f"{op_name}(Tensor?[] values) -> Tensor[]"
+            custom_op = dynamic_custom_op
+
         operator_registry_state.op_registry_schema[op_name] = schema_string
         # Register schema
         lib.define(schema_string)
@@ -370,8 +403,10 @@ def register_custom_op(
         lib.impl(op_name, custom_op, "CPU")
         lib.impl(op_name, custom_op, "CUDA")
 
-        # Register meta formula
-        lib.impl(op_name, custom_op, "Meta")
+        # # Register meta formula
+        # lib.impl(op_name, custom_op, "Meta")
+
+        register_fake(f"custom::{op_name}", custom_op, lib=lib)
 
         return getattr(torch.ops.custom, op_name)
 
@@ -392,9 +427,18 @@ def register_custom_ops_for_nodes(
             # torch.ops.custom.EmbeddingBagCollection_100.default
             # number represents dimension
             op_name = str(node.target).split(".")[-2]
+            print(f"@@@===@@@===@@@ {__name__}: {op_name}")
+
+            dynamic = "dynamic" in op_name
+            if dynamic:
+                dims = [int(dim) for dim in op_name.split("_")[1:-1]]
+            else:
+                dims = [int(dim) for dim in op_name.split("_")[1:]]
+
             register_custom_op(
                 op_name.split("_")[0],
-                [int(dim) for dim in op_name.split("_")[1:]],
+                dims,
+                dynamic,
             )
 
 

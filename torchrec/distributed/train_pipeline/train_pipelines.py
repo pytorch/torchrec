@@ -53,6 +53,7 @@ from torchrec.distributed.train_pipeline.utils import (
     TrainPipelineContext,
 )
 from torchrec.distributed.types import Awaitable
+from torchrec.ir.utils import move_to_copy_nodes_to_device
 from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.pt2.utils import default_pipeline_input_transformer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -468,6 +469,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             batch=batch,
             apply_jit=self._apply_jit,
             pipelined_forward=pipelined_forward,
+        )
+
+        move_to_copy_nodes_to_device(
+            self._model._dmp_wrapped_module.module, self._device
         )
         # initializes input dist, so we can override input dist forwards
         self.start_sparse_data_dist(batch, context)

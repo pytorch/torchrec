@@ -218,7 +218,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             features.offsets_or_none(),
         ]  # if want to include the weights: `+ [bag.weight for bag in self.embedding_bags.values()]`
         dims = [sum(self._lengths_per_embedding)]
-        ebc_op = register_custom_op(type(self).__name__, dims)
+        ebc_op = register_custom_op(type(self).__name__, dims, False)
         outputs = ebc_op(arg_list, batch_size)
         return KeyedTensor(
             keys=self._embedding_names,

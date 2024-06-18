@@ -416,7 +416,11 @@ def _start_data_dist(
             if arg_info.input_attrs:
                 arg = batch
                 for attr, is_getitem in zip(arg_info.input_attrs, arg_info.is_getitems):
-                    if is_getitem:
+                    if "[" in attr:
+                        key = attr.split("[")[1][:-1]
+                        attr = attr.split("[")[0]
+                        arg = getattr(arg, attr)[key]
+                    elif is_getitem:
                         arg = arg[attr]
                     else:
                         arg = getattr(arg, attr)
