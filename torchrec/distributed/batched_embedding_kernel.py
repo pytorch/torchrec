@@ -41,10 +41,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SparseType,
     SplitTableBatchedEmbeddingBagsCodegen,
 )
-from fbgemm_gpu.ssd_split_table_batched_embeddings_ops import (
-    ASSOC,
-    SSDTableBatchedEmbeddingBags,
-)
+from fbgemm_gpu.tbe.ssd import ASSOC, SSDTableBatchedEmbeddingBags
 from torch import nn
 from torchrec.distributed.composable.table_batched_embedding_slice import (
     TableBatchedEmbeddingSlice,
