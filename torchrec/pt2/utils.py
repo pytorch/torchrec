@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+
 import torch
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -81,3 +82,13 @@ def kjt_for_pt2_tracing(
         stride_per_key_per_rank=kjt.stride_per_key_per_rank() if is_vb else None,
         inverse_indices=inverse_indices,
     )
+
+
+# pyre-ignore
+def default_pipeline_input_transformer(inp):
+    for attr_name in ["id_list_features", "id_score_list_features"]:
+        if hasattr(inp, attr_name):
+            attr = getattr(inp, attr_name)
+            if isinstance(attr, KeyedJaggedTensor):
+                setattr(inp, attr_name, kjt_for_pt2_tracing(attr))
+    return inp
