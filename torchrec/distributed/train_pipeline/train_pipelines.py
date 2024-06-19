@@ -54,9 +54,9 @@ from torchrec.distributed.train_pipeline.utils import (
 )
 from torchrec.distributed.types import Awaitable
 from torchrec.pt2.checks import is_torchdynamo_compiling
+from torchrec.pt2.utils import default_pipeline_input_transformer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
-
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -190,7 +190,10 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
         )
         self._pre_compile_fn = pre_compile_fn
         self._post_compile_fn = post_compile_fn
-        self._input_transformer = input_transformer
+        # pyre-ignore
+        self._input_transformer = (
+            input_transformer or default_pipeline_input_transformer
+        )
         self._iter = 0
         self._cur_batch: Optional[In] = None
 
@@ -215,6 +218,13 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
                 logger.info("Compiling model...")
                 if self._pre_compile_fn:
                     self._pre_compile_fn(self._model)
+
+                # Mandatory dynamo configuration for Torchrec PT2 compilation
+                torch._dynamo.config.capture_scalar_outputs = True
+                torch._dynamo.config.capture_dynamic_output_shape_ops = True
+                torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = (
+                    True
+                )
                 self._model.compile(
                     fullgraph=cc.fullgraph, dynamic=cc.dynamic, backend=cc.backend
                 )

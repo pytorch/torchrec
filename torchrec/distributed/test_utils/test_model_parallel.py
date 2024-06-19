@@ -15,6 +15,7 @@ import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import assume, given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
@@ -629,4 +630,34 @@ class ModelParallelBase(ModelParallelTestShared):
             has_weighted_tables=False,
             global_constant_batch=global_constant_batch,
             pooling=pooling,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(sharding_type=st.just(ShardingType.COLUMN_WISE.value))
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_sharding_multiple_kernels(self, sharding_type: str) -> None:
+        if self.backend == "gloo":
+            self.skipTest("ProcessGroupGloo does not support reduce_scatter")
+        constraints = {
+            table.name: ParameterConstraints(
+                min_partition=4,
+                compute_kernels=(
+                    [EmbeddingComputeKernel.FUSED.value]
+                    if i % 2 == 0
+                    else [EmbeddingComputeKernel.FUSED_UVM_CACHING.value]
+                ),
+            )
+            for i, table in enumerate(self.tables)
+        }
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[EmbeddingBagCollectionSharder()],
+            backend=self.backend,
+            constraints=constraints,
+            variable_batch_per_feature=True,
+            has_weighted_tables=False,
         )

@@ -18,7 +18,8 @@ from torchrec.modules.embedding_configs import (
     EmbeddingConfig,
     pooling_type_to_str,
 )
-from torchrec.modules.utils import is_non_strict_exporting, register_custom_op
+from torchrec.modules.utils import register_custom_op
+from torchrec.pt2.checks import is_non_strict_exporting
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
