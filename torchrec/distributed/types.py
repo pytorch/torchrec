@@ -536,30 +536,31 @@ class CacheStatistics(abc.ABC):
 class CacheParams:
     """Caching related fused params for an embedding table. Most of these are
     passed to FBGEMM's Split TBE. These are useful for when uvm caching is used.
-
-    Attributes:
-        algorithm (Optional[CacheAlgorithm]): cache algorithm to use. Options
-            include LRU and LFU.
-        load_factor (Optional[float]): cache load factor per table. This decides
-            the size of the cache space for the table, and is crucial for
-            performance when using uvm caching.
-        reserved_memory (Optional[float]): reserved memory for the cache.
-        precision (Optional[DataType]): precision of the cache. Ideally this
-            should be the same as the data type of the weights (aka table).
-        prefetch_pipeline (Optional[bool]): whether to prefetch pipeline is
-            used.
-        stats (Optional[CacheStatistics]): cache statistics which has table
-            related metadata. Used to create a better plan and tune the load
-            factor.
     """
 
     algorithm: Optional[CacheAlgorithm] = None
+    """cache algorithm to use. Options include LRU and LFU."""
+
     load_factor: Optional[float] = None
+    """cache load factor per table. This decides the size of the cache space
+    for the table, and is crucial for performance when using uvm caching."""
+
     reserved_memory: Optional[float] = None
+    """reserved memory for the cache."""
+
     precision: Optional[DataType] = None
+    """precision of the cache. Ideally this should be the same as the data type
+    of the weights (aka table)."""
+
     prefetch_pipeline: Optional[bool] = None
+    """whether prefetch pipeline is used."""
+
     stats: Optional[CacheStatistics] = None
+    """cache statistics which has table related metadata. Used to create a
+    better plan and tune the load factor."""
+
     multipass_prefetch_config: Optional[MultiPassPrefetchConfig] = None
+    """multipass prefetch in FBGEMM TBE to reduce memory overhead from prefetching."""
 
     def __hash__(self) -> int:
         return hash(
