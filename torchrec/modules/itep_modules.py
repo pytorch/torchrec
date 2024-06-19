@@ -17,14 +17,9 @@ from torchrec.modules.embedding_modules import reorder_inverse_indices
 from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJaggedTensor
 
 try:
-    if torch.version.hip:
-        torch.ops.load_library(
-            "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_hip"
-        )
-    else:
-        torch.ops.load_library(
-            "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_cuda"
-        )
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning"
+    )
 except OSError:
     pass
 
