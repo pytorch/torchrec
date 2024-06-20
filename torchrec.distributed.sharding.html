@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrec.distributed.sharding &mdash; TorchRec 0.8.0 documentation</title>
+  <title>torchrec.distributed.sharding &mdash; TorchRec 0.9.0 documentation</title>
   
 
   
@@ -268,7 +268,7 @@
               
               
                 <div class="version">
-                  0.8.0.dev20240617+cpu
+                  0.9.0.dev20240619+cpu
                 </div>
               
             
@@ -598,6 +598,29 @@ For pooled embedding it is 1; for sequence embedding it is 0.</p></li>
 <span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.EmbeddingsAllToOneReduce.training" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.JaggedTensorAllToAll">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">JaggedTensorAllToAll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">jt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_items_to_send</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_items_to_receive</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.JaggedTensorAllToAll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Awaitable</span></code></a>[<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">JaggedTensor</span></code></a>]</p>
+<p>Redistributes <cite>JaggedTensor</cite> to a <cite>ProcessGroup</cite> along the batch dimension according
+to the number of items to send and receive. The number of items to send
+must be known ahead of time on each rank. This is currently used for sharded
+KeyedJaggedTensorPool, after distributing the number of IDs to lookup or update on
+each rank.</p>
+<p>Implementation utilizes AlltoAll collective as part of torch.distributed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>jt</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><em>JaggedTensor</em></a>) – JaggedTensor to distribute.</p></li>
+<li><p><strong>num_items_to_send</strong> (<em>int</em>) – Number of items to send.</p></li>
+<li><p><strong>num_items_to_receive</strong> (<em>int</em>) – Number of items to receive from all other ranks.
+This must be known ahead of time on each rank, usually via another AlltoAll.</p></li>
+<li><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – ProcessGroup for AlltoAll communication.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py class">
@@ -1148,6 +1171,172 @@ KJT bucketize (for row-wise sharding only).</p></li>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorAllToAll">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">TensorAllToAll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.TensorAllToAll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Redistributes a 1D tensor to a <cite>ProcessGroup</cite> according to splits.</p>
+<p>Implementation utilizes AlltoAll collective as part of torch.distributed.</p>
+<p>The first collective call in <cite>TensorAllToAllSplitsAwaitable</cite> will transmit
+splits to allocate correct space for the tensor values. The following collective
+calls in <cite>TensorAllToAllValuesAwaitable</cite> will transmit the actual
+tensor values asynchronously.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – ProcessGroup for AlltoAll communication.</p>
+</dd>
+</dl>
+<dl>
+<dt>Example::</dt><dd><p>tensor_A2A = TensorAllToAll(pg)
+splits = torch.Tensor([1,1]) on rank0 and rank1
+awaitable = tensor_A2A(rank0_input, splits)</p>
+<p>where:
+rank0_input is torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V1, V2, V3],
+[V4, V5, V6],</p>
+</div></blockquote>
+<p>]</p>
+<p>rank1_input is torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V7, V8, V9],
+[V10, V11, V12],</p>
+</div></blockquote>
+<p>]</p>
+<p>rank0_output = awaitable.wait().wait()</p>
+<p># where:
+rank0_input is torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V1, V2, V3],
+[V7, V8, V9],</p>
+</div></blockquote>
+<p>]</p>
+<p>rank1_input is torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V4, V5, V6],
+[V10, V11, V12],</p>
+</div></blockquote>
+<p>]</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorAllToAll.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.dist_data.TensorAllToAllSplitsAwaitable" title="torchrec.distributed.dist_data.TensorAllToAllSplitsAwaitable"><span class="pre">TensorAllToAllSplitsAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.TensorAllToAll.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sends tensor to relevant <cite>ProcessGroup</cite> ranks.</p>
+<p>The first wait will get the splits for the provided tensors and issue
+tensors AlltoAll. The second wait will get the tensors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>input</strong> (<em>torch.Tensor</em>) – <cite>torch.Tensor</cite> of values to distribute.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>awaitable of a <cite>TensorAllToAllValuesAwaitable</cite>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable">Awaitable</a>[<a class="reference internal" href="#torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable" title="torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable">TensorAllToAllValuesAwaitable</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorAllToAll.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.TensorAllToAll.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorAllToAllSplitsAwaitable">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">TensorAllToAllSplitsAwaitable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.TensorAllToAllSplitsAwaitable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Awaitable</span></code></a>[<a class="reference internal" href="#torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable" title="torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorAllToAllValuesAwaitable</span></code></a>]</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">TensorAllToAllValuesAwaitable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.Awaitable" title="torchrec.distributed.types.Awaitable"><code class="xref py py-class docutils literal notranslate"><span class="pre">Awaitable</span></code></a>[<code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code>]</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorValuesAllToAll">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.dist_data.</span></span><span class="sig-name descname"><span class="pre">TensorValuesAllToAll</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ProcessGroup</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.dist_data.TensorValuesAllToAll" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Redistributes torch.Tensor to a <cite>ProcessGroup</cite> according to input and output splits.</p>
+<p>Implementation utilizes AlltoAll collective as part of torch.distributed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>pg</strong> (<em>dist.ProcessGroup</em>) – ProcessGroup for AlltoAll communication.</p>
+</dd>
+</dl>
+<dl>
+<dt>Example::</dt><dd><p>tensor_vals_A2A = TensorValuesAllToAll(pg)
+input_splits = torch.Tensor([1,2]) on rank0 and torch.Tensor([1,1]) on rank1
+output_splits = torch.Tensor([1,1]) on rank0 and torch.Tensor([2,1]) on rank1
+awaitable = tensor_vals_A2A(rank0_input, input_splits, output_splits)</p>
+<p>where:
+rank0_input is 3 x 3 torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V1, V2, V3],
+[V4, V5, V6],
+[V7, V8, V9],</p>
+</div></blockquote>
+<p>]</p>
+<p>rank1_input is 2 x 3 torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V10, V11, V12],
+[V13, V14, V15],</p>
+</div></blockquote>
+<p>]</p>
+<p>rank0_output = awaitable.wait()</p>
+<p># where:
+# rank0_output is torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V1, V2, V3],
+[V10, V11, V12],</p>
+</div></blockquote>
+<p>]</p>
+<p># rank1_output is torch.Tensor holding
+[</p>
+<blockquote>
+<div><p>[V1, V2, V3],
+[V4, V5, V6],
+[V7, V8, V9],</p>
+</div></blockquote>
+<p>]</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorValuesAllToAll.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_splits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable" title="torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable"><span class="pre">TensorAllToAllValuesAwaitable</span></a></span></span><a class="headerlink" href="#torchrec.distributed.dist_data.TensorValuesAllToAll.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sends tensor to relevant <cite>ProcessGroup</cite> ranks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input</strong> (<em>torch.Tensor</em>) – <cite>torch.Tensor</cite> of values to distribute.</p></li>
+<li><p><strong>input_splits</strong> (<em>torch.Tensor</em>) – tensor containing number of rows
+to be sent to each rank.  len(input_splits) must equal self._pg.size()</p></li>
+<li><p><strong>output_splits</strong> (<em>torch.Tensor</em>) – tensor containing number of rows</p></li>
+<li><p><strong>len</strong> (<em>to be received from each rank.</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+<p>Returns: <cite>TensorAllToAllValuesAwaitable</cite></p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="torchrec.distributed.dist_data.TensorValuesAllToAll.training">
+<span class="sig-name descname"><span class="pre">training</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#torchrec.distributed.dist_data.TensorValuesAllToAll.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 <dl class="py class">

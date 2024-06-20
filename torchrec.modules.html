@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrec.modules &mdash; TorchRec 0.8.0 documentation</title>
+  <title>torchrec.modules &mdash; TorchRec 0.9.0 documentation</title>
   
 
   
@@ -268,7 +268,7 @@
               
               
                 <div class="version">
-                  0.8.0.dev20240617+cpu
+                  0.9.0.dev20240619+cpu
                 </div>
               
             
@@ -2018,6 +2018,13 @@ copies of the provided module and reinitializing the Linear layers.</p>
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="torchrec.modules.utils.deterministic_dedup">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">deterministic_dedup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.utils.deterministic_dedup" title="Permalink to this definition">¶</a></dt>
+<dd><p>To remove race condition in conflict update, remove duplicated IDs. Only the last existence of duplicated ID will be kept.
+Return sorted unique ids and the position of the last existence</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="torchrec.modules.utils.extract_module_or_tensor_callable">
 <span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">extract_module_or_tensor_callable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module_or_callable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.utils.extract_module_or_tensor_callable" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -2033,8 +2040,8 @@ copies of the provided module and reinitializing the Linear layers.</p>
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="torchrec.modules.utils.is_non_strict_exporting">
-<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">is_non_strict_exporting</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.modules.utils.is_non_strict_exporting" title="Permalink to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="torchrec.modules.utils.jagged_index_select_with_empty">
+<span class="sig-prename descclassname"><span class="pre">torchrec.modules.utils.</span></span><span class="sig-name descname"><span class="pre">jagged_index_select_with_empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_offsets</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.modules.utils.jagged_index_select_with_empty" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py function">

@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrec.inference &mdash; TorchRec 0.8.0 documentation</title>
+  <title>torchrec.inference &mdash; TorchRec 0.9.0 documentation</title>
   
 
   
@@ -268,7 +268,7 @@
               
               
                 <div class="version">
-                  0.8.0.dev20240617+cpu
+                  0.9.0.dev20240619+cpu
                 </div>
               
             
@@ -388,35 +388,7 @@
               
   <section id="torchrec-inference">
 <h1>torchrec.inference<a class="headerlink" href="#torchrec-inference" title="Permalink to this heading">¶</a></h1>
-<span class="target" id="module-torchrec.inference"></span><p>Torchrec Inference</p>
-<p>Torchrec inference provides a Torch.Deploy based library for GPU inference.</p>
-<dl class="simple">
-<dt>These includes:</dt><dd><ul class="simple">
-<li><dl class="simple">
-<dt>Model packaging in Python</dt><dd><ul>
-<li><p><cite>PredictModule</cite> and <cite>PredictFactory</cite> are the contracts between the Python model authoring and the C++ model serving.</p></li>
-<li><p><cite>PredictFactoryPackager</cite> can be used to package a PredictFactory class using torch.package.</p></li>
-</ul>
-</dd>
-</dl>
-</li>
-<li><dl class="simple">
-<dt>Model serving in C++</dt><dd><ul>
-<li><p><cite>BatchingQueue</cite> is a generalized config-based request tensor batching implementation.</p></li>
-<li><p><cite>GPUExecutor</cite> handles the forward call into the inference model inside Torch.Deploy.</p></li>
-</ul>
-</dd>
-</dl>
-</li>
-</ul>
-</dd>
-<dt>We implemented an example of how to use this library with the TorchRec DLRM model.</dt><dd><ul class="simple">
-<li><p><cite>examples/dlrm/inference/dlrm_packager.py</cite>: this demonstrates how to export the DLRM model as a torch.package.</p></li>
-<li><p><cite>examples/dlrm/inference/dlrm_predict.py</cite>: this shows how to use <cite>PredictModule</cite> and <cite>PredictFactory</cite> based on an existing model.</p></li>
-</ul>
-</dd>
-</dl>
-<section id="torchrec-inference-model-packager">
+<span class="target" id="module-torchrec.inference"></span><section id="torchrec-inference-model-packager">
 <h2>torchrec.inference.model_packager<a class="headerlink" href="#torchrec-inference-model-packager" title="Permalink to this heading">¶</a></h2>
 <span class="target" id="module-torchrec.inference.model_packager"></span><dl class="py class">
 <dt class="sig sig-object py" id="torchrec.inference.model_packager.PredictFactoryPackager">
@@ -702,34 +674,6 @@ Default: <code class="docutils literal notranslate"><span class="pre">False</spa
 </section>
 <section id="module-0">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
-<p>Torchrec Inference</p>
-<p>Torchrec inference provides a Torch.Deploy based library for GPU inference.</p>
-<dl class="simple">
-<dt>These includes:</dt><dd><ul class="simple">
-<li><dl class="simple">
-<dt>Model packaging in Python</dt><dd><ul>
-<li><p><cite>PredictModule</cite> and <cite>PredictFactory</cite> are the contracts between the Python model authoring and the C++ model serving.</p></li>
-<li><p><cite>PredictFactoryPackager</cite> can be used to package a PredictFactory class using torch.package.</p></li>
-</ul>
-</dd>
-</dl>
-</li>
-<li><dl class="simple">
-<dt>Model serving in C++</dt><dd><ul>
-<li><p><cite>BatchingQueue</cite> is a generalized config-based request tensor batching implementation.</p></li>
-<li><p><cite>GPUExecutor</cite> handles the forward call into the inference model inside Torch.Deploy.</p></li>
-</ul>
-</dd>
-</dl>
-</li>
-</ul>
-</dd>
-<dt>We implemented an example of how to use this library with the TorchRec DLRM model.</dt><dd><ul class="simple">
-<li><p><cite>examples/dlrm/inference/dlrm_packager.py</cite>: this demonstrates how to export the DLRM model as a torch.package.</p></li>
-<li><p><cite>examples/dlrm/inference/dlrm_predict.py</cite>: this shows how to use <cite>PredictModule</cite> and <cite>PredictFactory</cite> based on an existing model.</p></li>
-</ul>
-</dd>
-</dl>
 </section>
 </section>
 
