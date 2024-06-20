@@ -757,12 +757,9 @@ class MetaInferGroupedPooledEmbeddingsLookup(
     ) -> torch.Tensor:
         if len(self.grouped_configs) == 0:
             # return a dummy empty tensor when grouped_configs is empty
+            # assuming lookup ids are empty as well
             return fx_wrap_tensor_view2d(
-                torch.empty(
-                    [0],
-                    dtype=self.output_dtype,
-                    device=self.device,
-                ),
+                sparse_features.values(),
                 sparse_features.stride(),
                 0,
             )
