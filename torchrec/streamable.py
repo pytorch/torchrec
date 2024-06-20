@@ -20,7 +20,7 @@ class Multistreamable(abc.ABC):
     """
 
     @abc.abstractmethod
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         """
         See https://pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html
         """

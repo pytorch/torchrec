@@ -88,7 +88,7 @@ class ModelInputSimple(Pipelineable):
             label=self.label.to(device=device, non_blocking=non_blocking),
         )
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         self.float_features.record_stream(stream)
         self.label.record_stream(stream)
 

@@ -470,7 +470,7 @@ class ModelInput(Pipelineable):
             label=self.label.to(device=device, non_blocking=non_blocking),
         )
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         self.float_features.record_stream(stream)
         self.idlist_features.record_stream(stream)
         if self.idscore_features is not None:

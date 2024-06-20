@@ -71,7 +71,7 @@ class SequenceShardingContext(EmbeddingShardingContext):
         )
         self.lengths_after_input_dist: Optional[torch.Tensor] = lengths_after_input_dist
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         if self.features_before_input_dist is not None:
             self.features_before_input_dist.record_stream(stream)
         if self.sparse_features_recat is not None:
@@ -99,7 +99,7 @@ class InferSequenceShardingContext(Multistreamable):
     bucket_mapping_tensor: Optional[torch.Tensor] = None
     bucketized_length: Optional[torch.Tensor] = None
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         for feature in self.features:
             feature.record_stream(stream)
         if self.features_before_input_dist is not None:

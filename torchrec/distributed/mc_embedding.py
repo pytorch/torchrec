@@ -51,7 +51,7 @@ class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
         )
         self.remapped_kjt: Optional[KJTList] = remapped_kjt
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         super().record_stream(stream)
         if self.evictions_per_table:
             #  pyre-ignore
