@@ -139,8 +139,10 @@ def get_weights_list(
     position_weights: Dict[str, nn.Parameter],
 ) -> Optional[torch.Tensor]:
     weights_list = []
-    seqs = torch.split(cat_seq, features.length_per_key())
-    for key, seq in zip(features.keys(), seqs):
+    length_per_key = features.length_per_key()
+    cur_index = 0
+    for idx, key in enumerate(features.keys()):
+        seq = torch.narrow(cat_seq, 1, cur_index, length_per_key[idx])
         if key in position_weights.keys():
             weights_list.append(torch.gather(position_weights[key], dim=0, index=seq))
         else:
