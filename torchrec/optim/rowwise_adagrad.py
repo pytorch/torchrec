@@ -69,14 +69,6 @@ class RowWiseAdagrad(Optimizer):
         if not 0.0 <= eps:
             raise ValueError("Invalid epsilon value: {}".format(eps))
 
-        if weight_decay > 0:
-            logger.warning(
-                "Note that the weight decay mode of this optimizer may produce "
-                "different results compared to the one by FBGEMM TBE. This is "
-                "due to FBGEMM TBE rowwise adagrad is sparse, and will only "
-                "update the optimizer states if that row has nonzero gradients."
-            )
-
         defaults = dict(
             lr=lr,
             lr_decay=lr_decay,
@@ -213,6 +205,13 @@ def _single_tensor_adagrad(
     eps: float,
     maximize: bool,
 ) -> None:
+    if weight_decay != 0 and len(state_steps) > 0 and state_steps[0].item() < 1.0:
+        logger.warning(
+            "Note that the weight decay mode of this optimizer may produce "
+            "different results compared to the one by FBGEMM TBE. This is "
+            "due to FBGEMM TBE rowwise adagrad is sparse, and will only "
+            "update the optimizer states if that row has nonzero gradients."
+        )
 
     for param, grad, state_sum, step_t in zip(params, grads, state_sums, state_steps):
         if grad.is_sparse:
