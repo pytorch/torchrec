@@ -94,15 +94,9 @@ def _get_feature_length(feature: KeyedJaggedTensor) -> Tensor:
 
 
 @torch.fx.wrap
-def _feature_permute(
-    features: KeyedJaggedTensor,
-    features_order: List[int],
-    features_order_tensor: torch.Tensor,
-) -> KeyedJaggedTensor:
-    return features.permute(
-        features_order,
-        features_order_tensor,
-    )
+def _get_kjt_keys(feature: KeyedJaggedTensor) -> List[str]:
+    # this is a fx rule to help with batching hinting jagged sequence tensor coalescing.
+    return feature.keys()
 
 
 def for_each_module_of_type_do(
@@ -469,35 +463,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
 
-        self._has_uninitialized_kjt_permute_order: bool = True
-        self._has_features_permute: bool = True
-        self._features_order: List[int] = []
-
-    def _permute_kjt_order(
-        self, features: KeyedJaggedTensor
-    ) -> List[KeyedJaggedTensor]:
-        if self._has_uninitialized_kjt_permute_order:
-            kjt_keys = features.keys()
-            for f in self._feature_names:
-                self._features_order.append(kjt_keys.index(f))
-
-            self.register_buffer(
-                "_features_order_tensor",
-                torch.tensor(
-                    self._features_order,
-                    device=features.device(),
-                    dtype=torch.int32,
-                ),
-                persistent=False,
-            )
-
-            self._has_uninitialized_kjt_permute_order = False
-
-        features_permute = _feature_permute(
-            features, self._features_order, self._features_order_tensor
-        )
-        return features_permute.split(self._feature_splits)
-
     def forward(
         self,
         features: KeyedJaggedTensor,
@@ -511,7 +476,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         """
 
         embeddings = []
-        kjts_per_key = self._permute_kjt_order(features)
+        kjt_keys = _get_kjt_keys(features)
+        kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
+        kjt_permute = features.permute(kjt_permute_order)
+        kjts_per_key = kjt_permute.split(self._feature_splits)
 
         for i, (emb_op, _) in enumerate(
             zip(self._emb_modules, self._key_to_tables.keys())
