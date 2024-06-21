@@ -16,17 +16,24 @@ import torchrec
 
 class RowWiseAdagradTest(unittest.TestCase):
     def test_optim(self) -> None:
-        embedding_bag = torch.nn.EmbeddingBag(num_embeddings=4, embedding_dim=4)
+        embedding_bag = torch.nn.EmbeddingBag(
+            num_embeddings=4, embedding_dim=4, mode="sum"
+        )
         opt = torchrec.optim.RowWiseAdagrad(embedding_bag.parameters())
         index, offsets = torch.tensor([0, 3]), torch.tensor([0, 1])
         embedding_bag_out = embedding_bag(index, offsets)
         opt.zero_grad()
         embedding_bag_out.sum().backward()
+        opt.step()
 
     def test_optim_equivalence(self) -> None:
         # If rows are initialized to be the same and uniform, then RowWiseAdagrad and canonical Adagrad are identical
-        rowwise_embedding_bag = torch.nn.EmbeddingBag(num_embeddings=4, embedding_dim=4)
-        embedding_bag = torch.nn.EmbeddingBag(num_embeddings=4, embedding_dim=4)
+        rowwise_embedding_bag = torch.nn.EmbeddingBag(
+            num_embeddings=4, embedding_dim=4, mode="sum"
+        )
+        embedding_bag = torch.nn.EmbeddingBag(
+            num_embeddings=4, embedding_dim=4, mode="sum"
+        )
         state_dict = {
             "weight": torch.Tensor(
                 [[1, 1, 1, 1], [2, 2, 2, 2], [3, 3, 3, 3], [4, 4, 4, 4]]
