@@ -13,7 +13,17 @@ import logging
 import warnings
 from collections import defaultdict, deque, OrderedDict
 from itertools import accumulate
-from typing import Any, cast, Dict, List, MutableMapping, Optional, Tuple, Type, Union
+from typing import (
+    Any,
+    cast,
+    Dict,
+    List,
+    MutableMapping,
+    Optional,
+    Tuple,
+    Type,
+    Union as TypeUnion,
+)
 
 import torch
 from torch import distributed as dist, nn
@@ -369,7 +379,7 @@ class EmbeddingCollectionContext(Multistreamable):
         self.reverse_indices: List[torch.Tensor] = reverse_indices or []
         self.seq_vbe_ctx: List[SequenceVBEContext] = seq_vbe_ctx or []
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         for ctx in self.sharding_contexts:
             ctx.record_stream(stream)
         for f in self.input_features:
@@ -520,7 +530,9 @@ class ShardedEmbeddingCollection(
             for _, m in lookup.named_modules():
                 if isinstance(m, FusedOptimizerModule):
                     # modify param keys to match EmbeddingCollection
-                    params: MutableMapping[str, Union[torch.Tensor, ShardedTensor]] = {}
+                    params: MutableMapping[
+                        str, TypeUnion[torch.Tensor, ShardedTensor]
+                    ] = {}
                     for param_key, weight in m.fused_optimizer.params.items():
                         params["embeddings." + param_key] = weight
                     m.fused_optimizer.params = params

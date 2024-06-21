@@ -51,7 +51,7 @@ class SequenceVBEContext(Multistreamable):
     reindexed_length_per_key: List[int]
     reindexed_values: Optional[torch.Tensor] = None
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         self.recat.record_stream(stream)
         self.unpadded_lengths.record_stream(stream)
         self.reindexed_lengths.record_stream(stream)

@@ -847,14 +847,6 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
-        if "ps_hosts" in fused_params:
-            fused_params.pop("ps_hosts")
-        if "ps_max_key_per_request" in fused_params:
-            fused_params.pop("ps_max_key_per_request")
-        if "ps_client_thread_num" in fused_params:
-            fused_params.pop("ps_client_thread_num")
-        if "ps_max_local_index_length" in fused_params:
-            fused_params.pop("ps_max_local_index_length")
 
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
@@ -1287,14 +1279,6 @@ class BatchedFusedEmbeddingBag(
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
-        if "ps_hosts" in fused_params:
-            fused_params.pop("ps_hosts")
-        if "ps_max_key_per_request" in fused_params:
-            fused_params.pop("ps_max_key_per_request")
-        if "ps_client_thread_num" in fused_params:
-            fused_params.pop("ps_client_thread_num")
-        if "ps_max_local_index_length" in fused_params:
-            fused_params.pop("ps_max_local_index_length")
 
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(

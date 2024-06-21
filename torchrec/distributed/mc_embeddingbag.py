@@ -36,7 +36,7 @@ class ManagedCollisionEmbeddingBagCollectionContext(EmbeddingBagCollectionContex
     evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = None
     remapped_kjt: Optional[KJTList] = None
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         super().record_stream(stream)
         if self.evictions_per_table:
             #  pyre-ignore

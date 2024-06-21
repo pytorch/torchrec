@@ -26,39 +26,37 @@ class ObjectPoolShardingContext(Multistreamable):
     bucketize_permute: Optional[torch.Tensor] = None
     unbucketize_permute: Optional[torch.Tensor] = None
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        stream_casted = cast(torch._C.Stream, stream)
+    def record_stream(self, stream: torch.Stream) -> None:
         if self.ids_before_input_dist is not None:
-            self.ids_before_input_dist.record_stream(stream_casted)
+            self.ids_before_input_dist.record_stream(stream)
         if self.num_ids_each_rank_to_receive is not None:
-            self.num_ids_each_rank_to_receive.record_stream(stream_casted)
+            self.num_ids_each_rank_to_receive.record_stream(stream)
         if self.num_ids_each_rank_to_send is not None:
-            self.num_ids_each_rank_to_send.record_stream(stream_casted)
+            self.num_ids_each_rank_to_send.record_stream(stream)
         if self.bucketize_permute is not None:
-            self.bucketize_permute.record_stream(stream_casted)
+            self.bucketize_permute.record_stream(stream)
         if self.unbucketize_permute is not None:
-            self.unbucketize_permute.record_stream(stream_casted)
+            self.unbucketize_permute.record_stream(stream)
 
 
 @dataclass
 class RwShardingContext(Multistreamable):
     block_size: Optional[torch.Tensor] = None
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
-        stream_casted = cast(torch._C.Stream, stream)
+    def record_stream(self, stream: torch.Stream) -> None:
         if self.block_size is not None:
-            self.block_size.record_stream(stream_casted)
+            self.block_size.record_stream(stream)
 
 
 @dataclass
 class ObjectPoolRwShardingContext(ObjectPoolShardingContext, RwShardingContext):
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         super().record_stream(stream)
 
 
 @dataclass
 class ObjectPoolReplicatedRwShardingContext(ObjectPoolRwShardingContext):
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         super().record_stream(stream)
 
 
@@ -68,7 +66,7 @@ class TensorPoolRwShardingContext(ObjectPoolRwShardingContext):
     Placeholder for additional sharding context for TensorPool
     """
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         super().record_stream(stream)
 
 

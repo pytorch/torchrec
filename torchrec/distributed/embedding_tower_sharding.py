@@ -87,7 +87,7 @@ class TowerLazyAwaitable(LazyAwaitable[torch.Tensor]):
 class EmbeddingTowerCollectionContext(Multistreamable):
     embedding_contexts: List[NullShardedModuleContext] = field(default_factory=list)
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         for ctx in self.embedding_contexts:
             ctx.record_stream(stream)
 

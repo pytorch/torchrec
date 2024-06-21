@@ -863,7 +863,7 @@ class EmbeddingShardingContext(Multistreamable):
         )
         self.variable_batch_per_feature: bool = variable_batch_per_feature
 
-    def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
+    def record_stream(self, stream: torch.Stream) -> None:
         pass
 
 
