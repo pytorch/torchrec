@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
   torch::jit::script::Module module;
   try {
     module = torch::jit::load(argv[1]);
-  } catch (const c10::Error& e) {
+  } catch (const c10::Error&) {
     std::cerr << "Error loading model\n";
     return -1;
   }
