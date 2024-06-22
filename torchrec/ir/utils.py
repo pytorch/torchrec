@@ -17,8 +17,8 @@ import torch
 from torch import nn
 from torch.export import Dim, ExportedProgram, ShapesCollection
 from torch.export.dynamic_shapes import _Dim as DIM
-from torchrec import KeyedJaggedTensor
 from torchrec.ir.types import SerializerInterface
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 # TODO: Replace the default interface with the python dataclass interface
