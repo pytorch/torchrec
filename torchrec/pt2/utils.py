@@ -44,7 +44,7 @@ def kjt_for_pt2_tracing(
         # We can mark static lengths dimension as we have fixed batch_size, but using VB path for tracing
         torch._dynamo.decorators.mark_static(lengths, 0)
         values = kjt.values().long()
-        torch._dynamo.decorators.mark_dynamic(values, 0)
+        torch._dynamo.decorators.mark_unbacked(values, 0)
 
         return KeyedJaggedTensor(
             keys=kjt.keys(),
@@ -71,7 +71,7 @@ def kjt_for_pt2_tracing(
     stride = kjt.stride()
 
     values = kjt.values().long()
-    torch._dynamo.decorators.mark_dynamic(values, 0)
+    torch._dynamo.decorators.mark_unbacked(values, 0)
 
     return KeyedJaggedTensor(
         keys=kjt.keys(),

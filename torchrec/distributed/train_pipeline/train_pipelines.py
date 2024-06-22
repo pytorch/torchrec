@@ -243,6 +243,10 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
                 torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = (
                     True
                 )
+
+                # Importing only before compilation to not slow-done train_pipelines import
+                torch.ops.import_module("fbgemm_gpu.sparse_ops")
+
                 self._model.compile(
                     fullgraph=cc.fullgraph, dynamic=cc.dynamic, backend=cc.backend
                 )

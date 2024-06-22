@@ -604,3 +604,65 @@ class TestPt2(unittest.TestCase):
             # TODO: turn on AOT Inductor test once the support is ready
             test_aot_inductor=False,
         )
+
+    def test_kjt_values_specialization(self):
+        with dynamo_skipfiles_allow("torchrec"):
+            from torch._dynamo.testing import CompileCounter
+
+            kjt0 = KeyedJaggedTensor(
+                values=torch.tensor([3, 4, 5, 6, 7, 8], dtype=torch.int64),
+                keys=["f0", "f1", "f2"],
+                lengths=torch.tensor([0, 0, 1, 1, 2, 2]),
+                stride=2,
+            )
+            torch._dynamo.decorators.mark_unbacked(kjt0._values, 0)
+
+            counter = CompileCounter()
+
+            @torch._dynamo.optimize(counter, nopython=True)
+            def f(kjt):
+                l: List[KeyedJaggedTensor] = kjt.split([1, 1, 1])
+                return l[0].values().sum() + l[1].values().sum() + l[2].values().sum()
+
+            f(kjt0)
+            self.assertEqual(counter.frame_count, 1)
+
+            kjt1 = KeyedJaggedTensor(
+                values=torch.tensor([], dtype=torch.int64),
+                keys=["f0", "f1", "f2"],
+                lengths=torch.tensor([0, 0, 0, 0, 0, 0]),
+                stride=2,
+            )
+            torch._dynamo.decorators.mark_unbacked(kjt1._values, 0)
+            f(kjt1)
+            self.assertEqual(counter.frame_count, 1)
+
+    def test_kjt_values_specialization_utils(self):
+        with dynamo_skipfiles_allow("torchrec"):
+            from torch._dynamo.testing import CompileCounter
+
+            kjt0 = KeyedJaggedTensor(
+                values=torch.tensor([3, 4, 5, 6, 7, 8], dtype=torch.int64),
+                keys=["f0", "f1", "f2"],
+                lengths=torch.tensor([0, 0, 1, 1, 2, 2]),
+                stride=2,
+            ).sync()
+
+            counter = CompileCounter()
+
+            @torch._dynamo.optimize(counter, nopython=True)
+            def f(kjt):
+                l: List[KeyedJaggedTensor] = kjt.split([1, 1, 1])
+                return l[0].values().sum() + l[1].values().sum() + l[2].values().sum()
+
+            f(kjt_for_pt2_tracing(kjt0))
+            self.assertEqual(counter.frame_count, 1)
+
+            kjt1 = KeyedJaggedTensor(
+                values=torch.tensor([], dtype=torch.int64),
+                keys=["f0", "f1", "f2"],
+                lengths=torch.tensor([0, 0, 0, 0, 0, 0]),
+                stride=2,
+            ).sync()
+            f(kjt_for_pt2_tracing(kjt1))
+            self.assertEqual(counter.frame_count, 1)
