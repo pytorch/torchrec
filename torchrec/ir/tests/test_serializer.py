@@ -11,11 +11,12 @@
 
 import copy
 import unittest
-from typing import Callable, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import torch
 from torch import nn
 from torchrec.ir.serializer import JsonSerializer
+from torchrec.ir.types import SerializerInterface
 
 from torchrec.ir.utils import (
     deserialize_embedding_modules,
@@ -52,6 +53,45 @@ class CompoundModule(nn.Module):
             else:
                 res.append(m(features).values())
         return res
+
+
+class CompoundModuleSerializer(SerializerInterface):
+    @classmethod
+    def requires_children(cls, typename: str) -> bool:
+        return True
+
+    @classmethod
+    def serialize(
+        cls,
+        module: nn.Module,
+    ) -> torch.Tensor:
+        if not isinstance(module, CompoundModule):
+            raise ValueError(
+                f"Expected module to be of type CompoundModule, got {type(module)}"
+            )
+        return torch.empty(0)
+
+    @classmethod
+    def deserialize(
+        cls,
+        input: torch.Tensor,
+        typename: str,
+        device: Optional[torch.device] = None,
+        children: Dict[str, nn.Module] = {},
+    ) -> nn.Module:
+        if typename != "CompoundModule":
+            raise ValueError(f"Expected typename to be CompoundModule, got {typename}")
+        ebc = children["ebc"]
+        comp = children.get("comp")
+        assert isinstance(ebc, EmbeddingBagCollection)
+        if comp is not None:
+            assert isinstance(comp, CompoundModule)
+        i = 0
+        mlist = []
+        while f"list.{i}" in children:
+            mlist.append(children[f"list.{i}"])
+            i += 1
+        return CompoundModule(ebc, comp, mlist)
 
 
 class TestJsonSerializer(unittest.TestCase):
@@ -328,6 +368,9 @@ class TestJsonSerializer(unittest.TestCase):
 
         eager_out = model(id_list_features)
 
+        JsonSerializer.module_to_serializer_cls["CompoundModule"] = (
+            CompoundModuleSerializer
+        )
         # Serialize
         model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
         ep = torch.export.export(
@@ -346,6 +389,14 @@ class TestJsonSerializer(unittest.TestCase):
 
         # Deserialize
         deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+
+        # Check if Compound Module is deserialized correctly
+        self.assertIsInstance(deserialized_model.comp, CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.comp.comp, CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.list[1], CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.list[1].comp, CompoundModule)
+
         deserialized_model.load_state_dict(model.state_dict())
         # Run forward on deserialized model
         deserialized_out = deserialized_model(id_list_features)

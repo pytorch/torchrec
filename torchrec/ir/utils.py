@@ -10,7 +10,7 @@
 #!/usr/bin/env python3
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Type, Union
 
 import torch
 
@@ -36,14 +36,109 @@ def serialize_embedding_modules(
 
     Returns the modified module and the list of fqns that had the buffer added.
     """
+    # store the fqns of the modules that is serialized, so that the ir_export can preserve
+    # the fqns of those modules
     preserve_fqns = []
+
+    # store the fqn of the module that does not require serializing its children,
+    # so that we can skip based on the children's fqn
+    skip_children: Optional[str] = None
     for fqn, module in model.named_modules():
+        if skip_children is not None:
+            if fqn.startswith(skip_children):
+                # {fqn} is skipped for further serialization
+                continue
+            else:
+                # reset the skip_children to None because fqn is no longer a child
+                skip_children = None
         if type(module).__name__ in serializer_cls.module_to_serializer_cls:
             serialized_module = serializer_cls.serialize(module)
+            # store the fqn of a serialized module that doesn't not require further serialization of its children
+            if not serializer_cls.requires_children(type(module).__name__):
+                skip_children = fqn
             module.register_buffer("ir_metadata", serialized_module, persistent=False)
             preserve_fqns.append(fqn)
 
     return model, preserve_fqns
+
+
+def _next_or_none(
+    generator: Iterator[Tuple[str, nn.Module]]
+) -> Tuple[Optional[str], Optional[nn.Module]]:
+    try:
+        return next(generator)
+    except StopIteration:
+        return None, None
+
+
+def _deserialize_node(
+    parent_fqn: str,
+    fqn: Optional[str],
+    module: Optional[nn.Module],
+    generator: Iterator[Tuple[str, nn.Module]],
+    serializer_cls: Type[SerializerInterface],
+    module_type_dict: Dict[str, str],
+    fqn_to_new_module: Dict[str, nn.Module],
+    device: Optional[torch.device] = None,
+) -> Tuple[Dict[str, nn.Module], Optional[str], Optional[nn.Module]]:
+    """
+    returns:
+    1. the children of the parent_fqn Dict[relative_fqn -> module]
+    2. the next node Optional[fqn], Optional[module], which is not a child of the parent_fqn
+    """
+    children: Dict[str, nn.Module] = {}
+    # we only starts the while loop when the current fqn is a child of the parent_fqn
+    # it stops at either the current node is not a child of the parent_fqn or
+    # the generator is exhausted
+    while fqn is not None and module is not None and fqn.startswith(parent_fqn):
+        # the current node is a serialized module, need to deserialize it
+        if "ir_metadata" in dict(module.named_buffers()):
+            serialized_module = module.get_buffer("ir_metadata")
+            if fqn not in module_type_dict:
+                raise RuntimeError(
+                    f"Cannot find the type of module {fqn} in the exported program"
+                )
+
+            # current module's deserialization requires its children
+            if serializer_cls.requires_children(module_type_dict[fqn]):
+                # set current fqn as the new parent_fqn, and call deserialize_node function
+                # recursively to get the children of current_fqn, and the next sibling of current_fqn
+                next_fqn, next_module = _next_or_none(generator)
+                grand_children, next_fqn, next_module = _deserialize_node(
+                    fqn,
+                    next_fqn,
+                    next_module,
+                    generator,
+                    serializer_cls,
+                    module_type_dict,
+                    fqn_to_new_module,
+                    device,
+                )
+                # deserialize the current module with its children
+                deserialized_module = serializer_cls.deserialize(
+                    serialized_module,
+                    module_type_dict[fqn],
+                    device=device,
+                    children=grand_children,
+                )
+            else:
+                # current module's deserialization doesn't require its children
+                # deserialize it first then get the next sibling
+                deserialized_module = serializer_cls.deserialize(
+                    serialized_module, module_type_dict[fqn], device=device
+                )
+                next_fqn, next_module = _next_or_none(generator)
+
+            # register the deserialized module
+            rel_fqn = fqn[len(parent_fqn) + 1 :] if len(parent_fqn) > 0 else fqn
+            children[rel_fqn] = deserialized_module
+            fqn_to_new_module[fqn] = deserialized_module
+
+        else:  # current node doesn't require deserialization, move on
+            next_fqn, next_module = _next_or_none(generator)
+        # move to the next node
+        fqn, module = next_fqn, next_module
+    return children, fqn, module
 
 
 def deserialize_embedding_modules(
@@ -59,29 +154,26 @@ def deserialize_embedding_modules(
     Returns the unflattened ExportedProgram with the deserialized modules.
     """
     model = torch.export.unflatten(ep)
-    module_type_dict = {}
+    module_type_dict: Dict[str, str] = {}
     for node in ep.graph.nodes:
         if "nn_module_stack" in node.meta:
             for fqn, type_name in node.meta["nn_module_stack"].values():
                 # Only get the module type name, not the full type name
                 module_type_dict[fqn] = type_name.split(".")[-1]
 
-    fqn_to_new_module = {}
-    for fqn, module in model.named_modules():
-        if "ir_metadata" in dict(module.named_buffers()):
-            serialized_module = dict(module.named_buffers())["ir_metadata"]
-
-            if fqn not in module_type_dict:
-                raise RuntimeError(
-                    f"Cannot find the type of module {fqn} in the exported program"
-                )
-
-            deserialized_module = serializer_cls.deserialize(
-                serialized_module,
-                module_type_dict[fqn],
-                device,
-            )
-            fqn_to_new_module[fqn] = deserialized_module
+    fqn_to_new_module: Dict[str, nn.Module] = {}
+    generator = model.named_modules()
+    fqn, root = _next_or_none(generator)
+    _deserialize_node(
+        "",
+        fqn,
+        root,
+        generator,
+        serializer_cls,
+        module_type_dict,
+        fqn_to_new_module,
+        device,
+    )
 
     for fqn, new_module in fqn_to_new_module.items():
         # handle nested attribute like "x.y.z"

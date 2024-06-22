@@ -71,6 +71,11 @@ def get_deserialized_device(
 
 class JsonSerializerBase(SerializerInterface):
     _module_cls: Optional[Type[nn.Module]] = None
+    _requires_children: bool = False
+
+    @classmethod
+    def requires_children(cls, typename: str) -> bool:
+        return cls._requires_children
 
     @classmethod
     def serialize_to_dict(cls, module: nn.Module) -> Dict[str, Any]:
@@ -81,6 +86,7 @@ class JsonSerializerBase(SerializerInterface):
         cls,
         metadata_dict: Dict[str, Any],
         device: Optional[torch.device] = None,
+        children: Dict[str, nn.Module] = {},
     ) -> nn.Module:
         raise NotImplementedError()
 
@@ -106,10 +112,11 @@ class JsonSerializerBase(SerializerInterface):
         input: torch.Tensor,
         typename: str,
         device: Optional[torch.device] = None,
+        children: Dict[str, nn.Module] = {},
     ) -> nn.Module:
         raw_bytes = input.numpy().tobytes()
         metadata_dict = json.loads(raw_bytes.decode())
-        module = cls.deserialize_from_dict(metadata_dict, device)
+        module = cls.deserialize_from_dict(metadata_dict, device, children)
         if cls._module_cls is None:
             raise ValueError(
                 "Must assign a nn.Module to class static variable _module_cls"
@@ -148,6 +155,7 @@ class EBCJsonSerializer(JsonSerializerBase):
         cls,
         metadata_dict: Dict[str, Any],
         device: Optional[torch.device] = None,
+        children: Dict[str, nn.Module] = {},
     ) -> nn.Module:
         tables = [
             EmbeddingBagConfigMetadata(**table_config)
@@ -192,6 +200,7 @@ class JsonSerializer(SerializerInterface):
         input: torch.Tensor,
         typename: str,
         device: Optional[torch.device] = None,
+        children: Dict[str, nn.Module] = {},
     ) -> nn.Module:
         if typename not in cls.module_to_serializer_cls:
             raise ValueError(
@@ -199,5 +208,9 @@ class JsonSerializer(SerializerInterface):
             )
 
         return cls.module_to_serializer_cls[typename].deserialize(
-            input, typename, device
+            input, typename, device, children
         )
+
+    @classmethod
+    def requires_children(cls, typename: str) -> bool:
+        return cls.module_to_serializer_cls[typename].requires_children(typename)
