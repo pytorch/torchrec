@@ -186,6 +186,21 @@ def permute_multi_embedding(
 
 
 @torch.fx.wrap
+def keyed_tensor_regroup(
+    keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
+) -> List[torch.Tensor]:
+    keys, lengths, values = _desugar_keyed_tensors(keyed_tensors)
+    return torch.ops.fbgemm.regroup_keyed_tensor(
+        values,
+        [a for b in keys for a in b],
+        [a for b in groups for a in b],
+        [a for b in lengths for a in b],
+        [len(k) for k in keys],
+        [len(v) for v in groups],
+    )
+
+
+@torch.fx.wrap
 def _fbgemm_permute_pooled_embs(
     keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
 ) -> List[torch.Tensor]:

@@ -21,6 +21,7 @@ from torchrec.sparse.jagged_tensor import (
     _regroup_keyed_tensors,
     KeyedJaggedTensor,
     KeyedTensor,
+    regroup_keyed_tensor,
     permute_multi_embedding,
 )
 from torchrec.sparse.tests.utils import build_groups, build_kts
@@ -254,6 +255,17 @@ def main(
                         device_type,
                         run_backward,
                         permute_multi_embedding,
+                        {"keyed_tensors": kts, "groups": groups},
+                        profile,
+                    )
+                    bench(
+                        "regroup_keyed_tensor" + dup,
+                        labels,
+                        batch_size,
+                        n_dense + n_sparse,
+                        device_type,
+                        run_backward,
+                        regroup_keyed_tensor,
                         {"keyed_tensors": kts, "groups": groups},
                         profile,
                     )
