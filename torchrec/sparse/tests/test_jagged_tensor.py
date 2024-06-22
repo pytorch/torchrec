@@ -1549,6 +1549,232 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             assert isinstance(val_grad, torch.Tensor)
             self.assertTrue(torch.allclose(val_grad, ref_grad))
 
+    def test_regroup_cpp(self) -> None:
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        permutes, in_lengths, out_lengths = (
+            torch.ops.fbgemm.generate_keyed_tensor_permutes(
+                [a for b in keys for a in b],
+                [a for b in groups for a in b],
+                [a for b in lengths for a in b],
+                [len(key) for key in keys],
+                [len(v) for v in groups],
+            )
+        )
+        ref_permutes = [
+            [0, 0, 0, 0, 3, 4],  # f1, jump to 4, as a start
+            [1, 0, 0, 3, 5, 0],  # f3
+            [0, 1, 3, 0, 4, 0],  # f2
+            [1, 2, 5, 0, 6, 0],  # f4
+            [0, 2, 0, 6, 3, -6],  # f1 jump to 6, as in a jump sequence
+            [2, 2, 0, 9, 8, 0],  # f6
+            [0, 3, 0, 0, 3, -8],  # f1 jump stop, as out of boundary
+            [1, 3, 11, 3, 7, 0],  # f5
+        ]
+        self.assertEqual(permutes, [i for p in ref_permutes for i in p])
+        self.assertEqual(in_lengths, [7, 18, 8])
+        self.assertEqual(out_lengths, [8, 4, 17, 10])
+
+    def test_keyed_tensor_regroup_cpu_forward(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cpu", requires_grad=True)
+            for lens in lengths
+        ]
+        permutes = [
+            [0, 0, 0, 0, 3, 4],  # f1, jump to 4, as a start
+            [1, 0, 0, 3, 5, 0],  # f3
+            [0, 1, 3, 0, 4, 0],  # f2
+            [1, 2, 5, 0, 6, 0],  # f4
+            [0, 2, 0, 6, 3, -6],  # f1 jump to 6, as in a jump sequence
+            [2, 2, 0, 9, 8, 0],  # f6
+            [0, 3, 0, 0, 3, -8],  # f1 jump stop, as out of boundary
+            [1, 3, 11, 3, 7, 0],  # f5
+        ]
+        refs = [[] for _ in groups]
+        for p in permutes:
+            in_idx, out_idx, in_start, _, length, _ = p
+            refs[out_idx].append(values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.regroup_keyed_tensor(
+            values,
+            [a for b in keys for a in b],
+            [a for b in groups for a in b],
+            [a for b in lengths for a in b],
+            [len(key) for key in keys],
+            [len(v) for v in groups],
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+    def test_keyed_tensor_regroup_meta_forward(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="meta", requires_grad=True)
+            for lens in lengths
+        ]
+        permutes = [
+            [0, 0, 0, 0, 3, 4],  # f1, jump to 4, as a start
+            [1, 0, 0, 3, 5, 0],  # f3
+            [0, 1, 3, 0, 4, 0],  # f2
+            [1, 2, 5, 0, 6, 0],  # f4
+            [0, 2, 0, 6, 3, -6],  # f1 jump to 6, as in a jump sequence
+            [2, 2, 0, 9, 8, 0],  # f6
+            [0, 3, 0, 0, 3, -8],  # f1 jump stop, as out of boundary
+            [1, 3, 11, 3, 7, 0],  # f5
+        ]
+        refs = [[] for _ in groups]
+        for p in permutes:
+            in_idx, out_idx, in_start, _, length, _ = p
+            refs[out_idx].append(values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.regroup_keyed_tensor(
+            values,
+            [a for b in keys for a in b],
+            [a for b in groups for a in b],
+            [a for b in lengths for a in b],
+            [len(key) for key in keys],
+            [len(v) for v in groups],
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertEqual(out.shape, ref.shape)
+
+    # pyre-ignore[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 0,
+        "CUDA is not available",
+    )
+    def test_keyed_tensor_regroup_gpu_forward(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cuda", requires_grad=True)
+            for lens in lengths
+        ]
+        permutes = [
+            [0, 0, 0, 0, 3, 4],  # f1, jump to 4, as a start
+            [1, 0, 0, 3, 5, 0],  # f3
+            [0, 1, 3, 0, 4, 0],  # f2
+            [1, 2, 5, 0, 6, 0],  # f4
+            [0, 2, 0, 6, 3, -6],  # f1 jump to 6, as in a jump sequence
+            [2, 2, 0, 9, 8, 0],  # f6
+            [0, 3, 0, 0, 3, -8],  # f1 jump stop, as out of boundary
+            [1, 3, 11, 3, 7, 0],  # f5
+        ]
+        refs = [[] for _ in groups]
+        for p in permutes:
+            in_idx, out_idx, in_start, _, length, _ = p
+            refs[out_idx].append(values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.regroup_keyed_tensor(
+            values,
+            [a for b in keys for a in b],
+            [a for b in groups for a in b],
+            [a for b in lengths for a in b],
+            [len(key) for key in keys],
+            [len(v) for v in groups],
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+    def test_keyed_tensor_regroup_cpu_backward(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cpu", requires_grad=True)
+            for lens in lengths
+        ]
+        ref_values = [v.detach() for v in values]
+        for v in ref_values:
+            v.requires_grad = True
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        refs = [[] for _ in groups]
+        for i in range(len(permutes) // 6):
+            in_idx, out_idx, in_start, _, length, _ = permutes[i * 6 : i * 6 + 6]
+            refs[out_idx].append(ref_values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.regroup_keyed_tensor(
+            values,
+            [a for b in keys for a in b],
+            [a for b in groups for a in b],
+            [a for b in lengths for a in b],
+            [len(key) for key in keys],
+            [len(v) for v in groups],
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+        ref_loss, loss = refs[0].sum(), outputs[0].sum()
+        for i in range(1, len(refs)):
+            ref_loss += (i + 1.1) * refs[i].sum()
+            loss += (i + 1.1) * outputs[i].sum()
+        ref_loss.backward()
+        loss.backward()
+        for val, ref in zip(values, ref_values):
+            val_grad, ref_grad = val.grad, ref.grad
+            assert isinstance(val_grad, torch.Tensor)
+            self.assertTrue(torch.allclose(val_grad, ref_grad))
+
+    # pyre-ignore[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 0,
+        "CUDA is not available",
+    )
+    def test_keyed_tensor_regroup_gpu_backward(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cpu", requires_grad=True)
+            for lens in lengths
+        ]
+        ref_values = [v.detach() for v in values]
+        for v in ref_values:
+            v.requires_grad = True
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        refs = [[] for _ in groups]
+        for i in range(len(permutes) // 6):
+            in_idx, out_idx, in_start, _, length, _ = permutes[i * 6 : i * 6 + 6]
+            refs[out_idx].append(ref_values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.regroup_keyed_tensor(
+            values,
+            [a for b in keys for a in b],
+            [a for b in groups for a in b],
+            [a for b in lengths for a in b],
+            [len(key) for key in keys],
+            [len(v) for v in groups],
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+        ref_loss, loss = refs[0].sum(), outputs[0].sum()
+        for i in range(1, len(refs)):
+            ref_loss += (i + 1.1) * refs[i].sum()
+            loss += (i + 1.1) * outputs[i].sum()
+        ref_loss.backward()
+        loss.backward()
+        for val, ref in zip(values, ref_values):
+            val_grad, ref_grad = val.grad, ref.grad
+            assert isinstance(val_grad, torch.Tensor)
+            self.assertTrue(torch.allclose(val_grad, ref_grad))
+
     def test_permute_duplicates(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0])
