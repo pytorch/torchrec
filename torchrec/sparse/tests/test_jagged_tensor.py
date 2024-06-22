@@ -16,6 +16,7 @@ import torch.utils._pytree as pytree
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
+    _multi_remap_to_groups,
     _regroup_keyed_tensors,
     ComputeJTDictToKJT,
     ComputeKJTToJTDict,
@@ -1374,6 +1375,170 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         )
         self.assertEqual(permuted_jag_tensor.weights_or_none(), None)
 
+    def test_multi_remap_to_group(self) -> None:
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        ref_permutes = [
+            [0, 0, 0, 0, 3, 4],  # f1, jump to 4, as a start
+            [1, 0, 0, 3, 5, 0],  # f3
+            [0, 1, 3, 0, 4, 0],  # f2
+            [1, 2, 5, 0, 6, 0],  # f4
+            [0, 2, 0, 6, 3, -6],  # f1 jump to 6, as in a jump sequence
+            [2, 2, 0, 9, 8, 0],  # f6
+            [0, 3, 0, 0, 3, -8],  # f1 jump stop, as out of boundary
+            [1, 3, 11, 3, 7, 0],  # f5
+        ]
+        self.assertEqual(permutes, [i for p in ref_permutes for i in p])
+        self.assertEqual(in_lengths, [7, 18, 8])
+        self.assertEqual(out_lengths, [8, 4, 17, 10])
+
+    def test_multi_permute_forward_cpu(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cpu", requires_grad=True)
+            for lens in lengths
+        ]
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        refs = [[] for _ in groups]
+        for i in range(len(permutes) // 6):
+            in_idx, out_idx, in_start, _, length, _ = permutes[i * 6 : i * 6 + 6]
+            refs[out_idx].append(values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.permute_multi_embedding(
+            values, permutes, in_lengths, out_lengths
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+    def test_multi_permute_forward_meta(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="meta", requires_grad=True)
+            for lens in lengths
+        ]
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        refs = [[] for _ in groups]
+        for i in range(len(permutes) // 6):
+            in_idx, out_idx, in_start, _, length, _ = permutes[i * 6 : i * 6 + 6]
+            refs[out_idx].append(values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.permute_multi_embedding(
+            values, permutes, in_lengths, out_lengths
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertEqual(out.shape, ref.shape)
+
+    def test_multi_permute_forward_gpu(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cuda", requires_grad=True)
+            for lens in lengths
+        ]
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        refs = [[] for _ in groups]
+        for i in range(len(permutes) // 6):
+            in_idx, out_idx, in_start, _, length, _ = permutes[i * 6 : i * 6 + 6]
+            refs[out_idx].append(values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.permute_multi_embedding(
+            values, permutes, in_lengths, out_lengths
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+    def test_multi_permute_backward_cpu(self) -> None:
+        batch_size = 5
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cpu", requires_grad=True)
+            for lens in lengths
+        ]
+        ref_values = [v.detach() for v in values]
+        for v in ref_values:
+            v.requires_grad = True
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        refs = [[] for _ in groups]
+        for i in range(len(permutes) // 6):
+            in_idx, out_idx, in_start, _, length, _ = permutes[i * 6 : i * 6 + 6]
+            refs[out_idx].append(ref_values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.permute_multi_embedding(
+            values, permutes, in_lengths, out_lengths
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+        ref_loss, loss = refs[0].sum(), outputs[0].sum()
+        for i in range(1, len(refs)):
+            ref_loss += (i + 1.1) * refs[i].sum()
+            loss += (i + 1.1) * outputs[i].sum()
+        ref_loss.backward()
+        loss.backward()
+        for val, ref in zip(values, ref_values):
+            val_grad, ref_grad = val.grad, ref.grad
+            assert isinstance(val_grad, torch.Tensor)
+            self.assertTrue(torch.allclose(val_grad, ref_grad))
+
+    def test_multi_permute_backward_gpu(self) -> None:
+        batch_size = 2048
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[96, 256], [512, 128, 768], [1024]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(lens), device="cuda", requires_grad=True)
+            for lens in lengths
+        ]
+        ref_values = [v.detach() for v in values]
+        for v in ref_values:
+            v.requires_grad = True
+        permutes, in_lengths, out_lengths = _multi_remap_to_groups(
+            keys, lengths, groups
+        )
+        refs = [[] for _ in groups]
+        for i in range(len(permutes) // 6):
+            in_idx, out_idx, in_start, _, length, _ = permutes[i * 6 : i * 6 + 6]
+            refs[out_idx].append(ref_values[in_idx][:, in_start : (in_start + length)])
+        refs = [torch.cat(ref, dim=1) for ref in refs]
+        outputs = torch.ops.fbgemm.permute_multi_embedding(
+            values, permutes, in_lengths, out_lengths
+        )
+        for out, ref in zip(outputs, refs):
+            self.assertTrue(torch.allclose(out, ref))
+
+        ref_loss, loss = refs[0].sum(), outputs[0].sum()
+        for i in range(1, len(refs)):
+            ref_loss += (i + 1.1) * refs[i].sum()
+            loss += (i + 1.1) * outputs[i].sum()
+        ref_loss.backward()
+        loss.backward()
+        for val, ref in zip(values, ref_values):
+            val_grad, ref_grad = val.grad, ref.grad
+            assert isinstance(val_grad, torch.Tensor)
+            self.assertTrue(torch.allclose(val_grad, ref_grad))
+
     def test_permute_duplicates(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0])
@@ -1649,8 +1814,6 @@ KeyedJaggedTensor({
             weights=weights,
             stride_per_key_per_rank=stride_per_key_per_rank,
         )
-
-        print(str(jag_tensor))
 
         self.assertEqual(
             str(jag_tensor),
