@@ -46,6 +46,11 @@ class SerializerInterface(abc.ABC):
         input: Any,
         typename: str,
         device: Optional[torch.device] = None,
+        children: Dict[str, nn.Module] = {},
     ) -> nn.Module:
         # Take the bytes in the buffer and regenerate the eager embedding module
         pass
+
+    @classmethod
+    def requires_children(cls, typename: str) -> bool:
+        return False
