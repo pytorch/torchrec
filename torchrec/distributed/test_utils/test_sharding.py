@@ -14,6 +14,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from torch.distributed._tensor import DTensor
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
@@ -199,7 +200,7 @@ def gen_model_and_input(
 
 
 def copy_state_dict(
-    loc: Dict[str, Union[torch.Tensor, ShardedTensor]],
+    loc: Dict[str, Union[torch.Tensor, ShardedTensor, DTensor]],
     glob: Dict[str, torch.Tensor],
     exclude_predfix: Optional[str] = None,
 ) -> None:
@@ -211,6 +212,9 @@ def copy_state_dict(
         global_tensor = glob[name]
         if isinstance(global_tensor, ShardedTensor):
             global_tensor = global_tensor.local_shards()[0].tensor
+        if isinstance(global_tensor, DTensor):
+            global_tensor = global_tensor.to_local().local_tensors()[0]  # pyre-ignore[16]
+
         if isinstance(tensor, ShardedTensor):
             for local_shard in tensor.local_shards():
                 assert global_tensor.ndim == local_shard.tensor.ndim
@@ -231,6 +235,23 @@ def copy_state_dict(
                 else:
                     raise ValueError("Tensors with ndim > 2 are not supported")
                 local_shard.tensor.copy_(t)
+        elif isinstance(tensor, DTensor):
+            shard_offsets = tensor.to_local().local_offsets()  # pyre-ignore[16]
+            for i, local_shard in enumerate(tensor.to_local().local_shards()):  # pyre-ignore[16]
+                assert global_tensor.ndim == local_shard.ndim
+                t = global_tensor.detach()
+                local_shape = local_shard.shape
+                global_offset = shard_offsets[i]
+                if t.ndim == 1:
+                    t = t[global_offset[0] : global_offset[0] + local_shape[0]]
+                elif t.ndim == 2:
+                    t = t[
+                        global_offset[0] : global_offset[0] + local_shape[0],
+                        global_offset[1] : global_offset[1] + local_shape[1],
+                    ]
+                else:
+                    raise ValueError("Tensors with ndim > 2 are not supported")
+                local_shard.copy_(t)
         else:
             tensor.copy_(global_tensor)
 

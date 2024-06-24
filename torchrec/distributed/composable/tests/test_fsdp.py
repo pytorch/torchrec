@@ -16,6 +16,7 @@ import torch
 from torch import nn
 from torch.distributed._composable import fully_shard
 from torch.distributed._shard.sharded_tensor import ShardedTensor
+from torch.distributed._tensor import DTensor
 
 from torch.distributed.checkpoint import (
     FileSystemReader,
@@ -193,6 +194,10 @@ class FullyShardTest(MultiProcessTestBase):
                         if not p.local_shards():
                             continue
                         p = p.local_tensor()
+                    if isinstance(p, DTensor):
+                        if not p.to_local().local_shards():
+                            continue
+                        p = p.to_local().local_shards()[0]
                     p_sum += p.sum()
                     p.zero_()
                     assert p.sum() == 0
@@ -205,6 +210,10 @@ class FullyShardTest(MultiProcessTestBase):
                         if not t.local_shards():
                             continue
                         t = t.local_tensor()
+                    if isinstance(t, DTensor):
+                        if not t.to_local().local_shards():  # pyre-ignore[16]
+                            continue
+                        t = t.to_local().local_shards()[0]
                     o_sum += t.sum()
                     t.zero_()
                     assert t.sum() == 0
@@ -228,6 +237,10 @@ class FullyShardTest(MultiProcessTestBase):
                             continue
                         p = p.local_tensor()
                     p_sum_loaded += p.sum()
+                    if isinstance(p, DTensor):
+                        if not p.to_local().local_shards():
+                            continue
+                        p = p.to_local().local_shards()[0]
             assert p_sum.allclose(p_sum_loaded)
 
             o_sum_loaded = torch.zeros(1, device=ctx.device)
@@ -239,6 +252,10 @@ class FullyShardTest(MultiProcessTestBase):
                         if not t.local_shards():
                             continue
                         t = t.local_tensor()
+                    if isinstance(t, DTensor):
+                        if not t.to_local().local_shards():
+                            continue
+                        t = t.to_local().local_shards()[0]
                     o_sum_loaded += t.sum()
             assert o_sum.allclose(o_sum_loaded)
 
