@@ -14,6 +14,7 @@ import hypothesis.strategies as st
 import torch
 import torch.nn as nn
 from hypothesis import given, settings, Verbosity
+from torch.distributed._tensor.api import DTensor
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
@@ -177,6 +178,8 @@ def _test_sharding(  # noqa C901
             )
             if isinstance(sharded_state, ShardedTensor):
                 sharded_state.gather(out=sharded_param)
+            elif isinstance(sharded_state, DTensor):
+                sharded_param = sharded_state.full_tensor()
             else:
                 sharded_param = sharded_state
 

@@ -13,6 +13,7 @@ from typing import cast, List, Optional, Union
 import torch
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn
+from torch.distributed._tensor import DTensor
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
@@ -85,7 +86,19 @@ def initialize_and_test_parameters(
             else f"embedding_bags.{table_name}.weight"
         )
 
-        if isinstance(model.state_dict()[key], ShardedTensor):
+        if isinstance(model.state_dict()[key], DTensor):
+            if ctx.rank == 0:
+                gathered_tensor = torch.empty(model.state_dict()[key].size())
+            else:
+                gathered_tensor = None
+
+            gathered_tensor = model.state_dict()[key].full_tensor()
+            if ctx.rank == 0:
+                torch.testing.assert_close(
+                    gathered_tensor,
+                    embedding_tables.state_dict()[key],
+                )
+        elif isinstance(model.state_dict()[key], ShardedTensor):
             if ctx.rank == 0:
                 gathered_tensor = torch.empty_like(embedding_tables.state_dict()[key])
             else:

@@ -30,6 +30,7 @@ import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
+from torch.distributed._tensor import DTensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
@@ -52,6 +53,7 @@ from torchrec.distributed.sharding.rw_sharding import RwPooledEmbeddingSharding
 from torchrec.distributed.sharding.tw_sharding import TwPooledEmbeddingSharding
 from torchrec.distributed.sharding.twcw_sharding import TwCwPooledEmbeddingSharding
 from torchrec.distributed.sharding.twrw_sharding import TwRwPooledEmbeddingSharding
+from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 from torchrec.distributed.types import (
     Awaitable,
     EmbeddingModuleShardingPlan,
@@ -713,14 +715,17 @@ class ShardedEmbeddingBagCollection(
     ) -> None:
         """
         Modify the destination state_dict for model parallel
-        to transform from ShardedTensors into tensors
+        to transform from ShardedTensors/DTensors into tensors
         """
-        for (
-            table_name,
-            model_shards,
-        ) in self._model_parallel_name_to_local_shards.items():
+        for table_name in self._model_parallel_name_to_local_shards.keys():
             key = f"{prefix}embedding_bags.{table_name}.weight"
-
+            # gather model shards from both DTensor and ShardedTensor maps
+            model_shards_sharded_tensor = self._model_parallel_name_to_local_shards[
+                table_name
+            ]
+            model_shards_dtensor = self._model_parallel_name_to_shards_wrapper[
+                table_name
+            ]
             # If state_dict[key] is already a ShardedTensor, use its local shards
             if isinstance(state_dict[key], ShardedTensor):
                 local_shards = state_dict[key].local_shards()
@@ -735,21 +740,48 @@ class ShardedEmbeddingBagCollection(
                         ).view(-1, dim)
                     else:
                         state_dict[key] = local_shards[0].tensor.view(-1, dim)
+            elif isinstance(state_dict[key], DTensor):
+                shards_wrapper = state_dict[key].to_local()
+                local_shards = shards_wrapper.local_shards()
+                dim = shards_wrapper.local_sizes()[0][1]
+                if len(local_shards) == 0:
+                    state_dict[key] = torch.empty(0)
+                elif len(local_shards) > 1:
+                    # TODO - add multiple shards on rank support
+                    raise RuntimeError(
+                        f"Multiple shards on rank is not supported for DTensor yet, got {len(local_shards)}"
+                    )
+                else:
+                    state_dict[key] = local_shards[0].view(-1, dim)
             elif isinstance(state_dict[key], torch.Tensor):
                 local_shards = []
-                for shard in model_shards:
-                    # Extract shard size and offsets for splicing
-                    shard_sizes = shard.metadata.shard_sizes
-                    shard_offsets = shard.metadata.shard_offsets
+                if model_shards_sharded_tensor:
+                    # splice according to sharded tensor metadata
+                    for shard in model_shards_sharded_tensor:
+                        # Extract shard size and offsets for splicing
+                        shard_size = shard.metadata.shard_sizes
+                        shard_offset = shard.metadata.shard_offsets
 
-                    # Prepare tensor by splicing and placing on appropriate device
-                    spliced_tensor = state_dict[key][
-                        shard_offsets[0] : shard_offsets[0] + shard_sizes[0],
-                        shard_offsets[1] : shard_offsets[1] + shard_sizes[1],
-                    ]
+                        # Prepare tensor by splicing and placing on appropriate device
+                        spliced_tensor = state_dict[key][
+                            shard_offset[0] : shard_offset[0] + shard_size[0],
+                            shard_offset[1] : shard_offset[1] + shard_size[1],
+                        ]
 
-                    # Append spliced tensor into local shards
-                    local_shards.append(spliced_tensor)
+                        # Append spliced tensor into local shards
+                        local_shards.append(spliced_tensor)
+                elif model_shards_dtensor:
+                    # splice according to dtensor metadata
+                    for tensor, shard_offset in zip(
+                        model_shards_dtensor["local_tensors"],
+                        model_shards_dtensor["local_offsets"],
+                    ):
+                        shard_size = tensor.size()
+                        spliced_tensor = state_dict[key][
+                            shard_offset[0] : shard_offset[0] + shard_size[0],
+                            shard_offset[1] : shard_offset[1] + shard_size[1],
+                        ]
+                        local_shards.append(spliced_tensor)
                 state_dict[key] = (
                     torch.empty(0)
                     if not local_shards
@@ -774,7 +806,9 @@ class ShardedEmbeddingBagCollection(
         for table_name in self._table_names:
             self.embedding_bags[table_name] = nn.Module()
         self._model_parallel_name_to_local_shards = OrderedDict()
+        self._model_parallel_name_to_shards_wrapper = OrderedDict()
         self._model_parallel_name_to_sharded_tensor = OrderedDict()
+        self._model_parallel_name_to_dtensor = OrderedDict()
         model_parallel_name_to_compute_kernel: Dict[str, str] = {}
         for (
             table_name,
@@ -783,6 +817,9 @@ class ShardedEmbeddingBagCollection(
             if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
                 continue
             self._model_parallel_name_to_local_shards[table_name] = []
+            self._model_parallel_name_to_shards_wrapper[table_name] = OrderedDict(
+                [("local_tensors", []), ("local_offsets", [])]
+            )
             model_parallel_name_to_compute_kernel[table_name] = (
                 parameter_sharding.compute_kernel
             )
@@ -799,21 +836,32 @@ class ShardedEmbeddingBagCollection(
                 # unwrap DDP
                 lookup = lookup.module
             else:
-                # save local_shards for transforming MP params to shardedTensor
+                # save local_shards for transforming MP params to DTensor
                 for key, v in lookup.state_dict().items():
                     table_name = key[: -len(".weight")]
-                    self._model_parallel_name_to_local_shards[table_name].extend(
-                        v.local_shards()
-                    )
+                    if isinstance(v, DTensor):
+                        shards_wrapper = self._model_parallel_name_to_shards_wrapper[
+                            table_name
+                        ]
+                        local_shards_wrapper = v._local_tensor
+                        shards_wrapper["local_tensors"].extend(local_shards_wrapper.local_shards())  # pyre-ignore[16]
+                        shards_wrapper["local_offsets"].extend(local_shards_wrapper.local_offsets())  # pyre-ignore[16]
+                        shards_wrapper["global_size"] = v.size()
+                        shards_wrapper["global_stride"] = v.stride()
+                        shards_wrapper["placements"] = v.placements
+                    elif isinstance(v, ShardedTensor):
+                        self._model_parallel_name_to_local_shards[table_name].extend(
+                            v.local_shards()
+                        )
             for (
                 table_name,
                 tbe_slice,
             ) in lookup.named_parameters_by_table():
                 self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
-        for (
-            table_name,
-            local_shards,
-        ) in self._model_parallel_name_to_local_shards.items():
+
+        for table_name in self._model_parallel_name_to_local_shards.keys():
+            local_shards = self._model_parallel_name_to_local_shards[table_name]
+            shards_wrapper_map = self._model_parallel_name_to_shards_wrapper[table_name]
             # for shards that don't exist on this rank, register with empty tensor
             if not hasattr(self.embedding_bags[table_name], "weight"):
                 self.embedding_bags[table_name].register_parameter(
@@ -830,14 +878,28 @@ class ShardedEmbeddingBagCollection(
                 EmbeddingComputeKernel.KEY_VALUE.value
             }:
                 continue
-            # created ShardedTensors once in init, use in post_state_dict_hook
-            self._model_parallel_name_to_sharded_tensor[table_name] = (
-                ShardedTensor._init_from_local_shards(
-                    local_shards,
-                    self._name_to_table_size[table_name],
-                    process_group=self._env.process_group,
+            if shards_wrapper_map["local_tensors"]:
+                self._model_parallel_name_to_dtensor[table_name] = DTensor.from_local(
+                    local_tensor=LocalShardsWrapper(
+                        local_shards=shards_wrapper_map["local_tensors"],
+                        local_offsets=shards_wrapper_map["local_offsets"],
+                    ),
+                    device_mesh=self._env.device_mesh,
+                    placements=shards_wrapper_map["placements"],
+                    shape=shards_wrapper_map["global_size"],
+                    stride=shards_wrapper_map["global_stride"],
+                    run_check=False,
                 )
-            )
+            else:
+                # if DTensors for table do not exist, create ShardedTensor
+                # created ShardedTensors once in init, use in post_state_dict_hook
+                self._model_parallel_name_to_sharded_tensor[table_name] = (
+                    ShardedTensor._init_from_local_shards(
+                        local_shards,
+                        self._name_to_table_size[table_name],
+                        process_group=self._env.process_group,
+                    )
+                )
 
         def post_state_dict_hook(
             module: ShardedEmbeddingBagCollection,
@@ -852,6 +914,12 @@ class ShardedEmbeddingBagCollection(
             ) in module._model_parallel_name_to_sharded_tensor.items():
                 destination_key = f"{prefix}embedding_bags.{table_name}.weight"
                 destination[destination_key] = sharded_t
+            for (
+                table_name,
+                d_tensor,
+            ) in module._model_parallel_name_to_dtensor.items():
+                destination_key = f"{prefix}embedding_bags.{table_name}.weight"
+                destination[destination_key] = d_tensor
 
         self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)
