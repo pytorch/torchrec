@@ -13,6 +13,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
 import torch.distributed as dist
+from torch.distributed._tensor.placement_types import Shard
 from torchrec.distributed.dist_data import (
     EmbeddingsAllToOneReduce,
     KJTAllToAll,
@@ -37,6 +38,7 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
+    DTensorMetadata,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     InputDistOutputs,
@@ -164,6 +166,16 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
+            dtensor_metadata = DTensorMetadata(
+                mesh=self._env.device_mesh,
+                placements=(Shard(0),),
+                size=(
+                    info.embedding_config.num_embeddings,
+                    info.embedding_config.embedding_dim,
+                ),
+                stride=info.param.stride(),
+            )
+
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
@@ -183,6 +195,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         ),
                         local_metadata=shards[rank],
                         global_metadata=global_metadata,
+                        dtensor_metadata=dtensor_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,

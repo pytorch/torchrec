@@ -32,6 +32,8 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
 )
 
 from torch.autograd.profiler import record_function
+from torch.distributed.device_mesh import DeviceMesh, init_device_mesh
+from torch.distributed.distributed_c10d import _get_pg_default_device
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import DataType, ModuleNoCopyMixin
 
@@ -709,6 +711,14 @@ class ShardingEnv:
         self.world_size = world_size
         self.rank = rank
         self.process_group: Optional[dist.ProcessGroup] = pg
+        self.device_mesh: Optional[DeviceMesh] = (
+            init_device_mesh(
+                device_type=_get_pg_default_device(pg).type,
+                mesh_shape=(dist.get_world_size(pg),),
+            )
+            if pg
+            else None
+        )
 
     @classmethod
     def from_process_group(cls, pg: dist.ProcessGroup) -> "ShardingEnv":

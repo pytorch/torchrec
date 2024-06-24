@@ -10,11 +10,13 @@
 import abc
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Dict, Generic, Iterator, List, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, Iterator, List, Optional, Tuple, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLocation
 from torch import fx, nn
+from torch.distributed._tensor import DeviceMesh
+from torch.distributed._tensor.placement_types import Placement
 from torch.nn.modules.module import _addindent
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.types import (
@@ -179,9 +181,18 @@ class ShardedConfig:
 
 
 @dataclass
+class DTensorMetadata:
+    mesh: Optional[DeviceMesh] = None
+    placements: Optional[Tuple[Placement, ...]] = None
+    size: Optional[Tuple[int, ...]] = None
+    stride: Optional[Tuple[int, ...]] = None
+
+
+@dataclass
 class ShardedMetaConfig(ShardedConfig):
     local_metadata: Optional[ShardMetadata] = None
     global_metadata: Optional[ShardedTensorMetadata] = None
+    dtensor_metadata: Optional[DTensorMetadata] = None
 
 
 @dataclass
