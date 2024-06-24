@@ -130,6 +130,9 @@ class ShardingType(Enum):
     # Useful when having multiple ranks per node
     # and comms within a single node are more efficient than across nodes.
     TABLE_ROW_WISE = "table_row_wise"
+    # Column-wise accross nodes as different tables, then row-wise on the same node
+    # for extra large embedding table column wise helps distribute load from same table
+    COLUMN_TABLE_ROW_WISE = "column_table_row_wise"
     # Column-wise on the same node and table-wise across nodes
     TABLE_COLUMN_WISE = "table_column_wise"
 
