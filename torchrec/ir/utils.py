@@ -27,8 +27,9 @@ DYNAMIC_DIMS: Dict[str, int] = defaultdict(int)
 
 
 def serialize_embedding_modules(
-    model: nn.Module,
+    module: nn.Module,
     serializer_cls: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
+    fqn: str = "",
 ) -> Tuple[nn.Module, List[str]]:
     """
     Takes all the modules that are of type `serializer_cls` and serializes them
@@ -37,13 +38,46 @@ def serialize_embedding_modules(
     Returns the modified module and the list of fqns that had the buffer added.
     """
     preserve_fqns = []
-    for fqn, module in model.named_modules():
-        if type(module).__name__ in serializer_cls.module_to_serializer_cls:
-            serialized_module = serializer_cls.serialize(module)
-            module.register_buffer("ir_metadata", serialized_module, persistent=False)
-            preserve_fqns.append(fqn)
 
-    return model, preserve_fqns
+    # handle current module
+    if type(module).__name__ in serializer_cls.module_to_serializer_cls:
+        serialized_tensor, children = serializer_cls.serialize(module)
+        module.register_buffer("ir_metadata", serialized_tensor, persistent=False)
+        preserve_fqns.append(fqn)
+    else:
+        children = [child for child, _ in module.named_children()]
+
+    # handle child modules
+    for child in children:
+        submodule = module.get_submodule(child)
+        child_fqn = f"{fqn}.{child}" if len(fqn) > 0 else child
+        preserve_fqns.extend(
+            serialize_embedding_modules(submodule, serializer_cls, child_fqn)[1]
+        )
+    return module, preserve_fqns
+
+
+def _deserialize_embedding_modules(
+    module: nn.Module,
+    serializer_cls: Type[SerializerInterface],
+    device: Optional[torch.device] = None,
+) -> nn.Module:
+    """
+    returns:
+    1. the children of the parent_fqn Dict[relative_fqn -> module]
+    2. the next node Optional[fqn], Optional[module], which is not a child of the parent_fqn
+    """
+
+    for child_fqn, child in module.named_children():
+        child = _deserialize_embedding_modules(
+            module=child, serializer_cls=serializer_cls, device=device
+        )
+        setattr(module, child_fqn, child)
+
+    if "ir_metadata" in dict(module.named_buffers()):
+        serialized_tensor = module.get_buffer("ir_metadata")
+        module = serializer_cls.deserialize(serialized_tensor, device, module)
+    return module
 
 
 def deserialize_embedding_modules(
@@ -59,39 +93,7 @@ def deserialize_embedding_modules(
     Returns the unflattened ExportedProgram with the deserialized modules.
     """
     model = torch.export.unflatten(ep)
-    module_type_dict = {}
-    for node in ep.graph.nodes:
-        if "nn_module_stack" in node.meta:
-            for fqn, type_name in node.meta["nn_module_stack"].values():
-                # Only get the module type name, not the full type name
-                module_type_dict[fqn] = type_name.split(".")[-1]
-
-    fqn_to_new_module = {}
-    for fqn, module in model.named_modules():
-        if "ir_metadata" in dict(module.named_buffers()):
-            serialized_module = dict(module.named_buffers())["ir_metadata"]
-
-            if fqn not in module_type_dict:
-                raise RuntimeError(
-                    f"Cannot find the type of module {fqn} in the exported program"
-                )
-
-            deserialized_module = serializer_cls.deserialize(
-                serialized_module,
-                module_type_dict[fqn],
-                device,
-            )
-            fqn_to_new_module[fqn] = deserialized_module
-
-    for fqn, new_module in fqn_to_new_module.items():
-        # handle nested attribute like "x.y.z"
-        attrs = fqn.split(".")
-        parent = model
-        for a in attrs[:-1]:
-            parent = getattr(parent, a)
-        setattr(parent, attrs[-1], new_module)
-
-    return model
+    return _deserialize_embedding_modules(model, serializer_cls, device)
 
 
 def _get_dim(x: Union[DIM, str, None], s: str, max: Optional[int] = None) -> DIM:

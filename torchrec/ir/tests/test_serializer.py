@@ -11,7 +11,7 @@
 
 import copy
 import unittest
-from typing import Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
 from torch import nn
@@ -52,6 +52,41 @@ class CompoundModule(nn.Module):
             else:
                 res.append(m(features).values())
         return res
+
+
+class CompoundModuleSerializer(JsonSerializer):
+    _module_cls = CompoundModule
+
+    @classmethod
+    def children(cls, module: nn.Module) -> List[str]:
+        children = ["ebc", "list"]
+        if module.comp is not None:
+            children += ["comp"]
+        return children
+
+    @classmethod
+    def serialize_to_dict(
+        cls,
+        module: nn.Module,
+    ) -> Dict[str, Any]:
+        return {}
+
+    @classmethod
+    def deserialize_from_dict(
+        cls,
+        metadata_dict: Dict[str, Any],
+        device: Optional[torch.device] = None,
+        unflatten: Optional[nn.Module] = None,
+    ) -> nn.Module:
+        assert unflatten is not None
+        ebc = unflatten.ebc
+        comp = getattr(unflatten, "comp", None)
+        i = 0
+        mlist = []
+        while hasattr(unflatten.list, str(i)):
+            mlist.append(getattr(unflatten.list, str(i)))
+            i += 1
+        return CompoundModule(ebc, comp, mlist)
 
 
 class TestJsonSerializer(unittest.TestCase):
@@ -328,6 +363,9 @@ class TestJsonSerializer(unittest.TestCase):
 
         eager_out = model(id_list_features)
 
+        JsonSerializer.module_to_serializer_cls["CompoundModule"] = (
+            CompoundModuleSerializer
+        )
         # Serialize
         model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
         ep = torch.export.export(
@@ -346,6 +384,14 @@ class TestJsonSerializer(unittest.TestCase):
 
         # Deserialize
         deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+
+        # Check if Compound Module is deserialized correctly
+        self.assertIsInstance(deserialized_model.comp, CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.comp.comp, CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.list[1], CompoundModule)
+        self.assertIsInstance(deserialized_model.comp.list[1].comp, CompoundModule)
+
         deserialized_model.load_state_dict(model.state_dict())
         # Run forward on deserialized model
         deserialized_out = deserialized_model(id_list_features)

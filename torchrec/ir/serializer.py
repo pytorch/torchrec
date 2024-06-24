@@ -9,7 +9,7 @@
 
 import json
 import logging
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 
@@ -69,8 +69,18 @@ def get_deserialized_device(
     return device
 
 
-class JsonSerializerBase(SerializerInterface):
+class JsonSerializer(SerializerInterface):
+    """
+    Serializer for torch.export IR using json.
+    """
+
+    module_to_serializer_cls: Dict[str, Type["JsonSerializer"]] = {}
     _module_cls: Optional[Type[nn.Module]] = None
+    _children: Optional[List[str]] = None
+
+    @classmethod
+    def children(cls, module: nn.Module) -> List[str]:
+        return [] if not cls._children else cls._children
 
     @classmethod
     def serialize_to_dict(cls, module: nn.Module) -> Dict[str, Any]:
@@ -81,6 +91,7 @@ class JsonSerializerBase(SerializerInterface):
         cls,
         metadata_dict: Dict[str, Any],
         device: Optional[torch.device] = None,
+        unflatten: Optional[nn.Module] = None,
     ) -> nn.Module:
         raise NotImplementedError()
 
@@ -88,40 +99,59 @@ class JsonSerializerBase(SerializerInterface):
     def serialize(
         cls,
         module: nn.Module,
-    ) -> torch.Tensor:
-        if cls._module_cls is None:
+    ) -> Tuple[torch.Tensor, List[str]]:
+        typename = type(module).__name__
+        serializer = cls.module_to_serializer_cls.get(typename)
+        if serializer is None:
             raise ValueError(
-                "Must assign a nn.Module to class static variable _module_cls"
+                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
             )
-        if not isinstance(module, cls._module_cls):
+        assert issubclass(serializer, JsonSerializer)
+        assert serializer._module_cls is not None
+        if not isinstance(module, serializer._module_cls):
             raise ValueError(
-                f"Expected module to be of type {cls._module_cls.__name__}, got {type(module)}"
+                f"Expected module to be of type {serializer._module_cls.__name__}, "
+                f"got {type(module)}"
             )
-        metadata_dict = cls.serialize_to_dict(module)
-        return torch.frombuffer(json.dumps(metadata_dict).encode(), dtype=torch.uint8)
+        metadata_dict = serializer.serialize_to_dict(module)
+        raw_dict = {"typename": typename, "metadata_dict": metadata_dict}
+        serialized_tensor = torch.frombuffer(
+            json.dumps(raw_dict).encode(), dtype=torch.uint8
+        )
+        return serialized_tensor, serializer.children(module)
 
     @classmethod
     def deserialize(
         cls,
         input: torch.Tensor,
-        typename: str,
         device: Optional[torch.device] = None,
+        unflatten: Optional[nn.Module] = None,
     ) -> nn.Module:
         raw_bytes = input.numpy().tobytes()
-        metadata_dict = json.loads(raw_bytes.decode())
-        module = cls.deserialize_from_dict(metadata_dict, device)
-        if cls._module_cls is None:
+        raw_dict = json.loads(raw_bytes.decode())
+        typename = raw_dict["typename"]
+        if typename not in cls.module_to_serializer_cls:
+            raise ValueError(
+                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
+            )
+        serializer = cls.module_to_serializer_cls[typename]
+        assert issubclass(serializer, JsonSerializer)
+        module = serializer.deserialize_from_dict(
+            raw_dict["metadata_dict"], device, unflatten
+        )
+
+        if serializer._module_cls is None:
             raise ValueError(
                 "Must assign a nn.Module to class static variable _module_cls"
             )
-        if not isinstance(module, cls._module_cls):
+        if not isinstance(module, serializer._module_cls):
             raise ValueError(
-                f"Expected module to be of type {cls._module_cls.__name__}, got {type(module)}"
+                f"Expected module to be of type {serializer._module_cls.__name__}, got {type(module)}"
             )
         return module
 
 
-class EBCJsonSerializer(JsonSerializerBase):
+class EBCJsonSerializer(JsonSerializer):
     _module_cls = EmbeddingBagCollection
 
     @classmethod
@@ -148,6 +178,7 @@ class EBCJsonSerializer(JsonSerializerBase):
         cls,
         metadata_dict: Dict[str, Any],
         device: Optional[torch.device] = None,
+        unflatten: Optional[nn.Module] = None,
     ) -> nn.Module:
         tables = [
             EmbeddingBagConfigMetadata(**table_config)
@@ -164,40 +195,4 @@ class EBCJsonSerializer(JsonSerializerBase):
         )
 
 
-class JsonSerializer(SerializerInterface):
-    """
-    Serializer for torch.export IR using json.
-    """
-
-    module_to_serializer_cls: Dict[str, Type[SerializerInterface]] = {
-        "EmbeddingBagCollection": EBCJsonSerializer,
-    }
-
-    @classmethod
-    def serialize(
-        cls,
-        module: nn.Module,
-    ) -> torch.Tensor:
-        typename = type(module).__name__
-        if typename not in cls.module_to_serializer_cls:
-            raise ValueError(
-                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
-            )
-
-        return cls.module_to_serializer_cls[typename].serialize(module)
-
-    @classmethod
-    def deserialize(
-        cls,
-        input: torch.Tensor,
-        typename: str,
-        device: Optional[torch.device] = None,
-    ) -> nn.Module:
-        if typename not in cls.module_to_serializer_cls:
-            raise ValueError(
-                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
-            )
-
-        return cls.module_to_serializer_cls[typename].deserialize(
-            input, typename, device
-        )
+JsonSerializer.module_to_serializer_cls["EmbeddingBagCollection"] = EBCJsonSerializer

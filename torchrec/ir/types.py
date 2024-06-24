@@ -10,7 +10,7 @@
 #!/usr/bin/env python3
 
 import abc
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
@@ -24,28 +24,25 @@ class SerializerInterface(abc.ABC):
 
     @classmethod
     @property
-    # pyre-ignore [3]: Returning `None` but type `Any` is specified.
-    def module_to_serializer_cls(cls) -> Dict[str, Type[Any]]:
+    def module_to_serializer_cls(cls) -> Dict[str, Any]:
         raise NotImplementedError
 
     @classmethod
     @abc.abstractmethod
-    # pyre-ignore [3]: Returning `None` but type `Any` is specified.
     def serialize(
         cls,
         module: nn.Module,
-    ) -> Any:
+    ) -> Tuple[torch.Tensor, List[str]]:
         # Take the eager embedding module and generate bytes in buffer
-        pass
+        raise NotImplementedError
 
     @classmethod
     @abc.abstractmethod
     def deserialize(
         cls,
-        # pyre-ignore [2]: Parameter `input` must have a type other than `Any`.
-        input: Any,
-        typename: str,
+        input: torch.Tensor,
         device: Optional[torch.device] = None,
+        unflatten: Optional[nn.Module] = None,
     ) -> nn.Module:
         # Take the bytes in the buffer and regenerate the eager embedding module
-        pass
+        raise NotImplementedError
