@@ -1956,15 +1956,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 self.weights_or_none(),
             )
         else:
-
             (
                 permuted_lengths,
                 permuted_values,
                 permuted_weights,
-            ) = torch.ops.fbgemm.permute_2D_sparse_data(
+            ) = torch.ops.fbgemm.permute_2D_sparse_data_input1D(
                 indices_tensor,
-                self.lengths().view(len(self._keys), -1),
+                self.lengths(),
                 self.values(),
+                self.stride(),
                 self.weights_or_none(),
                 permuted_length_per_key_sum,
             )
@@ -1977,7 +1977,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             keys=permuted_keys,
             values=permuted_values,
             weights=permuted_weights,
-            lengths=permuted_lengths.view(-1),
+            lengths=permuted_lengths,
             offsets=None,
             stride=stride,
             stride_per_key_per_rank=optional_permuted_stride_per_key_per_rank,
@@ -2343,14 +2343,14 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             lengths,
                             values,
                             weights,
-                        ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                        ) = torch.ops.fbgemm.permute_2D_sparse_data_input1D(
                             torch.jit._unwrap_optional(recat),
-                            lengths.view(-1, stride),
+                            lengths,
                             values,
+                            stride,
                             weights,
                             values.numel(),
                         )
-                        lengths = lengths.view(-1)
                     else:  # variable batch size per rank
                         (
                             lengths,

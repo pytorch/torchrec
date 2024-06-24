@@ -1316,7 +1316,6 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             keys=keys,
             lengths=lengths,
         )
-
         indices = [1, 0, 2]
         permuted_jag_tensor = jag_tensor.permute(indices)
 
