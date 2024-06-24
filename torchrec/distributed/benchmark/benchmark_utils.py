@@ -492,9 +492,9 @@ def transform_module(
 def benchmark(
     name: str,
     model: torch.nn.Module,
-    warmup_inputs: List[KeyedJaggedTensor],
-    bench_inputs: List[KeyedJaggedTensor],
-    prof_inputs: List[KeyedJaggedTensor],
+    warmup_inputs: Union[List[KeyedJaggedTensor], List[Dict[str, Any]]],
+    bench_inputs: Union[List[KeyedJaggedTensor], List[Dict[str, Any]]],
+    prof_inputs: Union[List[KeyedJaggedTensor], List[Dict[str, Any]]],
     world_size: int,
     output_dir: str,
     num_benchmarks: int,
