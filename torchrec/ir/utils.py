@@ -26,6 +26,61 @@ DEFAULT_SERIALIZER_CLS = SerializerInterface
 DYNAMIC_DIMS: Dict[str, int] = defaultdict(int)
 
 
+def encapsulate_embedding_modules(
+    module: nn.Module,
+    serializer: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
+    fqn: str = "",
+) -> Tuple[nn.Module, List[str]]:
+    """
+    Takes a module and encapsulate its embedding modules and serializes them to the module buffer.
+    Returns the modified module and a list of fqns that had the buffer added, which is needed for torch.export
+    The encapsulation is done by using meta_forward function provided by the serializer
+    to replace the module's original forward function.
+    """
+    preserve_fqns: List[str] = []  # fqns of the serialized modules
+    children: List[str] = []  # fqns of the children that need further serialization
+    # handle current module, and find the children which need further serialization
+    if type(module).__name__ in serializer.module_to_serializer_cls:
+        children = serializer.encapsulate_module(module)
+        preserve_fqns.append(fqn)
+    else:
+        # if the module is not of type serializer, then we check all its children
+        children = [child for child, _ in module.named_children()]
+
+    # handle child modules recursively
+    for child in children:
+        submodule = module.get_submodule(child)
+        child_fqn = f"{fqn}.{child}" if len(fqn) > 0 else child
+        _, fqns = encapsulate_embedding_modules(submodule, serializer, child_fqn)
+        preserve_fqns.extend(fqns)
+    return module, preserve_fqns
+
+
+def decapsulate_embedding_modules(
+    module: nn.Module,
+    serializer: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
+    device: Optional[torch.device] = None,
+) -> nn.Module:
+    """
+    Takes a module and decapsulate its embedding modules by retrieving the buffer.
+    Returns the module with restored embedding (sub) modules.
+    """
+    for child_fqn, child in module.named_children():
+        # perform deserialization on the children first, so that we can replace the child module with
+        # the deserialized module, and then replace it in the parent
+        child = decapsulate_embedding_modules(
+            module=child, serializer=serializer, device=device
+        )
+        # replace the child module with deserialized one if applicable
+        setattr(module, child_fqn, child)
+
+    # only deserialize if the module has ir_metadata buffer, otherwise return as is
+    # we use "ir_metadata" as a convention to identify the deserializable module
+    if "ir_metadata" in dict(module.named_buffers()):
+        module = serializer.decapsulate_module(module, device)
+    return module
+
+
 def serialize_embedding_modules(
     module: nn.Module,
     serializer_cls: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
