@@ -68,6 +68,15 @@ def fx_wrap_tensor_view2d(x: torch.Tensor, dim0: int, dim1: int) -> torch.Tensor
     return x.view(dim0, dim1)
 
 
+@torch.fx.wrap
+def dummy_tensor(
+    sparse_features: KeyedJaggedTensor, dtype: torch.dtype
+) -> torch.Tensor:
+    return torch.empty([0], dtype=dtype, device=sparse_features.device()).view(
+        sparse_features.stride(), 0
+    )
+
+
 def _load_state_dict(
     emb_modules: "nn.ModuleList",
     state_dict: "OrderedDict[str, Union[torch.Tensor, ShardedTensor, DTensor]]",
@@ -774,14 +783,9 @@ class MetaInferGroupedPooledEmbeddingsLookup(
     ) -> torch.Tensor:
         if len(self.grouped_configs) == 0:
             # return a dummy empty tensor when grouped_configs is empty
-            return fx_wrap_tensor_view2d(
-                torch.empty(
-                    [0],
-                    dtype=self.output_dtype,
-                    device=self.device,
-                ),
-                sparse_features.stride(),
-                0,
+            return dummy_tensor(
+                sparse_features,
+                self.output_dtype,
             )
 
         embeddings: List[torch.Tensor] = []
