@@ -213,7 +213,7 @@ def copy_state_dict(
         if isinstance(global_tensor, ShardedTensor):
             global_tensor = global_tensor.local_shards()[0].tensor
         if isinstance(global_tensor, DTensor):
-            global_tensor = global_tensor.to_local().local_tensors()[0]  # pyre-ignore[16]
+            global_tensor = global_tensor.to_local().local_shards()[0]  # pyre-ignore[16]
 
         if isinstance(tensor, ShardedTensor):
             for local_shard in tensor.local_shards():
