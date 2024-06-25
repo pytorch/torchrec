@@ -30,6 +30,7 @@ from torchrec.distributed.planner.constants import (
 from torchrec.distributed.types import (
     BoundsCheckMode,
     CacheParams,
+    KeyValueParams,
     ModuleSharder,
     ShardingPlan,
 )
@@ -368,6 +369,8 @@ class ShardingOption:
         output_dtype (Optional[DataType]): output dtype to be used by this table.
             The default is FP32. If not None, the output dtype will also be used
             by the planner to produce a more balanced plan.
+        key_value_params (Optional[KeyValueParams]): Params for SSD TBE, either
+            for SSD or PS.
     """
 
     def __init__(
@@ -389,6 +392,7 @@ class ShardingOption:
         is_pooled: Optional[bool] = None,
         feature_names: Optional[List[str]] = None,
         output_dtype: Optional[DataType] = None,
+        key_value_params: Optional[KeyValueParams] = None,
     ) -> None:
         self.name = name
         self._tensor = tensor
@@ -410,6 +414,7 @@ class ShardingOption:
         self.is_weighted: Optional[bool] = None
         self.feature_names: Optional[List[str]] = feature_names
         self.output_dtype: Optional[DataType] = output_dtype
+        self.key_value_params: Optional[KeyValueParams] = key_value_params
 
     @property
     def tensor(self) -> torch.Tensor:
@@ -574,6 +579,8 @@ class ParameterConstraints:
         device_group (Optional[str]): device group to be used by this table. It can be cpu
             or cuda. This specifies if the table should be placed on a cpu device
             or a gpu device.
+        key_value_params (Optional[KeyValueParams]): key value params for SSD TBE, either for
+            SSD or PS.
     """
 
     sharding_types: Optional[List[str]] = None
@@ -592,6 +599,7 @@ class ParameterConstraints:
     feature_names: Optional[List[str]] = None
     output_dtype: Optional[DataType] = None
     device_group: Optional[str] = None
+    key_value_params: Optional[KeyValueParams] = None
 
 
 class PlannerErrorType(Enum):

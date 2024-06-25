@@ -43,6 +43,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
 )
 from fbgemm_gpu.tbe.ssd import ASSOC, SSDTableBatchedEmbeddingBags
 from torch import nn
+from torchrec.distributed.comm import get_local_rank
 from torchrec.distributed.composable.table_batched_embedding_slice import (
     TableBatchedEmbeddingSlice,
 )
@@ -133,6 +134,11 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
 
     if "ssd_storage_directory" not in ssd_tbe_params:
         ssd_tbe_params["ssd_storage_directory"] = tempfile.mkdtemp()
+    else:
+        directory = ssd_tbe_params["ssd_storage_directory"]
+        if "@local_rank" in directory:
+            # assume we have initialized a process group already
+            directory = directory.replace("@local_rank", str(get_local_rank()))
 
     if "weights_precision" not in ssd_tbe_params:
         weights_precision = data_type_to_sparse_type(config.data_type)
