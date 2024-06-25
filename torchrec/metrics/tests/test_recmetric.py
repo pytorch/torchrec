@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import copy
 import unittest
 
 import torch
@@ -61,10 +62,15 @@ class RecMetricTest(unittest.TestCase):
         )
         ne1 = ne1._metrics_computations[0]
         ne2 = ne2._metrics_computations[0]
-        self.assertTrue(ne1.cross_entropy_sum == ne2.cross_entropy_sum)
-        self.assertTrue(ne1.weighted_num_samples == ne2.weighted_num_samples)
-        self.assertTrue(ne1.pos_labels == ne2.pos_labels)
-        self.assertTrue(ne1.neg_labels == ne2.neg_labels)
+        self.assertTrue(
+            ne1.get_state("cross_entropy_sum") == ne2.get_state("cross_entropy_sum")
+        )
+        self.assertTrue(
+            ne1.get_state("weighted_num_samples")
+            == ne2.get_state("weighted_num_samples")
+        )
+        self.assertTrue(ne1.get_state("pos_labels") == ne2.get_state("pos_labels"))
+        self.assertTrue(ne1.get_state("neg_labels") == ne2.get_state("neg_labels"))
 
     def test_zero_weights(self) -> None:
         # Test if weights = 0 for an update
@@ -88,9 +94,10 @@ class RecMetricTest(unittest.TestCase):
             labels=self.labels,
             weights=zero_weights,
         )
-        self.assertEqual(mse_computation.error_sum, torch.tensor(0.0))
-        self.assertEqual(mse_computation.weighted_num_samples, torch.tensor(0.0))
-
+        self.assertEqual(mse_computation.get_state("error_sum"), torch.tensor(0.0))
+        self.assertEqual(
+            mse_computation.get_state("weighted_num_samples"), torch.tensor(0.0)
+        )
         res = mse.compute()
         self.assertEqual(res["mse-DefaultTask|lifetime_mse"], torch.tensor(0.0))
         self.assertEqual(res["mse-DefaultTask|lifetime_rmse"], torch.tensor(0.0))
@@ -100,13 +107,10 @@ class RecMetricTest(unittest.TestCase):
             labels=self.labels,
             weights=self.weights,
         )
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
-        self.assertGreater(mse_computation.error_sum, torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
-        self.assertGreater(mse_computation.weighted_num_samples, torch.tensor(0.0))
-
+        self.assertGreater(mse_computation.get_state("error_sum"), torch.tensor(0.0))
+        self.assertGreater(
+            mse_computation.get_state("weighted_num_samples"), torch.tensor(0.0)
+        )
         res = mse.compute()
         # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
         #  got `Tensor`.
@@ -151,14 +155,20 @@ class RecMetricTest(unittest.TestCase):
             labels=labels,
             weights=partial_zero_weights,
         )
-        self.assertEqual(ne_computation[0].cross_entropy_sum, torch.tensor(0.0))
-        self.assertEqual(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
-        self.assertGreater(ne_computation[1].cross_entropy_sum, torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
-        self.assertGreater(ne_computation[1].weighted_num_samples, torch.tensor(0.0))
+        self.assertEqual(
+            ne_computation[0].get_state("cross_entropy_sum"), torch.tensor(0.0)
+        )
+        self.assertEqual(
+            ne_computation[0].get_state("weighted_num_samples"), torch.tensor(0.0)
+        )
+
+        self.assertGreater(
+            ne_computation[1].get_state("cross_entropy_sum"), torch.tensor(0.0)
+        )
+
+        self.assertGreater(
+            ne_computation[1].get_state("weighted_num_samples"), torch.tensor(0.0)
+        )
 
         res = ne.compute()
         self.assertEqual(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
@@ -171,13 +181,13 @@ class RecMetricTest(unittest.TestCase):
             labels=labels,
             weights=weights,
         )
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
-        self.assertGreater(ne_computation[0].cross_entropy_sum, torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
-        self.assertGreater(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
+        self.assertGreater(
+            ne_computation[0].get_state("cross_entropy_sum"), torch.tensor(0.0)
+        )
 
+        self.assertGreater(
+            ne_computation[0].get_state("weighted_num_samples"), torch.tensor(0.0)
+        )
         res = ne.compute()
         # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
         #  got `Tensor`.
@@ -267,8 +277,87 @@ class RecMetricTest(unittest.TestCase):
             weights=self.weights,
         )
         ne = ne._metrics_computations[0]
-        window_buffer = ne._batch_window_buffers["window_cross_entropy_sum"].buffers
+        window_buffer = ne._batch_window_buffers["window__fused_states"].buffers
         self.assertTrue(len(window_buffer) > 0)
         ne.reset()
-        window_buffer = ne._batch_window_buffers["window_cross_entropy_sum"].buffers
+        window_buffer = ne._batch_window_buffers["window__fused_states"].buffers
         self.assertEqual(len(window_buffer), 0)
+
+    def test_state_dict(self) -> None:
+        """
+        This test is to ensure when metric state dict is saved, it unflattens state correctly
+        for checkpointing purposes.
+        """
+        ne = NEMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=100,
+            tasks=[DefaultTaskInfo],
+            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            window_size=100,
+            fused_update_limit=0,
+        )
+        ne.update(
+            predictions=self.predictions,
+            labels=self.labels,
+            weights=self.weights,
+        )
+
+        state_dict = ne.state_dict()
+        # NE should and only contain the following 4 states, otherwise
+        # it will have compatibility issue with existing model checkpoints
+        self.assertEqual(len(state_dict), 4)
+        self.assertIn("_metrics_computations.0.cross_entropy_sum", state_dict)
+        self.assertIn("_metrics_computations.0.weighted_num_samples", state_dict)
+        self.assertIn("_metrics_computations.0.pos_labels", state_dict)
+        self.assertIn("_metrics_computations.0.neg_labels", state_dict)
+
+        ne_compute = ne._metrics_computations[0]  # this is still fused
+        # We check if state_dict values from unflatten and fused states are the same
+        for k, v in state_dict.items():
+            state_name = k.split(".")[-1]
+            # calling it from fused, so we use get_state
+            state_val = ne_compute.get_state(state_name)
+            self.assertEqual(state_val, v)
+
+    def test_load_state_dict(self) -> None:
+        ne1 = NEMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=100,
+            tasks=[DefaultTaskInfo],
+            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            window_size=100,
+            fused_update_limit=0,
+        )
+
+        ne2 = copy.deepcopy(ne1)
+
+        ne1.update(
+            predictions=self.predictions,
+            labels=self.labels,
+            weights=self.weights,
+        )
+
+        state_dict = ne1.state_dict()
+
+        ne2_compute = ne2._metrics_computations[0]
+        # ne1 states are updated, while ne2 states are still initial values
+        for k, v in state_dict.items():
+            state_name = k.split(".")[-1]  # from unflattened state dict
+            state_val = ne2_compute.get_state(state_name)  # from fused state dict
+            self.assertNotEqual(state_val, v)
+
+        # with ne2 states upated from ne1, ne2 and ne1 should have the same keys
+        incompatible_keys = ne2.load_state_dict(state_dict)
+        self.assertEqual(len(incompatible_keys.missing_keys), 0)
+        self.assertEqual(len(incompatible_keys.unexpected_keys), 0)
+        self.assertNotIn("Incompatible", str(incompatible_keys))
+
+        # ne2 loads the state dict from ne1, so their states should be the same
+        # This simulates the checkpointing from one process, and resume training
+        # from another process
+        for k, v in state_dict.items():
+            state_name = k.split(".")[-1]
+            state_val = ne2_compute.get_state(state_name)
+            self.assertEqual(state_val, v)
