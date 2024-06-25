@@ -28,7 +28,6 @@ from typing import (
 
 import torch
 from torch.autograd.profiler import record_function
-from torchrec.distributed.comm_ops import set_use_sync_collectives
 from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
 from torchrec.distributed.model_parallel import ShardedModule
 from torchrec.distributed.train_pipeline.utils import (
@@ -212,7 +211,8 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
         if self._iter == 0:
             # Turn on sync collectives for PT2 pipeline.
             # To have similar logic between compiled/graph_break ranks.
-            set_use_sync_collectives(True)
+            # TODO(ivankobzarev): Call torchrec.distributed.comm_ops.set_use_sync_collectives(True) when torch package issue on import of comm_ops is fixed
+            pass
 
         cc = self._compile_configs
 
