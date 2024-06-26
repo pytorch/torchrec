@@ -204,6 +204,9 @@ class GenericITEPModule(nn.Module):
 
                 emb_tables: List[ShardedEmbeddingTable] = emb._config.embedding_tables
                 for table in emb_tables:
+                    # Skip if table was already added previously (if multiple shards assigned to same rank)
+                    if table.name in self.table_name_to_idx:
+                        continue
 
                     (
                         pruned_hash_size,
