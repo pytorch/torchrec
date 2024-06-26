@@ -129,6 +129,42 @@ def benchmark_qebc(args: argparse.Namespace, output_dir: str) -> List[BenchmarkR
     )
 
 
+def benchmark_qec_unsharded(
+    args: argparse.Namespace, output_dir: str
+) -> List[BenchmarkResult]:
+    tables = get_tables(TABLE_SIZES, is_pooled=False)
+    sharder = TestQuantECSharder(
+        sharding_type="",
+        kernel_type=EmbeddingComputeKernel.QUANT.value,
+        shardable_params=[table.name for table in tables],
+    )
+
+    module = QuantEmbeddingCollection(
+        # pyre-ignore [6]
+        tables=tables,
+        device=torch.device("cpu"),
+        quant_state_dict_split_scale_bias=True,
+    )
+
+    args_kwargs = {
+        argname: getattr(args, argname)
+        for argname in dir(args)
+        # Don't include output_dir since output_dir was modified
+        if not argname.startswith("_") and argname not in IGNORE_ARGNAME
+    }
+
+    return benchmark_module(
+        module=module,
+        sharder=sharder,
+        sharding_types=[],
+        compile_modes=BENCH_COMPILE_MODES,
+        tables=tables,
+        output_dir=output_dir,
+        benchmark_unsharded=True,  # benchmark unsharded module
+        **args_kwargs,
+    )
+
+
 def benchmark_qebc_unsharded(
     args: argparse.Namespace, output_dir: str
 ) -> List[BenchmarkResult]:
@@ -185,9 +221,10 @@ def main() -> None:
         "QuantEmbeddingCollection",
     ]
 
-    # Only do unsharded QEBC benchmark when using CPU device
+    # Only do unsharded QEBC/QEC benchmark when using CPU device
     if args.device_type == "cpu":
         module_names.append("unshardedQuantEmbeddingBagCollection")
+        module_names.append("unshardedQuantEmbeddingCollection")
 
     for module_name in module_names:
         output_dir = args.output_dir + f"/run_{datetime_sfx}"
@@ -197,9 +234,12 @@ def main() -> None:
         elif module_name == "QuantEmbeddingCollection":
             output_dir += "_qec"
             benchmark_func = benchmark_qec
-        else:
+        elif module_name == "unshardedQuantEmbeddingBagCollection":
             output_dir += "_uqebc"
             benchmark_func = benchmark_qebc_unsharded
+        else:
+            output_dir += "_uqec"
+            benchmark_func = benchmark_qec_unsharded
 
         if not os.path.exists(output_dir):
             # Place all outputs under the datetime folder
