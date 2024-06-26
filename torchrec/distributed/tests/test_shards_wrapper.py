@@ -106,7 +106,6 @@ class LocalShardsWrapperDistributedTest(MultiProcessTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(verbosity=Verbosity.verbose, deadline=None)
     @unittest.skip("Need to fix circular import errors with Torch")
     def test_shards_wrapper_all_gather_into_tensor(self) -> None:
         world_size = 2
@@ -138,7 +137,6 @@ class LocalShardsWrapperDistributedTest(MultiProcessTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(verbosity=Verbosity.verbose, deadline=None)
     @unittest.skip("Need to fix circular import errors with Torch")
     def test_shards_wrapper_all_gather(self) -> None:
         world_size = 2
@@ -168,7 +166,6 @@ class LocalShardsWrapperDistributedTest(MultiProcessTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(verbosity=Verbosity.verbose, deadline=None)
     @unittest.skip("Need to fix circular import errors with Torch")
     def test_shards_wrapper_all_gather_object(self) -> None:
         world_size = 2

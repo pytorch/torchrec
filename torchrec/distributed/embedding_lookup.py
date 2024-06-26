@@ -68,6 +68,15 @@ def fx_wrap_tensor_view2d(x: torch.Tensor, dim0: int, dim1: int) -> torch.Tensor
     return x.view(dim0, dim1)
 
 
+@torch.fx.wrap
+def dummy_tensor(
+    sparse_features: KeyedJaggedTensor, dtype: torch.dtype
+) -> torch.Tensor:
+    return torch.empty([0], dtype=dtype, device=sparse_features.device()).view(
+        sparse_features.stride(), 0
+    )
+
+
 def _load_state_dict(
     emb_modules: "nn.ModuleList",
     state_dict: "OrderedDict[str, Union[torch.Tensor, ShardedTensor, DTensor]]",
@@ -98,18 +107,18 @@ def _load_state_dict(
                         dst_local_shard.tensor.detach().copy_(src_local_shard.tensor)
                 elif isinstance(dst_param, DTensor):
                     assert isinstance(src_param, DTensor)
-                    dst_param = dst_param.to_local()
-                    src_param = src_param.to_local()
-                    assert len(dst_param.local_chunks) == len(  # pyre-ignore[16]
-                        src_param.local_chunks
+                    assert len(dst_param.to_local().local_chunks) == len(  # pyre-ignore[16]
+                        src_param.to_local().local_chunks
                     )
-                    for dst_local_shard, src_local_shard in zip(
-                        dst_param.to_local().local_shards(),  # pyre-ignore[16]
-                        src_param.to_local().local_shards(),
+                    for i, (dst_local_shard, src_local_shard) in enumerate(
+                        zip(
+                            dst_param.to_local().local_shards(),  # pyre-ignore[16]
+                            src_param.to_local().local_shards(),
+                        )
                     ):
                         assert (
-                            dst_local_shard.metadata.local_chunks
-                            == src_local_shard.metadata.local_chunks
+                            dst_param.to_local().local_chunks[i]
+                            == src_param.to_local().local_chunks[i]
                         )
                         dst_local_shard.detach().copy_(src_local_shard)
                 else:
@@ -774,14 +783,9 @@ class MetaInferGroupedPooledEmbeddingsLookup(
     ) -> torch.Tensor:
         if len(self.grouped_configs) == 0:
             # return a dummy empty tensor when grouped_configs is empty
-            return fx_wrap_tensor_view2d(
-                torch.empty(
-                    [0],
-                    dtype=self.output_dtype,
-                    device=self.device,
-                ),
-                sparse_features.stride(),
-                0,
+            return dummy_tensor(
+                sparse_features,
+                self.output_dtype,
             )
 
         embeddings: List[torch.Tensor] = []

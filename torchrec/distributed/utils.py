@@ -13,6 +13,7 @@ import pdb  # noqa
 import sys
 
 from collections import OrderedDict
+from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import torch
@@ -404,6 +405,16 @@ def add_params_from_parameter_sharding(
 
     if parameter_sharding.output_dtype is not None:
         fused_params["output_dtype"] = parameter_sharding.output_dtype
+
+    if (
+        parameter_sharding.compute_kernel in {EmbeddingComputeKernel.KEY_VALUE.value}
+        and parameter_sharding.key_value_params is not None
+    ):
+        key_value_params_dict = asdict(parameter_sharding.key_value_params)
+        key_value_params_dict = {
+            k: v for k, v in key_value_params_dict.items() if v is not None
+        }
+        fused_params.update(key_value_params_dict)
 
     # print warning if sharding_type is data_parallel or kernel is dense
     if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:

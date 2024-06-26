@@ -213,7 +213,7 @@ def _assert_close(actual, expected) -> None:
         raise ValueError(f"Unsupported type {type(expected)}")
 
 
-def test_compile_fwd_bwd(
+def _test_compile_fwd_bwd(
     fn,
     inp,
     device: torch.device,
@@ -503,6 +503,10 @@ class TestPt2(unittest.TestCase):
             compile_output = opt_fn(inputs)
             torch.testing.assert_close(eager_output, compile_output)
 
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
     def test_kjt_permute_dynamo_compile(self) -> None:
         class M(torch.nn.Module):
             def forward(self, kjt: KeyedJaggedTensor, indices: List[int]):
@@ -801,7 +805,6 @@ class TestPt2(unittest.TestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    @settings(deadline=None)
     def test_ebc_vb_reindex(self) -> None:
         device = "cuda"
 
@@ -840,13 +843,12 @@ class TestPt2(unittest.TestCase):
         )
 
         ins = (embs, indices, input_num_indices, input_rows, input_columns)
-        test_compile_fwd_bwd(fn, ins, device, unpack_inp=True)
+        _test_compile_fwd_bwd(fn, ins, device, unpack_inp=True)
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(deadline=None)
     def test_permute_pooled_embs(self) -> None:
         device = "cuda"
         m = PermutePooledEmbeddings(
@@ -854,13 +856,12 @@ class TestPt2(unittest.TestCase):
             permute=[2, 1, 0],
         )
         inp = torch.randn(12, 3)
-        test_compile_fwd_bwd(m, inp, device, backend="aot_eager")
+        _test_compile_fwd_bwd(m, inp, device, backend="aot_eager")
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @settings(deadline=None)
     def test_permute_pooled_embs_split(self) -> None:
         device = "cuda"
         m = PermutePooledEmbeddingsSplit(
@@ -868,9 +869,12 @@ class TestPt2(unittest.TestCase):
             permute=[2, 1, 0],
         )
         inp = torch.randn(12, 3)
-        test_compile_fwd_bwd(m, inp, device)
+        _test_compile_fwd_bwd(m, inp, device)
 
-    @settings(deadline=None)
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
     def test_tbe_compile(self) -> None:
         D = 4
         T = 2
@@ -948,7 +952,10 @@ class TestPt2(unittest.TestCase):
 
             assert_close(eager_weights_diff, compile_weights_diff)
 
-    @settings(deadline=None)
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
     def test_tbe_compile_vb(self) -> None:
         D = 4
         T = 2
