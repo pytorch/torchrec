@@ -32,10 +32,20 @@ logger: logging.Logger = logging.getLogger(__name__)
 logging.basicConfig(format="%(message)s", stream=sys.stdout)
 logger.setLevel(logging.DEBUG)
 
+DEFTAULT_BENCHMARK_FUNCS = [
+    "permute",
+    "to_dict",
+    "split",
+    "__getitem__",
+    "dist_splits",
+    "dist_init",
+]
+
 
 class TransformType(Enum):
     DEFAULT = "DEFAULT"
     JIT_SCRIPT = "JIT_SCRIPT"
+    VBE = "VBE"
     PT2_AOT_EAGER = "AOT_EAGER"
 
 
@@ -215,7 +225,7 @@ def benchmark_kjt(
         times.append(time_elapsed)
 
     result = BenchmarkResult(
-        short_name=test_name,
+        short_name=f"{test_name}-{transform_type.name}",
         elapsed_time=torch.tensor(times),
         max_mem_allocated=[0],
     )
@@ -334,6 +344,8 @@ def bench(
     mean_pooling_factor: int,
     num_workers: int,
     test_pt2: bool,
+    kjt_funcs: str,
+    run_modes: str,
 ) -> List[BenchmarkResult]:
     # TODO: support CUDA benchmark
     device: torch.device = torch.device("cpu")
@@ -347,6 +359,9 @@ def bench(
         )
         for i in range(num_features)
     ]
+
+    kjt_funcs_to_benchmark: List[str] = kjt_funcs.split(",")
+    run_modes_to_benchmark: List[str] = run_modes.split(",")
 
     kjt = build_kjts(
         tables,
@@ -399,61 +414,77 @@ def bench(
 
     all_results: List[BenchmarkResult] = []
 
-    for method_name, fn_kwargs, kjt_module in benchmarked_methods:
-        # Test Eager
-        result = benchmark_kjt(
-            test_name=f"{method_name}-eager",
-            kjt=kjt,
-            test_module=kjt_module,
-            num_repeat=num_repeat,
-            num_warmup=num_warmup,
-            fn_kwargs=fn_kwargs,
-            transform_type=TransformType.DEFAULT,
-            bench_formatter=bench_formatter,
-            is_baseline=True,
-        )
-        all_results.append(result)
+    filtered_benchmarked_methods = [
+        row for row in benchmarked_methods if row[0] in kjt_funcs_to_benchmark
+    ]
 
-        # Test JIT script
-        result = benchmark_kjt(
-            test_name=f"{method_name}-jitscript",
-            kjt=kjt,
-            test_module=torch.jit.script(kjt_module),
-            num_repeat=num_repeat,
-            num_warmup=num_warmup,
-            fn_kwargs=fn_kwargs,
-            transform_type=TransformType.JIT_SCRIPT,
-            bench_formatter=bench_formatter,
-        )
+    for method_name, fn_kwargs, kjt_module in filtered_benchmarked_methods:
+        if "DEFAULT" in run_modes_to_benchmark:
+            # Test Eager
+            result = benchmark_kjt(
+                test_name=method_name,
+                kjt=kjt,
+                test_module=kjt_module,
+                num_repeat=num_repeat,
+                num_warmup=num_warmup,
+                fn_kwargs=fn_kwargs,
+                transform_type=TransformType.DEFAULT,
+                bench_formatter=bench_formatter,
+                is_baseline=True,
+            )
+            all_results.append(result)
 
-        all_results.append(result)
+        if "JIT_SCRIPT" in run_modes_to_benchmark:
+            # Test JIT script
+            result = benchmark_kjt(
+                test_name=method_name,
+                kjt=kjt,
+                test_module=torch.jit.script(kjt_module),
+                num_repeat=num_repeat,
+                num_warmup=num_warmup,
+                fn_kwargs=fn_kwargs,
+                transform_type=TransformType.JIT_SCRIPT,
+                bench_formatter=bench_formatter,
+            )
 
-        # Test Eager VBE
-        vbe_kjt = KeyedJaggedTensor(
-            keys=kjt.keys(),
-            values=kjt._values,
-            lengths=kjt._lengths,
-            stride_per_key_per_rank=kjt._stride_per_key_per_rank,
-        )
-        vbe_fn_kwargs = fn_kwargs.copy()
-        if "kjt" in fn_kwargs:
-            vbe_fn_kwargs["kjt"] = vbe_kjt
+            all_results.append(result)
 
-        result = benchmark_kjt(
-            test_name=f"{method_name}-vbe",
-            kjt=vbe_kjt,
-            test_module=kjt_module,
-            num_repeat=num_repeat,
-            num_warmup=num_warmup,
-            fn_kwargs=vbe_fn_kwargs,
-            transform_type=TransformType.DEFAULT,
-            is_vb=True,
-            bench_formatter=bench_formatter,
-        )
-        all_results.append(result)
+        if "VBE" in run_modes_to_benchmark:
+            # Test Eager VBE
+            vbe_kjt = KeyedJaggedTensor(
+                keys=kjt.keys(),
+                values=kjt._values,
+                lengths=kjt._lengths,
+                stride_per_key_per_rank=kjt._stride_per_key_per_rank,
+            )
+            vbe_fn_kwargs = fn_kwargs.copy()
+            if "kjt" in fn_kwargs:
+                vbe_fn_kwargs["kjt"] = vbe_kjt
+
+            result = benchmark_kjt(
+                test_name=method_name,
+                kjt=vbe_kjt,
+                test_module=kjt_module,
+                num_repeat=num_repeat,
+                num_warmup=num_warmup,
+                fn_kwargs=vbe_fn_kwargs,
+                transform_type=TransformType.DEFAULT,
+                is_vb=True,
+                bench_formatter=bench_formatter,
+            )
+            all_results.append(result)
 
         # PT2 (Eager Inductor)
-        if test_pt2:
+        if test_pt2 or "AOT_EAGER" in run_modes_to_benchmark:
+            vbe_kjt = KeyedJaggedTensor(
+                keys=kjt.keys(),
+                values=kjt._values,
+                lengths=kjt._lengths,
+                stride_per_key_per_rank=kjt._stride_per_key_per_rank,
+            )
+            vbe_fn_kwargs = fn_kwargs.copy()
+            if "kjt" in fn_kwargs:
+                vbe_fn_kwargs["kjt"] = vbe_kjt
             dynamo_compiled_mod = dynamo_compile(
                 method_name,
                 kjt_module,
@@ -463,7 +494,7 @@ def bench(
             )
 
             result = benchmark_kjt(
-                test_name=f"{method_name}-aot-eager",
+                test_name=method_name,
                 kjt=vbe_kjt,
                 test_module=dynamo_compiled_mod,
                 num_repeat=num_repeat,
@@ -515,8 +546,21 @@ def bench(
 @click.option(
     "--test-pt2/--no-test-pt2",
     type=bool,
-    default=True,
-    help="Test",
+    default=False,
+    help="Whether to benchmark PT2 Eager",
+)
+@click.option(
+    "--kjt-funcs",
+    type=str,
+    default=",".join(DEFTAULT_BENCHMARK_FUNCS),
+    help="kjt functions to benchmark",
+)
+# pyre-ignore [56]
+@click.option(
+    "--run-modes",
+    type=str,
+    default=",".join([member.name for member in TransformType]),
+    help="kjt functions to benchmark",
 )
 def main(
     num_repeat: int,
@@ -526,6 +570,8 @@ def main(
     mean_pooling_factor: int,
     num_workers: int,
     test_pt2: bool,
+    kjt_funcs: str,
+    run_modes: str,
 ) -> None:
     bench(
         num_repeat,
@@ -535,6 +581,8 @@ def main(
         mean_pooling_factor,
         num_workers,
         test_pt2,
+        kjt_funcs,
+        run_modes,
     )
 
 
