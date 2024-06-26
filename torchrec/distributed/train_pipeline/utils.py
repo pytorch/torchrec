@@ -48,7 +48,6 @@ from torchrec.distributed.types import Awaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
-
 logger: logging.Logger = logging.getLogger(__name__)
 
 import torch
@@ -97,6 +96,9 @@ class TrainPipelineContext:
         field(default_factory=list)
     )
     event: Optional[torch.Event] = None
+
+    preproc_fwd_results: Dict[str, Any] = field(default_factory=dict)
+
     index: Optional[int] = None
     version: int = (
         0  # 1 is current version, 0 is deprecated but supported for backward compatibility
@@ -153,7 +155,138 @@ class ArgInfo:
 
     input_attrs: List[str]
     is_getitems: List[bool]
+    # recursive dataclass as preproc_modules.args -> arginfo.preproc_modules -> so on
+    preproc_modules: List[Optional["PipelinedPreproc"]]
     name: Optional[str]
+
+
+# pyre-ignore
+def _build_args_kwargs(
+    # pyre-ignore
+    initial_input: Any,
+    fwd_args: List[ArgInfo],
+) -> Tuple[List[Any], Dict[str, Any]]:
+    args = []
+    kwargs = {}
+    for arg_info in fwd_args:
+        if arg_info.input_attrs:
+            arg = initial_input
+            for attr, is_getitem, preproc_mod in zip(
+                arg_info.input_attrs, arg_info.is_getitems, arg_info.preproc_modules
+            ):
+                if preproc_mod is not None:
+                    # preproc will internally run the same logic recursively
+                    # if its args are derived from other preproc modules
+                    # we can get all inputs to preproc mod based on its recorded args_info + arg passed to it
+                    arg = preproc_mod(arg)
+                else:
+                    if is_getitem:
+                        arg = arg[attr]
+                    elif attr != "":
+                        arg = getattr(arg, attr)
+                    else:
+                        # neither is_getitem nor valid attr, no-op
+                        arg = arg
+            if arg_info.name:
+                kwargs[arg_info.name] = arg
+            else:
+                args.append(arg)
+        else:
+            args.append(None)
+    return args, kwargs
+
+
+class PipelinedPreproc(torch.nn.Module):
+    """
+    Wrapper around preproc module found during model graph traversal for sparse data dist
+    pipelining. In addition to the original module, it encapsulates information needed for
+    execution such as list of ArgInfo and the current training pipeline context.
+
+    Args:
+        preproc_module (torch.nn.Module): preproc module to run
+        fqn (str): fqn of the preproc module in the model being pipelined
+        args (List[ArgInfo]): list of ArgInfo for the preproc module
+        context (TrainPipelineContext): Training context for the next iteration / batch
+
+    Returns:
+        Any
+
+    Example:
+        preproc = PipelinedPreproc(preproc_module, fqn, args, context)
+        # module-swap with pipeliend preproc
+        setattr(model, fqn, preproc)
+    """
+
+    def __init__(
+        self,
+        preproc_module: torch.nn.Module,
+        fqn: str,
+        args: List[ArgInfo],
+        context: TrainPipelineContext,
+    ) -> None:
+        super().__init__()
+        self._preproc_module = preproc_module
+        self._fqn = fqn
+        self._args = args
+        self._context = context
+
+    @property
+    def preproc_module(self) -> torch.nn.Module:
+        return self._preproc_module
+
+    @property
+    def fqn(self) -> str:
+        return self._fqn
+
+    # pyre-ignore
+    def forward(self, *input, **kwargs) -> Any:
+        """
+        Args:
+            Any args and kwargs during model fwd
+            During _start_data_dist, input[0] contains the current data
+        Returns:
+            Any
+        """
+        if self._fqn in self._context.preproc_fwd_results:
+            # This should only be hit in two cases:
+            # 1) During model forward
+            # During model forward, avoid duplicate work
+            # by returning the cached result from previous
+            # iteration's _start_data_dist
+            # 2) During _start_data_dist when preproc module is
+            # shared by more than one args. e.g. if we have
+            # preproc_out_a = preproc_a(input)
+            # preproc_out_b = preproc_b(preproc_out_a) <- preproc_a shared
+            # preproc_out_c = preproc_c(preproc_out_a) <-^
+            # When processing preproc_b, we cache value of preproc_a(input)
+            # so when processing preproc_c, we can reuse preproc_a(input)
+            res = self._context.preproc_fwd_results[self._fqn]
+            return res
+
+        # Everything below should only be called during _start_data_dist stage
+
+        # Build up arg and kwargs from recursive call to pass to preproc module
+        # Arguments to preproc module can be also be a derived product
+        # of another preproc module call, as long as module is pipelineable
+
+        # Use input[0] as _start_data_dist only passes 1 arg
+        args, kwargs = _build_args_kwargs(input[0], self._args)
+
+        with record_function(f"## sdd_input_preproc {self._context.index} ##"):
+            res = self._preproc_module(*args, **kwargs)
+            # Cache results, only during _start_data_dist
+            self._context.preproc_fwd_results[self._fqn] = res
+            return res
+
+    @property
+    def args(self) -> List[ArgInfo]:
+        return self._args
+
+    def set_context(self, context: TrainPipelineContext) -> None:
+        self._context = context
+
+    def get_context(self) -> TrainPipelineContext:
+        return self._context
 
 
 class BaseForward:
@@ -258,7 +391,6 @@ class PrefetchPipelinedForward(BaseForward):
 
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
-
         assert (
             self._name
             # pyre-ignore [16]
@@ -422,22 +554,8 @@ def _start_data_dist(
         # False means this argument is getting while getattr
         # and this info was done in the _rewrite_model by tracing the
         # entire model to get the arg_info_list
-        args = []
-        kwargs = {}
-        for arg_info in forward.args:
-            if arg_info.input_attrs:
-                arg = batch
-                for attr, is_getitem in zip(arg_info.input_attrs, arg_info.is_getitems):
-                    if is_getitem:
-                        arg = arg[attr]
-                    else:
-                        arg = getattr(arg, attr)
-                if arg_info.name:
-                    kwargs[arg_info.name] = arg
-                else:
-                    args.append(arg)
-            else:
-                args.append(None)
+        args, kwargs = _build_args_kwargs(batch, forward.args)
+
         # Start input distribution.
         module_ctx = module.create_context()
         if context.version == 0:
@@ -522,17 +640,32 @@ def _check_args_for_call_module(
     return False
 
 
+def _check_preproc_pipelineable(
+    module: torch.nn.Module,
+) -> bool:
+    for _, _ in module.named_parameters(recurse=True):
+        # Cannot have any trainable params for it to be pipelined
+        logger.warning(
+            f"Module {module} cannot be pipelined as it has trainable parameters"
+        )
+        return False
+    return True
+
+
 def _get_node_args_helper(
+    model: torch.nn.Module,
     # pyre-ignore
     arguments,
     num_found: int,
+    pipelined_preprocs: Set[PipelinedPreproc],
+    context: TrainPipelineContext,
+    pipeline_preproc: bool,
 ) -> Tuple[List[ArgInfo], int]:
     """
     Goes through the args/kwargs of a node and arranges them into a list of `ArgInfo`s.
     It also counts the number of (args + kwargs) found.
     """
-
-    arg_info_list = [ArgInfo([], [], None) for _ in range(len(arguments))]
+    arg_info_list = [ArgInfo([], [], [], None) for _ in range(len(arguments))]
     for arg, arg_info in zip(arguments, arg_info_list):
         if arg is None:
             num_found += 1
@@ -547,6 +680,13 @@ def _get_node_args_helper(
                     # pyre-ignore[16]
                     arg_info.input_attrs.insert(0, child_node.ph_key)
                     arg_info.is_getitems.insert(0, False)
+                    arg_info.preproc_modules.insert(0, None)
+                else:
+                    # no-op
+                    arg_info.input_attrs.insert(0, "")
+                    arg_info.is_getitems.insert(0, False)
+                    arg_info.preproc_modules.insert(0, None)
+
                 num_found += 1
                 break
             elif (
@@ -561,6 +701,7 @@ def _get_node_args_helper(
                 #  memory_format, Tensor, typing.Tuple[typing.Any, ...]]`.
                 arg_info.input_attrs.insert(0, child_node.args[1])
                 arg_info.is_getitems.insert(0, False)
+                arg_info.preproc_modules.insert(0, None)
                 arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
@@ -574,6 +715,7 @@ def _get_node_args_helper(
                 #  memory_format, Tensor, typing.Tuple[typing.Any, ...]]`.
                 arg_info.input_attrs.insert(0, child_node.args[1])
                 arg_info.is_getitems.insert(0, True)
+                arg_info.preproc_modules.insert(0, None)
                 arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
@@ -610,18 +752,109 @@ def _get_node_args_helper(
                     arg = child_node.kwargs["values"]
                 else:
                     arg = child_node.args[1]
+            elif child_node.op == "call_module":
+                preproc_module_fqn = str(child_node.target)
+                preproc_module = getattr(model, preproc_module_fqn, None)
+
+                if not pipeline_preproc:
+                    logger.warning(
+                        f"Found module {preproc_module} that potentially modifies KJ. Train pipeline initialized with `pipeline_preproc=False` (default), so we assume KJT input modification. To allow torchrec to check if this module can be safely pipelined, please set `pipeline_preproc=True`"
+                    )
+                    break
+
+                if not preproc_module:
+                    # Could not find such module, should not happen
+                    break
+
+                if isinstance(preproc_module, PipelinedPreproc):
+                    # Already did module swap and registered args, early exit
+                    arg_info.input_attrs.insert(0, "")  # dummy value
+                    arg_info.is_getitems.insert(0, False)
+                    pipelined_preprocs.add(preproc_module)
+                    arg_info.preproc_modules.insert(0, preproc_module)
+                    num_found += 1
+                    break
+
+                if not isinstance(preproc_module, torch.nn.Module):
+                    logger.warning(
+                        f"Expected preproc_module to be nn.Module but was {type(preproc_module)}"
+                    )
+                    break
+
+                # check if module is safe to pipeline i.e.no trainable param
+                if not _check_preproc_pipelineable(preproc_module):
+                    break
+
+                # For module calls, `self` isn't counted
+                total_num_args = len(child_node.args) + len(child_node.kwargs)
+                if total_num_args == 0:
+                    # module call without any args, assume KJT modified
+                    break
+
+                # recursive call to check that all inputs to this preproc module
+                # is either made of preproc module or non-modifying train batch input
+                # transformations
+                preproc_args, num_found_safe_preproc_args = _get_node_args(
+                    model, child_node, pipelined_preprocs, context, pipeline_preproc
+                )
+                if num_found_safe_preproc_args == total_num_args:
+                    logger.info(
+                        f"""Module {preproc_module} is a valid preproc module (no
+                        trainable params and inputs can be derived from train batch input
+                         via a series of either valid preproc modules or non-modifying
+                         transformations) and will be applied during sparse data dist 
+                         stage"""
+                    )
+
+                    pipelined_preproc_module = PipelinedPreproc(
+                        preproc_module,
+                        preproc_module_fqn,
+                        preproc_args,
+                        context,
+                    )
+
+                    # module swap
+                    setattr(model, preproc_module_fqn, pipelined_preproc_module)
+
+                    arg_info.input_attrs.insert(0, "")  # dummy value
+                    arg_info.is_getitems.insert(0, False)
+                    pipelined_preprocs.add(pipelined_preproc_module)
+                    arg_info.preproc_modules.insert(0, pipelined_preproc_module)
+
+                    num_found += 1
+
+                # we cannot set any other `arg` value here
+                # break to avoid infinite loop
+                break
             else:
                 break
     return arg_info_list, num_found
 
 
 def _get_node_args(
+    model: torch.nn.Module,
     node: Node,
+    pipelined_preprocs: Set[PipelinedPreproc],
+    context: TrainPipelineContext,
+    pipeline_preproc: bool,
 ) -> Tuple[List[ArgInfo], int]:
     num_found = 0
-    pos_arg_info_list, num_found = _get_node_args_helper(node.args, num_found)
+
+    pos_arg_info_list, num_found = _get_node_args_helper(
+        model,
+        node.args,
+        num_found,
+        pipelined_preprocs,
+        context,
+        pipeline_preproc,
+    )
     kwargs_arg_info_list, num_found = _get_node_args_helper(
-        node.kwargs.values(), num_found
+        model,
+        node.kwargs.values(),
+        num_found,
+        pipelined_preprocs,
+        context,
+        pipeline_preproc,
     )
 
     # Replace with proper names for kwargs
@@ -629,7 +862,8 @@ def _get_node_args(
         arg_info_list.name = name
 
     arg_info_list = pos_arg_info_list + kwargs_arg_info_list
-    return arg_info_list, num_found
+
+    return (arg_info_list, num_found)
 
 
 def _get_leaf_module_names_helper(
@@ -744,7 +978,13 @@ def _rewrite_model(  # noqa C901
     batch: Optional[In] = None,
     apply_jit: bool = False,
     pipelined_forward: Type[BaseForward] = PipelinedForward,
-) -> Tuple[List[ShardedModule], torch.nn.Module, List[Callable[..., Any]]]:
+    pipeline_preproc: bool = False,
+) -> Tuple[
+    List[ShardedModule],
+    torch.nn.Module,
+    List[Callable[..., Any]],
+    List[PipelinedPreproc],
+]:
     input_model = model
     # Get underlying nn.Module
     if isinstance(model, DistributedModelParallel):
@@ -781,12 +1021,21 @@ def _rewrite_model(  # noqa C901
     # i.e. don't have input transformations, i.e. rely only on 'builtins.getattr'.
     pipelined_forwards = []
     original_forwards = []
+
+    pipelined_preprocs: Set[PipelinedPreproc] = set()
+
     for node in graph.nodes:
         if node.op == "call_module" and node.target in sharded_modules:
             total_num_args = len(node.args) + len(node.kwargs)
             if total_num_args == 0:
                 continue
-            arg_info_list, num_found = _get_node_args(node)
+            arg_info_list, num_found = _get_node_args(
+                model,
+                node,
+                pipelined_preprocs,
+                context,
+                pipeline_preproc,
+            )
 
             if num_found == total_num_args:
                 logger.info(f"Module '{node.target}'' will be pipelined")
@@ -812,7 +1061,7 @@ def _rewrite_model(  # noqa C901
         if isinstance(input_model, DistributedModelParallel):
             input_model.module = graph_model
 
-    return pipelined_forwards, input_model, original_forwards
+    return pipelined_forwards, input_model, original_forwards, list(pipelined_preprocs)
 
 
 def _override_input_dist_forwards(
@@ -985,7 +1234,8 @@ class SparseDataDistUtil(Generic[In]):
     def start_sparse_data_dist(self, batch: In) -> In:
         if not self.initialized:
             # Step 1: Pipeline input dist in trec sharded modules
-            self._pipelined_modules, self.model, self._original_forwards = (
+            # TODO (yhshin): support preproc modules for `StagedTrainPipeline`
+            self._pipelined_modules, self.model, self._original_forwards, _ = (
                 _rewrite_model(
                     model=self.model,
                     context=self.context,

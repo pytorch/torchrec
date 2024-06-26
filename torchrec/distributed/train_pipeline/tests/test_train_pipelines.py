@@ -8,6 +8,7 @@
 # pyre-strict
 
 import copy
+
 import unittest
 from dataclasses import dataclass
 from functools import partial
@@ -32,6 +33,9 @@ from torchrec.distributed.sharding_plan import (
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
+    TestModelWithPreproc,
+    TestNegSamplingModule,
+    TestPositionWeightedPreprocModule,
     TestSparseNN,
 )
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
@@ -54,6 +58,7 @@ from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
     get_h2d_func,
     PipelinedForward,
+    PipelinedPreproc,
     PipelineStage,
     SparseDataDistUtil,
     StageOut,
@@ -818,6 +823,491 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
                 cpu_pred.size() == gpu_pred.size()
                 for cpu_pred, gpu_pred in zip(cpu_preds, gpu_preds)
             )
+        )
+
+
+class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.num_batches = 10
+        self.batch_size = 32
+        self.sharding_type = ShardingType.TABLE_WISE.value
+        self.kernel_type = EmbeddingComputeKernel.FUSED.value
+        self.fused_params = {}
+
+    def _check_output_equal(
+        self,
+        model: torch.nn.Module,
+        sharding_type: str,
+        max_feature_lengths: Optional[List[int]] = None,
+    ) -> Tuple[nn.Module, TrainPipelineSparseDist[ModelInput, torch.Tensor]]:
+        data = self._generate_data(
+            num_batches=self.num_batches,
+            batch_size=self.batch_size,
+            max_feature_lengths=max_feature_lengths,
+        )
+        dataloader = iter(data)
+
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, self.kernel_type, self.fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, self.kernel_type, self.fused_params
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            pipeline_preproc=True,
+        )
+
+        for i in range(self.num_batches):
+            batch = data[i]
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            pred_pipelined = pipeline.progress(dataloader)
+            self.assertTrue(torch.equal(pred, pred_pipelined))
+
+        return sharded_model_pipelined, pipeline
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_modules_share_preproc(self) -> None:
+        """
+        Setup: preproc module takes in input batch and returns modified
+        input batch. EBC and weighted EBC inside model sparse arch subsequently
+        uses this modified KJT.
+
+        Test case where single preproc module is shared by multiple sharded modules
+        and output of preproc module needs to be transformed in the SAME way
+        """
+
+        extra_input = ModelInput.generate(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            batch_size=self.batch_size,
+            world_size=1,
+            num_float_features=10,
+            randomize_indices=False,
+        )[0].to(self.device)
+
+        preproc_module = TestNegSamplingModule(
+            extra_input=extra_input,
+        )
+        model = self._setup_model(preproc_module=preproc_module)
+
+        pipelined_model, pipeline = self._check_output_equal(
+            model,
+            self.sharding_type,
+        )
+
+        # Check that both EC and EBC pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+        self.assertEqual(len(pipeline._pipelined_preprocs), 1)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_preproc_not_shared_with_arg_transform(self) -> None:
+        """
+        Test case where arguments to preproc module is some non-modifying
+        transformation of the input batch (no nested preproc modules) AND
+        arguments to multiple sharded modules can be derived from the output
+        of different preproc modules (i.e. preproc modules not shared).
+        """
+        model = TestModelWithPreproc(
+            tables=self.tables[:-1],  # ignore last table as preproc will remove
+            weighted_tables=self.weighted_tables[:-1],  # ignore last table
+            device=self.device,
+        )
+
+        pipelined_model, pipeline = self._check_output_equal(
+            model,
+            self.sharding_type,
+        )
+
+        # Check that both EBC and weighted EBC pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+
+        pipelined_ebc = pipeline._pipelined_modules[0]
+        pipelined_weighted_ebc = pipeline._pipelined_modules[1]
+
+        # Check pipelined args
+        for ebc in [pipelined_ebc, pipelined_weighted_ebc]:
+            self.assertEqual(len(ebc.forward._args), 1)
+            self.assertEqual(ebc.forward._args[0].input_attrs, ["", 0])
+            self.assertEqual(ebc.forward._args[0].is_getitems, [False, True])
+            self.assertEqual(len(ebc.forward._args[0].preproc_modules), 2)
+            self.assertIsInstance(
+                ebc.forward._args[0].preproc_modules[0], PipelinedPreproc
+            )
+            self.assertEqual(ebc.forward._args[0].preproc_modules[1], None)
+
+        self.assertEqual(
+            pipelined_ebc.forward._args[0].preproc_modules[0],
+            pipelined_model.module.preproc_nonweighted,
+        )
+        self.assertEqual(
+            pipelined_weighted_ebc.forward._args[0].preproc_modules[0],
+            pipelined_model.module.preproc_weighted,
+        )
+
+        # preproc args
+        self.assertEqual(len(pipeline._pipelined_preprocs), 2)
+        for i, input_attr_name in [(0, "idlist_features"), (1, "idscore_features")]:
+            preproc_mod = pipeline._pipelined_preprocs[i]
+            self.assertEqual(len(preproc_mod._args), 1)
+            self.assertEqual(preproc_mod._args[0].input_attrs, ["", input_attr_name])
+            self.assertEqual(preproc_mod._args[0].is_getitems, [False, False])
+            # no parent preproc module in FX graph
+            self.assertEqual(preproc_mod._args[0].preproc_modules, [None, None])
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_preproc_recursive(self) -> None:
+        """
+        Test recursive case where multiple arguments to preproc module is derived
+        from output of another preproc module. For example,
+
+        out_a, out_b, out_c = preproc_1(input)
+        out_d = preproc_2(out_a, out_b)
+        # do something with out_c
+        out = ebc(out_d)
+        """
+        extra_input = ModelInput.generate(
+            tables=self.tables[:-1],
+            weighted_tables=self.weighted_tables[:-1],
+            batch_size=self.batch_size,
+            world_size=1,
+            num_float_features=10,
+            randomize_indices=False,
+        )[0].to(self.device)
+
+        preproc_module = TestNegSamplingModule(
+            extra_input=extra_input,
+        )
+
+        model = TestModelWithPreproc(
+            tables=self.tables[:-1],
+            weighted_tables=self.weighted_tables[:-1],
+            device=self.device,
+            preproc_module=preproc_module,
+        )
+
+        pipelined_model, pipeline = self._check_output_equal(model, self.sharding_type)
+
+        # Check that both EBC and weighted EBC pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+
+        pipelined_ebc = pipeline._pipelined_modules[0]
+        pipelined_weighted_ebc = pipeline._pipelined_modules[1]
+
+        # Check pipelined args
+        for ebc in [pipelined_ebc, pipelined_weighted_ebc]:
+            self.assertEqual(len(ebc.forward._args), 1)
+            self.assertEqual(ebc.forward._args[0].input_attrs, ["", 0])
+            self.assertEqual(ebc.forward._args[0].is_getitems, [False, True])
+            self.assertEqual(len(ebc.forward._args[0].preproc_modules), 2)
+            self.assertIsInstance(
+                ebc.forward._args[0].preproc_modules[0], PipelinedPreproc
+            )
+            self.assertEqual(ebc.forward._args[0].preproc_modules[1], None)
+
+        self.assertEqual(
+            pipelined_ebc.forward._args[0].preproc_modules[0],
+            pipelined_model.module.preproc_nonweighted,
+        )
+        self.assertEqual(
+            pipelined_weighted_ebc.forward._args[0].preproc_modules[0],
+            pipelined_model.module.preproc_weighted,
+        )
+
+        # preproc args
+        self.assertEqual(len(pipeline._pipelined_preprocs), 3)
+
+        parent_preproc_mod = pipelined_model.module._preproc_module
+
+        for preproc_mod in pipeline._pipelined_preprocs:
+            if preproc_mod == pipelined_model.module.preproc_nonweighted:
+                self.assertEqual(len(preproc_mod._args), 1)
+                args = preproc_mod._args[0]
+                self.assertEqual(args.input_attrs, ["", "idlist_features"])
+                self.assertEqual(args.is_getitems, [False, False])
+                self.assertEqual(len(args.preproc_modules), 2)
+                self.assertEqual(
+                    args.preproc_modules[0],
+                    parent_preproc_mod,
+                )
+                self.assertEqual(args.preproc_modules[1], None)
+            elif preproc_mod == pipelined_model.module.preproc_weighted:
+                self.assertEqual(len(preproc_mod._args), 1)
+                args = preproc_mod._args[0]
+                self.assertEqual(args.input_attrs, ["", "idscore_features"])
+                self.assertEqual(args.is_getitems, [False, False])
+                self.assertEqual(len(args.preproc_modules), 2)
+                self.assertEqual(
+                    args.preproc_modules[0],
+                    parent_preproc_mod,
+                )
+                self.assertEqual(args.preproc_modules[1], None)
+            elif preproc_mod == parent_preproc_mod:
+                self.assertEqual(len(preproc_mod._args), 1)
+                args = preproc_mod._args[0]
+                self.assertEqual(args.input_attrs, [""])
+                self.assertEqual(args.is_getitems, [False])
+                self.assertEqual(args.preproc_modules, [None])
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_invalid_preproc_inputs_has_trainable_params(self) -> None:
+        """
+        Test case where preproc module sits in front of sharded module but this cannot be
+        safely pipelined as it contains trainable params in its child modules
+        """
+        max_feature_lengths = {
+            "feature_0": 10,
+            "feature_1": 10,
+            "feature_2": 10,
+            "feature_3": 10,
+        }
+
+        preproc_module = TestPositionWeightedPreprocModule(
+            max_feature_lengths=max_feature_lengths,
+            device=self.device,
+        )
+
+        model = self._setup_model(preproc_module=preproc_module)
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, self.sharding_type, self.kernel_type, self.fused_params
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            pipeline_preproc=True,
+        )
+
+        data = self._generate_data(
+            num_batches=self.num_batches,
+            batch_size=self.batch_size,
+            max_feature_lengths=list(max_feature_lengths.values()),
+        )
+        dataloader = iter(data)
+
+        pipeline.progress(dataloader)
+
+        # Check that no modules are pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 0)
+        self.assertEqual(len(pipeline._pipelined_preprocs), 0)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_invalid_preproc_trainable_params_recursive(
+        self,
+    ) -> None:
+        max_feature_lengths = {
+            "feature_0": 10,
+            "feature_1": 10,
+            "feature_2": 10,
+            "feature_3": 10,
+        }
+
+        preproc_module = TestPositionWeightedPreprocModule(
+            max_feature_lengths=max_feature_lengths,
+            device=self.device,
+        )
+
+        model = TestModelWithPreproc(
+            tables=self.tables[:-1],
+            weighted_tables=self.weighted_tables[:-1],
+            device=self.device,
+            preproc_module=preproc_module,
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, self.sharding_type, self.kernel_type, self.fused_params
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            pipeline_preproc=True,
+        )
+
+        data = self._generate_data(
+            num_batches=self.num_batches,
+            batch_size=self.batch_size,
+            max_feature_lengths=list(max_feature_lengths.values()),
+        )
+        dataloader = iter(data)
+        pipeline.progress(dataloader)
+
+        # Check that no modules are pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 0)
+        self.assertEqual(len(pipeline._pipelined_preprocs), 0)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_invalid_preproc_inputs_modify_kjt_recursive(self) -> None:
+        """
+        Test case where preproc module cannot be pipelined because at least one of args
+        is derived from output of another preproc module whose arg(s) cannot be derived
+        from input batch (i.e. it has modifying transformations)
+        """
+        model = TestModelWithPreproc(
+            tables=self.tables[:-1],
+            weighted_tables=self.weighted_tables[:-1],
+            device=self.device,
+            preproc_module=None,
+            run_preproc_inline=True,  # run preproc inline, outside a module
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, self.sharding_type, self.kernel_type, self.fused_params
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            pipeline_preproc=True,
+        )
+
+        data = self._generate_data(
+            num_batches=self.num_batches,
+            batch_size=self.batch_size,
+        )
+        dataloader = iter(data)
+        pipeline.progress(dataloader)
+
+        # Check that only weighted EBC is pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 1)
+        self.assertEqual(len(pipeline._pipelined_preprocs), 1)
+        self.assertEqual(pipeline._pipelined_modules[0]._is_weighted, True)
+        self.assertEqual(
+            pipeline._pipelined_preprocs[0],
+            sharded_model_pipelined.module.preproc_weighted,
+        )
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_preproc_fwd_values_cached(self) -> None:
+        """
+        Test to check that during model forward, the preproc module pipelined uses the
+        saved result from previous iteration(s) and doesn't perform duplicate work
+        check that fqns for ALL preproc modules are populated in the right train pipeline
+        context.
+        """
+        extra_input = ModelInput.generate(
+            tables=self.tables[:-1],
+            weighted_tables=self.weighted_tables[:-1],
+            batch_size=self.batch_size,
+            world_size=1,
+            num_float_features=10,
+            randomize_indices=False,
+        )[0].to(self.device)
+
+        preproc_module = TestNegSamplingModule(
+            extra_input=extra_input,
+        )
+
+        model = TestModelWithPreproc(
+            tables=self.tables[:-1],
+            weighted_tables=self.weighted_tables[:-1],
+            device=self.device,
+            preproc_module=preproc_module,
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, self.sharding_type, self.kernel_type, self.fused_params
+        )
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            pipeline_preproc=True,
+        )
+
+        data = self._generate_data(
+            num_batches=self.num_batches,
+            batch_size=self.batch_size,
+        )
+        dataloader = iter(data)
+
+        pipeline.progress(dataloader)
+
+        # This was second context that was appended
+        current_context = pipeline.contexts[0]
+        cached_results = current_context.preproc_fwd_results
+        self.assertEqual(
+            list(cached_results.keys()),
+            ["_preproc_module", "preproc_nonweighted", "preproc_weighted"],
+        )
+
+        # next context cached results should be empty
+        next_context = pipeline.contexts[1]
+        next_cached_results = next_context.preproc_fwd_results
+        self.assertEqual(len(next_cached_results), 0)
+
+        # After progress, next_context should be populated
+        pipeline.progress(dataloader)
+        self.assertEqual(
+            list(next_cached_results.keys()),
+            ["_preproc_module", "preproc_nonweighted", "preproc_weighted"],
         )
 
 

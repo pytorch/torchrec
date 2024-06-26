@@ -45,6 +45,7 @@ from torchrec.distributed.train_pipeline.utils import (
     In,
     Out,
     PipelinedForward,
+    PipelinedPreproc,
     PipelineStage,
     PrefetchPipelinedForward,
     PrefetchTrainPipelineContext,
@@ -301,6 +302,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         execute_all_batches: bool = True,
         apply_jit: bool = False,
         context_type: Type[TrainPipelineContext] = TrainPipelineContext,
+        pipeline_preproc: bool = False,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -342,10 +344,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         ] = []
 
         self._model_attached = True
+        self._pipeline_preproc = pipeline_preproc
 
         self._next_index: int = 0
         self.contexts: Deque[TrainPipelineContext] = deque()
         self._pipelined_modules: List[ShardedModule] = []
+        self._pipelined_preprocs: List[PipelinedPreproc] = []
         self.batches: Deque[Optional[In]] = deque()
         self._dataloader_iter: Optional[Iterator[In]] = None
         self._dataloader_exhausted: bool = False
@@ -396,6 +400,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     def _set_module_context(self, context: TrainPipelineContext) -> None:
         for module in self._pipelined_modules:
             module.forward.set_context(context)
+
+        for preproc_module in self._pipelined_preprocs:
+            # This ensures that next iter model fwd uses cached results
+            preproc_module.set_context(context)
 
     def enqueue_batch(self, dataloader_iter: Iterator[In]) -> bool:
         batch, context = self.copy_batch_to_gpu(dataloader_iter)
@@ -494,13 +502,19 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         context: TrainPipelineContext,
         pipelined_forward: Type[PipelinedForward] = PipelinedForward,
     ) -> None:
-        self._pipelined_modules, self._model, self._original_forwards = _rewrite_model(
+        (
+            self._pipelined_modules,
+            self._model,
+            self._original_forwards,
+            self._pipelined_preprocs,
+        ) = _rewrite_model(
             model=self._model,
             context=context,
             dist_stream=self._data_dist_stream,
             batch=batch,
             apply_jit=self._apply_jit,
             pipelined_forward=pipelined_forward,
+            pipeline_preproc=self._pipeline_preproc,
         )
         # initializes input dist, so we can override input dist forwards
         self.start_sparse_data_dist(batch, context)
@@ -576,8 +590,21 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             return
         with record_function(f"## start_sparse_data_dist {context.index} ##"):
             with self._stream_context(self._data_dist_stream):
+                if context.event is not None:
+                    context.event.wait()
                 _wait_for_batch(batch, self._memcpy_stream)
+
+                original_contexts = [p.get_context() for p in self._pipelined_preprocs]
+
+                # Temporarily set context for next iter to populate cache
+                for preproc_mod in self._pipelined_preprocs:
+                    preproc_mod.set_context(context)
+
                 _start_data_dist(self._pipelined_modules, batch, context)
+
+                # Restore context for model fwd
+                for module, context in zip(self._pipelined_preprocs, original_contexts):
+                    module.set_context(context)
 
     def wait_sparse_data_dist(self, context: TrainPipelineContext) -> None:
         """
@@ -680,6 +707,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         apply_jit: bool = False,
         start_batch: int = 900,
         stash_gradients: bool = False,
+        pipeline_preproc: bool = False,
     ) -> None:
         super().__init__(
             model=model,
@@ -688,6 +716,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             execute_all_batches=execute_all_batches,
             apply_jit=apply_jit,
             context_type=EmbeddingTrainPipelineContext,
+            pipeline_preproc=pipeline_preproc,
         )
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
@@ -853,14 +882,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         """
         Waits for batch to finish getting copied to GPU, then starts the input dist.  This is Event based version.
         """
-        if batch is None:
-            return
-        with record_function(f"## start_sparse_data_dist {context.index} ##"):
-            with self._stream_context(self._data_dist_stream):
-                _wait_for_event(batch, self._device, context.event)
-                _start_data_dist(self._pipelined_modules, batch, context)
-                context.event = torch.get_device_module(self._device).Event()
-                context.event.record()
+        super().start_sparse_data_dist(batch, context)
+        context.event = torch.get_device_module(self._device).Event()
+        context.event.record()
 
     def start_embedding_lookup(
         self,
