@@ -20,6 +20,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Tuple,
     Type,
     TypeVar,
     Union,
@@ -577,6 +578,31 @@ class CacheParams:
 
 
 @dataclass
+class KeyValueParams:
+    """
+    Params for SSD TBE aka SSDTableBatchedEmbeddingBags.
+
+    Attributes:
+        ssd_storage_directory (Optional[str]): Directory for SSD. If we want directory
+            to be f"data00_nvidia{local_rank}", pass in "data00_nvidia@local_rank".
+        ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
+            and ports. Example: (("::1", 2000), ("::1", 2001), ("::1", 2002)).
+            Reason for using tuple is we want it hashable.
+    """
+
+    ssd_storage_directory: Optional[str] = None
+    ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.ssd_storage_directory,
+                self.ps_hosts,
+            )
+        )
+
+
+@dataclass
 class ParameterSharding:
     """
         Describes the sharding of the parameter.
@@ -591,6 +617,7 @@ class ParameterSharding:
         stochastic_rounding (Optional[bool]): whether to use stochastic rounding.
         bounds_check_mode (Optional[BoundsCheckMode]): bounds check mode.
         output_dtype (Optional[DataType]): output dtype.
+        key_value_params (Optional[KeyValueParams]): key value params for SSD TBE or PS.
 
     NOTE:
       ShardingType.TABLE_WISE - rank where this embedding is placed
@@ -610,6 +637,7 @@ class ParameterSharding:
     stochastic_rounding: Optional[bool] = None
     bounds_check_mode: Optional[BoundsCheckMode] = None
     output_dtype: Optional[DataType] = None
+    key_value_params: Optional[KeyValueParams] = None
 
 
 class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterSharding]):

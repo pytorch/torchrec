@@ -31,6 +31,7 @@ from torchrec.distributed.sharding_plan import calculate_shard_sizes_and_offsets
 from torchrec.distributed.types import (
     BoundsCheckMode,
     CacheParams,
+    KeyValueParams,
     ModuleSharder,
     ShardingType,
 )
@@ -154,6 +155,7 @@ class EmbeddingEnumerator(Enumerator):
                     feature_names,
                     output_dtype,
                     device_group,
+                    key_value_params,
                 ) = _extract_constraints_for_param(self._constraints, name)
 
                 # skip for other device groups
@@ -209,6 +211,7 @@ class EmbeddingEnumerator(Enumerator):
                                 is_pooled=is_pooled,
                                 feature_names=feature_names,
                                 output_dtype=output_dtype,
+                                key_value_params=key_value_params,
                             )
                         )
                 if not sharding_options_per_table:
@@ -315,6 +318,7 @@ def _extract_constraints_for_param(
     Optional[List[str]],
     Optional[DataType],
     Optional[str],
+    Optional[KeyValueParams],
 ]:
     input_lengths = [POOLING_FACTOR]
     col_wise_shard_dim = None
@@ -325,6 +329,7 @@ def _extract_constraints_for_param(
     feature_names = None
     output_dtype = None
     device_group = None
+    key_value_params = None
 
     if constraints and constraints.get(name):
         input_lengths = constraints[name].pooling_factors
@@ -336,6 +341,7 @@ def _extract_constraints_for_param(
         feature_names = constraints[name].feature_names
         output_dtype = constraints[name].output_dtype
         device_group = constraints[name].device_group
+        key_value_params = constraints[name].key_value_params
 
     return (
         input_lengths,
@@ -347,6 +353,7 @@ def _extract_constraints_for_param(
         feature_names,
         output_dtype,
         device_group,
+        key_value_params,
     )
 
 
