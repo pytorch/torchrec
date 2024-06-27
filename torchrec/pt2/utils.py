@@ -92,3 +92,62 @@ def default_pipeline_input_transformer(inp):
             if isinstance(attr, KeyedJaggedTensor):
                 setattr(inp, attr_name, kjt_for_pt2_tracing(attr))
     return inp
+
+
+def register_fake_classes() -> None:
+    @torch._library.register_fake_class("fbgemm::AtomicCounter")
+    class FakeAtomicCounter:
+        def __init__(self, counter_):
+            self.counter_ = counter_
+
+        @classmethod
+        def __obj_unflatten__(cls, flat_obj):
+            return cls(**dict(flat_obj))
+
+        def increment(self) -> int:
+            self.counter_ += 1
+            return self.counter_
+
+        def decrement(self) -> int:
+            self.counter_ -= 1
+            return self.counter_
+
+        def reset(self):
+            self.counter_ = 0
+
+        def get(self) -> int:
+            return self.counter_
+
+        def set(self, val):
+            self.counter_ = val
+
+    @torch._library.register_fake_class("fbgemm::TensorQueue")
+    class FakeTensorQueue:
+        def __init__(self, queue, init_tensor):
+            self.queue = queue
+            self.init_tensor = init_tensor
+
+        @classmethod
+        def __obj_unflatten__(cls, flattened_ctx):
+            return cls(**dict(flattened_ctx))
+
+        def push(self, x):
+            self.queue.append(x)
+
+        def pop(self):
+            if len(self.queue) == 0:
+                return self.init_tensor
+            return self.queue.pop(0)
+
+        def top(self):
+            if len(self.queue) == 0:
+                return self.init_tensor
+            return self.queue[0]
+
+        def size(self):
+            return len(self.queue)
+
+
+def deregister_fake_classes() -> None:
+    torch._library.fake_class_registry.deregister_fake_class("fbgemm::AtomicCounter")
+    torch._library.fake_class_registry.deregister_fake_class("fbgemm::TensorQueue")
