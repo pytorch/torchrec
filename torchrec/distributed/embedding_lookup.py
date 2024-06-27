@@ -107,9 +107,10 @@ def _load_state_dict(
                         dst_local_shard.tensor.detach().copy_(src_local_shard.tensor)
                 elif isinstance(dst_param, DTensor):
                     assert isinstance(src_param, DTensor)
-                    assert len(dst_param.to_local().local_chunks) == len(  # pyre-ignore[16]
-                        src_param.to_local().local_chunks
-                    )
+                    assert len(
+                        # pyre-ignore[16]
+                        dst_param.to_local().local_chunks
+                    ) == len(src_param.to_local().local_chunks)
                     for i, (dst_local_shard, src_local_shard) in enumerate(
                         zip(
                             dst_param.to_local().local_shards(),  # pyre-ignore[16]
