@@ -35,6 +35,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
 from torch.autograd.profiler import record_function
 from torch.distributed.device_mesh import DeviceMesh, init_device_mesh
 from torch.distributed.distributed_c10d import _get_pg_default_device
+from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import DataType, ModuleNoCopyMixin
 
@@ -324,6 +325,29 @@ class _LazyAwaitableMeta(
     pass
 
 
+# PT2 compilable copy of torch.fx.node.map_aggregate:
+# Using default list and dict instead of immutable_list, immutable_dict (not supported by dynamo yet)
+# fns under torch.fx.node package tracing is skipped by dynamo, placing it in torchrec
+# pyre-ignore
+def _map_aggregate(a, fn):
+    if isinstance(a, tuple):
+        t = tuple(_map_aggregate(elem, fn) for elem in a)
+        # Support NamedTuple (if it has `_fields`) by repacking into original type.
+        return t if not hasattr(a, "_fields") else type(a)(*t)
+    elif isinstance(a, list):
+        return list(_map_aggregate(elem, fn) for elem in a)
+    elif isinstance(a, dict):
+        return dict((k, _map_aggregate(v, fn)) for k, v in a.items())
+    elif isinstance(a, slice):
+        return slice(
+            _map_aggregate(a.start, fn),
+            _map_aggregate(a.stop, fn),
+            _map_aggregate(a.step, fn),
+        )
+    else:
+        return fn(a)
+
+
 class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
     """
     The LazyAwaitable type which exposes a `wait()` API, concrete types
@@ -389,8 +413,14 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
 
         # wait() on all LazyAwaitable args/kwargs and replace
         # them with the resulting value.
-        new_args = torch.fx.node.map_aggregate(args, LazyAwaitable._wait_async)
-        new_kwargs = torch.fx.node.map_aggregate(kwargs, LazyAwaitable._wait_async)
+        if is_torchdynamo_compiling():
+            # Using pt2 compatible _map_aggregate only for compiled path to not break eager BC.
+            # TODO: Use one path after testing in eager and compile or if torch.fx.node.map_aggregate becomes pt2 compat.
+            new_args = _map_aggregate(args, LazyAwaitable._wait_async)
+            new_kwargs = _map_aggregate(kwargs, LazyAwaitable._wait_async)
+        else:
+            new_args = torch.fx.node.map_aggregate(args, LazyAwaitable._wait_async)
+            new_kwargs = torch.fx.node.map_aggregate(kwargs, LazyAwaitable._wait_async)
 
         return func(*new_args, **new_kwargs)
 

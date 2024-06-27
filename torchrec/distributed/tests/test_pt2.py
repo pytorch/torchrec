@@ -32,6 +32,7 @@ from torchrec.distributed.test_utils.infer_utils import (
     KJTInputExportWrapperWithStrides,
     TestQuantFPEBCSharder,
 )
+from torchrec.distributed.types import LazyAwaitable
 from torchrec.pt2.utils import kjt_for_pt2_tracing
 
 try:
@@ -1030,3 +1031,26 @@ class TestPt2(unittest.TestCase):
             compile_weights_diff = get_weights(m_compile) - orig_compile_weights
 
             assert_close(eager_weights_diff, compile_weights_diff)
+
+    def test_lazy_awaitable_compile(self) -> None:
+        class TestLA(LazyAwaitable):
+
+            def __init__(self, shape) -> None:
+                super().__init__()
+                self.shape = shape
+
+            def _wait_impl(self) -> torch.Tensor:
+                ret = torch.rand(self.shape, requires_grad=False)
+                return ret
+
+        def fn(c):
+            a = TestLA((6, 2))
+            b = TestLA((2, 4))
+            LazyAwaitable._wait_async(a)
+            m = torch.mm(a, b)
+            return m + c
+
+        fn(torch.randn(6, 4))
+
+        with dynamo_skipfiles_allow("torchrec"):
+            torch.compile(fn, backend="inductor", fullgraph="true")(torch.randn(6, 4))
