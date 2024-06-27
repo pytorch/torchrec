@@ -21,7 +21,7 @@ from torchrec.distributed.test_utils.multi_process import (
 from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 
-def test_all_gather_into_tensor(
+def all_gather_into_tensor(
     rank: int,
     world_size: int,
     backend: str,
@@ -44,7 +44,7 @@ def test_all_gather_into_tensor(
         )
 
 
-def test_all_gather(
+def all_gather(
     rank: int,
     world_size: int,
     backend: str,
@@ -73,7 +73,7 @@ def test_all_gather(
             )
 
 
-def test_all_gather_object(
+def all_gather_object(
     rank: int,
     world_size: int,
     backend: str,
@@ -122,7 +122,7 @@ class LocalShardsWrapperDistributedTest(MultiProcessTestBase):
         ls_1 = LocalShardsWrapper(local_shards=shards_1, local_offsets=offsets)
 
         self._run_multi_process_test(
-            callable=test_all_gather_into_tensor,
+            callable=all_gather_into_tensor,
             shards_wrapper=[
                 ls_0,
                 ls_1,
@@ -151,7 +151,7 @@ class LocalShardsWrapperDistributedTest(MultiProcessTestBase):
         ls_1 = LocalShardsWrapper(local_shards=shards_1, local_offsets=offsets)
 
         self._run_multi_process_test(
-            callable=test_all_gather,
+            callable=all_gather,
             shards_wrapper=[
                 ls_0,
                 ls_1,
@@ -180,7 +180,7 @@ class LocalShardsWrapperDistributedTest(MultiProcessTestBase):
         ls_1 = LocalShardsWrapper(local_shards=shards_1, local_offsets=offsets)
 
         self._run_multi_process_test(
-            callable=test_all_gather_object,
+            callable=all_gather_object,
             shards_wrapper=[
                 ls_0,
                 ls_1,
