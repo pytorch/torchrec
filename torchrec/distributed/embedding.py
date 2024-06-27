@@ -735,8 +735,14 @@ class ShardedEmbeddingCollection(
                             table_name
                         ]
                         local_shards_wrapper = v._local_tensor
-                        shards_wrapper["local_tensors"].extend(local_shards_wrapper.local_shards())  # pyre-ignore[16]
-                        shards_wrapper["local_offsets"].extend(local_shards_wrapper.local_offsets())  # pyre-ignore[16]
+                        shards_wrapper["local_tensors"].extend(
+                            # pyre-ignore[16]
+                            local_shards_wrapper.local_shards()
+                        )
+                        shards_wrapper["local_offsets"].extend(
+                            # pyre-ignore[16]
+                            local_shards_wrapper.local_offsets()
+                        )
                         shards_wrapper["global_size"] = v.size()
                         shards_wrapper["global_stride"] = v.stride()
                         shards_wrapper["placements"] = v.placements
