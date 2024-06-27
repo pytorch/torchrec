@@ -237,7 +237,7 @@ def copy_state_dict(
                 local_shard.tensor.copy_(t)
         elif isinstance(tensor, DTensor):
             shard_offsets = tensor.to_local().local_offsets()  # pyre-ignore[16]
-            for i, local_shard in enumerate(tensor.to_local().local_shards()):  # pyre-ignore[16]
+            for i, local_shard in enumerate(tensor.to_local().local_shards()):
                 assert global_tensor.ndim == local_shard.ndim
                 t = global_tensor.detach()
                 local_shape = local_shard.shape
