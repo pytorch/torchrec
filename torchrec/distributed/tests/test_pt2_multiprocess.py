@@ -109,7 +109,7 @@ class _ConvertToVariableBatch(Enum):
 
 @dataclass
 class _TestConfig:
-    n_extra_numerics_checks_inputs: int = 2
+    n_extra_numerics_checks_inputs: int = 1
 
 
 class EBCSharderFixedShardingType(EmbeddingBagCollectionSharder):
@@ -427,6 +427,10 @@ def _test_compile_rank_fn(
         with dynamo_skipfiles_allow("torchrec"):
             torch._dynamo.config.capture_scalar_outputs = True
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
+            torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = (
+                True
+            )
+
             opt_fn = torch.compile(
                 dmp_compile,
                 backend=torch_compile_backend,
@@ -515,8 +519,7 @@ class TestPt2Train(MultiProcessTestBase):
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.TRUE,
                     "inductor",
-                    # TODO: Debug data dependent numerics checks failures on subsequent inputs for VB backward
-                    _TestConfig(n_extra_numerics_checks_inputs=0),
+                    _TestConfig(),
                 ),
                 (
                     _ModelType.EBC,
@@ -524,14 +527,14 @@ class TestPt2Train(MultiProcessTestBase):
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.TRUE,
                     "inductor",
-                    # TODO: Debug data dependent numerics checks failures on subsequent inputs for VB backward
-                    _TestConfig(n_extra_numerics_checks_inputs=0),
+                    _TestConfig(),
                 ),
                 (
                     _ModelType.EBC,
                     ShardingType.TABLE_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.FALSE,
+                    # TODO: Revert to "inductor" once D59031938 is relanded, waits sigrid predictor push on ~7/2/2024 for fbgemm op to be in (D58956327)
                     "eager",
                     _TestConfig(),
                 ),
@@ -540,6 +543,7 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.COLUMN_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.FALSE,
+                    # TODO: Revert to "inductor" once D59031938 is relanded, waits sigrid predictor push on ~7/2/2024 for fbgemm op to be in (D58956327)
                     "eager",
                     _TestConfig(),
                 ),
