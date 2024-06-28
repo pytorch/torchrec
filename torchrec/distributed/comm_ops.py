@@ -395,58 +395,6 @@ def alltoall_pooled(
     return myreq
 
 
-@torch.library.custom_op("torchrec::_split_1d_cat_2d", mutates_args=())
-def _split_1d_cat_2d_impl(t: torch.Tensor, dim0: int, dim1s: List[int]) -> torch.Tensor:
-    torch._check_is_size(dim0)
-    [torch._check_is_size(dim1) for dim1 in dim1s]
-    splits: List[torch.Tensor] = t.split([dim0 * dim1 for dim1 in dim1s])
-    return torch.cat(
-        [s.reshape(dim0, dim1) for s, dim1 in zip(splits, dim1s)],
-        dim=1,
-    )
-
-
-@torch.library.register_fake("torchrec::_split_1d_cat_2d")
-def _split_1d_cat_2d_impl_abstract(
-    t: torch.Tensor, dim0: int, dim1s: List[int]
-) -> torch.Tensor:
-    return t.new_empty([dim0, sum(dim1s)])
-
-
-@torch.library.custom_op("torchrec::_split_1d_cat_2d_backward_impl", mutates_args=())
-def _split_1d_cat_2d_backward_impl(
-    grad: torch.Tensor, dim1s: List[int]
-) -> torch.Tensor:
-    splits = grad.split(dim1s, dim=1)
-    return torch.cat([s.reshape(-1) for s in splits], dim=0)
-
-
-@torch.library.register_fake("torchrec::_split_1d_cat_2d_backward_impl")
-def _split_1d_cat_2d_backward_impl_fake(
-    grad: torch.Tensor, dim1s: List[int]
-) -> torch.Tensor:
-    return grad.new_empty([grad.numel()])
-
-
-# pyre-ignore
-def _split_1d_cat_2d_backward(ctx, grad):
-    ret = torch.ops.torchrec._split_1d_cat_2d_backward_impl(grad, ctx.dim1s)
-    return ret, None, None
-
-
-# pyre-ignore
-def _split_1d_cat_2d_setup_context(ctx, inputs, output):
-    (x, dim0, dim1s) = inputs
-    ctx.dim1s = dim1s
-
-
-torch.library.register_autograd(
-    "torchrec::_split_1d_cat_2d",
-    _split_1d_cat_2d_backward,
-    setup_context=_split_1d_cat_2d_setup_context,
-)
-
-
 def pg_name(pg: dist.ProcessGroup) -> str:
     return dist._functional_collectives._resolve_group_name(pg, "")
 
@@ -507,14 +455,6 @@ def all2all_pooled_sync(
         sharded_output_embeddings = codecs.forward.decode(
             sharded_output_embeddings,
             qcomm_ctx,
-        )
-
-    if is_torchdynamo_compiling():
-        # Default implementation fails on backward with unbacked symints in full Ads model compilation.
-        # This is workaround to do desired split-cat under tracing in custom_op.
-        # TODO: Remove when pt2 symbolic shapes default split - cat can be compiled forward and backward with unbacked symints
-        return torch.ops.torchrec._split_1d_cat_2d(
-            sharded_output_embeddings, B_local, dim_sum_per_rank
         )
 
     outputs_by_rank = sharded_output_embeddings.split(output_split_sizes)

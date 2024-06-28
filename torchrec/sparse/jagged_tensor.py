@@ -1144,6 +1144,42 @@ def _merge_weights_or_none(
     return torch.cat([a_weights, b_weights], dim=0)
 
 
+@torch.fx.wrap
+def _strides_from_kjt(
+    kjt: "KeyedJaggedTensor",
+) -> Tuple[Optional[int], Optional[List[List[int]]]]:
+    stride, stride_per_key_per_rank = (
+        (None, kjt.stride_per_key_per_rank())
+        if kjt.variable_stride_per_key()
+        else (kjt.stride(), None)
+    )
+
+    return stride, stride_per_key_per_rank
+
+
+@torch.fx.wrap
+def _kjt_empty_like(kjt: "KeyedJaggedTensor") -> "KeyedJaggedTensor":
+    # empty like function fx wrapped, also avoids device hardcoding
+    stride, stride_per_key_per_rank = (
+        (None, kjt.stride_per_key_per_rank())
+        if kjt.variable_stride_per_key()
+        else (kjt.stride(), None)
+    )
+
+    return KeyedJaggedTensor(
+        keys=[],
+        values=torch.empty(0, device=kjt.device(), dtype=kjt.values().dtype),
+        weights=(
+            None
+            if kjt.weights_or_none() is None
+            else torch.empty(0, device=kjt.device(), dtype=kjt.weights().dtype)
+        ),
+        lengths=torch.empty(0, device=kjt.device(), dtype=kjt.lengths().dtype),
+        stride=stride,
+        stride_per_key_per_rank=stride_per_key_per_rank,
+    )
+
+
 def _sum_by_splits(input_list: List[int], splits: List[int]) -> List[int]:
     return [
         sum(input_list[sum(splits[:i]) : sum(splits[:i]) + n])
@@ -1549,23 +1585,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
     @staticmethod
     def empty_like(kjt: "KeyedJaggedTensor") -> "KeyedJaggedTensor":
-        stride, stride_per_key_per_rank = (
-            (None, kjt.stride_per_key_per_rank())
-            if kjt.variable_stride_per_key()
-            else (kjt.stride(), None)
-        )
-        return KeyedJaggedTensor(
-            keys=[],
-            values=torch.empty(0, device=kjt.device(), dtype=kjt.values().dtype),
-            weights=(
-                None
-                if kjt.weights_or_none() is None
-                else torch.empty(0, device=kjt.device(), dtype=kjt.weights().dtype)
-            ),
-            lengths=torch.empty(0, device=kjt.device(), dtype=kjt.lengths().dtype),
-            stride=stride,
-            stride_per_key_per_rank=stride_per_key_per_rank,
-        )
+        return _kjt_empty_like(kjt)
 
     @staticmethod
     def from_jt_dict(jt_dict: Dict[str, JaggedTensor]) -> "KeyedJaggedTensor":

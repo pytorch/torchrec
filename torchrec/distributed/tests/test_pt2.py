@@ -32,7 +32,11 @@ from torchrec.distributed.test_utils.infer_utils import (
     KJTInputExportWrapperWithStrides,
     TestQuantFPEBCSharder,
 )
-from torchrec.pt2.utils import kjt_for_pt2_tracing
+from torchrec.pt2.utils import (
+    deregister_fake_classes,
+    kjt_for_pt2_tracing,
+    register_fake_classes,
+)
 
 try:
     # pyre-ignore
@@ -262,64 +266,10 @@ def _test_compile_fwd_bwd(
 class TestPt2(unittest.TestCase):
     def setUp(self):
         super().setUp()
-
-        @torch._library.register_fake_class("fbgemm::AtomicCounter")
-        class FakeAtomicCounter:
-            def __init__(self, counter_):
-                self.counter_ = counter_
-
-            @classmethod
-            def __obj_unflatten__(cls, flat_obj):
-                return cls(**dict(flat_obj))
-
-            def increment(self) -> int:
-                self.counter_ += 1
-                return self.counter_
-
-            def decrement(self) -> int:
-                self.counter_ -= 1
-                return self.counter_
-
-            def reset(self):
-                self.counter_ = 0
-
-            def get(self) -> int:
-                return self.counter_
-
-            def set(self, val):
-                self.counter_ = val
-
-        @torch._library.register_fake_class("fbgemm::TensorQueue")
-        class FakeTensorQueue:
-            def __init__(self, queue, init_tensor):
-                self.queue = queue
-                self.init_tensor = init_tensor
-
-            @classmethod
-            def __obj_unflatten__(cls, flattened_ctx):
-                return cls(**dict(flattened_ctx))
-
-            def push(self, x):
-                self.queue.append(x)
-
-            def pop(self):
-                if len(self.queue) == 0:
-                    return self.init_tensor
-                return self.queue.pop(0)
-
-            def top(self):
-                if len(self.queue) == 0:
-                    return self.init_tensor
-                return self.queue[0]
-
-            def size(self):
-                return len(self.queue)
+        register_fake_classes()
 
     def tearDown(self):
-        torch._library.fake_class_registry.deregister_fake_class(
-            "fbgemm::AtomicCounter"
-        )
-        torch._library.fake_class_registry.deregister_fake_class("fbgemm::TensorQueue")
+        deregister_fake_classes()
         super().tearDown()
 
     def _test_kjt_input_module(
