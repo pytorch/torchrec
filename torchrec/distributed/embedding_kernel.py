@@ -77,7 +77,8 @@ def get_state_dict(
     key_to_local_shards: Dict[str, List[Shard]] = defaultdict(list)
     key_to_global_metadata: Dict[str, ShardedTensorMetadata] = {}
     key_to_dtensor_metadata: Dict[str, DTensorMetadata] = {}
-    key_to_local_tensor_shards: Dict[str, List[Any]] = defaultdict(list)  # pyre-ignore[33]
+    # pyre-ignore[33]
+    key_to_local_tensor_shards: Dict[str, List[Any]] = defaultdict(list)
 
     def get_key_from_embedding_table(embedding_table: ShardedEmbeddingTable) -> str:
         return prefix + f"{embedding_table.name}.weight"

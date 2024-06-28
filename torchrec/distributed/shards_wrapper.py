@@ -24,7 +24,7 @@ from torch.distributed.checkpoint.planner import (
     WriteItemType,
 )
 
-aten = torch.ops.aten  # pyre-ignore[5]: Globally accessible variable `aten` has no type specified.
+aten = torch.ops.aten  # pyre-ignore[5]
 
 
 class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new__
@@ -95,9 +95,7 @@ class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new
         }
 
         if func in dispatcher:
-            return dispatcher[func](  # pyre-ignore [29] - `Variable[_VT]` is not a function.
-                args, kwargs
-            )
+            return dispatcher[func](args, kwargs)  # pyre-ignore [29]
         else:
             raise NotImplementedError(
                 f"{func} is not supported for LocalShardsWrapper!"
