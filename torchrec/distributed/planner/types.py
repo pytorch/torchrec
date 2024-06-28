@@ -189,6 +189,7 @@ class Topology:
         bwd_compute_multiplier: float = BWD_COMPUTE_MULTIPLIER,
         custom_topology_data: Optional[CustomTopologyData] = None,
         weighted_feature_bwd_compute_multiplier: float = WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER,
+        uneven_sharding_perf_multiplier: float = 1.0,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -244,6 +245,7 @@ class Topology:
         self._weighted_feature_bwd_compute_multiplier = (
             weighted_feature_bwd_compute_multiplier
         )
+        self._uneven_sharding_perf_multiplier = uneven_sharding_perf_multiplier
 
     @property
     def compute_device(self) -> str:
@@ -284,6 +286,10 @@ class Topology:
     @property
     def weighted_feature_bwd_compute_multiplier(self) -> float:
         return self._weighted_feature_bwd_compute_multiplier
+
+    @property
+    def uneven_sharding_perf_multiplier(self) -> float:
+        return self._uneven_sharding_perf_multiplier
 
     def __repr__(self) -> str:
         topology_repr: str = f"world_size={self._world_size} \n"
