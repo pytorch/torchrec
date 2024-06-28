@@ -1999,6 +1999,36 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
         self.assertEqual(ref_out, traced_out)
         torch.jit.script(gm)
 
+    def test_traceable_empty_like(self) -> None:
+        class ModuleCreateAndAccessEmptyLikeKeyedJaggedTensor(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+
+            def forward(self, kjt: KeyedJaggedTensor) -> int:
+                features = KeyedJaggedTensor.empty_like(kjt)
+                return (
+                    len(features.keys())
+                    + features.values().numel()
+                    + features.weights().numel()
+                    + features.lengths().numel()
+                    + features.offsets().numel()
+                )
+
+        # Case 4: KeyedJaggedTensor is only used within the root module and not as part of
+        # the root module's input/output interface.
+        m = ModuleCreateAndAccessEmptyLikeKeyedJaggedTensor()
+        kjt = KeyedJaggedTensor.from_offsets_sync(
+            values=torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+            weights=torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5]),
+            keys=["index_0", "index_1"],
+            offsets=torch.IntTensor([0, 0, 2, 2, 3, 4, 5, 5, 8]),
+        )
+        gm = symbolic_trace(m)
+        ref_out = m(kjt)
+        traced_out = gm(kjt)
+        self.assertEqual(ref_out, traced_out)
+        torch.jit.script(gm)
+
     def test_use_keyed_jagged_tensor_as_input_and_output(self) -> None:
         class ModuleUseKeyedJaggedTensorAsInputAndOutput(torch.nn.Module):
             def __init__(self):
