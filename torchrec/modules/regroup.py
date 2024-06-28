@@ -20,6 +20,17 @@ from torchrec.sparse.jagged_tensor import (
 )
 
 
+try:
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_gpu"
+    )
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_cpu"
+    )
+except OSError:
+    pass
+
+
 @torch.fx.wrap
 def _concat_values(kts: List[KeyedTensor], dim: int) -> torch.Tensor:
     return torch.cat([kt.values() for kt in kts], dim=dim)
