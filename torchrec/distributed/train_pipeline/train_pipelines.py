@@ -38,7 +38,7 @@ from torchrec.distributed.train_pipeline.utils import (
     _start_embedding_lookup,
     _to_device,
     _wait_for_batch,
-    _wait_for_event,
+    _wait_for_events,
     DataLoadingThread,
     EmbeddingPipelinedForward,
     EmbeddingTrainPipelineContext,
@@ -590,8 +590,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             return
         with record_function(f"## start_sparse_data_dist {context.index} ##"):
             with self._stream_context(self._data_dist_stream):
-                if context.event is not None:
-                    context.event.wait()
                 _wait_for_batch(batch, self._memcpy_stream)
 
                 original_contexts = [p.get_context() for p in self._pipelined_preprocs]
@@ -737,11 +735,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             if device.type in ["cuda", "mtia"]
             else None
         )
-        self._bwd_sync_stream: Optional[torch.Stream] = (
-            (torch.get_device_module(self._device).Stream(priority=0))
-            if device.type in ["cuda", "mtia"]
-            else None
-        )
+        self._embedding_odd_streams: List[Optional[torch.Stream]] = []
+        self._embedding_even_streams: List[Optional[torch.Stream]] = []
         self._gradients: Dict[str, torch.Tensor] = {}
 
     def _grad_swap(self) -> None:
@@ -750,6 +745,29 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             if param.grad is not None:
                 self._gradients[name] = param.grad.clone()
             param.grad = grad
+
+    def _init_embedding_streams(self) -> None:
+
+        for _ in self._pipelined_modules:
+            self._embedding_odd_streams.append(
+                (torch.get_device_module(self._device).Stream(priority=0))
+                if self._device.type in ["cuda", "mtia"]
+                else None
+            )
+            self._embedding_even_streams.append(
+                (torch.get_device_module(self._device).Stream(priority=0))
+                if self._device.type in ["cuda", "mtia"]
+                else None
+            )
+
+    def _validate_optimizer(self) -> None:
+        for pipelined_module in self._pipelined_modules:
+            pipelined_params = set(pipelined_module.parameters())
+            for group in self._optimizer.param_groups:
+                if not set(group["params"]).isdisjoint(pipelined_params):
+                    logger.warning(
+                        f"SemiSync pipelined {type(pipelined_module)} and optimizer share parameters"
+                    )
 
     def fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
         # pipeline is already filled
@@ -770,7 +788,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             # pyre-ignore [6]
             EmbeddingPipelinedForward,
         )
+        self._init_embedding_streams()
         self.wait_sparse_data_dist(self.contexts[0])
+        self._validate_optimizer()
         # pyre-ignore [6]
         self.start_embedding_lookup(self.batches[0], self.contexts[0])
 
@@ -824,26 +844,25 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             self.wait_sparse_data_dist(self.contexts[2])
 
         if self._model.training:
-            # backward would put an implicit sync point in stream called from, ideally
-            # this would different from optimizer so it could start earilier, but currently not safe to do so.
-            with self._stream_context(self._overarch_stream):
-                with record_function(f"## backward {self.contexts[0].index} ##"):
-                    torch.sum(losses, dim=0).backward()
+            with record_function(f"## backward {self.contexts[0].index} ##"):
+                torch.sum(losses, dim=0).backward()
+            # pyre-ignore [6]
+            self.embedding_backward(self.contexts[0])
 
-            with self._stream_context(self._overarch_stream):
-                with record_function(
-                    f"## optimizer {cast(int, self.contexts[0].index) - 1} ##"
-                ):
-                    if self.is_semi_sync() and self._stash_gradients:
-                        self._grad_swap()
-                    self._mlp_optimizer_step()
+            with record_function(
+                f"## optimizer {cast(int, self.contexts[0].index) - 1} ##"
+            ):
+                if self.is_semi_sync() and self._stash_gradients:
+                    self._grad_swap()
+                self._mlp_optimizer_step()
 
-                with record_function(
-                    f"## zero_grad {cast(int, self.contexts[0].index) - 1} ##"
-                ):
-                    self._optimizer.zero_grad()
+            with record_function(
+                f"## zero_grad {cast(int, self.contexts[0].index) - 1} ##"
+            ):
+                self._optimizer.zero_grad()
 
         if len(self.batches) >= 2 and not self.is_semi_sync():
+            torch.cuda.synchronize()  # needed to avoid race condition
             # pyre-ignore [6]
             self.start_embedding_lookup(self.batches[1], self.contexts[1])
 
@@ -854,10 +873,29 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self, batch: In, context: TrainPipelineContext
     ) -> Tuple[torch.Tensor, Out]:
         with record_function(f"## forward {context.index} ##"):
-            with self._stream_context(self._overarch_stream):
-                _wait_for_event(batch, self._device, context.event)
-                context.event = None
-                return cast(Tuple[torch.Tensor, Out], self._model(batch))
+            _wait_for_events(
+                batch, context, torch.get_device_module(self._device).current_stream()
+            )
+            return cast(Tuple[torch.Tensor, Out], self._model(batch))
+
+    def embedding_backward(self, context: EmbeddingTrainPipelineContext) -> None:
+        default_stream = torch.get_device_module(self._device).current_stream()
+        streams = (
+            self._embedding_even_streams
+            if cast(int, context.index) % 2 == 0
+            else self._embedding_odd_streams
+        )
+        for stream, emb_tensors, detached_emb_tensors in zip(
+            streams,
+            context.embedding_tensors,
+            context.detached_embedding_tensors,
+        ):
+            with self._stream_context(stream):
+                grads = [tensor.grad for tensor in detached_emb_tensors]
+                if stream:
+                    stream.wait_stream(default_stream)
+                # pyre-ignore
+                torch.autograd.backward(emb_tensors, grads)
 
     def copy_batch_to_gpu(
         self,
@@ -870,8 +908,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                 if batch is not None:
                     batch = _to_device(batch, self._device, non_blocking=True)
                     context = self._create_context()
-                    context.event = torch.get_device_module(self._device).Event()
-                    context.event.record()
+                    event = torch.get_device_module(self._device).Event()
+                    event.record()
+                    context.events.append(event)
                 return batch, context
 
     def start_sparse_data_dist(
@@ -882,9 +921,25 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         """
         Waits for batch to finish getting copied to GPU, then starts the input dist.  This is Event based version.
         """
-        super().start_sparse_data_dist(batch, context)
-        context.event = torch.get_device_module(self._device).Event()
-        context.event.record()
+        if batch is None:
+            return
+
+        # Temporarily set context for next iter to populate cache
+        original_contexts = [p.get_context() for p in self._pipelined_preprocs]
+        for preproc_mod in self._pipelined_preprocs:
+            preproc_mod.set_context(context)
+
+        with record_function(f"## start_sparse_data_dist {context.index} ##"):
+            with self._stream_context(self._data_dist_stream):
+                _wait_for_events(batch, context, self._data_dist_stream)
+                _start_data_dist(self._pipelined_modules, batch, context)
+                event = torch.get_device_module(self._device).Event()
+                event.record()
+                context.events.append(event)
+
+        # Restore context for model forward
+        for module, context in zip(self._pipelined_preprocs, original_contexts):
+            module.set_context(context)
 
     def start_embedding_lookup(
         self,
@@ -897,17 +952,20 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         if batch is None:
             return
         with record_function(f"## start_embedding_lookup {context.index} ##"):
-            with self._stream_context(
-                self._embedding_even_stream
-                if cast(int, context.index) % 2 == 0
-                else self._embedding_odd_stream
-            ):
-                _wait_for_event(batch, self._device, context.event)
-                _start_embedding_lookup(
-                    self._pipelined_modules, batch, context, self._device
+            _wait_for_events(
+                batch, context, torch.get_device_module(self._device).current_stream()
+            )
+            for i, module in enumerate(self._pipelined_modules):
+                stream = (
+                    self._embedding_even_streams[i]
+                    if cast(int, context.index) % 2 == 0
+                    else self._embedding_odd_streams[i]
                 )
-                context.event = torch.get_device_module(self._device).Event()
-                context.event.record()
+                with self._stream_context(stream):
+                    _start_embedding_lookup(module, batch, context, stream)
+                    event = torch.get_device_module(self._device).Event()
+                    event.record()
+                    context.events.append(event)
 
 
 class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):

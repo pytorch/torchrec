@@ -43,9 +43,9 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, LazyNoWait
 
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -95,10 +95,8 @@ class TrainPipelineContext:
     fused_splits_awaitables: List[Tuple[List[str], FusedKJTListSplitsAwaitable]] = (
         field(default_factory=list)
     )
-    event: Optional[torch.Event] = None
-
+    events: List[torch.Event] = field(default_factory=list)
     preproc_fwd_results: Dict[str, Any] = field(default_factory=dict)
-
     index: Optional[int] = None
     version: int = (
         0  # 1 is current version, 0 is deprecated but supported for backward compatibility
@@ -116,6 +114,8 @@ class PrefetchTrainPipelineContext(TrainPipelineContext):
 @dataclass
 class EmbeddingTrainPipelineContext(TrainPipelineContext):
     embedding_a2a_requests: Dict[str, Multistreamable] = field(default_factory=dict)
+    embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
+    detached_embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
 
 
 @dataclass
@@ -369,7 +369,35 @@ class EmbeddingPipelinedForward(BaseForward):
             )
             cur_stream = torch.get_device_module(self._device).current_stream()
             ctx.record_stream(cur_stream)
-        return self._context.embedding_a2a_requests.pop(self._name)
+        awaitable = self._context.embedding_a2a_requests.pop(self._name)
+        embeddings = awaitable.wait()  # trigger awaitable manually for type checking
+        tensors = []
+        detached_tensors = []
+        if isinstance(embeddings, Dict):
+            for jt in embeddings.values():
+                assert isinstance(jt, JaggedTensor)
+                tensor = jt.values()
+                detached_tensor = tensor.detach().requires_grad_()
+                detached_tensor.retain_grad()
+                jt._values = detached_tensor
+                tensors.append(tensor)
+                detached_tensors.append(detached_tensor)
+            # pyre-ignore [16]
+            self._context.embedding_tensors.append(tensors)
+            # pyre-ignore [16]
+            self._context.detached_embedding_tensors.append(detached_tensors)
+        else:
+            assert isinstance(embeddings, KeyedTensor)
+            tensor = embeddings.values()
+            detached_tensor = tensor.detach().requires_grad_()
+            detached_tensor.retain_grad()
+            embeddings._values = detached_tensor
+            tensors.append(tensor)
+            detached_tensors.append(detached_tensor)
+            self._context.embedding_tensors.append(tensors)
+            self._context.detached_embedding_tensors.append(detached_tensors)
+
+        return LazyNoWait(embeddings)
 
 
 class PrefetchPipelinedForward(BaseForward):
@@ -513,22 +541,23 @@ def _wait_for_batch(batch: In, stream: Optional[torch.Stream]) -> None:
     batch.record_stream(cur_stream)
 
 
-def _wait_for_event(
+def _wait_for_events(
     batch: In,
-    device: torch.device,
-    event: Optional[torch.Event],
+    context: TrainPipelineContext,
+    stream: Optional[torch.Stream],
 ) -> None:
     """
-    Wait for event
+    Wait for any outstanding events for a given context
     """
-    if event is not None:
-        event.wait()
-    cur_stream = torch.get_device_module(device).current_stream()
 
-    assert isinstance(
-        batch, (torch.Tensor, Multistreamable)
-    ), f"{type(batch)} must implement Multistreamable interface"
-    batch.record_stream(cur_stream)
+    for event in context.events:
+        event.wait()
+    context.events.clear()
+    if stream:
+        assert isinstance(
+            batch, (torch.Tensor, Multistreamable)
+        ), f"{type(batch)} must implement Multistreamable interface"
+        batch.record_stream(stream)
 
 
 def _start_data_dist(
@@ -569,25 +598,19 @@ def _start_data_dist(
 
 
 def _start_embedding_lookup(
-    pipelined_modules: List[ShardedModule],
+    module: ShardedModule,
     batch: In,  # not used in this function
     context: EmbeddingTrainPipelineContext,
-    device: torch.device,
+    stream: Optional[torch.Stream],
 ) -> None:
-    cur_stream = torch.get_device_module(device).current_stream()
-    kjts_per_module = []
-    for module in pipelined_modules:
-        kjts = context.input_dist_tensors_requests[module.forward.name].wait()
-        kjts.record_stream(cur_stream)
-        kjts_per_module.append(kjts)
-
-    for module, kjts in zip(pipelined_modules, kjts_per_module):
-        module_name = module.forward.name
-        module_context = context.module_contexts[module.forward.name]
-        module_context.record_stream(cur_stream)
-        a2a_awaitable = module.compute_and_output_dist(module_context, kjts)
-        # pyre-ignore[6]
-        context.embedding_a2a_requests[module_name] = a2a_awaitable
+    kjt = context.input_dist_tensors_requests[module.forward.name].wait()
+    module_context = context.module_contexts[module.forward.name]
+    if stream:
+        kjt.record_stream(stream)
+        module_context.record_stream(stream)
+    a2a_awaitable = module.compute_and_output_dist(module_context, kjt)
+    # pyre-ignore[6]
+    context.embedding_a2a_requests[module.forward.name] = a2a_awaitable
 
 
 def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
@@ -678,9 +701,17 @@ def _get_node_args_helper(
             if child_node.op == "placeholder":
                 if hasattr(child_node, "ph_key"):
                     # pyre-ignore[16]
-                    arg_info.input_attrs.insert(0, child_node.ph_key)
-                    arg_info.is_getitems.insert(0, False)
-                    arg_info.preproc_modules.insert(0, None)
+                    ph_key: str = child_node.ph_key
+                    # example: ph_key = 'event_id_list_features_seqs[marketplace]'
+                    ph_keys = ph_key.split("[")
+                    for key in ph_keys:
+                        if "]" in key:
+                            arg_info.input_attrs.append(key[:-1])
+                            arg_info.is_getitems.append(True)
+                        else:
+                            arg_info.input_attrs.append(key)
+                            arg_info.is_getitems.append(False)
+                        arg_info.preproc_modules.append(None)
                 else:
                     # no-op
                     arg_info.input_attrs.insert(0, "")
@@ -1038,7 +1069,7 @@ def _rewrite_model(  # noqa C901
             )
 
             if num_found == total_num_args:
-                logger.info(f"Module '{node.target}'' will be pipelined")
+                logger.info(f"Module '{node.target}' will be pipelined")
                 child = sharded_modules[node.target]
                 original_forwards.append(child.forward)
                 child.forward = pipelined_forward(

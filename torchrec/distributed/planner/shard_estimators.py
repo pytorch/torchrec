@@ -223,6 +223,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 caching_ratio=caching_ratio,
                 prefetch_pipeline=prefetch_pipeline,
                 expected_cache_fetches=expected_cache_fetches,
+                uneven_sharding_perf_multiplier=self._topology.uneven_sharding_perf_multiplier,
             )
 
             for shard, perf in zip(sharding_option.shards, shard_perfs):
@@ -259,6 +260,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         is_inference: bool = False,
         prefetch_pipeline: bool = False,
         expected_cache_fetches: float = 0,
+        uneven_sharding_perf_multiplier: float = 1.0,
     ) -> List[Perf]:
         """
         Attempts to model perfs as a function of relative wall times.
