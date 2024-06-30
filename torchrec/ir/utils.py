@@ -150,8 +150,11 @@ def mark_dynamic_kjt(
     if kjt._weights is not None:
         shapes_collection[kjt._weights] = (vlen,)
     if variable_length:
-        batch_size = _get_dim(batch_size, "batch_size", max=4294967295)
-        llen = len(kjt.keys()) * batch_size
+        if batch_size is None:
+            llen = _get_dim(None, "llen", max=4294967295)
+        else:
+            batch_size = _get_dim(batch_size, "batch_size", max=4294967295)
+            llen = len(kjt.keys()) * batch_size
         olen = llen + 1
         if kjt._lengths is not None:
             shapes_collection[kjt._lengths] = (llen,)
