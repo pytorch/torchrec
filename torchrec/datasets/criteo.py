@@ -258,7 +258,7 @@ class BinaryCriteoUtils:
         del labels
 
         # Log is expensive to compute at runtime.
-        dense_np += 3
+        dense_np -= dense_np.min() - 2
         dense_np = np.log(dense_np, dtype=np.float32)
 
         # To be consistent with dense and sparse.
