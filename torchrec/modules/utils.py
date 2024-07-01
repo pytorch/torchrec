@@ -15,11 +15,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from torch.profiler import record_function
-from torchrec.sparse.jagged_tensor import (
-    _permute_tensor_by_segments,
-    JaggedTensor,
-    KeyedJaggedTensor,
-)
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
 
@@ -165,6 +161,53 @@ def convert_list_of_modules_to_modulelist(
         return torch.nn.ModuleList(
             convert_list_of_modules_to_modulelist(m, sizes[1:]) for m in modules
         )
+
+
+def _permute_tensor_by_segments(
+    tensor: torch.Tensor,
+    segment_sizes: torch.Tensor,
+    recat: torch.Tensor,
+    weights: Optional[torch.Tensor] = None,
+    output_size: Optional[int] = None,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """
+    TODO: remove and import from `jagged_tensor.py` once packaging issue is resolved
+
+    Permutes a tensor by segments according to recat tensor.
+
+    For variable stride tensors we permute across length per key, which reduces the
+    number of permute indices and lengthens each sequence.
+    `keyed_jagged_index_select_dim1` more efficiently parallelizes work for each permute
+    index and sequence across multiple thread blocks.
+
+    NOTE:
+        `keyed_jagged_index_select_dim1` is only supported for CUDA.
+    """
+    if tensor.device.type == "cuda":
+        output = torch.ops.fbgemm.keyed_jagged_index_select_dim1(
+            values=tensor,
+            lengths=segment_sizes,
+            offsets=torch.ops.fbgemm.asynchronous_complete_cumsum(segment_sizes),
+            indices=recat,
+            batch_size=segment_sizes.numel(),
+            weights=weights,
+            selected_lengths_sum=output_size,
+        )
+        permuted_tensor = output[0]
+        permuted_weights = None if weights is None else output[2]
+    else:
+        (
+            _,
+            permuted_tensor,
+            permuted_weights,
+        ) = torch.ops.fbgemm.permute_1D_sparse_data(
+            recat,
+            segment_sizes,
+            tensor,
+            weights,
+            tensor.numel(),
+        )
+    return permuted_tensor, permuted_weights
 
 
 def _vbe_reindex(
