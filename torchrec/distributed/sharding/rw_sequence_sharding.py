@@ -32,6 +32,7 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
     InferRwSparseFeaturesDist,
+    InputDistOutputs,
     RwSparseFeaturesDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import (
