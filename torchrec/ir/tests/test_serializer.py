@@ -18,9 +18,9 @@ from torch import nn
 from torchrec.ir.serializer import JsonSerializer
 
 from torchrec.ir.utils import (
-    deserialize_embedding_modules,
+    decapsulate_ir_modules,
+    encapsulate_ir_modules,
     mark_dynamic_kjt,
-    serialize_embedding_modules,
 )
 
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -30,7 +30,6 @@ from torchrec.modules.feature_processor_ import (
     PositionWeightedModuleCollection,
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
-from torchrec.modules.utils import operator_registry_state
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
@@ -183,7 +182,7 @@ class TestJsonSerializer(unittest.TestCase):
         eager_out = model(id_list_features)
 
         # Serialize EBC
-        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
         ep = torch.export.export(
             model,
             (id_list_features,),
@@ -199,34 +198,9 @@ class TestJsonSerializer(unittest.TestCase):
         for i, tensor in enumerate(ep_output):
             self.assertEqual(eager_out[i].shape, tensor.shape)
 
-        # Should have 3 custom op registered, as dimensions of ebc are same,
-        # and two fpEBCs have different dims
-        self.assertEqual(len(operator_registry_state.op_registry_schema), 3)
-
-        total_dim_ebc = sum(model.ebc1._lengths_per_embedding)
-        total_dim_fpebc1 = sum(
-            model.fpebc1._embedding_bag_collection._lengths_per_embedding
-        )
-        total_dim_fpebc2 = sum(
-            model.fpebc2._embedding_bag_collection._lengths_per_embedding
-        )
-        # Check if custom op is registered with the correct name
-        # EmbeddingBagCollection type and total dim
-        self.assertTrue(
-            f"EmbeddingBagCollection_{total_dim_ebc}"
-            in operator_registry_state.op_registry_schema
-        )
-        self.assertTrue(
-            f"EmbeddingBagCollection_{total_dim_fpebc1}"
-            in operator_registry_state.op_registry_schema
-        )
-        self.assertTrue(
-            f"EmbeddingBagCollection_{total_dim_fpebc2}"
-            in operator_registry_state.op_registry_schema
-        )
-
         # Deserialize EBC
-        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+        unflatten_ep = torch.export.unflatten(ep)
+        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
 
         # check EBC config
         for i in range(5):
@@ -265,9 +239,8 @@ class TestJsonSerializer(unittest.TestCase):
                 self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
                 self.assertEqual(deserialized.feature_names, orginal.feature_names)
 
-        deserialized_model.load_state_dict(model.state_dict())
-
         # Run forward on deserialized model and compare the output
+        deserialized_model.load_state_dict(model.state_dict())
         deserialized_out = deserialized_model(id_list_features)
 
         self.assertEqual(len(deserialized_out), len(eager_out))
@@ -292,7 +265,7 @@ class TestJsonSerializer(unittest.TestCase):
 
         # Serialize EBC
         collection = mark_dynamic_kjt(feature1)
-        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
         ep = torch.export.export(
             model,
             (feature1,),
@@ -311,7 +284,8 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(eager_out[i].shape, tensor.shape)
 
         # Deserialize EBC
-        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+        unflatten_ep = torch.export.unflatten(ep)
+        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
         deserialized_model.load_state_dict(model.state_dict())
 
         # Run forward on deserialized model
@@ -330,7 +304,7 @@ class TestJsonSerializer(unittest.TestCase):
         )
 
         # Serialize EBC
-        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
         ep = torch.export.export(
             model,
             (id_list_features,),
@@ -345,8 +319,9 @@ class TestJsonSerializer(unittest.TestCase):
             if device == "cuda" and not torch.cuda.is_available():
                 continue
             device = torch.device(device)
-            deserialized_model = deserialize_embedding_modules(
-                ep, JsonSerializer, device
+            unflatten_ep = torch.export.unflatten(ep)
+            deserialized_model = decapsulate_ir_modules(
+                unflatten_ep, JsonSerializer, device
             )
             for name, m in deserialized_model.named_modules():
                 if hasattr(m, "device"):
@@ -408,7 +383,7 @@ class TestJsonSerializer(unittest.TestCase):
             CompoundModuleSerializer
         )
         # Serialize
-        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
         ep = torch.export.export(
             model,
             (id_list_features,),
@@ -424,8 +399,8 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(x.shape, y.shape)
 
         # Deserialize
-        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
-
+        unflatten_ep = torch.export.unflatten(ep)
+        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
         # Check if Compound Module is deserialized correctly
         self.assertIsInstance(deserialized_model.comp, CompoundModule)
         self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
