@@ -343,6 +343,7 @@ def format_embedding_names_per_rank_per_sharding(
         annotated_embedding_names_per_rank: List[List[str]] = []
         for embedding_names in embedding_names_per_rank:
             annotated_embedding_names_per_rank.append(
+                # pyre-ignore [29]: `None` is not a function.
                 annotate_embedding_names(embedding_names, dummy)
             )
         annotated_embedding_names_per_rank_per_sharding.append(

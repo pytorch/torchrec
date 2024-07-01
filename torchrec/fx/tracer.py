@@ -109,6 +109,7 @@ class Tracer(torch.fx.Tracer):
             return self.create_node(
                 "call_function",
                 target=NoWait,
+                # pyre-ignore [6]: Incompatible parameter type
                 args=self.create_arg((a._obj,)),
                 kwargs={},
                 type_expr=NoWait,
@@ -159,4 +160,5 @@ def symbolic_trace(
     """
     tracer = Tracer(leaf_modules)
     graph = tracer.trace(root, concrete_args)
+    # pyre-ignore [6]: Incompatible parameter type
     return torch.fx.GraphModule(root, graph)
