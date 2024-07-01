@@ -168,13 +168,11 @@ class KJTInputExportDynamicShapeWrapper(torch.nn.Module):
         values_size = values[0].item()
         torch._check_is_size(values_size)
         torch._check(values_size >= lengths.shape[0])
-        # pyre-ignore
         values = torch.ones(values_size).to(values.device)
         if weights is not None:
             weights_size = weights.int()[0].item()
             torch._check_is_size(weights_size)
             torch._check(weights_size >= lengths.shape[0])
-            # pyre-ignore
             weights = torch.ones(weights_size).to(weights.device)
 
         return self.kjt_input_wrapper(values, lengths, weights, *args, **kwargs)

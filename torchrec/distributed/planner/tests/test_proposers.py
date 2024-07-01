@@ -374,6 +374,8 @@ class TestProposers(unittest.TestCase):
             EmbeddingOffloadScaleupProposer.clf_to_bytes(model, got).sum()
             - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
         ).item()
+
+        # pyre-ignore [6]
         self.assertLess(increase, budget)
 
         # Scenario 2, limited budget, uniform scale up

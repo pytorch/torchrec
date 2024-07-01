@@ -329,11 +329,7 @@ class ShardedEmbeddingTower(
         )
         dim_sum_per_rank = [x.item() for x in dim_sum_per_rank]
         self._output_dist = PooledEmbeddingsAllToAll(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             pg=self._cross_pg,
-            # pyre-fixme[6]: For 2nd param expected `List[int]` but got
-            #  `List[Union[bool, float, int]]`.
             dim_sum_per_rank=dim_sum_per_rank,
             device=self._device,
             codecs=(
