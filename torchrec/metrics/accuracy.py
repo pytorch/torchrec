@@ -45,13 +45,18 @@ def get_accuracy_states(
     predictions: torch.Tensor,
     weights: Optional[torch.Tensor],
     threshold: float = 0.5,
-) -> Dict[str, torch.Tensor]:
+) -> torch.Tensor:
     if weights is None:
         weights = torch.ones_like(predictions)
-    return {
-        "accuracy_sum": compute_accuracy_sum(labels, predictions, weights, threshold),
-        "weighted_num_samples": torch.sum(weights, dim=-1),
-    }
+
+    return torch.stack(
+        [
+            compute_accuracy_sum(
+                labels, predictions, weights, threshold
+            ),  # accuracy sum
+            torch.sum(weights, dim=-1),  # weighted_num_samples
+        ]
+    )
 
 
 class AccuracyMetricComputation(RecMetricComputation):
@@ -68,16 +73,10 @@ class AccuracyMetricComputation(RecMetricComputation):
 
     def __init__(self, *args: Any, threshold: float = 0.5, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.state_names = ["accuracy_sum", "weighted_num_samples"]
         self._add_state(
-            "accuracy_sum",
-            torch.zeros(self._n_tasks, dtype=torch.double),
-            add_window_state=True,
-            dist_reduce_fx="sum",
-            persistent=True,
-        )
-        self._add_state(
-            "weighted_num_samples",
-            torch.zeros(self._n_tasks, dtype=torch.double),
+            self.state_names,
+            torch.zeros((len(self.state_names), self._n_tasks), dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
             persistent=True,
@@ -96,13 +95,11 @@ class AccuracyMetricComputation(RecMetricComputation):
             raise RecMetricException(
                 "Inputs 'predictions' should not be None for AccuracyMetricComputation update"
             )
-        states = get_accuracy_states(labels, predictions, weights, self._threshold)
         num_samples = predictions.shape[-1]
-
-        for state_name, state_value in states.items():
-            state = getattr(self, state_name)
-            state += state_value
-            self._aggregate_window_state(state_name, state_value, num_samples)
+        states = get_accuracy_states(labels, predictions, weights, self._threshold)
+        state = getattr(self, self._fused_name)
+        state += states
+        self._aggregate_window_state(self._fused_name, states, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
         reports = [
@@ -110,8 +107,8 @@ class AccuracyMetricComputation(RecMetricComputation):
                 name=MetricName.ACCURACY,
                 metric_prefix=MetricPrefix.LIFETIME,
                 value=compute_accuracy(
-                    cast(torch.Tensor, self.accuracy_sum),
-                    cast(torch.Tensor, self.weighted_num_samples),
+                    self.get_state("accuracy_sum"),
+                    self.get_state("weighted_num_samples"),
                 ),
             ),
             MetricComputationReport(

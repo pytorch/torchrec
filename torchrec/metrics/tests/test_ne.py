@@ -16,6 +16,7 @@ from torchrec.metrics.ne import (
     compute_cross_entropy,
     compute_logloss,
     compute_ne,
+    get_ne_states,
     NEMetric,
 )
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
@@ -257,4 +258,47 @@ class NEMetricTest(unittest.TestCase):
             world_size=WORLD_SIZE,
             entry_point=self._logloss_metric_test_helper,
             batch_window_size=10,
+        )
+
+    # Computation tests for coverage reasons
+    def test_compute_log_loss(self) -> None:
+        ce_sum = torch.tensor([10.0, 20.0, 30.0])
+        pos_labels = torch.tensor([1.0, 2.0, 3.0])
+        neg_labels = torch.tensor([9.0, 8.0, 7.0])
+        eta = 0.1
+
+        result = compute_logloss(ce_sum, pos_labels, neg_labels, eta)
+        expected_result = torch.tensor([1.0, 2.0, 3.0])
+
+        self.assertTrue(torch.allclose(result, expected_result, atol=1e-6))
+
+    def test_get_ne_states(self) -> None:
+        labels = torch.tensor([1.0, 0.0, 1.0])
+        predictions = torch.tensor([0.8, 0.2, 0.9])
+        weights = torch.tensor([0.5, 1.0, 0.5])
+        eta = 0.1
+
+        result = get_ne_states(labels, predictions, weights, eta)
+
+        cross_entropy = compute_cross_entropy(labels, predictions, weights, eta)
+        expected_cross_entropy_sum = torch.sum(cross_entropy)
+        expected_weighted_num_samples = torch.sum(weights)
+        expected_pos_labels = torch.sum(weights * labels)
+        expected_neg_labels = torch.sum(weights * (1.0 - labels))
+
+        self.assertTrue(
+            torch.allclose(
+                result["cross_entropy_sum"], expected_cross_entropy_sum, atol=1e-6
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                result["weighted_num_samples"], expected_weighted_num_samples, atol=1e-6
+            )
+        )
+        self.assertTrue(
+            torch.allclose(result["pos_labels"], expected_pos_labels, atol=1e-6)
+        )
+        self.assertTrue(
+            torch.allclose(result["neg_labels"], expected_neg_labels, atol=1e-6)
         )

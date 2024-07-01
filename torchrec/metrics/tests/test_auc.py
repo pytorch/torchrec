@@ -21,6 +21,7 @@ from torchrec.metrics.rec_metric import (
     RecTaskInfo,
 )
 from torchrec.metrics.test_utils import (
+    gen_test_batch,
     metric_test_helper,
     rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
@@ -117,6 +118,30 @@ class AUCMetricTest(unittest.TestCase):
             world_size=WORLD_SIZE,
             entry_point=metric_test_helper,
         )
+
+    def test_auc_reset(self) -> None:
+        batch_size = 100
+        auc = AUCMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=batch_size,
+            tasks=[DefaultTaskInfo],
+        )
+
+        # Mimic that reset is called when checkpointing.
+        auc.reset()
+        self.assertEqual(len(auc._metrics_computations[0].predictions), 1)
+        self.assertEqual(len(auc._metrics_computations[0].labels), 1)
+        self.assertEqual(len(auc._metrics_computations[0].weights), 1)
+        model_output = gen_test_batch(batch_size)
+        auc.update(
+            predictions={"DefaultTask": model_output["prediction"]},
+            labels={"DefaultTask": model_output["label"]},
+            weights={"DefaultTask": model_output["weight"]},
+        )
+        self.assertEqual(len(auc._metrics_computations[0].predictions), 1)
+        self.assertEqual(len(auc._metrics_computations[0].labels), 1)
+        self.assertEqual(len(auc._metrics_computations[0].weights), 1)
 
 
 class AUCGPUSyncTest(unittest.TestCase):

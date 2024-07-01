@@ -40,11 +40,14 @@ def compute_error_sum(
 
 def get_mae_states(
     labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
-) -> Dict[str, torch.Tensor]:
-    return {
-        "error_sum": compute_error_sum(labels, predictions, weights),
-        "weighted_num_samples": torch.sum(weights, dim=-1),
-    }
+) -> torch.Tensor:
+
+    return torch.stack(
+        [
+            compute_error_sum(labels, predictions, weights),  # error sum
+            torch.sum(weights, dim=-1),  # weighted_num_samples
+        ]
+    )
 
 
 class MAEMetricComputation(RecMetricComputation):
@@ -57,16 +60,10 @@ class MAEMetricComputation(RecMetricComputation):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.state_names = ["error_sum", "weighted_num_samples"]
         self._add_state(
-            "error_sum",
-            torch.zeros(self._n_tasks, dtype=torch.double),
-            add_window_state=True,
-            dist_reduce_fx="sum",
-            persistent=True,
-        )
-        self._add_state(
-            "weighted_num_samples",
-            torch.zeros(self._n_tasks, dtype=torch.double),
+            self.state_names,
+            torch.zeros((len(self.state_names), self._n_tasks), dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
             persistent=True,
@@ -87,10 +84,9 @@ class MAEMetricComputation(RecMetricComputation):
             )
         states = get_mae_states(labels, predictions, weights)
         num_samples = predictions.shape[-1]
-        for state_name, state_value in states.items():
-            state = getattr(self, state_name)
-            state += state_value
-            self._aggregate_window_state(state_name, state_value, num_samples)
+        state = getattr(self, self._fused_name)
+        state += states
+        self._aggregate_window_state(self._fused_name, states, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
         return [
@@ -98,8 +94,8 @@ class MAEMetricComputation(RecMetricComputation):
                 name=MetricName.MAE,
                 metric_prefix=MetricPrefix.LIFETIME,
                 value=compute_mae(
-                    cast(torch.Tensor, self.error_sum),
-                    cast(torch.Tensor, self.weighted_num_samples),
+                    self.get_state(ERROR_SUM),
+                    self.get_state(WEIGHTED_NUM_SAMPES),
                 ),
             ),
             MetricComputationReport(
