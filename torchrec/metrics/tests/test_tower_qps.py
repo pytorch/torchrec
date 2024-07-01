@@ -250,6 +250,13 @@ class TowerQPSMetricTest(unittest.TestCase):
             window_size=200,
         )
         model_output = gen_test_batch(batch_size)
+        labels = model_output["label"]
+        num_positive_examples = labels[labels > 0].sum()
+        num_negative_examples = labels[labels <= 0].sum()
+
+        self.assertTrue(hasattr(qps._metrics_computations[0], "num_positive_examples"))
+        self.assertTrue(hasattr(qps._metrics_computations[0], "num_negative_examples"))
+
         for i in range(5):
             for _ in range(warmup_steps + extra_steps):
                 qps.update(
@@ -265,6 +272,17 @@ class TowerQPSMetricTest(unittest.TestCase):
                 qps._metrics_computations[0].num_examples,
                 batch_size * (warmup_steps + extra_steps) * (i + 1),
             )
+
+            self.assertEquals(
+                qps._metrics_computations[0].num_positive_examples,
+                num_positive_examples * (warmup_steps + extra_steps) * (i + 1),
+            )
+
+            self.assertEquals(
+                qps._metrics_computations[0].num_negative_examples,
+                num_negative_examples * (warmup_steps + extra_steps) * (i + 1),
+            )
+
             # Mimic trainer crashing and loading a checkpoint.
             qps._metrics_computations[0]._steps = 0
 

@@ -28,6 +28,8 @@ WARMUP_STEPS = 100
 NUM_EXAMPLES = "num_examples"
 WARMUP_EXAMPLES = "warmup_examples"
 TIME_LAPSE = "time_lapse"
+NUM_POSITIVE_EXAMPLES = "num_positive_examples"
+NUM_NEGATIVE_EXAMPLES = "num_negative_examples"
 
 
 def _compute_tower_qps(
@@ -69,6 +71,20 @@ class TowerQPSMetricComputation(RecMetricComputation):
             persistent=True,
         )
         self._add_state(
+            NUM_POSITIVE_EXAMPLES,
+            torch.zeros(self._n_tasks, dtype=torch.long),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            NUM_NEGATIVE_EXAMPLES,
+            torch.zeros(self._n_tasks, dtype=torch.long),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
             TIME_LAPSE,
             torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
@@ -87,10 +103,26 @@ class TowerQPSMetricComputation(RecMetricComputation):
         **kwargs: Dict[str, Any],
     ) -> None:
         self._steps += 1
+
         num_examples_scalar = labels.shape[-1]
         num_examples = torch.tensor(num_examples_scalar, dtype=torch.long)
         self_num_examples = getattr(self, NUM_EXAMPLES)
         self_num_examples += num_examples
+
+        num_positive_examples_scalar = int(labels[labels > 0].sum())
+        num_positive_examples = torch.tensor(
+            num_positive_examples_scalar, dtype=torch.long
+        )
+        self_num_positive_examples = getattr(self, NUM_POSITIVE_EXAMPLES)
+        self_num_positive_examples += num_positive_examples
+
+        num_negative_examples_scalar = int(labels[labels <= 0].sum())
+        num_negative_examples = torch.tensor(
+            num_negative_examples_scalar, dtype=torch.long
+        )
+        self_num_negative_examples = getattr(self, NUM_NEGATIVE_EXAMPLES)
+        self_num_negative_examples += num_negative_examples
+
         ts = time.monotonic()
         if self._steps <= self._warmup_steps:
             self_warmup_examples = getattr(self, WARMUP_EXAMPLES)
@@ -130,6 +162,16 @@ class TowerQPSMetricComputation(RecMetricComputation):
                 name=MetricName.TOTAL_EXAMPLES,
                 metric_prefix=MetricPrefix.DEFAULT,
                 value=cast(torch.Tensor, self.num_examples).detach(),
+            ),
+            MetricComputationReport(
+                name=MetricName.TOTAL_POSITIVE_EXAMPLES,
+                metric_prefix=MetricPrefix.DEFAULT,
+                value=cast(torch.Tensor, self.num_positive_examples).detach(),
+            ),
+            MetricComputationReport(
+                name=MetricName.TOTAL_NEGATIVE_EXAMPLES,
+                metric_prefix=MetricPrefix.DEFAULT,
+                value=cast(torch.Tensor, self.num_negative_examples).detach(),
             ),
         ]
 
