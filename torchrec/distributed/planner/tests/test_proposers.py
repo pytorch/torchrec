@@ -329,10 +329,11 @@ class TestProposers(unittest.TestCase):
             - fused_uvm_caching
             - fused_uvm
         DP will have 1 possible compute kernel: dense
+        Skipping non-supported COLUMN_TABLE_ROW_WISE sharding type
         So the total number of pruned options will be:
-            (num_sharding_types - 1) * 3 + 1 = 16
+            (num_sharding_types - 1 -1) * 3 + 1 = 16
         """
-        num_pruned_options = (len(ShardingType) - 1) * 3 + 1
+        num_pruned_options = (len(ShardingType) - 1 - 1) * 3 + 1
         self.grid_search_proposer.load(search_space)
         for (
             sharding_options
