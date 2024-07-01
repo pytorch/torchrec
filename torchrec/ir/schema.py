@@ -8,7 +8,7 @@
 # pyre-strict
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from torchrec.modules.embedding_configs import DataType, PoolingType
 
@@ -32,3 +32,19 @@ class EBCMetadata:
     tables: List[EmbeddingBagConfigMetadata]
     is_weighted: bool
     device: Optional[str]
+
+
+@dataclass
+class FPEBCMetadata:
+    is_fp_collection: bool
+    features: List[str]
+
+
+@dataclass
+class PositionWeightedModuleMetadata:
+    max_feature_length: int
+
+
+@dataclass
+class PositionWeightedModuleCollectionMetadata:
+    max_feature_lengths: List[Tuple[str, int]]

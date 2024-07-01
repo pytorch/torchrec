@@ -227,7 +227,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(torch.device("cpu"), ebc.embedding_bags["t1"].weight.device)
         self.assertEqual(torch.device("cpu"), ebc.device)
 
-    def test_exporting(self) -> None:
+    def test_ir_export(self) -> None:
         class MyModule(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -294,6 +294,13 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
             sum(n.name.startswith("embedding_bag_collection") for n in ep.graph.nodes),
             2,
             "Shoulde be exact 2 EmbeddingBagCollection nodes in the exported graph",
+        )
+
+        # export_program's module should produce the same output shape
+        output = m(features)
+        exported = ep.module()(features)
+        self.assertEqual(
+            output.size(), exported.size(), "Output should match exported output"
         )
 
 

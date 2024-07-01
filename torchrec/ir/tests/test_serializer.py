@@ -25,7 +25,10 @@ from torchrec.ir.utils import (
 
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
-from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
+from torchrec.modules.feature_processor_ import (
+    PositionWeightedModule,
+    PositionWeightedModuleCollection,
+)
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.modules.utils import operator_registry_state
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
@@ -90,16 +93,18 @@ class CompoundModuleSerializer(JsonSerializer):
 
 
 class TestJsonSerializer(unittest.TestCase):
+    # in the model we have 5 duplicated EBCs, 1 fpEBC with fpCollection, and 1 fpEBC with fpDict
     def generate_model(self) -> nn.Module:
         class Model(nn.Module):
-            def __init__(self, ebc, fpebc):
+            def __init__(self, ebc, fpebc1, fpebc2):
                 super().__init__()
                 self.ebc1 = ebc
                 self.ebc2 = copy.deepcopy(ebc)
                 self.ebc3 = copy.deepcopy(ebc)
                 self.ebc4 = copy.deepcopy(ebc)
                 self.ebc5 = copy.deepcopy(ebc)
-                self.fpebc = fpebc
+                self.fpebc1 = fpebc1
+                self.fpebc2 = fpebc2
 
             def forward(
                 self,
@@ -111,22 +116,16 @@ class TestJsonSerializer(unittest.TestCase):
                 kt4 = self.ebc4(features)
                 kt5 = self.ebc5(features)
 
-                fpebc_res = self.fpebc(features)
-                ebc_kt_vals = [kt.values() for kt in [kt1, kt2, kt3, kt4, kt5]]
-                sparse_arch_vals = sum(ebc_kt_vals)
-                sparse_arch_res = KeyedTensor(
-                    keys=kt1.keys(),
-                    values=sparse_arch_vals,
-                    length_per_key=kt1.length_per_key(),
-                )
-
-                return KeyedTensor.regroup(
-                    [sparse_arch_res, fpebc_res], [["f1"], ["f2", "f3"]]
-                )
+                fpebc1_res = self.fpebc1(features)
+                fpebc2_res = self.fpebc2(features)
+                res: List[torch.Tensor] = []
+                for kt in [kt1, kt2, kt3, kt4, kt5, fpebc1_res, fpebc2_res]:
+                    res.extend(KeyedTensor.regroup([kt], [[key] for key in kt.keys()]))
+                return res
 
         tb1_config = EmbeddingBagConfig(
             name="t1",
-            embedding_dim=4,
+            embedding_dim=3,
             num_embeddings=10,
             feature_names=["f1"],
         )
@@ -138,7 +137,7 @@ class TestJsonSerializer(unittest.TestCase):
         )
         tb3_config = EmbeddingBagConfig(
             name="t3",
-            embedding_dim=4,
+            embedding_dim=5,
             num_embeddings=10,
             feature_names=["f3"],
         )
@@ -149,7 +148,7 @@ class TestJsonSerializer(unittest.TestCase):
         )
         max_feature_lengths = {"f1": 100, "f2": 100}
 
-        fpebc = FeatureProcessedEmbeddingBagCollection(
+        fpebc1 = FeatureProcessedEmbeddingBagCollection(
             EmbeddingBagCollection(
                 tables=[tb1_config, tb2_config],
                 is_weighted=True,
@@ -158,8 +157,18 @@ class TestJsonSerializer(unittest.TestCase):
                 max_feature_lengths=max_feature_lengths,
             ),
         )
+        fpebc2 = FeatureProcessedEmbeddingBagCollection(
+            EmbeddingBagCollection(
+                tables=[tb1_config, tb3_config],
+                is_weighted=True,
+            ),
+            {
+                "f1": PositionWeightedModule(max_feature_length=10),
+                "f3": PositionWeightedModule(max_feature_length=20),
+            },
+        )
 
-        model = Model(ebc, fpebc)
+        model = Model(ebc, fpebc1, fpebc2)
 
         return model
 
@@ -190,12 +199,16 @@ class TestJsonSerializer(unittest.TestCase):
         for i, tensor in enumerate(ep_output):
             self.assertEqual(eager_out[i].shape, tensor.shape)
 
-        # Only 2 custom op registered, as dimensions of ebc are same
-        self.assertEqual(len(operator_registry_state.op_registry_schema), 2)
+        # Should have 3 custom op registered, as dimensions of ebc are same,
+        # and two fpEBCs have different dims
+        self.assertEqual(len(operator_registry_state.op_registry_schema), 3)
 
         total_dim_ebc = sum(model.ebc1._lengths_per_embedding)
-        total_dim_fpebc = sum(
-            model.fpebc._embedding_bag_collection._lengths_per_embedding
+        total_dim_fpebc1 = sum(
+            model.fpebc1._embedding_bag_collection._lengths_per_embedding
+        )
+        total_dim_fpebc2 = sum(
+            model.fpebc2._embedding_bag_collection._lengths_per_embedding
         )
         # Check if custom op is registered with the correct name
         # EmbeddingBagCollection type and total dim
@@ -204,35 +217,63 @@ class TestJsonSerializer(unittest.TestCase):
             in operator_registry_state.op_registry_schema
         )
         self.assertTrue(
-            f"EmbeddingBagCollection_{total_dim_fpebc}"
+            f"EmbeddingBagCollection_{total_dim_fpebc1}"
+            in operator_registry_state.op_registry_schema
+        )
+        self.assertTrue(
+            f"EmbeddingBagCollection_{total_dim_fpebc2}"
             in operator_registry_state.op_registry_schema
         )
 
         # Deserialize EBC
         deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
 
+        # check EBC config
         for i in range(5):
             ebc_name = f"ebc{i + 1}"
-            assert isinstance(
+            self.assertIsInstance(
                 getattr(deserialized_model, ebc_name), EmbeddingBagCollection
             )
 
-            for deserialized_config, org_config in zip(
+            for deserialized, orginal in zip(
                 getattr(deserialized_model, ebc_name).embedding_bag_configs(),
                 getattr(model, ebc_name).embedding_bag_configs(),
             ):
-                assert deserialized_config.name == org_config.name
-                assert deserialized_config.embedding_dim == org_config.embedding_dim
-                assert deserialized_config.num_embeddings, org_config.num_embeddings
-                assert deserialized_config.feature_names, org_config.feature_names
+                self.assertEqual(deserialized.name, orginal.name)
+                self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
+                self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
+                self.assertEqual(deserialized.feature_names, orginal.feature_names)
+
+        # check FPEBC config
+        for i in range(2):
+            fpebc_name = f"fpebc{i + 1}"
+            assert isinstance(
+                getattr(deserialized_model, fpebc_name),
+                FeatureProcessedEmbeddingBagCollection,
+            )
+
+            for deserialized, orginal in zip(
+                getattr(
+                    deserialized_model, fpebc_name
+                )._embedding_bag_collection.embedding_bag_configs(),
+                getattr(
+                    model, fpebc_name
+                )._embedding_bag_collection.embedding_bag_configs(),
+            ):
+                self.assertEqual(deserialized.name, orginal.name)
+                self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
+                self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
+                self.assertEqual(deserialized.feature_names, orginal.feature_names)
 
         deserialized_model.load_state_dict(model.state_dict())
-        # Run forward on deserialized model
+
+        # Run forward on deserialized model and compare the output
         deserialized_out = deserialized_model(id_list_features)
 
-        for i, tensor in enumerate(deserialized_out):
-            assert eager_out[i].shape == tensor.shape
-            assert torch.allclose(eager_out[i], tensor)
+        self.assertEqual(len(deserialized_out), len(eager_out))
+        for deserialized, orginal in zip(deserialized_out, eager_out):
+            self.assertEqual(deserialized.shape, orginal.shape)
+            self.assertTrue(torch.allclose(deserialized, orginal))
 
     def test_dynamic_shape_ebc(self) -> None:
         model = self.generate_model()
@@ -259,7 +300,7 @@ class TestJsonSerializer(unittest.TestCase):
             dynamic_shapes=collection.dynamic_shapes(model, (feature1,)),
             strict=False,
             # Allows KJT to not be unflattened and run a forward on unflattened EP
-            preserve_module_call_signature=(tuple(sparse_fqns)),
+            preserve_module_call_signature=tuple(sparse_fqns),
         )
 
         # Run forward on ExportedProgram
@@ -271,8 +312,8 @@ class TestJsonSerializer(unittest.TestCase):
 
         # Deserialize EBC
         deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
-
         deserialized_model.load_state_dict(model.state_dict())
+
         # Run forward on deserialized model
         deserialized_out = deserialized_model(feature2)
 
