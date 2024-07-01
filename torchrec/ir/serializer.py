@@ -8,7 +8,6 @@
 # pyre-strict
 
 import json
-import logging
 from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
@@ -23,6 +22,7 @@ from torchrec.ir.schema import (
 )
 
 from torchrec.ir.types import SerializerInterface
+from torchrec.ir.utils import logging
 from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import (
@@ -32,6 +32,8 @@ from torchrec.modules.feature_processor_ import (
     PositionWeightedModuleCollection,
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -80,6 +82,26 @@ def get_deserialized_device(
                 f"deserialized device={device} overrides the original device={original_device}"
             )
     return device
+
+
+def ebc_meta_forward(
+    ebc: EmbeddingBagCollection,
+    features: KeyedJaggedTensor,
+) -> KeyedTensor:
+    batch_size = features.stride()
+    dim = sum(ebc._lengths_per_embedding)
+    arg_list = [
+        features.values(),
+        features.weights_or_none(),
+        features.lengths_or_none(),
+        features.offsets_or_none(),
+    ]  # if want to include the weights: `+ [bag.weight for bag in self.embedding_bags.values()]`
+    output = torch.ops.torchrec.ir_custom_op(arg_list, batch_size, dim)
+    return KeyedTensor(
+        keys=ebc._embedding_names,
+        values=output,
+        length_per_key=ebc._lengths_per_embedding,
+    )
 
 
 class JsonSerializer(SerializerInterface):
@@ -163,9 +185,69 @@ class JsonSerializer(SerializerInterface):
             )
         return module
 
+    @classmethod
+    def swap_meta_forward(cls, module: nn.Module) -> None:
+        pass
+
+    @classmethod
+    def encapsulate_module(cls, module: nn.Module) -> List[str]:
+        typename = type(module).__name__
+        serializer = cls.module_to_serializer_cls.get(typename)
+        if serializer is None:
+            raise ValueError(
+                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
+            )
+        assert issubclass(serializer, JsonSerializer)
+        assert serializer._module_cls is not None
+        if not isinstance(module, serializer._module_cls):
+            raise ValueError(
+                f"Expected module to be of type {serializer._module_cls.__name__}, "
+                f"got {type(module)}"
+            )
+        metadata_dict = serializer.serialize_to_dict(module)
+        raw_dict = {"typename": typename, "metadata_dict": metadata_dict}
+        ir_metadata_tensor = torch.frombuffer(
+            json.dumps(raw_dict).encode(), dtype=torch.uint8
+        )
+        module.register_buffer("ir_metadata", ir_metadata_tensor, persistent=False)
+        serializer.swap_meta_forward(module)
+        return serializer.children(module)
+
+    @classmethod
+    def decapsulate_module(
+        cls, module: nn.Module, device: Optional[torch.device] = None
+    ) -> nn.Module:
+        raw_bytes = module.get_buffer("ir_metadata").numpy().tobytes()
+        raw_dict = json.loads(raw_bytes.decode())
+        typename = raw_dict["typename"]
+        metadata_dict = raw_dict["metadata_dict"]
+        if typename not in cls.module_to_serializer_cls:
+            raise ValueError(
+                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
+            )
+        serializer = cls.module_to_serializer_cls[typename]
+        assert issubclass(serializer, JsonSerializer)
+        module = serializer.deserialize_from_dict(metadata_dict, device, module)
+
+        if serializer._module_cls is None:
+            raise ValueError(
+                "Must assign a nn.Module to class static variable _module_cls"
+            )
+        if not isinstance(module, serializer._module_cls):
+            raise ValueError(
+                f"Expected module to be of type {serializer._module_cls.__name__}, got {type(module)}"
+            )
+        return module
+
 
 class EBCJsonSerializer(JsonSerializer):
     _module_cls = EmbeddingBagCollection
+
+    @classmethod
+    def swap_meta_forward(cls, module: nn.Module) -> None:
+        assert isinstance(module, cls._module_cls)
+        # pyre-ignore
+        module.forward = ebc_meta_forward.__get__(module, cls._module_cls)
 
     @classmethod
     def serialize_to_dict(
