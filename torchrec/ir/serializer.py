@@ -14,11 +14,24 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 import torch
 
 from torch import nn
-from torchrec.ir.schema import EBCMetadata, EmbeddingBagConfigMetadata
+from torchrec.ir.schema import (
+    EBCMetadata,
+    EmbeddingBagConfigMetadata,
+    FPEBCMetadata,
+    PositionWeightedModuleCollectionMetadata,
+    PositionWeightedModuleMetadata,
+)
 
 from torchrec.ir.types import SerializerInterface
 from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.feature_processor_ import (
+    FeatureProcessor,
+    FeatureProcessorsCollection,
+    PositionWeightedModule,
+    PositionWeightedModuleCollection,
+)
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -196,3 +209,110 @@ class EBCJsonSerializer(JsonSerializer):
 
 
 JsonSerializer.module_to_serializer_cls["EmbeddingBagCollection"] = EBCJsonSerializer
+
+
+class PWMJsonSerializer(JsonSerializer):
+    _module_cls = PositionWeightedModule
+
+    @classmethod
+    def serialize_to_dict(cls, module: nn.Module) -> Dict[str, Any]:
+        metadata = PositionWeightedModuleMetadata(
+            max_feature_length=module.position_weight.shape[0],
+        )
+        return metadata.__dict__
+
+    @classmethod
+    def deserialize_from_dict(
+        cls,
+        metadata_dict: Dict[str, Any],
+        device: Optional[torch.device] = None,
+        unflatten_ep: Optional[nn.Module] = None,
+    ) -> nn.Module:
+        metadata = PositionWeightedModuleMetadata(**metadata_dict)
+        return PositionWeightedModule(metadata.max_feature_length, device)
+
+
+JsonSerializer.module_to_serializer_cls["PositionWeightedModule"] = PWMJsonSerializer
+
+
+class PWMCJsonSerializer(JsonSerializer):
+    _module_cls = PositionWeightedModuleCollection
+
+    @classmethod
+    def serialize_to_dict(cls, module: nn.Module) -> Dict[str, Any]:
+        metadata = PositionWeightedModuleCollectionMetadata(
+            max_feature_lengths=[  # convert to list of tuples to preserve the order
+                (feature, len) for feature, len in module.max_feature_lengths.items()
+            ],
+        )
+        return metadata.__dict__
+
+    @classmethod
+    def deserialize_from_dict(
+        cls,
+        metadata_dict: Dict[str, Any],
+        device: Optional[torch.device] = None,
+        unflatten_ep: Optional[nn.Module] = None,
+    ) -> nn.Module:
+        metadata = PositionWeightedModuleCollectionMetadata(**metadata_dict)
+        max_feature_lengths = {
+            feature: len for feature, len in metadata.max_feature_lengths
+        }
+        return PositionWeightedModuleCollection(max_feature_lengths, device)
+
+
+JsonSerializer.module_to_serializer_cls["PositionWeightedModuleCollection"] = (
+    PWMCJsonSerializer
+)
+
+
+class FPEBCJsonSerializer(JsonSerializer):
+    _module_cls = FeatureProcessedEmbeddingBagCollection
+    _children = ["_feature_processors", "_embedding_bag_collection"]
+
+    @classmethod
+    def serialize_to_dict(
+        cls,
+        module: nn.Module,
+    ) -> Dict[str, Any]:
+        if isinstance(module._feature_processors, FeatureProcessorsCollection):
+            metadata = FPEBCMetadata(
+                is_fp_collection=True,
+                features=[],
+            )
+        else:
+            metadata = FPEBCMetadata(
+                is_fp_collection=False,
+                features=list(module._feature_processors.keys()),
+            )
+        return metadata.__dict__
+
+    @classmethod
+    def deserialize_from_dict(
+        cls,
+        metadata_dict: Dict[str, Any],
+        device: Optional[torch.device] = None,
+        unflatten_ep: Optional[nn.Module] = None,
+    ) -> nn.Module:
+        metadata = FPEBCMetadata(**metadata_dict)
+        assert unflatten_ep is not None
+        if metadata.is_fp_collection:
+            feature_processors = unflatten_ep._feature_processors
+            assert isinstance(feature_processors, FeatureProcessorsCollection)
+        else:
+            feature_processors: dict[str, FeatureProcessor] = {}
+            for feature in metadata.features:
+                fp = getattr(unflatten_ep._feature_processors, feature)
+                assert isinstance(fp, FeatureProcessor)
+                feature_processors[feature] = fp
+        ebc = unflatten_ep._embedding_bag_collection
+        assert isinstance(ebc, EmbeddingBagCollection)
+        return FeatureProcessedEmbeddingBagCollection(
+            ebc,
+            feature_processors,
+        )
+
+
+JsonSerializer.module_to_serializer_cls["FeatureProcessedEmbeddingBagCollection"] = (
+    FPEBCJsonSerializer
+)
