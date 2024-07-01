@@ -238,6 +238,7 @@ def bucketize_kjt_before_all2all(
         bucketized_weights,
         pos,
         unbucketize_permute,
+        _,
     ) = torch.ops.fbgemm.block_bucketize_sparse_features(
         kjt.lengths().view(-1),
         kjt.values(),
