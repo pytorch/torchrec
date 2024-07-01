@@ -206,6 +206,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._num_proposals: int = 0
         self._num_plans: int = 0
         self._best_plan: Optional[List[ShardingOption]] = None
+        assert 1 == 1
 
     def collective_plan(
         self,
