@@ -10,7 +10,7 @@
 import copy
 from functools import reduce
 from time import perf_counter
-from typing import cast, Dict, List, Optional, Tuple, Union
+from typing import Callable, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 
@@ -137,6 +137,34 @@ def _merge_plans(best_plans: List[ShardingPlan]) -> ShardingPlan:
         return merged_plan
 
 
+def _place_shards_contigious(
+    sharding_options: List[ShardingOption],
+) -> List[ShardingOption]:
+    """
+    This callback is used to place shards contiguously in the same rank for CW sharding.
+    Example (using offsets to describe shard):
+
+    Input:
+    rank 0: [0, 0], [0, 8]
+    rank 1: [0, 4]
+
+    Output:
+    rank 0: [0, 0], [0, 4]
+    rank 1: [0, 8]
+    """
+    for sharding_option in sharding_options:
+        if sharding_option.sharding_type == ShardingType.COLUMN_WISE.value:
+            ranks = [shard.rank for shard in sharding_option.shards]
+            if len(set(ranks)) == len(sharding_option.shards):
+                # no multiple shards can skip table
+                continue
+            ranks.sort()
+            for shard, rank in zip(sharding_option.shards, ranks):
+                shard.rank = rank
+
+    return sharding_options
+
+
 class EmbeddingShardingPlanner(ShardingPlanner):
     """
     Provides an optimized sharding plan for a given module with shardable parameters
@@ -155,6 +183,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         stats: Optional[Union[Stats, List[Stats]]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
+        callbacks: Optional[
+            List[Callable[[List[ShardingOption]], List[ShardingOption]]]
+        ] = None,
     ) -> None:
         if topology is None:
             topology = Topology(
@@ -206,6 +237,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._num_proposals: int = 0
         self._num_plans: int = 0
         self._best_plan: Optional[List[ShardingOption]] = None
+        self._callbacks: List[
+            Callable[[List[ShardingOption]], List[ShardingOption]]
+        ] = ([_place_shards_contigious] if callbacks is None else callbacks)
 
     def collective_plan(
         self,
@@ -336,6 +370,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 proposal = proposer.propose()
 
         if best_plan:
+            for callback in self._callbacks:
+                best_plan = callback(best_plan)
+
             self._best_plan = best_plan
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
 
@@ -445,6 +482,9 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
         stats: Optional[Dict[str, Union[Stats, List[Stats]]]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
+        callbacks: Optional[
+            List[Callable[[List[ShardingOption]], List[ShardingOption]]]
+        ] = None,
     ) -> None:
         default_device = "cuda" if torch.cuda.is_available() else "cpu"
         if topology_groups is None:
@@ -532,6 +572,9 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
         self._num_proposals: int = 0
         self._num_plans: int = 0
         self._best_plan: Optional[List[ShardingOption]] = None
+        self._callbacks: List[
+            Callable[[List[ShardingOption]], List[ShardingOption]]
+        ] = ([_place_shards_contigious] if callbacks is None else callbacks)
 
     def collective_plan(
         self,
@@ -676,6 +719,8 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                     proposal = proposer.propose()
 
             if best_plan:
+                for callback in self._callbacks:
+                    best_plan = callback(best_plan)
                 self._best_plan = best_plan
                 sharding_plan = _to_sharding_plan(
                     best_plan, self._topology_groups[group]
