@@ -70,6 +70,7 @@ class MetricName(MetricNameBase):
     RECALL = "recall"
 
     SERVING_NE = "serving_ne"
+    SERVING_CALIBRATION = "serving_calibration"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -109,6 +110,7 @@ class MetricNamespace(MetricNamespaceBase):
     RECALL = "recall"
 
     SERVING_NE = "serving_ne"
+    SERVING_CALIBRATION = "serving_calibration"
 
 
 class MetricPrefix(StrValueMixin, Enum):
