@@ -104,17 +104,22 @@ def decapsulate_ir_modules(
     return module
 
 
-def _get_dim(x: Union[DIM, str, None], s: str, max: Optional[int] = None) -> DIM:
+def _get_dim(
+    x: Union[DIM, str, None],
+    s: str,
+    min: Optional[int] = None,
+    max: Optional[int] = None,
+) -> DIM:
     if isinstance(x, DIM):
         return x
     elif isinstance(x, str):
         if x in DYNAMIC_DIMS:
             DYNAMIC_DIMS[x] += 1
             x += str(DYNAMIC_DIMS[x])
-        dim = Dim(x, max=max)
+        dim = Dim(x, min=min, max=max)
     else:
         DYNAMIC_DIMS[s] += 1
-        dim = Dim(s + str(DYNAMIC_DIMS[s]), max=max)
+        dim = Dim(s + str(DYNAMIC_DIMS[s]), min=min, max=max)
     return dim
 
 
@@ -123,6 +128,7 @@ def mark_dynamic_kjt(
     shapes_collection: Optional[ShapesCollection] = None,
     variable_length: bool = False,
     vlen: Optional[Union[DIM, str]] = None,
+    llen: Optional[Union[DIM, str]] = None,
     batch_size: Optional[Union[DIM, str]] = None,
 ) -> ShapesCollection:
     """
@@ -153,8 +159,14 @@ def mark_dynamic_kjt(
     if kjt._weights is not None:
         shapes_collection[kjt._weights] = (vlen,)
     if variable_length:
-        batch_size = _get_dim(batch_size, "batch_size", max=4294967295)
-        llen = len(kjt.keys()) * batch_size
+        keys = len(kjt.keys())
+        if llen is None or batch_size is None:
+            llen = _get_dim(None, "llen", min=keys * 2, max=4294967295)
+        elif batch_size is not None:
+            batch_size = _get_dim(
+                batch_size, "batch_size", max=4294967295 // (keys + 1)
+            )
+            llen = len(kjt.keys()) * batch_size
         olen = llen + 1
         if kjt._lengths is not None:
             shapes_collection[kjt._lengths] = (llen,)
