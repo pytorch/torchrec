@@ -69,6 +69,8 @@ class MetricName(MetricNameBase):
     PRECISION = "precision"
     RECALL = "recall"
 
+    SERVING_NE = "serving_ne"
+
 
 class MetricNamespaceBase(StrValueMixin, Enum):
     pass
@@ -105,6 +107,8 @@ class MetricNamespace(MetricNamespaceBase):
 
     PRECISION = "precision"
     RECALL = "recall"
+
+    SERVING_NE = "serving_ne"
 
 
 class MetricPrefix(StrValueMixin, Enum):
