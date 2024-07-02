@@ -152,61 +152,6 @@ class JsonSerializer(SerializerInterface):
         raise NotImplementedError()
 
     @classmethod
-    def serialize(
-        cls,
-        module: nn.Module,
-    ) -> Tuple[torch.Tensor, List[str]]:
-        typename = type(module).__name__
-        serializer = cls.module_to_serializer_cls.get(typename)
-        if serializer is None:
-            raise ValueError(
-                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
-            )
-        assert issubclass(serializer, JsonSerializer)
-        assert serializer._module_cls is not None
-        if not isinstance(module, serializer._module_cls):
-            raise ValueError(
-                f"Expected module to be of type {serializer._module_cls.__name__}, "
-                f"got {type(module)}"
-            )
-        metadata_dict = serializer.serialize_to_dict(module)
-        raw_dict = {"typename": typename, "metadata_dict": metadata_dict}
-        ir_metadata_tensor = torch.frombuffer(
-            json.dumps(raw_dict).encode(), dtype=torch.uint8
-        )
-        return ir_metadata_tensor, serializer.children(module)
-
-    @classmethod
-    def deserialize(
-        cls,
-        ir_metadata: torch.Tensor,
-        device: Optional[torch.device] = None,
-        unflatten_ep: Optional[nn.Module] = None,
-    ) -> nn.Module:
-        raw_bytes = ir_metadata.numpy().tobytes()
-        raw_dict = json.loads(raw_bytes.decode())
-        typename = raw_dict["typename"]
-        if typename not in cls.module_to_serializer_cls:
-            raise ValueError(
-                f"Expected typename to be one of {list(cls.module_to_serializer_cls.keys())}, got {typename}"
-            )
-        serializer = cls.module_to_serializer_cls[typename]
-        assert issubclass(serializer, JsonSerializer)
-        module = serializer.deserialize_from_dict(
-            raw_dict["metadata_dict"], device, unflatten_ep
-        )
-
-        if serializer._module_cls is None:
-            raise ValueError(
-                "Must assign a nn.Module to class static variable _module_cls"
-            )
-        if not isinstance(module, serializer._module_cls):
-            raise ValueError(
-                f"Expected module to be of type {serializer._module_cls.__name__}, got {type(module)}"
-            )
-        return module
-
-    @classmethod
     def swap_meta_forward(cls, module: nn.Module) -> None:
         pass
 

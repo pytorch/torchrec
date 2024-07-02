@@ -29,27 +29,6 @@ class SerializerInterface(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def serialize(
-        cls,
-        module: nn.Module,
-    ) -> Tuple[torch.Tensor, List[str]]:
-        # Take the eager embedding module and generate bytes,
-        #  and a list of children (fqns) which needs further serialization
-        raise NotImplementedError
-
-    @classmethod
-    @abc.abstractmethod
-    def deserialize(
-        cls,
-        ir_metadata: torch.Tensor,  # serialized bytes into a tensor
-        device: Optional[torch.device] = None,
-        unflatten_ep: Optional[nn.Module] = None,  # unflattened ExportedProgram module
-    ) -> nn.Module:
-        # Take the bytes in the buffer and regenerate the eager embedding module
-        raise NotImplementedError
-
-    @classmethod
-    @abc.abstractmethod
     def encapsulate_module(cls, module: nn.Module) -> List[str]:
         # Take the eager embedding module and encapsulate the module, including serialization
         # and meta_forward-swapping, then returns a list of children (fqns) which needs further encapsulation

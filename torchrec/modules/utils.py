@@ -8,7 +8,6 @@
 # pyre-strict
 
 import copy
-import threading
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
@@ -21,26 +20,6 @@ from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
 )
 from torchrec.streamable import Multistreamable
-
-
-lib = torch.library.Library("custom", "FRAGMENT")
-
-
-class OpRegistryState:
-    """
-    State of operator registry.
-
-    We can only register the op schema once. So if we're registering multiple
-    times we need a lock and check if they're the same schema
-    """
-
-    op_registry_lock = threading.Lock()
-
-    # operator schema: {class}.{id} => op_name
-    op_registry_schema: Dict[str, str] = {}
-
-
-operator_registry_state = OpRegistryState()
 
 
 @dataclass
@@ -312,90 +291,6 @@ def _permute_indices(indices: List[int], permute: List[int]) -> List[int]:
     for i, permuted_index in enumerate(permute):
         permuted_indices[i] = indices[permuted_index]
     return permuted_indices
-
-
-#  register a customized operator that takes a list of tensors as input and returns
-#  a list of tensors as output. The operator is registered with the name of
-#  {module_class_name}_{instance_count}
-def register_custom_op(
-    module_name: str,
-    dims: List[int],
-) -> Callable[[List[Optional[torch.Tensor]], int], List[torch.Tensor]]:
-    """
-    Register a customized operator.
-
-    Args:
-        module: customized module instance
-        dims: output dimensions
-    """
-
-    global operator_registry_state
-
-    dims_str = "_".join([str(d) for d in dims])
-    with operator_registry_state.op_registry_lock:
-        op_name: str = f"{module_name}_{dims_str}"
-
-        if op_name in operator_registry_state.op_registry_schema:
-            return getattr(torch.ops.custom, op_name)
-
-        def custom_op(
-            values: List[Optional[torch.Tensor]],
-            batch_size: int,
-        ) -> List[torch.Tensor]:
-            device = None
-            for v in values:
-                if v is not None:
-                    device = v.device
-                    break
-            else:
-                raise AssertionError(
-                    f"Custom op {op_name} expects at least one input tensor"
-                )
-
-            return [
-                torch.empty(
-                    batch_size,
-                    dim,
-                    device=device,
-                )
-                for dim in dims
-            ]
-
-        schema_string = f"{op_name}(Tensor?[] values, SymInt batch_size) -> Tensor[]"
-        operator_registry_state.op_registry_schema[op_name] = schema_string
-        # Register schema
-        lib.define(schema_string)
-
-        # Register implementation
-        lib.impl(op_name, custom_op, "CPU")
-        lib.impl(op_name, custom_op, "CUDA")
-
-        # Register meta formula
-        lib.impl(op_name, custom_op, "Meta")
-
-        return getattr(torch.ops.custom, op_name)
-
-
-def register_custom_ops_for_nodes(
-    nodes: List[torch.fx.Node],
-) -> None:
-    """
-    Given a list of nodes, register custom ops if they exist in the nodes.
-    Required for deserialization if in different runtime environments
-
-    Args:
-        nodes: list of nodes
-    """
-
-    for node in nodes:
-        if "custom." in str(node.target):
-            # torch.ops.custom.EmbeddingBagCollection_100.default
-            # number represents dimension
-            op_name = str(node.target).split(".")[-2]
-            register_custom_op(
-                op_name.split("_")[0],
-                [int(dim) for dim in op_name.split("_")[1:]],
-            )
 
 
 @torch.fx.wrap

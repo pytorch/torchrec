@@ -96,43 +96,6 @@ class PositionWeightedModuleEmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings.values().size(), (3, 16))
         self.assertEqual(pooled_embeddings.offset_per_key(), [0, 8, 16])
 
-    def test_ir_export(self) -> None:
-        class MyModule(torch.nn.Module):
-            def __init__(self, fp_ebc) -> None:
-                super().__init__()
-                self._fp_ebc = fp_ebc
-
-            def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
-                return self._fp_ebc(features)
-
-        m = MyModule(self.generate_fp_ebc())
-        features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8, 9, 9, 9]),
-        )
-        ep = torch.export.export(
-            m,
-            (features,),
-            {},
-            strict=False,
-        )
-        self.assertEqual(
-            sum(n.name.startswith("_embedding_bag") for n in ep.graph.nodes),
-            0,
-        )
-        self.assertEqual(
-            sum(n.name.startswith("embedding_bag_collection") for n in ep.graph.nodes),
-            1,
-            "Shoulde be exact 1 EBC nodes in the exported graph",
-        )
-
-        # export_program's module should produce the same output shape
-        output = m(features)
-        exported = ep.module()(features)
-        self.assertEqual(output.keys(), exported.keys())
-        self.assertEqual(output.values().size(), exported.values().size())
-
 
 class PositionWeightedModuleCollectionEmbeddingBagCollectionTest(unittest.TestCase):
     def generate_fp_ebc(self) -> FeatureProcessedEmbeddingBagCollection:
@@ -182,40 +145,3 @@ class PositionWeightedModuleCollectionEmbeddingBagCollectionTest(unittest.TestCa
             pooled_embeddings_gm_script.offset_per_key(),
             pooled_embeddings.offset_per_key(),
         )
-
-    def test_ir_export(self) -> None:
-        class MyModule(torch.nn.Module):
-            def __init__(self, fp_ebc) -> None:
-                super().__init__()
-                self._fp_ebc = fp_ebc
-
-            def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
-                return self._fp_ebc(features)
-
-        m = MyModule(self.generate_fp_ebc())
-        features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7, 8]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8, 9, 9, 9]),
-        )
-        ep = torch.export.export(
-            m,
-            (features,),
-            {},
-            strict=False,
-        )
-        self.assertEqual(
-            sum(n.name.startswith("_embedding_bag") for n in ep.graph.nodes),
-            0,
-        )
-        self.assertEqual(
-            sum(n.name.startswith("embedding_bag_collection") for n in ep.graph.nodes),
-            1,
-            "Shoulde be exact 1 EBC nodes in the exported graph",
-        )
-
-        # export_program's module should produce the same output shape
-        output = m(features)
-        exported = ep.module()(features)
-        self.assertEqual(output.keys(), exported.keys())
-        self.assertEqual(output.values().size(), exported.values().size())
