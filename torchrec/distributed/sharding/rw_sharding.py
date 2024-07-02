@@ -166,16 +166,6 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
-            dtensor_metadata = DTensorMetadata(
-                mesh=self._env.device_mesh,
-                placements=(Shard(0),),
-                size=(
-                    info.embedding_config.num_embeddings,
-                    info.embedding_config.embedding_dim,
-                ),
-                stride=info.param.stride(),
-            )
-
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
@@ -195,7 +185,6 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         ),
                         local_metadata=shards[rank],
                         global_metadata=global_metadata,
-                        dtensor_metadata=dtensor_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,
