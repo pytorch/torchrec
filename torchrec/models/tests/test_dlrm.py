@@ -15,7 +15,7 @@ from torch.testing import FileCheck  # @manual
 from torchrec.datasets.utils import Batch
 from torchrec.fx import symbolic_trace
 from torchrec.ir.serializer import JsonSerializer
-from torchrec.ir.utils import deserialize_embedding_modules, serialize_embedding_modules
+from torchrec.ir.utils import decapsulate_ir_modules, encapsulate_ir_modules
 from torchrec.models.dlrm import (
     choose,
     DenseArch,
@@ -1263,7 +1263,7 @@ class DLRMExampleTest(unittest.TestCase):
 
         self.assertEqual(logits.size(), (B, 1))
 
-        model, sparse_fqns = serialize_embedding_modules(model, JsonSerializer)
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
 
         ep = torch.export.export(
             model,
@@ -1278,7 +1278,8 @@ class DLRMExampleTest(unittest.TestCase):
         ep_output = ep.module()(features, sparse_features)
         self.assertEqual(ep_output.size(), (B, 1))
 
-        deserialized_model = deserialize_embedding_modules(ep, JsonSerializer)
+        unflatten_model = torch.export.unflatten(ep)
+        deserialized_model = decapsulate_ir_modules(unflatten_model, JsonSerializer)
         deserialized_logits = deserialized_model(features, sparse_features)
 
         self.assertEqual(deserialized_logits.size(), (B, 1))
