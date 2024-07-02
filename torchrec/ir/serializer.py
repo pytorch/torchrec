@@ -104,6 +104,27 @@ def ebc_meta_forward(
     )
 
 
+def fpebc_meta_forward(
+    fpebc: FeatureProcessedEmbeddingBagCollection,
+    features: KeyedJaggedTensor,
+) -> KeyedTensor:
+    batch_size = features.stride()
+    ebc = fpebc._embedding_bag_collection
+    dim = sum(ebc._lengths_per_embedding)
+    arg_list = [
+        features.values(),
+        features.weights_or_none(),
+        features.lengths_or_none(),
+        features.offsets_or_none(),
+    ]  # if want to include the weights: `+ [bag.weight for bag in self.embedding_bags.values()]`
+    output = torch.ops.torchrec.ir_custom_op(arg_list, batch_size, dim)
+    return KeyedTensor(
+        keys=ebc._embedding_names,
+        values=output,
+        length_per_key=ebc._lengths_per_embedding,
+    )
+
+
 class JsonSerializer(SerializerInterface):
     """
     Serializer for torch.export IR using json.
