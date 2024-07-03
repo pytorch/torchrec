@@ -1432,10 +1432,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self._stride_per_key_per_rank = stride_per_key_per_rank
             self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
             self._variable_stride_per_key = True
-            if stride_per_key_per_rank is not None:
-                self._stride = 0
-            elif all(s == self.stride_per_key()[0] for s in self.stride_per_key()):
-                self._stride = self.stride_per_key()[0]
+            self._stride = max(self._stride_per_key)
         else:
             stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
             self._stride = stride
