@@ -41,7 +41,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: pypa/cibuildwheel@v2.8.0
+      - uses: pypa/cibuildwheel@v2.19.2
         with:
           package-dir: contrib/dynamic_embedding
         env:
