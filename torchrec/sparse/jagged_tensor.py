@@ -58,6 +58,22 @@ def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     )
 
 
+@torch.library.custom_op("torchrec::_pin_and_move_op_int", mutates_args=())
+def _pin_and_move_op_int_impl(data: List[int], other: torch.Tensor) -> torch.Tensor:
+    tensor = torch.Tensor(data)
+    device = other.device
+    return (
+        tensor.pin_memory().to(device=device, non_blocking=True)
+        if device.type == "cuda" and tensor.device.type == "cpu"
+        else tensor.to(device=device, non_blocking=True)
+    )
+
+
+@torch.library.register_fake("torchrec::_pin_and_move_op_int")
+def _pin_and_move_op_int_fake(data: List[int], other: torch.Tensor) -> torch.Tensor:
+    return torch.empty(len(data), dtype=torch.int64, device=other.device)
+
+
 def _cumsum(o: List[int]) -> List[int]:
     ret = [0] * (len(o) + 1)
     for i in range(len(o)):
@@ -169,17 +185,22 @@ def _fbgemm_permute_pooled_embs(
     keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
 ) -> List[torch.Tensor]:
     keys, lengths, values = _desugar_keyed_tensors(keyed_tensors)
-    permute, inv_permute, offsets, inv_offsets, splits = _remap_to_groups(
+    permute, inv_permute, offsets, inv_offsets, splits = _remap_to_groups_list(
         keys, lengths, groups
     )
+    args = torch.ops.torchrec._pin_and_move_op_int(
+        permute + inv_permute + offsets + inv_offsets, values[0]
+    )
+    permute, inv_permute, offsets, inv_offsets = args.split(
+        [len(permute), len(permute), len(offsets), len(offsets)]
+    )
     values = torch.concat(values, dim=1)
-    device = values.device
     permuted_values = torch.ops.fbgemm.permute_pooled_embs_auto_grad(
         values,
-        _pin_and_move(offsets, device),
-        _pin_and_move(permute, device),
-        _pin_and_move(inv_offsets, device),
-        _pin_and_move(inv_permute, device),
+        offsets,
+        permute,
+        inv_offsets,
+        inv_permute,
     )
     return list(torch.split(permuted_values, splits, dim=1))
 
@@ -196,6 +217,42 @@ def _desugar_keyed_tensors(
         [kt.length_per_key() for kt in kts],
         [kt.values() for kt in kts],
     )
+
+
+def _remap_to_groups_list(
+    keys: List[List[str]],
+    key_lengths: List[List[int]],
+    groups: List[List[str]],
+) -> Tuple[List[int], List[int], List[int], List[int], List[int]]:
+    """
+    Given a list of keys and lengths per key for each group, return the permute indices, inverse_permute indices, offsets, inv_offsets, splits.
+    The output is used to re-arrange values based on groups with a single cat operation.
+    """
+
+    lengths: List[int] = []
+    flat_keys: List[str] = []
+    flat_groups: List[str] = []
+
+    for sub_keys_length in key_lengths:
+        lengths.extend(sub_keys_length)
+    for sub_keys in keys:
+        flat_keys.extend(sub_keys)
+
+    for sub_group in groups:
+        flat_groups.extend(sub_group)
+
+    key_splits = [len(sub_group) for sub_group in groups]
+
+    index_map = {key: idx for idx, key in enumerate(flat_keys)}
+    permute = [index_map[key] for key in flat_groups]
+    inv_lengths = [lengths[i] for i in permute]
+    splits = _sum_by_splits(inv_lengths, key_splits)
+
+    inv_permute = [0] * len(permute)
+    for i, p in enumerate(permute):
+        inv_permute[p] = i
+
+    return permute, inv_permute, _cumsum(lengths), _cumsum(inv_lengths), splits
 
 
 @torch.fx.wrap
