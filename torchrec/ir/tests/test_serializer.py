@@ -258,15 +258,15 @@ class TestJsonSerializer(unittest.TestCase):
 
         feature2 = KeyedJaggedTensor.from_offsets_sync(
             keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3, 4]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7]),
+            values=torch.tensor([0, 1, 2, 3, 2, 3, 4, 5, 6, 8, 1, 2]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7, 8, 10, 12]),
         )
         eager_out = model(feature2)
 
         # Serialize EBC
-        collection = mark_dynamic_kjt(feature1)
+        collection = mark_dynamic_kjt(feature1, variable_length=True)
         model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
-        ep = torch.export.export(
+        ep = torch.export._trace._export(
             model,
             (feature1,),
             {},
@@ -274,6 +274,7 @@ class TestJsonSerializer(unittest.TestCase):
             strict=False,
             # Allows KJT to not be unflattened and run a forward on unflattened EP
             preserve_module_call_signature=tuple(sparse_fqns),
+            _allow_complex_guards_as_runtime_asserts=True,
         )
 
         # Run forward on ExportedProgram
