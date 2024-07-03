@@ -295,6 +295,25 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(eager_out[i].shape, tensor.shape)
             assert torch.allclose(eager_out[i], tensor)
 
+    def test_ir_custom_op_device(self) -> None:
+        model = self.generate_model()
+        model.fpebc1 = copy.deepcopy(model.ebc1)
+        model.fpebc2 = copy.deepcopy(model.ebc1)
+        feature1 = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+        )
+
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+        for device in ["cpu", "cuda", "meta"]:
+            if device == "cuda" and not torch.cuda.is_available():
+                continue
+            device = torch.device(device)
+            outputs = model.to(device)(feature1.to(device))
+            for output in outputs:
+                self.assertEqual(output.device.type, device.type)
+
     def test_deserialized_device(self) -> None:
         model = self.generate_model()
         id_list_features = KeyedJaggedTensor.from_offsets_sync(

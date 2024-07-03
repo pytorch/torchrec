@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple, Type, Union
 import torch
 
 from torch import nn
-from torch.export import Dim, ExportedProgram, ShapesCollection
+from torch.export import Dim, ShapesCollection
 from torch.export.dynamic_shapes import _Dim as DIM
 from torchrec.ir.types import SerializerInterface
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -37,7 +37,7 @@ def ir_custom_op_impl(
         if t is not None:
             device = t.device
             break
-    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dim})")
+    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dim}) {device}")
     return torch.empty(batch_size, dim, device=device)
 
 
@@ -45,8 +45,13 @@ def ir_custom_op_impl(
 def ir_custom_op_fake(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dim: int
 ) -> torch.Tensor:
-    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dim})")
-    return torch.empty(batch_size, dim)
+    device = None
+    for t in tensors:
+        if t is not None:
+            device = t.device
+            break
+    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dim}) {device}")
+    return torch.empty(batch_size, dim, device=device)
 
 
 def encapsulate_ir_modules(
@@ -104,92 +109,22 @@ def decapsulate_ir_modules(
     return module
 
 
-def serialize_embedding_modules(
-    module: nn.Module,
-    serializer_cls: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
-    fqn: str = "",  # current module's fqn for recursion purpose
-) -> Tuple[nn.Module, List[str]]:
-    """
-    Takes all the modules that are of type `serializer_cls` and serializes them
-    in the given format with a registered buffer to the module.
-
-    Returns the modified module and the list of fqns that had the buffer added,
-    which is needed for torch.export
-    """
-    preserve_fqns: List[str] = []  # fqns of the serialized modules
-    children: List[str] = []  # fqns of the children that need further serialization
-    # handle current module, and find the children which need further serialization
-    if type(module).__name__ in serializer_cls.module_to_serializer_cls:
-        serialized_tensor, children = serializer_cls.serialize(module)
-        module.register_buffer("ir_metadata", serialized_tensor, persistent=False)
-        preserve_fqns.append(fqn)
-    else:
-        # if the module is not of type serializer_cls, then we check all its children
-        children = [child for child, _ in module.named_children()]
-
-    # handle child modules recursively
-    for child in children:
-        submodule = module.get_submodule(child)
-        child_fqn = f"{fqn}.{child}" if len(fqn) > 0 else child
-        _, fqns = serialize_embedding_modules(submodule, serializer_cls, child_fqn)
-        preserve_fqns.extend(fqns)
-    return module, preserve_fqns
-
-
-def _deserialize_embedding_modules(
-    module: nn.Module,
-    serializer_cls: Type[SerializerInterface],
-    device: Optional[torch.device] = None,
-) -> nn.Module:
-    """
-    Takes the unflattened ExportedProgram module, and looks for ir_metadata buffer.
-    If found, deserializes the buffer and replaces the module with the deserialized module.
-    """
-
-    for child_fqn, child in module.named_children():
-        # perform deserialization on the children first, so that we can replace the child module with
-        # the deserialized module, and then replace it in the parent
-        child = _deserialize_embedding_modules(
-            module=child, serializer_cls=serializer_cls, device=device
-        )
-        # replace the child module with deserialized one if applicable
-        setattr(module, child_fqn, child)
-
-    # only deserialize if the module has ir_metadata buffer, otherwise return as is
-    # we use "ir_metadata" as a convention to identify the deserializable module
-    if "ir_metadata" in dict(module.named_buffers()):
-        ir_metadata_tensor = module.get_buffer("ir_metadata")
-        module = serializer_cls.deserialize(ir_metadata_tensor, device, module)
-    return module
-
-
-def deserialize_embedding_modules(
-    ep: ExportedProgram,
-    serializer_cls: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
-    device: Optional[torch.device] = None,
-) -> nn.Module:
-    """
-    Takes ExportedProgram (IR) and looks for ir_metadata buffer.
-    If found, deserializes the buffer and replaces the module with the deserialized
-    module.
-
-    Returns the unflattened ExportedProgram with the deserialized modules.
-    """
-    model = torch.export.unflatten(ep)
-    return _deserialize_embedding_modules(model, serializer_cls, device)
-
-
-def _get_dim(x: Union[DIM, str, None], s: str, max: Optional[int] = None) -> DIM:
+def _get_dim(
+    x: Union[DIM, str, None],
+    s: str,
+    min: Optional[int] = None,
+    max: Optional[int] = None,
+) -> DIM:
     if isinstance(x, DIM):
         return x
     elif isinstance(x, str):
         if x in DYNAMIC_DIMS:
             DYNAMIC_DIMS[x] += 1
             x += str(DYNAMIC_DIMS[x])
-        dim = Dim(x, max=max)
+        dim = Dim(x, min=min, max=max)
     else:
         DYNAMIC_DIMS[s] += 1
-        dim = Dim(s + str(DYNAMIC_DIMS[s]), max=max)
+        dim = Dim(s + str(DYNAMIC_DIMS[s]), min=min, max=max)
     return dim
 
 
@@ -198,6 +133,7 @@ def mark_dynamic_kjt(
     shapes_collection: Optional[ShapesCollection] = None,
     variable_length: bool = False,
     vlen: Optional[Union[DIM, str]] = None,
+    llen: Optional[Union[DIM, str]] = None,
     batch_size: Optional[Union[DIM, str]] = None,
 ) -> ShapesCollection:
     """
@@ -228,8 +164,14 @@ def mark_dynamic_kjt(
     if kjt._weights is not None:
         shapes_collection[kjt._weights] = (vlen,)
     if variable_length:
-        batch_size = _get_dim(batch_size, "batch_size", max=4294967295)
-        llen = len(kjt.keys()) * batch_size
+        keys = len(kjt.keys())
+        if llen is None or batch_size is None:
+            llen = _get_dim(None, "llen", min=keys * 2, max=4294967295)
+        elif batch_size is not None:
+            batch_size = _get_dim(
+                batch_size, "batch_size", max=4294967295 // (keys + 1)
+            )
+            llen = len(kjt.keys()) * batch_size
         olen = llen + 1
         if kjt._lengths is not None:
             shapes_collection[kjt._lengths] = (llen,)
