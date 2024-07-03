@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple, Type, Union
 import torch
 
 from torch import nn
-from torch.export import Dim, ExportedProgram, ShapesCollection
+from torch.export import Dim, ShapesCollection
 from torch.export.dynamic_shapes import _Dim as DIM
 from torchrec.ir.types import SerializerInterface
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -37,7 +37,7 @@ def ir_custom_op_impl(
         if t is not None:
             device = t.device
             break
-    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dim})")
+    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dim}) {device}")
     return torch.empty(batch_size, dim, device=device)
 
 
@@ -45,8 +45,13 @@ def ir_custom_op_impl(
 def ir_custom_op_fake(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dim: int
 ) -> torch.Tensor:
-    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dim})")
-    return torch.empty(batch_size, dim)
+    device = None
+    for t in tensors:
+        if t is not None:
+            device = t.device
+            break
+    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dim}) {device}")
+    return torch.empty(batch_size, dim, device=device)
 
 
 def encapsulate_ir_modules(
