@@ -68,6 +68,8 @@ class QCommsConfig:
     fp8_quantize_dim: Optional[int] = None
     fp8_quantize_dim_bwd: Optional[int] = None
     fp8_bwd_uses_143: Optional[bool] = False
+    mx4_quantize_dim: Optional[int] = None
+    mx4_quantize_dim_bwd: Optional[int] = None
 
     def __post_init__(self) -> None:
         if (
@@ -90,10 +92,35 @@ class QCommsConfig:
                 f"No override of FP8 bwd row dim, using general FP8 row dim for backward: {self.fp8_quantize_dim_bwd} "
             )
 
+        if (
+            self.forward_precision != CommType.MX4
+            and self.backward_precision != CommType.MX4
+            and (
+                self.mx4_quantize_dim is not None
+                or self.mx4_quantize_dim_bwd is not None
+            )
+        ):
+            raise ValueError(
+                f"mx4_quantize_dim is set to {self.mx4_quantize_dim} and mx4_quantize_dim_bwd is set to {self.mx4_quantize_dim_bwd} but no MX4 precision is found in forward or backward precisions"
+            )
+        if (
+            self.backward_precision == CommType.MX4
+            and self.mx4_quantize_dim_bwd is None
+        ):
+            self.mx4_quantize_dim_bwd = self.mx4_quantize_dim
+            logger.warning(
+                f"No override of MX4 bwd row dim, using general MX4 row dim for backward: {self.mx4_quantize_dim_bwd} "
+            )
+
 
 def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCodecs:
     codecs = QuantizedCommCodecs()
     if qcomms_config is not None:
+        row_dim = None
+        if qcomms_config.forward_precision == CommType.FP8:
+            row_dim = qcomms_config.fp8_quantize_dim
+        elif qcomms_config.forward_precision == CommType.MX4:
+            row_dim = qcomms_config.mx4_quantize_dim
         codecs.forward = cast(
             QuantizedCommCodec[QuantizationContext],
             FbgemmQuantizedCommCodec(
@@ -102,13 +129,14 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                 ),
                 loss_scale=qcomms_config.forward_loss_scale,
                 is_fwd=True,
-                row_dim=(
-                    qcomms_config.fp8_quantize_dim
-                    if qcomms_config.forward_precision == CommType.FP8
-                    else None
-                ),
+                row_dim=row_dim,
             ),
         )
+        row_dim_bwd = None
+        if qcomms_config.backward_precision == CommType.FP8:
+            row_dim_bwd = qcomms_config.fp8_quantize_dim_bwd
+        elif qcomms_config.backward_precision == CommType.MX4:
+            row_dim_bwd = qcomms_config.mx4_quantize_dim_bwd
         codecs.backward = cast(
             QuantizedCommCodec[QuantizationContext],
             FbgemmQuantizedCommCodec(
@@ -120,11 +148,7 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                     True if qcomms_config.fp8_bwd_uses_143 else False
                 ),  # if fp8_bwd_uses_143 is True, bwd will use 1-4-3
                 # if fp8_bwd_uses_143 is False/None, bwd will use 1-5-2
-                row_dim=(
-                    qcomms_config.fp8_quantize_dim_bwd
-                    if qcomms_config.backward_precision == CommType.FP8
-                    else None
-                ),
+                row_dim=row_dim_bwd,
             ),
         )
     return codecs
