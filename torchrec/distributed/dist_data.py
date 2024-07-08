@@ -1558,7 +1558,7 @@ class TensorAllToAllValuesAwaitable(Awaitable[torch.Tensor]):
 
         self._dist_values: torch.Tensor
         if self._workers == 1:
-            self._dist_values = input_splits
+            self._dist_values = input
             return
         else:
             if input.dim() > 1:
