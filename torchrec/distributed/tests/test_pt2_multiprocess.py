@@ -534,8 +534,7 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.TABLE_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.FALSE,
-                    # TODO: Revert to "inductor" once D59031938 is relanded, waits sigrid predictor push on ~7/2/2024 for fbgemm op to be in (D58956327)
-                    "eager",
+                    "inductor",
                     _TestConfig(),
                 ),
                 (
@@ -543,8 +542,7 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.COLUMN_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.FALSE,
-                    # TODO: Revert to "inductor" once D59031938 is relanded, waits sigrid predictor push on ~7/2/2024 for fbgemm op to be in (D58956327)
-                    "eager",
+                    "inductor",
                     _TestConfig(),
                 ),
             ]
