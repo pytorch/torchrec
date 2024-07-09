@@ -1197,6 +1197,22 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             torch.equal(j1.values(), torch.Tensor([4.0, 5.0, 6.0, 7.0, 8.0]))
         )
 
+    def test_empty_vb(self) -> None:
+        keys = ["index_0"]
+        values = torch.tensor([])
+        lengths = torch.tensor([])
+        stride_per_key_per_rank = [[]]
+
+        kjt_0 = KeyedJaggedTensor(
+            keys=keys,
+            values=values,
+            lengths=lengths,
+            stride_per_key_per_rank=stride_per_key_per_rank,
+        )
+        self.assertTrue(torch.equal(kjt_0.lengths(), torch.Tensor([])))
+        self.assertTrue(torch.equal(kjt_0.values(), torch.Tensor([])))
+        self.assertEqual(kjt_0.stride(), 0)
+
     def test_split_vb(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
         keys = ["index_0", "index_1", "index_2", "index_3"]
@@ -1214,6 +1230,9 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         self.assertEqual(j0.keys(), ["index_0"])
         self.assertEqual(j1.keys(), ["index_1"])
         self.assertEqual(j2.keys(), ["index_2", "index_3"])
+        self.assertEqual(j0.stride(), 4)
+        self.assertEqual(j1.stride(), 4)
+        self.assertEqual(j2.stride(), 4)
         self.assertTrue(torch.equal(j0.lengths(), torch.IntTensor([2, 0, 1])))
         self.assertTrue(torch.equal(j0.values(), torch.Tensor([1.0, 2.0, 3.0])))
         self.assertTrue(torch.equal(j1.lengths(), torch.IntTensor([])))
@@ -1229,6 +1248,10 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         self.assertEqual(j1.keys(), ["index_0", "index_1", "index_2"])
         self.assertEqual(j2.keys(), [])
         self.assertEqual(j3.keys(), ["index_3"])
+        self.assertEqual(j0.stride(), 4)
+        self.assertEqual(j1.stride(), 4)
+        self.assertEqual(j2.stride(), 4)
+        self.assertEqual(j3.stride(), 4)
         self.assertTrue(torch.equal(j0.lengths(), torch.IntTensor([])))
         self.assertTrue(torch.equal(j0.values(), torch.Tensor([])))
         self.assertTrue(torch.equal(j1.lengths(), torch.IntTensor([2, 0, 1, 1])))

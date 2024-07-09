@@ -1425,17 +1425,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._stride: int = -1
 
         if stride_per_key_per_rank is not None:
-            if stride is not None:
-                raise ValueError(
-                    "Cannot initialize KJT with both `stride` and `stride_per_key_per_rank`"
-                )
             self._stride_per_key_per_rank = stride_per_key_per_rank
             self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
             self._variable_stride_per_key = True
-            if stride_per_key_per_rank is not None:
-                self._stride = 0
-            elif all(s == self.stride_per_key()[0] for s in self.stride_per_key()):
-                self._stride = self.stride_per_key()[0]
+            if stride is not None:
+                self._stride = stride
+            else:
+                self._stride = (
+                    max(self._stride_per_key) if len(self._stride_per_key) > 0 else 0
+                )
         else:
             stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
             self._stride = stride
@@ -1790,7 +1788,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             end_offset = _offset_per_key[end]
             keys: List[str] = self._keys[start:end]
             stride, stride_per_key_per_rank = (
-                (None, self.stride_per_key_per_rank()[start:end])
+                (self._stride, self.stride_per_key_per_rank()[start:end])
                 if self.variable_stride_per_key()
                 else (self._stride, None)
             )
