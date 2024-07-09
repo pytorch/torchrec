@@ -39,6 +39,8 @@ class RecMetricEnum(RecMetricEnumBase):
     SCALAR = "scalar"
     PRECISION = "precision"
     RECALL = "recall"
+    SERVING_NE = "serving_ne"
+    SERVING_CALIBRATION = "serving_calibration"
 
 
 @dataclass(unsafe_hash=True, eq=True)
