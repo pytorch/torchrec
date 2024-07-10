@@ -46,7 +46,6 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     InputDistOutputs,
-    KJTList,
 )
 from torchrec.distributed.fused_params import (
     get_tbes_to_register_from_iterable,
@@ -442,8 +441,9 @@ class GroupedPooledEmbeddingsLookup(
         self.grouped_configs = grouped_configs
         self._feature_processor = feature_processor
 
+        self._world_size: int = dist.get_world_size(pg)
         self._scale_gradient_factor: int = (
-            dist.get_world_size(pg)
+            self._world_size
             if scale_weight_gradients and get_gradient_division()
             else 1
         )
@@ -487,11 +487,24 @@ class GroupedPooledEmbeddingsLookup(
                         ),
                     )
 
+    def _merge_variable_batch_embeddings(
+        self, embeddings: List[torch.Tensor], splits: List[List[int]]
+    ) -> List[torch.Tensor]:
+        split_embs = [e.split(s) for e, s in zip(embeddings, splits)]
+        combined_embs = [
+            emb
+            for rank in range(self._world_size)
+            for n, embs in zip(self._feature_splits, split_embs)
+            for emb in embs[n * rank : n * rank + n]
+        ]
+        return [torch.cat(combined_embs)]
+
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
     ) -> torch.Tensor:
         embeddings: List[torch.Tensor] = []
+        vbe_splits = []
         if len(self._emb_modules) > 0:
             assert sparse_features is not None
             features_by_group = sparse_features.split(
@@ -513,6 +526,23 @@ class GroupedPooledEmbeddingsLookup(
                     )
 
                 embeddings.append(emb_op(features))
+
+                if features.variable_stride_per_key():
+                    stride_per_rank_per_key = list(
+                        zip(*features.stride_per_key_per_rank())
+                    )
+                    vbe_splits.append(
+                        [
+                            stride * dim
+                            for stride_per_rank in stride_per_rank_per_key
+                            for stride, dim in zip(
+                                stride_per_rank, config.embedding_dims()
+                            )
+                        ]
+                    )
+
+        if sparse_features.variable_stride_per_key():
+            embeddings = self._merge_variable_batch_embeddings(embeddings, vbe_splits)
 
         dummy_embedding = (
             self._dummy_embs_tensor
