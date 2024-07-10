@@ -196,6 +196,12 @@ class MergePooledEmbeddingsModule(torch.nn.Module):
         super().__init__()
         self.impl = _MergePooledEmbeddingsModuleImpl(device)
 
+    # This method can be used by an inference runtime to update the
+    # device information for this module.
+    @torch.jit.export
+    def set_device(self, device_str: str) -> None:
+        self.impl.set_device(device_str)
+
     def forward(self, tensors: List[torch.Tensor], cat_dim: int) -> torch.Tensor:
         """
         Calls _MergePooledEmbeddingsModuleImpl with tensors and cat_dim.
@@ -1002,6 +1008,7 @@ class EmbeddingsAllToOne(nn.Module):
     @torch.jit.export
     def set_device(self, device_str: str) -> None:
         self._device = torch.device(device_str)
+        self.merge_pooled_embeddings.set_device(device_str)
 
     def forward(self, tensors: List[torch.Tensor]) -> torch.Tensor:
         """

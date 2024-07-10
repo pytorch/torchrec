@@ -36,6 +36,12 @@ try:
     torch.ops.load_library(
         "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_cpu"
     )
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:permute_multi_embedding_ops_cpu"
+    )
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:permute_multi_embedding_ops_gpu"
+    )
 except OSError:
     pass
 
@@ -165,6 +171,24 @@ def _all_keys_used_once(
 
 
 @torch.fx.wrap
+def permute_multi_embedding(
+    keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
+) -> List[torch.Tensor]:
+    keys, lengths, values = _desugar_keyed_tensors(keyed_tensors)
+    permutes, in_shape, out_shape, out_lengths = _kt_regroup_permutes(
+        values[0], keys, lengths, groups
+    )
+    permuted_values = torch.ops.fbgemm.permute_multi_embedding(
+        values,
+        permutes,
+        in_shape,
+        out_shape,
+        out_lengths,
+    )
+    return permuted_values
+
+
+@torch.fx.wrap
 def _fbgemm_permute_pooled_embs(
     keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
 ) -> List[torch.Tensor]:
@@ -238,6 +262,90 @@ def _remap_to_groups(
     inv_permute = torch.tensor(inv_permute, dtype=torch.int64)
 
     return permute, inv_permute, offsets, inv_offsets, splits
+
+
+def _kt_regroup_permutes(
+    value: torch.Tensor,
+    keys: List[List[str]],
+    key_lengths: List[List[int]],
+    groups: List[List[str]],
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[int]]:
+    """
+    returns: permutes, in_shapes, out_shapes, out_lengths
+    """
+    #  key => (tensor_idx, key_index)
+    key_map: Dict[str, Tuple[int, int]] = {
+        key: (tensor_idx, key_idx)
+        for tensor_idx, tensor in enumerate(keys)
+        for key_idx, key in enumerate(tensor)
+    }
+
+    #  [offsets per tensor]
+    in_offsets: List[List[int]] = [[] for _ in key_lengths]
+    for i, tensor in enumerate(key_lengths):
+        in_offsets[i] = _cumsum(tensor)
+    in_lengths: List[int] = [sum(lengths) for lengths in key_lengths]
+
+    # set total_permutes as the jump stop sign
+    total_permutes: int = sum(len(tensor) for tensor in groups)
+    out_lengths: List[int] = [0] * len(groups)
+
+    # [input_tensor_idx, output_tensor_idx, input_start, output_start, length, jump]
+    permute_param = 6
+    permutes: List[List[int]] = [[0] * permute_param for _ in range(total_permutes)]
+
+    # record the last seen index, so that can make the jump from last_seen to current
+    last_seen: Dict[str, int] = {}
+    permute_idx = 0
+    for output_tensor_idx, output_tenser in enumerate(groups):
+        output_start = 0
+        for output_key in output_tenser:
+            input_tensor_idx, input_key_idx = key_map[output_key]
+            input_start = in_offsets[input_tensor_idx][input_key_idx]
+            length = key_lengths[input_tensor_idx][input_key_idx]
+
+            # add jump data
+            if output_key not in last_seen:
+                jump = 0  # don't need to jump yet
+                # positive as a potential jump start
+                last_seen[output_key] = permute_idx
+            else:
+                prev = last_seen[output_key]
+                if prev >= 0:  # positive ==> it's a jump start
+                    # jump to current idx, positive as the jump start
+                    permutes[prev][5] = permute_idx
+                else:  # it's already in a jump sequence, mark as negative
+                    permutes[-prev][5] = -permute_idx
+                # mark last_seen negative since it's already in jump
+                last_seen[output_key] = -permute_idx
+                # it's a potential jump stop
+                jump = -total_permutes
+
+            permutes[permute_idx][:] = [
+                input_tensor_idx,
+                output_tensor_idx,
+                input_start,
+                output_start,
+                length,
+                jump,
+            ]
+            permute_idx += 1
+            output_start += length
+        out_lengths[output_tensor_idx] = output_start
+
+    permute_tensor = torch.tensor(permutes, dtype=torch.int32)
+    in_shapes = torch.tensor(in_lengths, dtype=torch.int32)
+    out_shapes = torch.tensor(out_lengths, dtype=torch.int32)
+    device = value.device
+    permute_tensor = _pin_and_move(permute_tensor, device)
+    in_shapes = _pin_and_move(in_shapes, device)
+    out_shapes = _pin_and_move(out_shapes, device)
+    return (
+        permute_tensor,
+        in_shapes,
+        out_shapes,
+        out_lengths,
+    )
 
 
 def _values_string(values: torch.Tensor, start: int, end: int) -> str:
@@ -1425,17 +1533,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._stride: int = -1
 
         if stride_per_key_per_rank is not None:
-            if stride is not None:
-                raise ValueError(
-                    "Cannot initialize KJT with both `stride` and `stride_per_key_per_rank`"
-                )
             self._stride_per_key_per_rank = stride_per_key_per_rank
             self._stride_per_key = [sum(s) for s in self._stride_per_key_per_rank]
             self._variable_stride_per_key = True
-            if stride_per_key_per_rank is not None:
-                self._stride = 0
-            elif all(s == self.stride_per_key()[0] for s in self.stride_per_key()):
-                self._stride = self.stride_per_key()[0]
+            if stride is not None:
+                self._stride = stride
+            else:
+                self._stride = (
+                    max(self._stride_per_key) if len(self._stride_per_key) > 0 else 0
+                )
         else:
             stride = _maybe_compute_stride_kjt(keys, stride, lengths, offsets)
             self._stride = stride
@@ -1790,7 +1896,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             end_offset = _offset_per_key[end]
             keys: List[str] = self._keys[start:end]
             stride, stride_per_key_per_rank = (
-                (None, self.stride_per_key_per_rank()[start:end])
+                (self._stride, self.stride_per_key_per_rank()[start:end])
                 if self.variable_stride_per_key()
                 else (self._stride, None)
             )
@@ -1975,8 +2081,20 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 indices_tensor,
                 self.weights_or_none(),
             )
+        elif is_torchdynamo_compiling() and not torch.jit.is_scripting():
+            (
+                permuted_lengths,
+                permuted_values,
+                permuted_weights,
+            ) = torch.ops.fbgemm.permute_2D_sparse_data_input1D(
+                indices_tensor,
+                self.lengths(),
+                self.values(),
+                self.stride(),
+                self.weights_or_none(),
+                permuted_length_per_key_sum,
+            )
         else:
-
             (
                 permuted_lengths,
                 permuted_values,
@@ -2357,8 +2475,24 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         single_batch_per_rank = all(
                             s == stride for s in stride_per_rank
                         )
-
-                    if single_batch_per_rank:
+                    if (
+                        single_batch_per_rank
+                        and is_torchdynamo_compiling()
+                        and not torch.jit.is_scripting()
+                    ):
+                        (
+                            lengths,
+                            values,
+                            weights,
+                        ) = torch.ops.fbgemm.permute_2D_sparse_data_input1D(
+                            torch.jit._unwrap_optional(recat),
+                            lengths,
+                            values,
+                            stride,
+                            weights,
+                            values.numel(),
+                        )
+                    elif single_batch_per_rank:
                         (
                             lengths,
                             values,
