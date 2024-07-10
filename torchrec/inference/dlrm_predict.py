@@ -175,7 +175,7 @@ class DLRMPredictFactory(PredictFactory):
                 table_fqns.append(name.split(".")[-1])
 
         quant_model = quantize_inference_model(module)
-        sharded_model, _ = shard_quant_model(quant_model, table_fqns)
+        sharded_model, _ = shard_quant_model(quant_model)
 
         batch = {}
         batch["float_features"] = self.model_config.sample_input.dense_features.cuda()

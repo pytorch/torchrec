@@ -9,6 +9,7 @@
 
 import abc
 import json
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any, cast, Dict, List, Optional, Tuple, Type
 
@@ -30,6 +31,9 @@ from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.shard_estimators import (
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
+)
+from torchrec.distributed.planner.storage_reservations import (
+    FixedPercentageStorageReservation,
 )
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import (
@@ -60,12 +64,53 @@ from torchrec.quant.embedding_modules import (
     quant_prep_enable_register_tbes,
 )
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 def trim_torch_package_prefix_from_typename(typename: str) -> str:
     if typename.startswith("<torch_package_"):
         # Trim off <torch_package_x> prefix.
         typename = ".".join(typename.split(".")[1:])
     return typename
+
+
+DEFAULT_FUSED_PARAMS: Dict[str, Any] = {
+    FUSED_PARAM_REGISTER_TBE_BOOL: True,
+    FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: True,
+    FUSED_PARAM_BOUNDS_CHECK_MODE: BoundsCheckMode.NONE,
+}
+
+DEFAULT_SHARDERS: List[ModuleSharder[torch.nn.Module]] = [
+    cast(
+        ModuleSharder[torch.nn.Module],
+        QuantEmbeddingBagCollectionSharder(fused_params=DEFAULT_FUSED_PARAMS),
+    ),
+    cast(
+        ModuleSharder[torch.nn.Module],
+        QuantEmbeddingCollectionSharder(fused_params=DEFAULT_FUSED_PARAMS),
+    ),
+    cast(
+        ModuleSharder[torch.nn.Module],
+        QuantFeatureProcessedEmbeddingBagCollectionSharder(
+            fused_params=DEFAULT_FUSED_PARAMS
+        ),
+    ),
+]
+
+DEFAULT_QUANT_MAPPING: Dict[str, Type[torch.nn.Module]] = {
+    trim_torch_package_prefix_from_typename(
+        torch.typename(EmbeddingBagCollection)
+    ): QuantEmbeddingBagCollection,
+    trim_torch_package_prefix_from_typename(
+        torch.typename(EmbeddingCollection)
+    ): QuantEmbeddingCollection,
+}
+
+DEFAULT_QUANTIZATION_DTYPE: torch.dtype = torch.int8
+
+FEATURE_PROCESSED_EBC_TYPE: str = trim_torch_package_prefix_from_typename(
+    torch.typename(FeatureProcessedEmbeddingBagCollection)
+)
 
 
 def quantize_feature(
@@ -301,16 +346,18 @@ def quantize_dense(
     return predict_module
 
 
-def quantize_inference_model(model: torch.nn.Module) -> torch.nn.Module:
+def quantize_inference_model(
+    model: torch.nn.Module,
+    quantization_mapping: Optional[Dict[str, Type[torch.nn.Module]]] = None,
+    per_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None,
+    fp_weight_dtype: torch.dtype = DEFAULT_QUANTIZATION_DTYPE,
+) -> torch.nn.Module:
     """
     Quantize the model.
     """
 
-    DEFAULT_QUANTIZATION_DTYPE: torch.dtype = torch.int8
-
-    FEATURE_PROCESSED_EBC_TYPE: str = trim_torch_package_prefix_from_typename(
-        torch.typename(FeatureProcessedEmbeddingBagCollection)
-    )
+    if quantization_mapping is None:
+        quantization_mapping = DEFAULT_QUANT_MAPPING
 
     def _quantize_fp_module(
         model: torch.nn.Module,
@@ -334,27 +381,18 @@ def quantize_inference_model(model: torch.nn.Module) -> torch.nn.Module:
             QuantFeatureProcessedEmbeddingBagCollection.from_float(fp_module),
         )
 
-    QUANTIZATION_MAPPING: Dict[str, Type[torch.nn.Module]] = {
-        trim_torch_package_prefix_from_typename(
-            torch.typename(EmbeddingBagCollection)
-        ): QuantEmbeddingBagCollection,
-        trim_torch_package_prefix_from_typename(
-            torch.typename(EmbeddingCollection)
-        ): QuantEmbeddingCollection,
-    }
-
     additional_qconfig_spec_keys = []
     additional_mapping = {}
 
     for n, m in model.named_modules():
         typename = trim_torch_package_prefix_from_typename(torch.typename(m))
 
-        if typename in QUANTIZATION_MAPPING:
+        if typename in quantization_mapping:
             additional_qconfig_spec_keys.append(type(m))
-            additional_mapping[type(m)] = QUANTIZATION_MAPPING[typename]
+            additional_mapping[type(m)] = quantization_mapping[typename]
         elif typename == FEATURE_PROCESSED_EBC_TYPE:
             # handle the fp ebc separately
-            _quantize_fp_module(model, m, n)
+            _quantize_fp_module(model, m, n, weight_dtype=fp_weight_dtype)
 
     quant_prep_enable_register_tbes(model, list(additional_mapping.keys()))
     quantize_embeddings(
@@ -363,6 +401,11 @@ def quantize_inference_model(model: torch.nn.Module) -> torch.nn.Module:
         additional_qconfig_spec_keys=additional_qconfig_spec_keys,
         additional_mapping=additional_mapping,
         inplace=True,
+        per_table_weight_dtype=per_table_weight_dtype,
+    )
+
+    logger.info(
+        f"Default quantization dtype is {DEFAULT_QUANTIZATION_DTYPE}, {per_table_weight_dtype=}."
     )
 
     return model
@@ -370,48 +413,45 @@ def quantize_inference_model(model: torch.nn.Module) -> torch.nn.Module:
 
 def shard_quant_model(
     model: torch.nn.Module,
-    table_fqns: List[str],
     world_size: int = 1,
     compute_device: str = "cuda",
+    sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+    fused_params: Optional[Dict[str, Any]] = None,
+    device_memory_size: Optional[int] = None,
+    constraints: Optional[Dict[str, ParameterConstraints]] = None,
 ) -> Tuple[torch.nn.Module, ShardingPlan]:
     """
     Shard the model.
     """
 
-    _fused_param: Dict[str, Any] = {
-        FUSED_PARAM_REGISTER_TBE_BOOL: True,
-        FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: True,
-        FUSED_PARAM_BOUNDS_CHECK_MODE: BoundsCheckMode.NONE,
-    }
+    if constraints is None:
+        table_fqns = []
+        for name, _ in model.named_modules():
+            if "table" in name:
+                table_fqns.append(name.split(".")[-1])
 
-    _sharders: List[ModuleSharder[torch.nn.Module]] = [
-        cast(
-            ModuleSharder[torch.nn.Module],
-            QuantEmbeddingBagCollectionSharder(fused_params=_fused_param),
-        ),
-        cast(
-            ModuleSharder[torch.nn.Module],
-            QuantEmbeddingCollectionSharder(fused_params=_fused_param),
-        ),
-        cast(
-            ModuleSharder[torch.nn.Module],
-            QuantFeatureProcessedEmbeddingBagCollectionSharder(
-                fused_params=_fused_param
-            ),
-        ),
-    ]
+        # Default table wise constraints
+        constraints = {}
+        for name in table_fqns:
+            constraints[name] = ParameterConstraints(
+                sharding_types=[ShardingType.TABLE_WISE.value],
+                compute_kernels=[EmbeddingComputeKernel.QUANT.value],
+            )
 
-    constraints = {}
-
-    for name in table_fqns:
-        constraints[name] = ParameterConstraints(
-            sharding_types=[ShardingType.TABLE_WISE.value],
-            compute_kernels=[EmbeddingComputeKernel.QUANT.value],
-        )
+    if device_memory_size is not None:
+        hbm_cap = device_memory_size
+    elif torch.cuda.is_available() and compute_device == "cuda":
+        hbm_cap = torch.cuda.get_device_properties(
+            f"cuda:{torch.cuda.current_device()}"
+        ).total_memory
+    else:
+        hbm_cap = None
 
     topology = trec_dist.planner.Topology(
         world_size=world_size,
         compute_device=compute_device,
+        local_world_size=world_size,
+        hbm_cap=hbm_cap,
     )
     batch_size = 1
     model_plan = trec_dist.planner.EmbeddingShardingPlanner(
@@ -429,9 +469,12 @@ def shard_quant_model(
                 EmbeddingStorageEstimator(topology=topology, constraints=constraints),
             ],
         ),
+        storage_reservation=FixedPercentageStorageReservation(
+            percentage=0.0,
+        ),
     ).plan(
         model,
-        _sharders,
+        sharders if sharders else DEFAULT_SHARDERS,
     )
 
     model = _shard_modules(
@@ -442,7 +485,7 @@ def shard_quant_model(
             world_size,
             0,
         ),
-        sharders=_sharders,
+        sharders=sharders if sharders else DEFAULT_SHARDERS,
     )
 
     return model, model_plan
