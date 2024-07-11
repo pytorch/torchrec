@@ -518,7 +518,8 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.TABLE_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.TRUE,
-                    "inductor",
+                    # TODO: Revert to "inductor" once https://github.com/pytorch/pytorch/pull/130431 is landed
+                    "eager",
                     _TestConfig(),
                 ),
                 (
@@ -526,7 +527,8 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.COLUMN_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.TRUE,
-                    "inductor",
+                    # TODO: Revert to "inductor" once https://github.com/pytorch/pytorch/pull/130431 is landed
+                    "eager",
                     _TestConfig(),
                 ),
                 (

@@ -205,28 +205,7 @@ def get_sharding_group(
     param_sharding: ParameterSharding,
     fused_params: Optional[Dict[str, Any]] = None,
 ) -> str:
-    if fused_params and fused_params.get(USE_ONE_TBE_PER_TABLE, False):
-        return config.name
-    if param_sharding.sharding_type in {
-        ShardingType.COLUMN_WISE.value,
-        ShardingType.TABLE_COLUMN_WISE.value,
-    }:
-        assert param_sharding.ranks
-        num_ranks = len(param_sharding.ranks)
-        assert config.embedding_dim % num_ranks == 0
-        dim = config.embedding_dim // num_ranks
-    else:
-        dim = config.embedding_dim
-
-    group = f"{param_sharding.sharding_type}"
-    if param_sharding.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING.value:
-        group += f"@{param_sharding.compute_kernel}"
-        if (fused_params and fused_params.get("prefetch_pipeline", False)) or (
-            param_sharding.cache_params
-            and param_sharding.cache_params.prefetch_pipeline
-        ):
-            group += f"@{dim}"
-    return group
+    return param_sharding.sharding_type
 
 
 def create_sharding_infos_by_group(
