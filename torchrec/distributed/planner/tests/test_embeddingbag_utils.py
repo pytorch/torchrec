@@ -11,7 +11,7 @@ import copy
 import unittest
 
 from torchrec.distributed.embeddingbag import (
-    create_sharding_infos_by_group,
+    create_sharding_infos_by_sharding,
     EmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.planner import (
@@ -79,7 +79,7 @@ class CreateShardingInfoTest(unittest.TestCase):
         )
         self.expected_plan = planner.plan(self.model, [self.sharder])  # pyre-ignore[6]
 
-        self.expected_sharding_infos = create_sharding_infos_by_group(
+        self.expected_sharding_infos = create_sharding_infos_by_sharding(
             self.model,
             self.expected_plan.get_plan_for_module(""),  # pyre-ignore[6]
             prefix="embedding_bags.",
@@ -93,7 +93,7 @@ class CreateShardingInfoTest(unittest.TestCase):
 
         # with sharder fused params that will get overridden
         sharder_fused_params = {"enforce_hbm": False}
-        overriden_sharding_infos = create_sharding_infos_by_group(
+        overriden_sharding_infos = create_sharding_infos_by_sharding(
             self.model,
             self.expected_plan.get_plan_for_module(""),
             prefix="embedding_bags.",
@@ -106,7 +106,7 @@ class CreateShardingInfoTest(unittest.TestCase):
 
         # with sharder fused params that won't get overridden
         sharder_fused_params = {"ABC": True}
-        not_overriden_sharding_infos = create_sharding_infos_by_group(
+        not_overriden_sharding_infos = create_sharding_infos_by_sharding(
             self.model,
             self.expected_plan.get_plan_for_module(""),
             prefix="embedding_bags.",
@@ -141,7 +141,7 @@ class CreateShardingInfoTest(unittest.TestCase):
         # provide that two fused params from sharder
         sharder_fused_params = {"enforce_hbm": True, "stochastic_rounding": False}
 
-        combined_sharding_infos = create_sharding_infos_by_group(
+        combined_sharding_infos = create_sharding_infos_by_sharding(
             self.model,
             new_plan.get_plan_for_module(""),  # pyre-ignore[6]
             prefix="embedding_bags.",
@@ -156,7 +156,7 @@ class CreateShardingInfoTest(unittest.TestCase):
 
         # provide that two fused params from sharder wrongly
         sharder_fused_params = {"enforce_hbm": True, "stochastic_rounding": True}
-        wrong_combined_sharding_infos = create_sharding_infos_by_group(
+        wrong_combined_sharding_infos = create_sharding_infos_by_sharding(
             self.model,
             new_plan.get_plan_for_module(""),  # pyre-ignore[6]
             prefix="embedding_bags.",
