@@ -1895,10 +1895,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             end = start + segment
             end_offset = _offset_per_key[end]
             keys: List[str] = self._keys[start:end]
-            stride, stride_per_key_per_rank = (
-                (self._stride, self.stride_per_key_per_rank()[start:end])
+            stride_per_key_per_rank = (
+                self.stride_per_key_per_rank()[start:end]
                 if self.variable_stride_per_key()
-                else (self._stride, None)
+                else None
             )
             if segment == len(self._keys):
                 # no torch slicing required
@@ -1909,7 +1909,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         weights=self.weights_or_none(),
                         lengths=self._lengths,
                         offsets=self._offsets,
-                        stride=stride,
+                        stride=self._stride,
                         stride_per_key_per_rank=stride_per_key_per_rank,
                         length_per_key=self._length_per_key,
                         offset_per_key=self._offset_per_key,
@@ -1943,7 +1943,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                         offsets=torch.tensor(
                             empty_int_list, device=self.device(), dtype=torch.int
                         ),
-                        stride=stride,
+                        stride=self._stride,
                         stride_per_key_per_rank=stride_per_key_per_rank,
                         length_per_key=None,
                         offset_per_key=None,
@@ -1987,7 +1987,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             ),
                             lengths=_lengths,
                             offsets=None,
-                            stride=stride,
+                            stride=self._stride,
                             stride_per_key_per_rank=stride_per_key_per_rank,
                             length_per_key=split_length_per_key,
                             offset_per_key=None,
@@ -2021,7 +2021,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                                 ]
                             ],
                             offsets=None,
-                            stride=stride,
+                            stride=self._stride,
                             stride_per_key_per_rank=stride_per_key_per_rank,
                             length_per_key=split_length_per_key,
                             offset_per_key=None,
@@ -2106,10 +2106,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 self.weights_or_none(),
                 permuted_length_per_key_sum,
             )
-        stride, optional_permuted_stride_per_key_per_rank = (
-            (None, permuted_stride_per_key_per_rank)
-            if self.variable_stride_per_key()
-            else (self._stride, None)
+        stride_per_key_per_rank = (
+            permuted_stride_per_key_per_rank if self.variable_stride_per_key() else None
         )
         kjt = KeyedJaggedTensor(
             keys=permuted_keys,
@@ -2117,8 +2115,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights=permuted_weights,
             lengths=permuted_lengths.view(-1),
             offsets=None,
-            stride=stride,
-            stride_per_key_per_rank=optional_permuted_stride_per_key_per_rank,
+            stride=self._stride,
+            stride_per_key_per_rank=stride_per_key_per_rank,
             length_per_key=permuted_length_per_key if len(permuted_keys) > 0 else None,
             offset_per_key=None,
             index_per_key=None,
@@ -2128,10 +2126,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return kjt
 
     def flatten_lengths(self) -> "KeyedJaggedTensor":
-        stride, stride_per_key_per_rank = (
-            (None, self.stride_per_key_per_rank())
-            if self.variable_stride_per_key()
-            else (self._stride, None)
+        stride_per_key_per_rank = (
+            self._stride_per_key_per_rank if self.variable_stride_per_key() else None
         )
         return KeyedJaggedTensor(
             keys=self._keys,
@@ -2139,7 +2135,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights=self._weights,
             lengths=self.lengths().view(-1),
             offsets=None,
-            stride=stride,
+            stride=self._stride,
             stride_per_key_per_rank=stride_per_key_per_rank,
             length_per_key=self.length_per_key(),
             offset_per_key=None,
@@ -2253,10 +2249,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
-        stride, stride_per_key_per_rank = (
-            (None, self._stride_per_key_per_rank)
-            if self.variable_stride_per_key()
-            else (self._stride, None)
+        stride_per_key_per_rank = (
+            self._stride_per_key_per_rank if self.variable_stride_per_key() else None
         )
         length_per_key = self._length_per_key
         offset_per_key = self._offset_per_key
@@ -2290,7 +2284,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 if offsets is not None
                 else None
             ),
-            stride=stride,
+            stride=self._stride,
             stride_per_key_per_rank=stride_per_key_per_rank,
             length_per_key=length_per_key,
             offset_per_key=offset_per_key,
@@ -2327,10 +2321,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
-        stride, stride_per_key_per_rank = (
-            (None, self._stride_per_key_per_rank)
-            if self.variable_stride_per_key()
-            else (self._stride, None)
+        stride_per_key_per_rank = (
+            self._stride_per_key_per_rank if self.variable_stride_per_key() else None
         )
         inverse_indices = self._inverse_indices
         if inverse_indices is not None:
@@ -2342,7 +2334,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights=weights.pin_memory() if weights is not None else None,
             lengths=lengths.pin_memory() if lengths is not None else None,
             offsets=offsets.pin_memory() if offsets is not None else None,
-            stride=stride,
+            stride=self._stride,
             stride_per_key_per_rank=stride_per_key_per_rank,
             length_per_key=self._length_per_key,
             offset_per_key=self._offset_per_key,
