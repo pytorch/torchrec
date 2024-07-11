@@ -172,9 +172,7 @@ class ThroughputMetric(nn.Module):
             if not math.isclose(lifetime_throughput.item(), 0):
                 ret.update(
                     {
-                        self._lifetime_throughput_key: torch.tensor(
-                            lifetime_throughput, dtype=torch.double
-                        ),
+                        self._lifetime_throughput_key: lifetime_throughput.clone().detach(),
                         self._window_throughput_key: torch.tensor(
                             window_throughput, dtype=torch.double
                         ),
