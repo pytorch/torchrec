@@ -61,6 +61,7 @@ def compute_ne(
         return torch.tensor([eta])
 
     # Goes into this block if all elements in weighted_num_samples > 0
+    weighted_num_samples = weighted_num_samples.double().clamp(min=eta)
     mean_label = pos_labels / weighted_num_samples
     ce_norm = _compute_cross_entropy_norm(mean_label, pos_labels, neg_labels, eta)
     return ce_sum / ce_norm

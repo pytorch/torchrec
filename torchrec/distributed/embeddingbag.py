@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import (
     Any,
-    Callable,
     cast,
     Dict,
     Iterator,
@@ -39,7 +38,6 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingShardingInfo,
     KJTListSplitsAwaitable,
     Multistreamable,
-    USE_ONE_TBE_PER_TABLE,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -77,7 +75,6 @@ from torchrec.distributed.utils import (
     optimizer_type_to_emb_opt_type,
 )
 from torchrec.modules.embedding_configs import (
-    BaseEmbeddingConfig,
     EmbeddingBagConfig,
     EmbeddingTableConfig,
     PoolingType,
@@ -200,36 +197,7 @@ def create_embedding_bag_sharding(
         raise ValueError(f"Sharding type not supported {sharding_type}")
 
 
-def get_sharding_group(
-    config: BaseEmbeddingConfig,
-    param_sharding: ParameterSharding,
-    fused_params: Optional[Dict[str, Any]] = None,
-) -> str:
-    if fused_params and fused_params.get(USE_ONE_TBE_PER_TABLE, False):
-        return config.name
-    if param_sharding.sharding_type in {
-        ShardingType.COLUMN_WISE.value,
-        ShardingType.TABLE_COLUMN_WISE.value,
-    }:
-        assert param_sharding.ranks
-        num_ranks = len(param_sharding.ranks)
-        assert config.embedding_dim % num_ranks == 0
-        dim = config.embedding_dim // num_ranks
-    else:
-        dim = config.embedding_dim
-
-    group = f"{param_sharding.sharding_type}"
-    if param_sharding.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING.value:
-        group += f"@{param_sharding.compute_kernel}"
-        if (fused_params and fused_params.get("prefetch_pipeline", False)) or (
-            param_sharding.cache_params
-            and param_sharding.cache_params.prefetch_pipeline
-        ):
-            group += f"@{dim}"
-    return group
-
-
-def create_sharding_infos_by_group(
+def create_sharding_infos_by_sharding(
     module: EmbeddingBagCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
     prefix: str,
@@ -250,7 +218,9 @@ def create_sharding_infos_by_group(
             else:
                 shared_feature[feature_name] = True
 
-    group_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = defaultdict(list)
+    sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]] = (
+        defaultdict(list)
+    )
 
     # state_dict returns parameter.Tensor, which loses parameter level attributes
     parameter_by_name = dict(module.named_parameters())
@@ -304,7 +274,6 @@ def create_sharding_infos_by_group(
         )
         per_table_fused_params = convert_to_fbgemm_types(per_table_fused_params)
 
-        group = get_sharding_group(config, parameter_sharding, fused_params)
         sharding_info = EmbeddingShardingInfo(
             embedding_config=EmbeddingTableConfig(
                 num_embeddings=config.num_embeddings,
@@ -324,8 +293,10 @@ def create_sharding_infos_by_group(
             param=param,
             fused_params=per_table_fused_params,
         )
-        group_to_sharding_infos[group].append(sharding_info)
-    return group_to_sharding_infos
+        sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
+            sharding_info
+        )
+    return sharding_type_to_sharding_infos
 
 
 def create_sharding_infos_by_sharding_device_group(
@@ -602,7 +573,7 @@ class ShardedEmbeddingBagCollection(
         )
         self._env = env
 
-        group_to_sharding_infos = create_sharding_infos_by_group(
+        sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module,
             table_name_to_parameter_sharding,
             "embedding_bags.",
@@ -623,7 +594,7 @@ class ShardedEmbeddingBagCollection(
                 permute_embeddings=True,
                 qcomm_codecs_registry=self.qcomm_codecs_registry,
             )
-            for embedding_configs in group_to_sharding_infos.values()
+            for embedding_configs in sharding_type_to_sharding_infos.values()
         ]
 
         self._is_weighted: bool = module.is_weighted()

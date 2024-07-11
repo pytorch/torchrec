@@ -37,10 +37,8 @@ class EagerModelProcessingTests(unittest.TestCase):
             )
         )
 
-        table_fqns = ["table_" + str(i) for i in range(10)]
-
         quantized_model = quantize_inference_model(model)
-        sharded_model, _ = shard_quant_model(quantized_model, table_fqns)
+        sharded_model, _ = shard_quant_model(quantized_model)
 
         sharded_qebc = sharded_model._module.sparse.ebc
         self.assertEqual(len(sharded_qebc.tbes), 1)

@@ -653,9 +653,10 @@ class ModelParallelBase(ModelParallelTestShared):
             )
             for i, table in enumerate(self.tables)
         }
+        fused_params = {"prefetch_pipeline": True}
         self._test_sharding(
             # pyre-ignore[6]
-            sharders=[EmbeddingBagCollectionSharder()],
+            sharders=[EmbeddingBagCollectionSharder(fused_params=fused_params)],
             backend=self.backend,
             constraints=constraints,
             variable_batch_per_feature=True,
