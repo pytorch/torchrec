@@ -490,6 +490,7 @@ class GroupedPooledEmbeddingsLookup(
     def _merge_variable_batch_embeddings(
         self, embeddings: List[torch.Tensor], splits: List[List[int]]
     ) -> List[torch.Tensor]:
+        assert len(embeddings) > 1 and len(splits) > 1
         split_embs = [e.split(s) for e, s in zip(embeddings, splits)]
         combined_embs = [
             emb
@@ -527,7 +528,7 @@ class GroupedPooledEmbeddingsLookup(
 
                 embeddings.append(emb_op(features))
 
-                if features.variable_stride_per_key():
+                if features.variable_stride_per_key() and len(self._emb_modules) > 1:
                     stride_per_rank_per_key = list(
                         zip(*features.stride_per_key_per_rank())
                     )
@@ -541,7 +542,7 @@ class GroupedPooledEmbeddingsLookup(
                         ]
                     )
 
-        if sparse_features.variable_stride_per_key():
+        if sparse_features.variable_stride_per_key() and len(embeddings) > 1:
             embeddings = self._merge_variable_batch_embeddings(embeddings, vbe_splits)
 
         dummy_embedding = (
