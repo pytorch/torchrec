@@ -27,7 +27,7 @@ jobs:
       with-rocm: false
   filter-matrix:
     needs: generate-matrix
-    runs-on: linux.2xlarge
+    runs-on: linux.20_04.4x
     outputs:
       matrix: ${{ steps.filter.outputs.matrix }}
     steps:
