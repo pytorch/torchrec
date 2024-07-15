@@ -24,8 +24,8 @@ jobs:
     # Update references
     - name: Update pip
       run: |
-        sudo yum update -y
-        sudo yum -y install git python3-pip
+        sudo apt-get update
+        sudo apt-get -y install python3-pip
         sudo pip3 install --upgrade pip
     - name: Setup conda
       run: |
@@ -48,7 +48,7 @@ jobs:
     - name: Install gcc
       shell: bash
       run: |
-        sudo yum group install -y "Development Tools"
+        sudo apt-get install build-essential
     - name: setup Path
       run: |
         echo /usr/local/bin >> $GITHUB_PATH
