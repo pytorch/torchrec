@@ -8,7 +8,7 @@
 # pyre-strict
 
 from enum import Enum, unique
-from typing import Any, List
+from typing import Any, List, Union
 
 import torch
 
@@ -32,6 +32,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
         optimizer (KeyedOptimizer): optimizer to wrap
         clipping (GradientClipping): how to clip gradients
         max_gradient (float): max value for clipping
+        norm_type (float or str): type of the used p-norm. Can be ``'inf'`` for infinity norm.
     """
 
     def __init__(
@@ -39,10 +40,12 @@ class GradientClippingOptimizer(OptimizerWrapper):
         optimizer: KeyedOptimizer,
         clipping: GradientClipping = GradientClipping.NONE,
         max_gradient: float = 0.1,
+        norm_type: Union[float, str] = 2.0,
     ) -> None:
         super().__init__(optimizer)
         self._clipping = clipping
         self._max_gradient = max_gradient
+        self._norm_type = norm_type
         self._check_meta: bool = True
 
         self._params: List[torch.Tensor] = []
@@ -79,7 +82,9 @@ class GradientClippingOptimizer(OptimizerWrapper):
             self._check_meta = False
 
         if self._clipping == GradientClipping.NORM:
-            torch.nn.utils.clip_grad_norm_(self._params, self._max_gradient)
+            torch.nn.utils.clip_grad_norm_(
+                self._params, self._max_gradient, norm_type=self._norm_type
+            )
         elif self._clipping == GradientClipping.VALUE:
             torch.nn.utils.clip_grad_value_(self._params, self._max_gradient)
 
