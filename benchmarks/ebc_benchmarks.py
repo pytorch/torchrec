@@ -11,9 +11,10 @@ import argparse
 import sys
 from typing import List, Tuple
 
+# pyre-fixme[21]: Could not find module `ebc_benchmarks_utils`.
+import ebc_benchmarks_utils
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLocation
-from torchrec.github.benchmarks import ebc_benchmarks_utils
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.fused_embedding_modules import FusedEmbeddingBagCollection
