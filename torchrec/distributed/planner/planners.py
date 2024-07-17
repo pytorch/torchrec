@@ -214,7 +214,20 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         pg: Optional[dist.ProcessGroup] = None,
     ) -> ShardingPlan:
         """
-        Call self.plan(...) on rank 0 and broadcast
+        Call self.plan(...) on group rank 0 and broadcast
+
+        If the pg is a WORLD pg, then group rank 0 == global rank 0,
+        and there's no conversion needed.
+
+        However when pg is a group pg, say the below case:
+
+        [
+            [0, 1, 2, 3],
+            [4, 5, 6, 7],
+        ]
+
+        The broadcast in the 2nd group is esssentially
+        from group rank 0 (global rank 4).
         """
         if pg is None:
             assert dist.is_initialized(), (
@@ -228,13 +241,15 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             sharders = get_default_sharders()
         return invoke_on_rank_and_broadcast_result(
             pg,
-            0,
+            # Convert from group rank 0 to WORLD
+            # See https://github.com/pytorch/pytorch/blob/b5bef9bbfd3aa963645d915c0452f5e342b60039/torch/distributed/distributed_c10d.py#L2117
+            dist.get_global_rank(pg, 0),
             self.plan,
             module,
             sharders,
         )
 
-    def plan(
+    def plan(  # noqa: C901
         self,
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
