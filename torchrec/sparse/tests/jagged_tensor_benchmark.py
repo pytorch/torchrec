@@ -18,10 +18,12 @@ import torch
 from torchrec.distributed.benchmark.benchmark_utils import benchmark, BenchmarkResult
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import (
+    _fbgemm_permute_pooled_embs,
     _regroup_keyed_tensors,
     KeyedJaggedTensor,
     KeyedTensor,
     permute_multi_embedding,
+    regroup_kts,
 )
 from torchrec.sparse.tests.utils import build_groups, build_kts
 
@@ -213,7 +215,7 @@ def main(
                     ).float()
                     groups = build_groups(kts, n_groups, duplicates=duplicates)
                     bench(
-                        "_regroup_keyed_tenors" + dup,
+                        "[pytorch generic] fallback" + dup,
                         labels,
                         batch_size,
                         n_dense + n_sparse,
@@ -224,7 +226,7 @@ def main(
                         profile,
                     )
                     bench(
-                        "KeyedTensor.regroup" + dup,
+                        "[Prod] KeyedTensor.regroup" + dup,
                         labels,
                         batch_size,
                         n_dense + n_sparse,
@@ -235,7 +237,7 @@ def main(
                         profile,
                     )
                     bench(
-                        "KTRegroupAsDict" + dup,
+                        "[Module] KTRegroupAsDict" + dup,
                         labels,
                         batch_size,
                         n_dense + n_sparse,
@@ -248,7 +250,7 @@ def main(
                         profile,
                     )
                     bench(
-                        "permute_multi_embs" + dup,
+                        "[2 Ops] permute_multi_embs" + dup,
                         labels,
                         batch_size,
                         n_dense + n_sparse,
@@ -258,6 +260,29 @@ def main(
                         {"keyed_tensors": kts, "groups": groups},
                         profile,
                     )
+                    bench(
+                        "[1 Op] KT_regroup" + dup,
+                        labels,
+                        batch_size,
+                        n_dense + n_sparse,
+                        device_type,
+                        run_backward,
+                        regroup_kts,
+                        {"keyed_tensors": kts, "groups": groups},
+                        profile,
+                    )
+                    if not duplicates:
+                        bench(
+                            "[Old Prod] permute_pooled_embs" + dup,
+                            labels,
+                            batch_size,
+                            n_dense + n_sparse,
+                            device_type,
+                            run_backward,
+                            _fbgemm_permute_pooled_embs,
+                            {"keyed_tensors": kts, "groups": groups},
+                            profile,
+                        )
 
 
 if __name__ == "__main__":

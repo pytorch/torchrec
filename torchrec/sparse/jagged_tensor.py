@@ -175,7 +175,7 @@ def permute_multi_embedding(
     keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
 ) -> List[torch.Tensor]:
     keys, lengths, values = _desugar_keyed_tensors(keyed_tensors)
-    permutes, in_shape, out_shape, out_lengths = _kt_regroup_permutes(
+    permutes, in_shape, out_shape, out_lengths = torch.ops.fbgemm.kt_regroup_permutes(
         values[0], keys, lengths, groups
     )
     permuted_values = torch.ops.fbgemm.permute_multi_embedding(
@@ -186,6 +186,19 @@ def permute_multi_embedding(
         out_lengths,
     )
     return permuted_values
+
+
+@torch.fx.wrap
+def regroup_kts(
+    keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
+) -> List[torch.Tensor]:
+    keys, lengths, values = _desugar_keyed_tensors(keyed_tensors)
+    return torch.ops.fbgemm.regroup_keyed_tensor(
+        values,
+        keys,
+        lengths,
+        groups,
+    )
 
 
 @torch.fx.wrap
@@ -2726,11 +2739,7 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def regroup(
         keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
     ) -> List[torch.Tensor]:
-        # Fast path, one-to-one correspondence between keyed_tensors and groups
-        if _all_keys_used_once(keyed_tensors, groups) is True:
-            return _fbgemm_permute_pooled_embs(keyed_tensors, groups)
-        else:  # Fallback to slow path otherwise
-            return _regroup_keyed_tensors(keyed_tensors, groups)
+        return permute_multi_embedding(keyed_tensors, groups)
 
     @staticmethod
     def regroup_as_dict(
