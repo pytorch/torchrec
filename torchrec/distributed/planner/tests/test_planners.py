@@ -11,7 +11,9 @@ import unittest
 from typing import cast, List, Optional
 
 import torch
+import torch.distributed as dist
 from torch import nn
+from torch.testing._internal.common_distributed import spawn_threads_and_init_comms
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner import ParameterConstraints
@@ -108,6 +110,51 @@ class TestEmbeddingShardingPlanner(unittest.TestCase):
         ]
 
         self.assertEqual(sorted(expected_ranks), sorted(ranks))
+
+    @spawn_threads_and_init_comms(world_size=4)
+    def test_collective_plan(self) -> None:
+        # set up groups
+        group_sz = 2
+        group_start = dist.get_rank() // group_sz * group_sz
+        sub_group_world_ranks = list(range(group_start, group_start + group_sz))
+        pg = dist.new_group(
+            sub_group_world_ranks,
+            backend=dist.get_backend(),
+            use_local_synchronization=True,
+        )
+
+        # setup tables
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(4)
+        ]
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(
+                world_size=group_sz,
+                hbm_cap=1024 * 1024 * 2,
+                compute_device="cuda",
+                device_ranks=sub_group_world_ranks,
+            )
+        )
+        sharding_plan = planner.collective_plan(
+            module=model, sharders=[TWvsRWSharder()], pg=pg
+        )
+        ebc_plan = cast(EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ebc"])
+        self.assertIsInstance(ebc_plan, EmbeddingModuleShardingPlan)
+        ranks = [
+            cast(List[int], param_shard.ranks) for param_shard in ebc_plan.values()
+        ]
+        if dist.get_rank() < 2:
+            self.assertEqual(sorted(ranks), [[0], [0], [1], [1]])
+        else:
+            self.assertEqual(sorted(ranks), [[2], [2], [3], [3]])
 
     def test_never_fit(self) -> None:
         tables = [

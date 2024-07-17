@@ -190,6 +190,7 @@ class Topology:
         custom_topology_data: Optional[CustomTopologyData] = None,
         weighted_feature_bwd_compute_multiplier: float = WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER,
         uneven_sharding_perf_multiplier: float = 1.0,
+        device_ranks: Optional[List[int]] = None,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
@@ -203,26 +204,35 @@ class Topology:
 
         self._compute_device = compute_device
         self._world_size = world_size
+        self._device_ranks: List[int] = (
+            device_ranks if device_ranks is not None else list(range(world_size))
+        )
 
-        hbm_per_device = [0] * world_size
+        hbm_per_device: Dict[int, int] = {rank: 0 for rank in self._device_ranks}
         if self._compute_device == "cuda":
-            hbm_per_device = [hbm_cap if hbm_cap else HBM_CAP] * world_size
-        ddr_cap_per_rank = [ddr_cap if ddr_cap else DDR_CAP] * world_size
+            for rank in hbm_per_device.keys():
+                hbm_per_device[rank] = hbm_cap if hbm_cap else HBM_CAP
+        ddr_cap_per_rank: Dict[int, int] = {
+            rank: ddr_cap if ddr_cap else DDR_CAP for rank in self._device_ranks
+        }
 
         if custom_topology_data:
-            if custom_topology_data.has_data("hbm_cap"):
-                hbm_per_device = custom_topology_data.get_data("hbm_cap")
-                assert (
-                    len(hbm_per_device) == world_size
-                ), "Must provide individual hbm_cap for each device"
-            if custom_topology_data.has_data("ddr_cap"):
-                ddr_cap_per_rank = custom_topology_data.get_data("ddr_cap")
-                assert (
-                    len(ddr_cap_per_rank) == world_size
-                ), "Must provide individual ddr_cap for each device"
+            hbm_cap_override = self._from_contiguous(
+                custom_topology_data, "hbm_cap", world_size
+            )
+            if hbm_cap_override is not None:
+                hbm_per_device = hbm_cap_override
+            ddr_cap_override = self._from_contiguous(
+                custom_topology_data, "ddr_cap", world_size
+            )
+            if ddr_cap_override is not None:
+                ddr_cap_per_rank = ddr_cap_override
 
         self._devices: List[DeviceHardware] = []
-        for rank in range(world_size):
+        assert (
+            len(self._device_ranks) == world_size
+        ), f"Mismatched {world_size=} and device_ranks={len(self._device_ranks)}. Device ranks input: {device_ranks}"
+        for rank in self._device_ranks:
             self._devices.append(
                 DeviceHardware(
                     rank=rank,
@@ -247,6 +257,20 @@ class Topology:
         )
         self._uneven_sharding_perf_multiplier = uneven_sharding_perf_multiplier
 
+    @classmethod
+    def _from_contiguous(
+        cls, custom_topology_data: CustomTopologyData, field_name: str, world_size: int
+    ) -> Optional[Dict[int, int]]:
+        if not custom_topology_data.has_data(field_name):
+            return None
+        hbm_per_device: Dict[int, int] = dict(
+            enumerate(custom_topology_data.get_data(field_name))
+        )
+        assert (
+            len(hbm_per_device) == world_size
+        ), f"Must provide individual {field_name} for each device"
+        return hbm_per_device
+
     @property
     def compute_device(self) -> str:
         return self._compute_device
@@ -254,6 +278,10 @@ class Topology:
     @property
     def devices(self) -> List[DeviceHardware]:
         return self._devices
+
+    @property
+    def device_ranks(self) -> List[int]:
+        return self._device_ranks
 
     @property
     def world_size(self) -> int:
