@@ -10,7 +10,7 @@
 import copy
 from functools import reduce
 from time import perf_counter
-from typing import cast, Dict, List, Optional, Tuple, Union
+from typing import Callable, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
 
@@ -65,6 +65,8 @@ from torchrec.distributed.types import (
     ShardMetadata,
 )
 from torchrec.distributed.utils import none_throws
+
+W = TypeVar("W")
 
 
 def _to_sharding_plan(
@@ -155,6 +157,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         stats: Optional[Union[Stats, List[Stats]]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
+        callbacks: Optional[List[Callable[[W], W]]] = None,
     ) -> None:
         if topology is None:
             topology = Topology(
@@ -206,6 +209,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._num_proposals: int = 0
         self._num_plans: int = 0
         self._best_plan: Optional[List[ShardingOption]] = None
+        self._callbacks: List[Callable[[W], W]] = [] if callbacks is None else callbacks
 
     def collective_plan(
         self,
@@ -338,6 +342,8 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         if best_plan:
             self._best_plan = best_plan
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
+            for callback in self._callbacks:
+                sharding_plan = callback(sharding_plan)
 
             end_time = perf_counter()
             for stats in self._stats:
