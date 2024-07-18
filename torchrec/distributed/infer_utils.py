@@ -7,16 +7,26 @@
 
 # pyre-strict
 
-from typing import List, Optional, Set, Tuple
+from typing import cast, Dict, List, Optional, Set, Tuple, Type
 
 import torch
 
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
-from torchrec.distributed.quant_embedding import ShardedQuantEmbeddingCollection
+from torchrec.distributed.quant_embedding import (
+    QuantEmbeddingCollection,
+    ShardedQuantEmbeddingCollection,
+)
 
-from torchrec.distributed.quant_embeddingbag import ShardedQuantEmbeddingBagCollection
+from torchrec.distributed.quant_embeddingbag import (
+    QuantEmbeddingBagCollection,
+    ShardedQuantEmbeddingBagCollection,
+)
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollection,
+    EmbeddingCollection,
+)
 
 
 def get_tbes_from_sharded_module(
@@ -122,3 +132,46 @@ def get_path_device_tuples(
     recursive_find_device(module, 0, "")
 
     return path_device_tuples
+
+
+def get_all_torchrec_modules(
+    model: torch.nn.Module,
+    trec_module_class_types: Optional[List[Type[torch.nn.Module]]] = None,
+) -> Dict[str, torch.nn.Module]:
+    """
+    Get all targeted TorchRec modules in the model.
+    Args:
+        model (torch.nn.Module): The input module to search for TREC modules.
+        trec_module_class_types (List[Type[torch.nn.Module]], optional): List of type of Trec modules
+    """
+    if not trec_module_class_types:
+        trec_module_class_types = [
+            ShardedQuantEmbeddingBagCollection,
+            ShardedQuantEmbeddingCollection,
+            QuantEmbeddingBagCollection,
+            QuantEmbeddingCollection,
+            EmbeddingBagCollection,
+            EmbeddingCollection,
+        ]
+    trec_modules: Dict[str, torch.nn.Module] = {}
+
+    def _recursive_get_module(
+        module: torch.nn.Module,
+        path: str,
+        target_module_class: List[Type[torch.nn.Module]],
+    ) -> None:
+        if type(module) in target_module_class:
+            trec_modules[path] = module
+            return
+        for name, c_module in module.named_children():
+            child_path = f"{path}.{name}" if path else name
+            if type(c_module) in target_module_class:
+                trec_modules[child_path] = c_module
+            else:
+                _recursive_get_module(c_module, child_path, target_module_class)
+
+    _recursive_get_module(
+        model, "", cast(List[Type[torch.nn.Module]], trec_module_class_types)
+    )
+
+    return trec_modules
