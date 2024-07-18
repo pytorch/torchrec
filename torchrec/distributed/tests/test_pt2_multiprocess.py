@@ -509,6 +509,7 @@ class TestPt2Train(MultiProcessTestBase):
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
             ],
         ),
         given_config_tuple=st.sampled_from(
