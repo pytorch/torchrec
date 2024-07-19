@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import nn
+from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_types import ShardedEmbeddingTable
 from torchrec.modules.embedding_modules import reorder_inverse_indices
 from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJaggedTensor
@@ -200,6 +201,8 @@ class GenericITEPModule(nn.Module):
         # Iterate over all tables
         # pyre-ignore
         for lookup in self.lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
             for emb in lookup._emb_modules:
 
                 emb_tables: List[ShardedEmbeddingTable] = emb._config.embedding_tables
@@ -283,6 +286,8 @@ class GenericITEPModule(nn.Module):
         if self.lookups is not None:
             # pyre-ignore
             for lookup in self.lookups:
+                while isinstance(lookup, DistributedDataParallel):
+                    lookup = lookup.module
                 for emb in lookup._emb_modules:
                     emb_tables: List[ShardedEmbeddingTable] = (
                         emb._config.embedding_tables
@@ -322,6 +327,8 @@ class GenericITEPModule(nn.Module):
         if self.lookups is not None:
             # pyre-ignore
             for lookup in self.lookups:
+                while isinstance(lookup, DistributedDataParallel):
+                    lookup = lookup.module
                 for emb in lookup._emb_modules:
                     emb.emb_module.flush()
                     emb.emb_module.reset_cache_states()
