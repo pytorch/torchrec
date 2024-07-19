@@ -175,3 +175,20 @@ def get_all_torchrec_modules(
     )
 
     return trec_modules
+
+
+def get_non_scriptable_trec_module(
+    model: torch.nn.Module,
+) -> Dict[str, torch.nn.Module]:
+    """
+    Get all targeted TorchRec modules in that model that is not torchsciptable before trace.
+    Args:
+        model (torch.nn.Module): The input module to search for TREC modules.
+    """
+    return get_all_torchrec_modules(
+        model,
+        trec_module_class_types=[
+            ShardedQuantEmbeddingBagCollection,
+            ShardedQuantEmbeddingCollection,
+        ],
+    )
