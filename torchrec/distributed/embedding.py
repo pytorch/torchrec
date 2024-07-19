@@ -86,12 +86,7 @@ from torchrec.modules.embedding_modules import (
 from torchrec.modules.utils import construct_jagged_tensors, SequenceVBEContext
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
-from torchrec.sparse.jagged_tensor import (
-    _pin_and_move,
-    _to_offsets,
-    JaggedTensor,
-    KeyedJaggedTensor,
-)
+from torchrec.sparse.jagged_tensor import _to_offsets, JaggedTensor, KeyedJaggedTensor
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -360,6 +355,17 @@ def pad_vbe_kjt_lengths(features: KeyedJaggedTensor) -> KeyedJaggedTensor:
         stride=max_stride,
         length_per_key=features.length_per_key(),
         offset_per_key=features.offset_per_key(),
+    )
+
+
+def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
+    """
+    TODO: remove and import from `jagged_tensor.py` once packaging issue is resolved
+    """
+    return (
+        tensor.pin_memory().to(device=device, non_blocking=True)
+        if device.type == "cuda" and tensor.device.type == "cpu"
+        else tensor.to(device=device, non_blocking=True)
     )
 
 
