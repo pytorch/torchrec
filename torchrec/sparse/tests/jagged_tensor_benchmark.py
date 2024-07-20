@@ -18,6 +18,7 @@ import torch
 from torchrec.distributed.benchmark.benchmark_utils import benchmark, BenchmarkResult
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import (
+    _desugar_keyed_tensors,
     _fbgemm_permute_pooled_embs,
     _regroup_keyed_tensors,
     KeyedJaggedTensor,
@@ -26,6 +27,37 @@ from torchrec.sparse.jagged_tensor import (
     regroup_kts,
 )
 from torchrec.sparse.tests.utils import build_groups, build_kts
+from torchrec.sparse.triton_ops import (
+    triton_permute_multi_embs,
+    triton_permute_pooled_embs,
+)
+
+
+@torch.fx.wrap
+def _triton_permute_pooled_embs(
+    keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
+) -> List[torch.Tensor]:
+    keys, lengths, values = _desugar_keyed_tensors(keyed_tensors)
+    permuted_values, splits = triton_permute_pooled_embs(
+        values,
+        keys,
+        lengths,
+        groups,
+    )
+    return list(torch.split(permuted_values, splits, dim=1))
+
+
+@torch.fx.wrap
+def _triton_permute_multi_embs(
+    keyed_tensors: List["KeyedTensor"], groups: List[List["str"]]
+) -> List[torch.Tensor]:
+    keys, lengths, values = _desugar_keyed_tensors(keyed_tensors)
+    return triton_permute_multi_embs(
+        values,
+        keys,
+        lengths,
+        groups,
+    )
 
 
 class DummyModel(torch.nn.Module):
@@ -280,6 +312,28 @@ def main(
                             device_type,
                             run_backward,
                             _fbgemm_permute_pooled_embs,
+                            {"keyed_tensors": kts, "groups": groups},
+                            profile,
+                        )
+                        bench(
+                            "[Triton] permute_pooled_embs",
+                            labels,
+                            batch_size,
+                            n_dense + n_sparse,
+                            device_type,
+                            run_backward,
+                            _triton_permute_pooled_embs,
+                            {"keyed_tensors": kts, "groups": groups},
+                            profile,
+                        )
+                        bench(
+                            "[Triton] permute_multi_embs",
+                            labels,
+                            batch_size,
+                            n_dense + n_sparse,
+                            device_type,
+                            run_backward,
+                            _triton_permute_multi_embs,
                             {"keyed_tensors": kts, "groups": groups},
                             profile,
                         )
