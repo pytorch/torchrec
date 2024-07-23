@@ -227,6 +227,17 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(torch.device("cpu"), ebc.embedding_bags["t1"].weight.device)
         self.assertEqual(torch.device("cpu"), ebc.device)
 
+    def test_sparse(self) -> None:
+        config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1"],
+            sparse=True,
+        )
+        ebc = EmbeddingBagCollection(tables=[config])
+        self.assertTrue(ebc.embedding_bags["t1"].sparse)
+
 
 class EmbeddingCollectionTest(unittest.TestCase):
     def test_forward(self) -> None:
