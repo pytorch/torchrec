@@ -1667,7 +1667,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
 
         sdd = SparseDataDistUtil[ModelInput](
             model=sharded_model_pipelined,
-            stream=torch.cuda.Stream(),
+            data_dist_stream=torch.cuda.Stream(),
             apply_jit=False,
         )
 
@@ -1695,7 +1695,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
             PipelineStage(
                 name="start_sparse_data_dist",
                 runnable=sdd.start_sparse_data_dist,
-                stream=sdd.stream,
+                stream=sdd.data_dist_stream,
                 fill_callback=sdd.wait_sparse_data_dist,
             ),
         ]
@@ -1744,7 +1744,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
 
         sdd = SparseDataDistUtil[ModelInput](
             model=sharded_model_pipelined,
-            stream=torch.cuda.Stream(),
+            data_dist_stream=torch.cuda.Stream(),
             apply_jit=False,
         )
 
@@ -1762,7 +1762,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
             PipelineStage(
                 name="start_sparse_data_dist",
                 runnable=sdd.start_sparse_data_dist,
-                stream=sdd.stream,
+                stream=sdd.data_dist_stream,
                 fill_callback=sdd.wait_sparse_data_dist,
             ),
         ]
@@ -1860,7 +1860,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
 
         sdd = SparseDataDistUtil[ModelInput](
             model=sharded_model_pipelined,
-            stream=torch.cuda.Stream(),
+            data_dist_stream=torch.cuda.Stream(),
             apply_jit=False,
         )
 
@@ -1873,7 +1873,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
             PipelineStage(
                 name="start_sparse_data_dist",
                 runnable=sdd.start_sparse_data_dist,
-                stream=sdd.stream,
+                stream=sdd.data_dist_stream,
                 fill_callback=sdd.wait_sparse_data_dist,
             ),
         ]
@@ -1964,3 +1964,133 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
         # Check pipeline exhausted
         preproc_input = pipeline.progress(dataloader)
         self.assertIsNone(preproc_input)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    @settings(max_examples=4, deadline=None)
+    # pyre-ignore[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            ]
+        ),
+        cache_precision=st.sampled_from(
+            [
+                DataType.FP16,
+                DataType.FP32,
+            ]
+        ),
+        load_factor=st.sampled_from(
+            [
+                0.2,
+                0.4,
+            ]
+        ),
+    )
+    def test_pipelining_prefetch(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        cache_precision: DataType,
+        load_factor: float,
+    ) -> None:
+        model = self._setup_model()
+
+        fused_params = {
+            "cache_load_factor": load_factor,
+            "cache_precision": cache_precision,
+            "stochastic_rounding": False,  # disable non-deterministic behavior when converting fp32<->fp16
+        }
+        fused_params_pipelined = {
+            **fused_params,
+            "prefetch_pipeline": True,
+        }
+
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        num_batches = 12
+        data = self._generate_data(
+            num_batches=num_batches,
+            batch_size=32,
+        )
+
+        non_pipelined_outputs = []
+        for batch in data:
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+            non_pipelined_outputs.append(pred)
+
+        def gpu_preproc(x: StageOut) -> StageOut:
+            return x
+
+        sdd = SparseDataDistUtil[ModelInput](
+            model=sharded_model_pipelined,
+            data_dist_stream=torch.cuda.Stream(),
+            apply_jit=False,
+            prefetch_stream=torch.cuda.Stream(),
+        )
+
+        pipeline_stages = [
+            PipelineStage(
+                name="data_copy",
+                runnable=partial(get_h2d_func, device=self.device),
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="start_sparse_data_dist",
+                runnable=sdd.start_sparse_data_dist,
+                stream=sdd.data_dist_stream,
+                fill_callback=sdd.wait_sparse_data_dist,
+            ),
+            PipelineStage(
+                name="prefetch",
+                runnable=sdd.prefetch,
+                # pyre-ignore
+                stream=sdd.prefetch_stream,
+                fill_callback=sdd.load_prefetch,
+            ),
+        ]
+        pipeline = StagedTrainPipeline(
+            pipeline_stages=pipeline_stages, compute_stream=torch.cuda.current_stream()
+        )
+        dataloader = iter(data)
+
+        pipelined_out = []
+        num_batches_processed = 0
+
+        while model_in := pipeline.progress(dataloader):
+            num_batches_processed += 1
+            optim_pipelined.zero_grad()
+            loss, pred = sharded_model_pipelined(model_in)
+            loss.backward()
+            optim_pipelined.step()
+            pipelined_out.append(pred)
+
+        self.assertEqual(num_batches_processed, num_batches)
+
+        self.assertEqual(len(pipelined_out), len(non_pipelined_outputs))
+        for out, ref_out in zip(pipelined_out, non_pipelined_outputs):
+            torch.testing.assert_close(out, ref_out)

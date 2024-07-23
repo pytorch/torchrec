@@ -33,6 +33,7 @@ from torchrec.distributed.model_parallel import ShardedModule
 from torchrec.distributed.train_pipeline.utils import (
     _override_input_dist_forwards,
     _pipeline_detach_model,
+    _prefetch_embeddings,
     _rewrite_model,
     _start_data_dist,
     _start_embedding_lookup,
@@ -1101,46 +1102,18 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                 batch.record_stream(
                     torch.get_device_module(self._device).current_stream()
                 )
+                data_per_pipelined_module = _prefetch_embeddings(
+                    batch,
+                    self._context,
+                    self._pipelined_modules,
+                    self._device,
+                    self._stream_context,
+                    self._data_dist_stream,
+                    self._default_stream,
+                )
                 for sharded_module in self._pipelined_modules:
                     forward = sharded_module.forward
-                    assert isinstance(forward, PrefetchPipelinedForward)
-
-                    assert forward._name in self._context.input_dist_tensors_requests
-                    request = self._context.input_dist_tensors_requests.pop(
-                        forward._name
-                    )
-                    assert isinstance(request, Awaitable)
-                    with record_function("## wait_sparse_data_dist ##"):
-                        # Finish waiting on the dist_stream,
-                        # in case some delayed stream scheduling happens during the wait() call.
-                        with self._stream_context(self._data_dist_stream):
-                            data = request.wait()
-
-                    # Make sure that both result of input_dist and context
-                    # are properly transferred to the current stream.
-                    module_context = self._context.module_contexts[forward._name]
-                    if self._data_dist_stream is not None:
-                        torch.get_device_module(
-                            self._device
-                        ).current_stream().wait_stream(self._data_dist_stream)
-                        cur_stream = torch.get_device_module(
-                            self._device
-                        ).current_stream()
-
-                        assert isinstance(
-                            data, (torch.Tensor, Multistreamable)
-                        ), f"{type(data)} must implement Multistreamable interface"
-                        data.record_stream(cur_stream)
-                        data.record_stream(self._default_stream)
-
-                        module_context.record_stream(cur_stream)
-                        module_context.record_stream(self._default_stream)
-
-                    sharded_module.prefetch(
-                        ctx=module_context,
-                        dist_input=data,
-                        forward_stream=self._default_stream,
-                    )
+                    data = data_per_pipelined_module[forward._name]
                     self._context.module_input_post_prefetch[forward._name] = data
                     self._context.module_contexts_post_prefetch[forward._name] = (
                         self._context.module_contexts.pop(forward._name)

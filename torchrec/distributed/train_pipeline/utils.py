@@ -41,6 +41,7 @@ from torchrec.distributed.embedding_sharding import (
     KJTListSplitsAwaitable,
     KJTSplitsAllToAllMeta,
 )
+from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 
 from torchrec.distributed.types import Awaitable, LazyNoWait
@@ -107,6 +108,12 @@ class TrainPipelineContext:
 class PrefetchTrainPipelineContext(TrainPipelineContext):
     module_input_post_prefetch: Dict[str, Multistreamable] = field(default_factory=dict)
     module_contexts_post_prefetch: Dict[str, Multistreamable] = field(
+        default_factory=dict
+    )
+    module_input_post_prefetch_next_batch: Dict[str, Multistreamable] = field(
+        default_factory=dict
+    )
+    module_contexts_post_prefetch_next_batch: Dict[str, Multistreamable] = field(
         default_factory=dict
     )
 
@@ -1212,29 +1219,137 @@ class DataLoadingThread(Thread, Generic[In]):
         return batch
 
 
+def _prefetch_embeddings(
+    batch: In,
+    context: PrefetchTrainPipelineContext,
+    pipelined_modules: List[ShardedModule],
+    device: torch.device,
+    stream_context: torch.Stream,
+    data_dist_stream: Optional[torch.Stream],
+    default_stream: Optional[torch.Stream],
+) -> Dict[str, KJTList]:
+    data_per_sharded_module = {}
+    for sharded_module in pipelined_modules:
+        forward = sharded_module.forward
+        assert isinstance(forward, PrefetchPipelinedForward)
+
+        assert forward._name in context.input_dist_tensors_requests
+        request = context.input_dist_tensors_requests.pop(forward._name)
+        assert isinstance(request, Awaitable)
+        with record_function("## wait_sparse_data_dist ##"):
+            # Finish waiting on the dist_stream,
+            # in case some delayed stream scheduling happens during the wait() call.
+            with stream_context(data_dist_stream):
+                data = request.wait()
+
+        # Make sure that both result of input_dist and context
+        # are properly transferred to the current stream.
+        module_context = context.module_contexts[forward._name]
+        if data_dist_stream is not None:
+            torch.get_device_module(device).current_stream().wait_stream(
+                data_dist_stream
+            )
+            cur_stream = torch.get_device_module(device).current_stream()
+
+            assert isinstance(
+                data, (torch.Tensor, Multistreamable)
+            ), f"{type(data)} must implement Multistreamable interface"
+            data.record_stream(cur_stream)
+            data.record_stream(default_stream)
+
+            module_context.record_stream(cur_stream)
+            module_context.record_stream(default_stream)
+
+        sharded_module.prefetch(
+            ctx=module_context,
+            dist_input=data,
+            forward_stream=default_stream,
+        )
+        data_per_sharded_module[forward._name] = data
+    return data_per_sharded_module
+
+
 class SparseDataDistUtil(Generic[In]):
+    """
+    Helper class exposing methods for sparse data dist and prefetch pipelining.
+    Currently used for `StagedTrainPipeline` pipeline stages
+
+    Args:
+        model (torch.nn.Module): Model to pipeline
+        prefetch_stream (torch.cuda.Stream): Stream on which to run sparse data dist.
+        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+        prefetch_stream (Optional[torch.cuda.Stream]): Stream on which model prefetch runs
+            Defaults to `None`. This needs to be passed in to enable prefetch pipelining.
+
+    Example::
+        sdd = SparseDataDistUtil(
+            model=model,
+            data_dist_stream=torch.cuda.Stream(),
+            prefetch_stream=torch.cuda.Stream(), <-- required to enable prefetch pipeline
+        )
+        pipeline = [
+            PipelineStage(
+                name="data_copy",
+                runnable=lambda batch, context: batch.to(
+                    self._device, non_blocking=True
+                ),
+                stream=torch.cuda.Stream(),
+            ),
+            PipelineStage(
+                name="start_sparse_data_dist",
+                runnable=sdd.start_sparse_data_dist,
+                stream=sdd.data_dist_stream,
+                fill_callback=sdd.wait_sparse_data_dist,
+            ),
+            PipelineStage(
+                name="prefetch",
+                runnable=sdd.prefetch,
+                stream=sdd.prefetch_stream,
+                fill_callback=sdd.load_prefetch,
+            ),
+        ]
+
+        return StagedTrainPipeline(pipeline_stages=pipeline)
+    """
+
     def __init__(
         self,
         model: torch.nn.Module,
-        stream: torch.Stream,
+        data_dist_stream: torch.Stream,
         apply_jit: bool = False,
+        prefetch_stream: Optional[torch.Stream] = None,
     ) -> None:
         super().__init__()
         self.model = model
-        self.stream = stream
+        self.data_dist_stream = data_dist_stream
+        self.prefetch_stream = prefetch_stream
         self.apply_jit = apply_jit
-        self.context = TrainPipelineContext(version=0)
+        self.context = (
+            PrefetchTrainPipelineContext(version=0)
+            if prefetch_stream
+            else TrainPipelineContext(version=0)
+        )
         self.initialized = False
         self._pipelined_modules: List[ShardedModule] = []
         # pyre-ignore
         self.fwd_hook = None
-        self._device: torch.device = stream.device
+        self._device: torch.device = data_dist_stream.device
 
         # pyre-ignore
         self._original_forwards: List[Callable[..., Any]] = []
         self._original_kjt_dist_forwards: List[
             Callable[[KeyedJaggedTensor], Awaitable[KJTAllToAllTensorsAwaitable]]
         ] = []
+
+        self._pipelined_forward = (
+            PrefetchPipelinedForward if prefetch_stream else PipelinedForward
+        )
+
+        self._default_stream: Optional[torch.Stream] = (
+            (torch.get_device_module(self._device).Stream())
+            if self._device.type in ["cuda", "mtia"]
+            else None
+        )
 
     def detach(self) -> torch.nn.Module:
         """
@@ -1270,9 +1385,10 @@ class SparseDataDistUtil(Generic[In]):
                 _rewrite_model(
                     model=self.model,
                     context=self.context,
-                    dist_stream=self.stream,
+                    dist_stream=self.data_dist_stream,
                     batch=batch,
                     apply_jit=self.apply_jit,
+                    pipelined_forward=self._pipelined_forward,
                 )
             )
             # initializes input dist, so we can override input dist forwards
@@ -1287,6 +1403,9 @@ class SparseDataDistUtil(Generic[In]):
                 input: Union[torch.Tensor, Tuple[torch.Tensor]],
                 output: Union[torch.Tensor, Tuple[torch.Tensor]],
             ) -> None:
+                if self.prefetch_stream is not None:
+                    # Need to load prefetch before wait_sparse_data_dist
+                    self.load_prefetch()
                 self.wait_sparse_data_dist()
 
             self.fwd_hook = self.model.register_forward_hook(forward_hook)
@@ -1299,7 +1418,7 @@ class SparseDataDistUtil(Generic[In]):
 
     def wait_sparse_data_dist(self) -> None:
         with record_function("## wait_sparse_data_dist ##"):
-            with torch.get_device_module(self._device).stream(self.stream):
+            with torch.get_device_module(self._device).stream(self.data_dist_stream):
                 self.context.module_contexts = (
                     self.context.module_contexts_next_batch.copy()
                 )
@@ -1307,3 +1426,58 @@ class SparseDataDistUtil(Generic[In]):
                 for names, awaitable in self.context.fused_splits_awaitables:
                     for name, request in zip(names, awaitable.wait()):
                         self.context.input_dist_tensors_requests[name] = request
+
+    def prefetch(self, batch: In) -> In:
+        """
+        Waits for input dist to finish, then prefetches data.
+        """
+        assert isinstance(
+            self.context, PrefetchTrainPipelineContext
+        ), "Pass prefetch_stream into SparseDataDistUtil to use prefetch() as a stage"
+        self.context.module_input_post_prefetch_next_batch.clear()
+        # pyre-ignore
+        self.context.module_contexts_post_prefetch_next_batch.clear()
+
+        data_per_pipelined_module = _prefetch_embeddings(
+            batch,
+            # pyre-ignore
+            self.context,
+            self._pipelined_modules,
+            self._device,
+            torch.get_device_module(self._device).stream,
+            self.data_dist_stream,
+            self._default_stream,
+        )
+        for sharded_module in self._pipelined_modules:
+            forward = sharded_module.forward
+            data = data_per_pipelined_module[forward._name]
+            # pyre-ignore [16]
+            self.context.module_input_post_prefetch_next_batch[forward._name] = data
+            self.context.module_contexts_post_prefetch_next_batch[forward._name] = (
+                self.context.module_contexts.pop(forward._name)
+            )
+        return batch
+
+    def load_prefetch(self) -> None:
+        assert isinstance(
+            self.context, PrefetchTrainPipelineContext
+        ), "Pass prefetch_stream into SparseDataDistUtil to use load_prefetch()"
+        self.context.module_input_post_prefetch.clear()
+        # pyre-ignore
+        self.context.module_contexts_post_prefetch.clear()
+
+        with record_function("## load_sharded_module_prefetch ##"):
+            with torch.get_device_module(self._device).stream(self.prefetch_stream):
+                for sharded_module in self._pipelined_modules:
+                    forward = sharded_module.forward
+                    assert isinstance(forward, PrefetchPipelinedForward)
+                    self.context.module_input_post_prefetch[forward._name] = (
+                        self.context.module_input_post_prefetch_next_batch[
+                            forward._name
+                        ]
+                    )
+                    self.context.module_contexts_post_prefetch[forward._name] = (
+                        self.context.module_contexts_post_prefetch_next_batch[
+                            forward._name
+                        ]
+                    )
