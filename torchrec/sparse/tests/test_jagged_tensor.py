@@ -2425,15 +2425,94 @@ class TestKeyedTensor(unittest.TestCase):
             )
         )
 
-    def test_regroup_scriptable(self) -> None:
+    @repeat_test(
+        regroup_func=[
+            KeyedTensor.regroup,
+            regroup_kts,
+            permute_multi_embedding,
+        ],
+        device_str=["cpu", "cuda", "meta"],
+    )
+    def test_regroup_scriptable(
+        self, regroup_func: Callable[..., List[torch.Tensor]], device_str: str
+    ) -> None:
+        if device_str == "cuda" and not torch.cuda.is_available():
+            return
+        else:
+            device = torch.device(device_str)
+
         class MyModule(torch.nn.Module):
             def forward(self, inputs: List[KeyedTensor]) -> List[torch.Tensor]:
                 # user provided, not model input
                 groups = [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
-                return KeyedTensor.regroup(inputs, groups)
+                return regroup_func(inputs, groups)
 
         m = MyModule()
-        torch.jit.script(m)
+        script_model = torch.jit.script(m)
+        # input
+        key_dim = 1
+        tensor_list_1 = [torch.randn(2, 3, device=device) for i in range(3)]
+        keys_1 = ["dense_0", "dense_1", "dense_2"]
+        kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
+        tensor_list_2 = [torch.randn(2, 3, device=device) for i in range(2)]
+        keys_2 = ["sparse_0", "sparse_1"]
+        kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
+        inputs = [kt_1, kt_2]
+        outputs = script_model(inputs)
+        refs = _regroup_keyed_tensors(
+            inputs, [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
+        )
+        for ref, output in zip(refs, outputs):
+            self.assertEqual(ref.device, output.device)
+            if device_str == "meta":
+                self.assertEqual(ref.shape, output.shape)
+            else:
+                torch.testing.assert_close(ref, output)
+
+    @repeat_test(
+        regroup_func=[
+            KeyedTensor.regroup,
+            regroup_kts,
+            permute_multi_embedding,
+        ],
+        device_str=["cpu", "cuda", "meta"],
+    )
+    def test_regroup_scriptable_inference(
+        self, regroup_func: Callable[..., List[torch.Tensor]], device_str: str
+    ) -> None:
+        if device_str == "cuda" and not torch.cuda.is_available():
+            return
+        else:
+            device = torch.device(device_str)
+
+        class MyModule(torch.nn.Module):
+            def forward(self, inputs: List[KeyedTensor]) -> List[torch.Tensor]:
+                # user provided, not model input
+                groups = [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
+                return regroup_func(inputs, groups)
+
+        m = MyModule()
+        script_model = torch.jit.script(m)
+        with torch.inference_mode():
+            # input
+            key_dim = 1
+            tensor_list_1 = [torch.randn(2, 3, device=device) for i in range(3)]
+            keys_1 = ["dense_0", "dense_1", "dense_2"]
+            kt_1 = KeyedTensor.from_tensor_list(keys_1, tensor_list_1, key_dim)
+            tensor_list_2 = [torch.randn(2, 3, device=device) for i in range(2)]
+            keys_2 = ["sparse_0", "sparse_1"]
+            kt_2 = KeyedTensor.from_tensor_list(keys_2, tensor_list_2, key_dim)
+            inputs = [kt_1, kt_2]
+            outputs = script_model(inputs)
+            refs = _regroup_keyed_tensors(
+                inputs, [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]
+            )
+        for ref, output in zip(refs, outputs):
+            self.assertEqual(ref.device, output.device)
+            if device_str == "meta":
+                self.assertEqual(ref.shape, output.shape)
+            else:
+                torch.testing.assert_close(ref, output)
 
     def test_regroup_fxable(self) -> None:
         class MyModule(torch.nn.Module):
