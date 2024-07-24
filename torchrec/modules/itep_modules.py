@@ -19,7 +19,7 @@ from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJagge
 
 try:
     torch.ops.load_library(
-        "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning"
+        "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_gpu"
     )
 except OSError:
     pass
