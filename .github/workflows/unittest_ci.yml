@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         include:
-         - os: linux.2xlarge
+         - os: amz2023.linux.2xlarge
           # ideally we run on 3.9 and 3.10 as well, however we are limited in resources.
            python-version: 3.8
            python-tag: "py38"
@@ -97,7 +97,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [linux.4xlarge.nvidia.gpu]
+        os: [amz2023.linux.4xlarge.nvidia.gpu]
         python-version: [3.8]
         cuda-tag: ["cu11"]
     needs: build_on_cpu
