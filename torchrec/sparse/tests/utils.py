@@ -7,8 +7,10 @@
 
 # pyre-strict
 
+import functools
 import random
-from typing import List
+import unittest
+from typing import Any, Callable, List, Sequence
 
 import torch
 from torchrec.sparse.jagged_tensor import KeyedTensor
@@ -61,3 +63,27 @@ def build_groups(
         for group in groups:
             group.append(random.choice(all_keys))
     return groups
+
+
+def repeat_test(
+    *args: List[Any], **kwargs: Sequence[Any]
+) -> Callable[..., Callable[..., None]]:
+    def decorate(f: Callable[..., None]) -> Callable[..., None]:
+        @functools.wraps(f)
+        def decorator(self: unittest.TestCase) -> None:
+            queue = [(arg, {}) for arg in args] if args else [((), {})]
+            for k, values in kwargs.items():
+                new_queue = []
+                for a, d in queue:
+                    for v in values:
+                        new_d = d.copy()
+                        new_d[k] = v
+                        new_queue.append((a, new_d))
+                queue = new_queue
+            for a, d in queue:
+                print(f"running {f.__name__} {a} {d}")
+                f(self, *a, **d)
+
+        return decorator
+
+    return decorate
