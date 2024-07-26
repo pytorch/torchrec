@@ -388,6 +388,12 @@ class CombinedOptimizer(KeyedOptimizer):
         for _, opt in self._optims:
             opt.save_param_groups(save)
 
+    def set_optimizer_step(self, step: int) -> None:
+        for _, opt in self._optims:
+            if hasattr(opt, "set_optimizer_step"):
+                # pyre-ignore [16]: Undefined attribute [16]: `KeyedOptimizer` has no attribute `set_optimizer_step`.
+                opt.set_optimizer_step(step)
+
 
 class KeyedOptimizerWrapper(KeyedOptimizer):
     """

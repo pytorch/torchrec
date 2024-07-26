@@ -494,6 +494,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         # pyre-ignore [16]
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
+    def set_optimizer_step(self, step: int) -> None:
+        self._emb_module.set_optimizer_step(step)
+
 
 def _gen_named_parameters_by_table_ssd(
     emb_module: SSDTableBatchedEmbeddingBags,
