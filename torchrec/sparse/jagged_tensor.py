@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+import logging
 
 import operator
 
@@ -50,6 +51,8 @@ try:
     pass
 except ImportError:
     pass
+
+logger: logging.Logger = logging.getLogger()
 
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
@@ -2226,6 +2229,10 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             )
 
     def to_dict(self) -> Dict[str, JaggedTensor]:
+        if not torch.jit.is_scripting() and is_non_strict_exporting():
+            logger.warn(
+                "Trying to non-strict torch.export KJT to_dict, which is extremely slow and not recommended!"
+            )
         _jt_dict = _maybe_compute_kjt_to_jt_dict(
             stride=self.stride(),
             stride_per_key=self.stride_per_key(),
