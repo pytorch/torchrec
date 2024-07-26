@@ -144,7 +144,6 @@ class ShardedManagedCollisionCollection(
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__()
-
         self._device = device
         self._env = env
         self._table_name_to_parameter_sharding: Dict[str, ParameterSharding] = (
@@ -481,6 +480,15 @@ class ShardedManagedCollisionCollection(
         ) in self._managed_collision_modules.items():
             evictions[table] = managed_collision_module.evict()
         return evictions
+
+    def open_slots(self) -> Dict[str, torch.Tensor]:
+        open_slots: Dict[str, torch.Tensor] = {}
+        for (
+            table,
+            managed_collision_module,
+        ) in self._managed_collision_modules.items():
+            open_slots[table] = managed_collision_module.open_slots()
+        return open_slots
 
     def output_dist(
         self,
