@@ -11,7 +11,7 @@
 
 import logging
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import Dict, List, Optional, Tuple, Type
 
 import torch
 
@@ -53,6 +53,27 @@ def ir_custom_op_fake(
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
     logger.info(f"ir_custom_op_fake -> ({batch_size}, {dims}) {device}")
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+
+
+@torch.library.custom_op("torchrec::ir_dynamic_batch_op", mutates_args={})
+def ir_dynamic_batch_op_impl(
+    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    logger.info(
+        f"torch.ops.torchrec.ir_dynamic_batch_op -> ({batch_size}, {dims}) {device}"
+    )
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+
+
+@torch.library.register_fake("torchrec::ir_dynamic_batch_op")
+def ir_dynamic_batch_op_fake(
+    tensors: List[Optional[torch.Tensor]], batch_dize: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    batch_size = torch.library.get_ctx().new_dynamic_size()
+    logger.info(f"ir_dynamic_batch_op_fake -> ({batch_size}, {dims}) {device}")
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
@@ -111,32 +132,21 @@ def decapsulate_ir_modules(
     return module
 
 
-def _get_dim(
-    x: Union[DIM, str, None],
-    s: str,
-    min: Optional[int] = None,
-    max: Optional[int] = None,
-) -> DIM:
-    if isinstance(x, DIM):
-        return x
-    elif isinstance(x, str):
-        if x in DYNAMIC_DIMS:
-            DYNAMIC_DIMS[x] += 1
-            x += str(DYNAMIC_DIMS[x])
-        dim = Dim(x, min=min, max=max)
-    else:
-        DYNAMIC_DIMS[s] += 1
-        dim = Dim(s + str(DYNAMIC_DIMS[s]), min=min, max=max)
-    return dim
+def _get_dim(name: str, min: Optional[int] = None, max: Optional[int] = None) -> DIM:
+    """
+    Returns a Dim object with the given name and min/max. If the name is not unique, it will append a suffix to the name.
+    """
+    dim = f"{name}_{DYNAMIC_DIMS[name]}"
+    DYNAMIC_DIMS[name] += 1
+    return Dim(dim, min=min, max=max)
 
 
 def mark_dynamic_kjt(
     kjt: KeyedJaggedTensor,
     shapes_collection: Optional[ShapesCollection] = None,
     variable_length: bool = False,
-    vlen: Optional[Union[DIM, str]] = None,
-    llen: Optional[Union[DIM, str]] = None,
-    batch_size: Optional[Union[DIM, str]] = None,
+    vlen: Optional[DIM] = None,
+    llen: Optional[DIM] = None,
 ) -> ShapesCollection:
     """
     Makes the given KJT dynamic. If it's not variable length, it will only have
@@ -155,30 +165,22 @@ def mark_dynamic_kjt(
         kjt (KeyedJaggedTensor): The KJT to make dynamic.
         shapes_collection (Optional[ShapesCollection]): The collection to update.
         variable_length (bool): Whether the KJT is variable length.
-        vlen (Optional[Union[DIM, str]]): The dynamic length for the values.
-        batch_size (Optional[Union[DIM, str]]): The dynamic length for the batch_size.
+        vlen (Optional[DIM]): The dynamic length for the values. If it's None, it will use the default name "vlen".
+        llen (Optional[DIM]): The dynamic length for the lengths, it's only used when variable_length is true. If it's None, it will use the default name "llen".
+        batch_size (Optional[DIM]): The dynamic length for the batch_size, it's only used when variable_length and mark_batch_size are both true.
     """
-    global DYNAMIC_DIMS
     if shapes_collection is None:
         shapes_collection = ShapesCollection()
-    vlen = _get_dim(vlen, "vlen")
+    vlen = _get_dim("vlen") if vlen is None else vlen
     shapes_collection[kjt._values] = (vlen,)
     if kjt._weights is not None:
         shapes_collection[kjt._weights] = (vlen,)
     if variable_length:
-        keys = len(kjt.keys())
-        if llen is None or batch_size is None:
-            llen = _get_dim(None, "llen", min=keys * 2, max=4294967295)
-        elif batch_size is not None:
-            batch_size = _get_dim(
-                batch_size, "batch_size", max=4294967295 // (keys + 1)
-            )
-            llen = len(kjt.keys()) * batch_size
-        olen = llen + 1
+        llen = _get_dim("llen") if llen is None else llen
         if kjt._lengths is not None:
             shapes_collection[kjt._lengths] = (llen,)
         if kjt._offsets is not None:
-            shapes_collection[kjt._offsets] = (olen,)
+            shapes_collection[kjt._offsets] = (llen + 1,)
     return shapes_collection
 
 
