@@ -28,30 +28,32 @@ DYNAMIC_DIMS: Dict[str, int] = defaultdict(int)
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-@torch.library.custom_op("torchrec::ir_custom_op", mutates_args={})
-def ir_custom_op_impl(
-    tensors: List[Optional[torch.Tensor]], batch_size: int, dim: int
-) -> torch.Tensor:
-    device = None
+def get_device(tensors: List[Optional[torch.Tensor]]) -> Optional[torch.device]:
+    """
+    Returns the device of the first non-None tensor in the list.
+    """
     for t in tensors:
         if t is not None:
-            device = t.device
-            break
-    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dim}) {device}")
-    return torch.empty(batch_size, dim, device=device)
+            return t.device
+    return None
+
+
+@torch.library.custom_op("torchrec::ir_custom_op", mutates_args={})
+def ir_custom_op_impl(
+    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dims}) {device}")
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
 @torch.library.register_fake("torchrec::ir_custom_op")
 def ir_custom_op_fake(
-    tensors: List[Optional[torch.Tensor]], batch_size: int, dim: int
-) -> torch.Tensor:
-    device = None
-    for t in tensors:
-        if t is not None:
-            device = t.device
-            break
-    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dim}) {device}")
-    return torch.empty(batch_size, dim, device=device)
+    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dims}) {device}")
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
 def encapsulate_ir_modules(
