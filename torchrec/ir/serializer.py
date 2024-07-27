@@ -89,17 +89,17 @@ def ebc_meta_forward(
     features: KeyedJaggedTensor,
 ) -> KeyedTensor:
     batch_size = features.stride()
-    dim = sum(ebc._lengths_per_embedding)
+    dims = ebc._lengths_per_embedding
     arg_list = [
         features.values(),
         features.weights_or_none(),
         features.lengths_or_none(),
         features.offsets_or_none(),
     ]  # if want to include the weights: `+ [bag.weight for bag in self.embedding_bags.values()]`
-    output = torch.ops.torchrec.ir_custom_op(arg_list, batch_size, dim)
+    outputs = torch.ops.torchrec.ir_custom_op(arg_list, batch_size, dims)
     return KeyedTensor(
         keys=ebc._embedding_names,
-        values=output,
+        values=torch.cat(outputs, dim=1),
         length_per_key=ebc._lengths_per_embedding,
     )
 
@@ -110,17 +110,17 @@ def fpebc_meta_forward(
 ) -> KeyedTensor:
     batch_size = features.stride()
     ebc = fpebc._embedding_bag_collection
-    dim = sum(ebc._lengths_per_embedding)
+    dims = ebc._lengths_per_embedding
     arg_list = [
         features.values(),
         features.weights_or_none(),
         features.lengths_or_none(),
         features.offsets_or_none(),
     ]  # if want to include the weights: `+ [bag.weight for bag in self.embedding_bags.values()]`
-    output = torch.ops.torchrec.ir_custom_op(arg_list, batch_size, dim)
+    outputs = torch.ops.torchrec.ir_custom_op(arg_list, batch_size, dims)
     return KeyedTensor(
         keys=ebc._embedding_names,
-        values=output,
+        values=torch.cat(outputs, dim=1),
         length_per_key=ebc._lengths_per_embedding,
     )
 
