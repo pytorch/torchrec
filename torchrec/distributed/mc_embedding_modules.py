@@ -152,6 +152,7 @@ class BaseShardedManagedCollisionEmbeddingCollection(
         )
 
     def _evict(self, evictions_per_table: Dict[str, Optional[torch.Tensor]]) -> None:
+        open_slots = None
         for table, evictions_indices_for_table in evictions_per_table.items():
             if evictions_indices_for_table is not None:
                 (tbe, logical_table_ids) = self._table_to_tbe_and_index[table]
@@ -160,8 +161,10 @@ class BaseShardedManagedCollisionEmbeddingCollection(
                     dtype=torch.long,
                     device=self._device,
                 )
+                if open_slots is None:
+                    open_slots = self._managed_collision_collection.open_slots()
                 logger.info(
-                    f"Evicting {evictions_indices_for_table.numel()} ids from {table}"
+                    f"Table {table}: inserting {evictions_indices_for_table.numel()} ids with {open_slots[table].item()} open slots"
                 )
                 with torch.no_grad():
                     # embeddings, and optimizer state will be reset

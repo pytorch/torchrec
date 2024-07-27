@@ -175,6 +175,13 @@ class ManagedCollisionModule(nn.Module):
         pass
 
     @abc.abstractmethod
+    def open_slots(self) -> torch.Tensor:
+        """
+        Returns number of unused slots in managed collision module
+        """
+        pass
+
+    @abc.abstractmethod
     def rebuild_with_output_id_range(
         self,
         output_id_range: Tuple[int, int],
@@ -264,6 +271,15 @@ class ManagedCollisionCollection(nn.Module):
         ) in self._managed_collision_modules.items():
             evictions[table] = managed_collision_module.evict()
         return evictions
+
+    def open_slots(self) -> Dict[str, torch.Tensor]:
+        open_slots: Dict[str, torch.Tensor] = {}
+        for (
+            table,
+            managed_collision_module,
+        ) in self._managed_collision_modules.items():
+            open_slots[table] = managed_collision_module.open_slots()
+        return open_slots
 
 
 class MCHEvictionPolicyMetadataInfo(NamedTuple):
@@ -516,6 +532,7 @@ class LRU_EvictionPolicy(MCHEvictionPolicy):
         additional_ids: Optional[torch.Tensor] = None,
         threshold_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
+
         coalesced_history_metadata: Dict[str, torch.Tensor] = {}
         history_last_access_iter = history_metadata["last_access_iter"]
         if additional_ids is not None:
@@ -792,7 +809,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         device: torch.device,
         eviction_policy: MCHEvictionPolicy,
         eviction_interval: int,
-        input_hash_size: int = 2**63,
+        input_hash_size: int = (2**63) - 1,
         input_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
         mch_size: Optional[int] = None,  # experimental
         mch_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
@@ -844,6 +861,22 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                 dtype=torch.int64,
                 device=self.device,
             ),
+        )
+        self.register_buffer(
+            "_zch_slots",
+            torch.tensor(
+                [(self._zch_size - 1)],
+                dtype=torch.int64,
+                device=self.device,
+            ),
+            persistent=False,
+        )
+        self.register_buffer(
+            "_delimiter",
+            torch.tensor(
+                [torch.iinfo(torch.int64).max], dtype=torch.int64, device=self.device
+            ),
+            persistent=False,
         )
         self.register_buffer(
             "_mch_remapped_ids_mapping",
@@ -1139,6 +1172,11 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
     def input_size(self) -> int:
         return self._input_hash_size
+
+    def open_slots(self) -> torch.Tensor:
+        return self._zch_slots - torch.searchsorted(
+            self._mch_sorted_raw_ids, self._delimiter
+        )
 
     @torch.no_grad()
     def evict(self) -> Optional[torch.Tensor]:

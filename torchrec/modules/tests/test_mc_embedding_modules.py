@@ -131,8 +131,24 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         for mc_module in mc_modules:
+
+            self.assertEqual(
+                mc_module._managed_collision_collection.open_slots()["t1"].item(),
+                zch_size - 1,
+            )  # (ZCH-1 slots)
+
             out1, remapped_kjt1 = mc_module.forward(update_one)
+
+            self.assertEqual(
+                mc_module._managed_collision_collection.open_slots()["t1"].item(),
+                zch_size - 1,
+            )  # prior update, ZCH-1 slots
+
             out2, remapped_kjt2 = mc_module.forward(update_one)
+
+            self.assertEqual(
+                mc_module._managed_collision_collection.open_slots()["t1"].item(), 0
+            )  # post update, 0 slots
 
             assert torch.all(
                 # pyre-ignore[16]
