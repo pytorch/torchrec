@@ -86,7 +86,7 @@ class TestEvictionPolicy(unittest.TestCase):
             )
         }
         mc_module.profile(features)
-
+        self.assertEqual(mc_module.open_slots().item(), 1)
         ids = [3, 4, 5]
         features: Dict[str, JaggedTensor] = {
             "f1": JaggedTensor(
@@ -95,7 +95,7 @@ class TestEvictionPolicy(unittest.TestCase):
             )
         }
         mc_module.profile(features)
-
+        self.assertEqual(mc_module.open_slots().item(), 0)
         ids = [7, 8]
         features: Dict[str, JaggedTensor] = {
             "f1": JaggedTensor(
@@ -104,6 +104,7 @@ class TestEvictionPolicy(unittest.TestCase):
             )
         }
         mc_module.profile(features)
+        self.assertEqual(mc_module.open_slots().item(), 0)
 
         _mch_sorted_raw_ids = mc_module._mch_sorted_raw_ids
         self.assertEqual(
@@ -112,6 +113,7 @@ class TestEvictionPolicy(unittest.TestCase):
         )
         _mch_last_access_iter = mc_module._mch_last_access_iter
         self.assertEqual(list(_mch_last_access_iter), [2, 2, 3, 3, 3])
+        self.assertEqual(mc_module.open_slots().item(), 0)
 
     def test_distance_lfu_eviction(self) -> None:
         mc_module = MCHManagedCollisionModule(

@@ -9,7 +9,7 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass
-from typing import Dict, Optional, Type
+from typing import Any, Dict, Optional, Type
 
 import torch
 from torchrec.distributed.embedding_types import KJTList
@@ -93,12 +93,13 @@ class ManagedCollisionEmbeddingBagCollectionSharder(
         self,
         ebc_sharder: Optional[EmbeddingBagCollectionSharder] = None,
         mc_sharder: Optional[ManagedCollisionCollectionSharder] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(
             ebc_sharder
             or EmbeddingBagCollectionSharder(
-                qcomm_codecs_registry=qcomm_codecs_registry
+                fused_params=fused_params, qcomm_codecs_registry=qcomm_codecs_registry
             ),
             mc_sharder or ManagedCollisionCollectionSharder(),
             qcomm_codecs_registry=qcomm_codecs_registry,

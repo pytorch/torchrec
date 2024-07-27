@@ -9,7 +9,7 @@
 
 #!/usr/bin/env python3
 
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 import torch
 
@@ -104,11 +104,15 @@ class ManagedCollisionEmbeddingCollectionSharder(
         self,
         ec_sharder: Optional[EmbeddingCollectionSharder] = None,
         mc_sharder: Optional[ManagedCollisionCollectionSharder] = None,
+        fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(
             ec_sharder
-            or EmbeddingCollectionSharder(qcomm_codecs_registry=qcomm_codecs_registry),
+            or EmbeddingCollectionSharder(
+                qcomm_codecs_registry=qcomm_codecs_registry,
+                fused_params=fused_params,
+            ),
             mc_sharder or ManagedCollisionCollectionSharder(),
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
