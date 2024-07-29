@@ -171,6 +171,12 @@ def mark_dynamic_kjt(
     """
     if shapes_collection is None:
         shapes_collection = ShapesCollection()
+    if kjt._values.numel() == 0:
+        # if the values is empty, we need to set the shape to (2,) to make it compatible with dynamic shape
+        # a 0-size dynamic shape will cause error in torch.export.
+        # logically when the values is empty, the lengths and offsets should all be zero-value tensors.
+        # And this makes the actual values irrelavent to the downstream process.
+        kjt._values = torch.ones(2, device=kjt._values.device, dtype=kjt._values.dtype)
     vlen = _get_dim("vlen") if vlen is None else vlen
     shapes_collection[kjt._values] = (vlen,)
     if kjt._weights is not None:
