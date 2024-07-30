@@ -26,6 +26,7 @@ from typing import (
     Union,
 )
 
+from fbgemm_gpu.runtime_monitor import TBEStatsReporterConfig
 from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
     BoundsCheckMode,
     CacheAlgorithm,
@@ -588,16 +589,30 @@ class KeyValueParams:
         ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
             and ports. Example: (("::1", 2000), ("::1", 2001), ("::1", 2002)).
             Reason for using tuple is we want it hashable.
+        ssd_rocksdb_write_buffer_size: Optional[int]: rocksdb write buffer size per tbe,
+            relavant to rocksdb compaction frequency
+        ssd_rocksdb_shards: Optional[int]: rocksdb shards number
+        gather_ssd_cache_stats: bool: whether enable ssd stats collection, std reporter and ods reporter
+        report_interval: int: report interval in train iteration if gather_ssd_cache_stats is enabled
+        ods_prefix: str: ods prefix for ods reporting
     """
 
     ssd_storage_directory: Optional[str] = None
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
+    ssd_rocksdb_write_buffer_size: Optional[int] = None
+    ssd_rocksdb_shards: Optional[int] = None
+    gather_ssd_cache_stats: Optional[bool] = None
+    stats_reporter_config: Optional[TBEStatsReporterConfig] = None
 
     def __hash__(self) -> int:
         return hash(
             (
                 self.ssd_storage_directory,
                 self.ps_hosts,
+                self.ssd_rocksdb_write_buffer_size,
+                self.ssd_rocksdb_shards,
+                self.gather_ssd_cache_stats,
+                self.stats_reporter_config,
             )
         )
 
