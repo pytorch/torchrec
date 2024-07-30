@@ -463,6 +463,7 @@ def generate_metric_module(
             batch_size=batch_size,
             world_size=world_size,
             window_seconds=metrics_config.throughput_metric.window_size,
+            warmup_steps=metrics_config.throughput_metric.warmup_steps,
         )
     else:
         throughput_metric = None

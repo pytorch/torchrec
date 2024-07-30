@@ -80,6 +80,7 @@ class RecComputeMode(Enum):
 
 _DEFAULT_WINDOW_SIZE = 10_000_000
 _DEFAULT_THROUGHPUT_WINDOW_SECONDS = 100
+_DEFAULT_THROUGHPUT_WARMUP_STEPS = 100
 
 
 @dataclass
@@ -113,6 +114,7 @@ class StateMetricEnum(StrValueMixin, Enum):
 @dataclass
 class ThroughputDef:
     window_size: int = _DEFAULT_THROUGHPUT_WINDOW_SECONDS
+    warmup_steps: int = _DEFAULT_THROUGHPUT_WARMUP_STEPS
 
 
 @dataclass
