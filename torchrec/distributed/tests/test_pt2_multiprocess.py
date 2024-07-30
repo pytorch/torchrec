@@ -40,10 +40,7 @@ from torchrec.distributed.planner.shard_estimators import (
 from torchrec.distributed.planner.types import ShardingPlan
 from torchrec.distributed.sharding_plan import EmbeddingBagCollectionSharder
 
-from torchrec.distributed.test_utils.infer_utils import (
-    dynamo_skipfiles_allow,
-    TestModelInfo,
-)
+from torchrec.distributed.test_utils.infer_utils import TestModelInfo
 
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
@@ -424,7 +421,10 @@ def _test_compile_rank_fn(
 
         ##### COMPILE #####
         run_compile_backward: bool = torch_compile_backend in ["aot_eager", "inductor"]
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             torch._dynamo.config.capture_scalar_outputs = True
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
             torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = (
@@ -457,7 +457,10 @@ def _test_compile_rank_fn(
         ##### COMPILE END #####
 
         ##### NUMERIC CHECK #####
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             for i in range(n_extra_numerics_checks):
                 local_model_input = ins[1 + i][rank].to(device)
                 kjt = local_model_input.idlist_features
