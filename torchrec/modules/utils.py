@@ -184,7 +184,7 @@ def _permute_tensor_by_segments(
             segment_sizes,
             tensor,
             weights,
-            tensor.numel(),
+            output_size,
         )
     return permuted_tensor, permuted_weights
 
