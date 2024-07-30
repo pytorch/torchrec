@@ -1400,6 +1400,59 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         )
         self.assertEqual(permuted_jag_tensor.weights_or_none(), None)
 
+    def test_permute_vb_duplicate(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        lengths = torch.IntTensor([1, 0, 1, 3, 0, 1, 0, 2, 0])
+        keys = ["index_0", "index_1", "index_2"]
+        stride_per_key_per_rank = [[2], [4], [3]]
+
+        jag_tensor = KeyedJaggedTensor.from_lengths_sync(
+            values=values,
+            keys=keys,
+            lengths=lengths,
+            stride_per_key_per_rank=stride_per_key_per_rank,
+        )
+
+        indices = [1, 1, 0, 0, 2, 2]
+        permuted_jag_tensor = jag_tensor.permute(indices)
+
+        self.assertEqual(
+            permuted_jag_tensor.keys(),
+            ["index_1", "index_1", "index_0", "index_0", "index_2", "index_2"],
+        )
+        self.assertTrue(
+            torch.equal(
+                permuted_jag_tensor.values(),
+                torch.Tensor(
+                    [
+                        2.0,
+                        3.0,
+                        4.0,
+                        5.0,
+                        6.0,
+                        2.0,
+                        3.0,
+                        4.0,
+                        5.0,
+                        6.0,
+                        1.0,
+                        1.0,
+                        7.0,
+                        8.0,
+                        7.0,
+                        8.0,
+                    ]
+                ),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                permuted_jag_tensor.lengths(),
+                torch.IntTensor([1, 3, 0, 1, 1, 3, 0, 1, 1, 0, 1, 0, 0, 2, 0, 0, 2, 0]),
+            )
+        )
+        self.assertEqual(permuted_jag_tensor.weights_or_none(), None)
+
     def test_permute_duplicates(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0])
