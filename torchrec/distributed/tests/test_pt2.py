@@ -53,7 +53,6 @@ from torchrec.distributed.shard import _shard_modules
 from torchrec.distributed.test_utils.infer_utils import (
     assert_close,
     create_test_model_ebc_only,
-    dynamo_skipfiles_allow,
     KJTInputExportWrapper,
     prep_inputs,
     replace_registered_tbes_with_mock_tbes,
@@ -241,7 +240,10 @@ def _test_compile_fwd_bwd(
         eager_loss.backward()
         eager_bwd_out = _grad_detach_clone(eager_input)
 
-    with dynamo_skipfiles_allow("torchrec"):
+    with unittest.mock.patch(
+        "torch._dynamo.config.skip_torchrec",
+        False,
+    ):
         torch._dynamo.config.capture_scalar_outputs = True
         torch._dynamo.config.capture_dynamic_output_shape_ops = True
 
@@ -281,7 +283,10 @@ class TestPt2(unittest.TestCase):
         test_aot_inductor: bool = True,
         test_pt2_ir_export: bool = False,
     ) -> None:
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             EM: torch.nn.Module = KJTInputExportWrapper(kjt_input_module, kjt.keys())
             em_inputs = (kjt.values(), kjt.lengths(), kjt.weights_or_none(), *inputs)
             eager_output = EM(*em_inputs)
@@ -332,7 +337,10 @@ class TestPt2(unittest.TestCase):
         inputs,
         backend: str = "eager",
     ) -> None:
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             EM: torch.nn.Module = KJTInputExportWrapperWithStrides(
                 kjt_input_module, kjt_keys
             )
@@ -442,7 +450,10 @@ class TestPt2(unittest.TestCase):
             torch._dynamo.decorators.mark_dynamic(t, 1)
 
         eager_output = m(inputs)
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             torch_compile_backend = "eager"
 
             torch._dynamo.config.capture_scalar_outputs = True
@@ -581,7 +592,10 @@ class TestPt2(unittest.TestCase):
 
         device: str = "cuda"
 
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             tracing_values = kjt.values()
             tracing_lengths = kjt.lengths()
             torch._dynamo.mark_dynamic(tracing_values, 0)
@@ -690,7 +704,10 @@ class TestPt2(unittest.TestCase):
         )
 
     def test_kjt_values_specialization(self):
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             from torch._dynamo.testing import CompileCounter
 
             kjt0 = KeyedJaggedTensor(
@@ -722,7 +739,10 @@ class TestPt2(unittest.TestCase):
             self.assertEqual(counter.frame_count, 1)
 
     def test_kjt_values_specialization_utils(self):
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             from torch._dynamo.testing import CompileCounter
 
             kjt0 = KeyedJaggedTensor(
@@ -890,7 +910,10 @@ class TestPt2(unittest.TestCase):
 
         # COMPILE
         orig_compile_weights = get_weights(m_compile)
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             torch._dynamo.config.capture_scalar_outputs = True
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
 
@@ -969,7 +992,10 @@ class TestPt2(unittest.TestCase):
 
         # COMPILE
         orig_compile_weights = get_weights(m_compile)
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             torch._dynamo.config.capture_scalar_outputs = True
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
 
