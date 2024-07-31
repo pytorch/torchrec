@@ -19,6 +19,7 @@ from torch.distributed.algorithms.ddp_comm_hooks import (
     default_hooks as ddp_default_hooks,
 )
 from torch.distributed.fsdp import FullyShardedDataParallel
+from torch.export import UnflattenedModule
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
@@ -38,6 +39,7 @@ from torchrec.distributed.utils import (
     filter_state_dict,
     sharded_model_copy,
 )
+from torchrec.ir.utils import move_to_copy_nodes_to_device
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
@@ -270,6 +272,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         if init_data_parallel:
             self.init_data_parallel()
+
+        if isinstance(self.module, UnflattenedModule):
+            move_to_copy_nodes_to_device(self.module, self.device)
 
     @property
     def module(self) -> nn.Module:
