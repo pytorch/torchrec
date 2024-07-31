@@ -23,8 +23,9 @@ import torchrec
 import torchrec.distributed.comm_ops as comm_ops
 from hypothesis import given, settings
 from torch.distributed.distributed_c10d import GroupMember
-from torchrec.distributed.test_utils.infer_utils import dynamo_skipfiles_allow
 from torchrec.test_utils import get_free_port, seed_and_log
+
+torch.ops.import_module("fbgemm_gpu.sparse_ops")
 
 
 @dataclass
@@ -128,7 +129,10 @@ def _test_async_sync_compile(
     if compile_config.backend is not None:
         fn_transform = compile_config_to_fn_transform(compile_config)
 
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             if compile_config.test_compiled_with_noncompiled_ranks and rank == 1:
                 # Turn off compilation for rank==1 to test compatibility of compiled rank and non-compiled
                 fn_transform = lambda x: x
@@ -241,7 +245,10 @@ class TestAllToAll(unittest.TestCase):
 
         fn_transform = compile_config_to_fn_transform(compile_config)
 
-        with dynamo_skipfiles_allow("torchrec"):
+        with unittest.mock.patch(
+            "torch._dynamo.config.skip_torchrec",
+            False,
+        ):
             v_embs_out = fn_transform(fn)(
                 input_embeddings, out_split=out_split, group=pg if specify_pg else None
             )
