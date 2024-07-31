@@ -410,10 +410,15 @@ def add_params_from_parameter_sharding(
         parameter_sharding.compute_kernel in {EmbeddingComputeKernel.KEY_VALUE.value}
         and parameter_sharding.key_value_params is not None
     ):
-        key_value_params_dict = asdict(parameter_sharding.key_value_params)
+        kv_params = parameter_sharding.key_value_params
+        key_value_params_dict = asdict(kv_params)
         key_value_params_dict = {
             k: v for k, v in key_value_params_dict.items() if v is not None
         }
+        if kv_params.stats_reporter_config:
+            key_value_params_dict["stats_reporter_config"] = (
+                kv_params.stats_reporter_config
+            )
         fused_params.update(key_value_params_dict)
 
     # print warning if sharding_type is data_parallel or kernel is dense
