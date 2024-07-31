@@ -169,23 +169,31 @@ def mark_dynamic_kjt(
         llen (Optional[DIM]): The dynamic length for the lengths, it's only used when variable_length is true. If it's None, it will use the default name "llen".
         batch_size (Optional[DIM]): The dynamic length for the batch_size, it's only used when variable_length and mark_batch_size are both true.
     """
+
+    def _has_dim(t: Optional[torch.Tensor]) -> bool:
+        return t is not None and t.dim() > 0
+
     if shapes_collection is None:
         shapes_collection = ShapesCollection()
-    if kjt._values.numel() == 0:
-        # if the values is empty, we need to set the shape to (2,) to make it compatible with dynamic shape
-        # a 0-size dynamic shape will cause error in torch.export.
-        # logically when the values is empty, the lengths and offsets should all be zero-value tensors.
-        # And this makes the actual values irrelavent to the downstream process.
-        kjt._values = torch.ones(2, device=kjt._values.device, dtype=kjt._values.dtype)
     vlen = _get_dim("vlen") if vlen is None else vlen
-    shapes_collection[kjt._values] = (vlen,)
-    if kjt._weights is not None:
+
+    if _has_dim(kjt._values):
+        if kjt._values.numel() == 0:
+            # if the values is empty, we need to set the shape to (2,) to make it compatible with dynamic shape
+            # a 0-size dynamic shape will cause error in torch.export.
+            # logically when the values is empty, the lengths and offsets should all be zero-value tensors.
+            # And this makes the actual values irrelavent to the downstream process.
+            kjt._values = torch.ones(
+                2, device=kjt._values.device, dtype=kjt._values.dtype
+            )
+        shapes_collection[kjt._values] = (vlen,)
+    if _has_dim(kjt._weights):
         shapes_collection[kjt._weights] = (vlen,)
     if variable_length:
         llen = _get_dim("llen") if llen is None else llen
-        if kjt._lengths is not None:
+        if _has_dim(kjt._lengths):
             shapes_collection[kjt._lengths] = (llen,)
-        if kjt._offsets is not None:
+        if _has_dim(kjt._offsets):
             shapes_collection[kjt._offsets] = (llen + 1,)
     return shapes_collection
 
