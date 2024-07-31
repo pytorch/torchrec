@@ -70,6 +70,7 @@ def _load_split_embedding_weights(
             weight,
             torch.as_tensor([height]),
             table_id,
+            False,  # is_bwd
         )
         cum_sum += height
 
