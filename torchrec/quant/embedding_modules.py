@@ -241,6 +241,16 @@ def _update_embedding_configs(
         )
 
 
+@torch.fx.wrap
+def _fx_trec_qebc_unwrap_kjt(
+    kjt: KeyedJaggedTensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    if kjt.device() == "cpu":
+        return kjt.values().long(), kjt.offsets().long()
+    else:
+        return kjt.values(), kjt.offsets()
+
+
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
@@ -485,8 +495,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             zip(self._emb_modules, self._key_to_tables.keys())
         ):
             f = kjts_per_key[i]
-            indices = f.values()
-            offsets = f.offsets()
+            indices, offsets = _fx_trec_qebc_unwrap_kjt(f)
 
             embeddings.append(
                 # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
