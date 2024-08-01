@@ -161,7 +161,11 @@ def _unwrap_kjt(
 def _unwrap_kjt_for_cpu(
     features: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-    return features.values(), features.offsets(), features.weights_or_none()
+    return (
+        features.values().long(),
+        features.offsets().long(),
+        features.weights_or_none(),
+    )
 
 
 @torch.fx.wrap
