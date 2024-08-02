@@ -689,9 +689,10 @@ class TestPt2(unittest.TestCase):
         for n in ep.graph_module.graph.nodes:
             self.assertFalse("auto_functionalized" in str(n.name))
 
-        torch.export.unflatten(ep)
-
-        ep(kjt.values(), kjt.lengths())
+        # The nn_module_stack for this model forms a skip connection that looks like:
+        # a -> a.b -> a.b.c -> a.d
+        # This is currently not supported by unflatten.
+        # torch.export.unflatten(ep)
 
     def test_maybe_compute_kjt_to_jt_dict(self) -> None:
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
