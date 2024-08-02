@@ -891,7 +891,7 @@ def _assert_tensor_has_no_elements_or_has_integers(
         # TODO(ivankobzarev): Use guard_size_oblivious to pass tensor.numel() == 0 once it is torch scriptable.
         return
 
-    assert tensor.numel() == 0 or tensor.dtype in [
+    assert pt2_guard_size_oblivious(tensor.numel() == 0) or tensor.dtype in [
         torch.long,
         torch.int,
         torch.short,
@@ -1219,12 +1219,17 @@ def _maybe_compute_kjt_to_jt_dict(
             ]
         else:
             split_lengths = torch.unbind(
-                lengths.view(-1, stride) if lengths.numel() != 0 else lengths, dim=0
+                (
+                    lengths.view(-1, stride)
+                    if pt2_guard_size_oblivious(lengths.numel() != 0)
+                    else lengths
+                ),
+                dim=0,
             )
             split_offsets = torch.unbind(
                 (
                     _batched_lengths_to_offsets(lengths.view(-1, stride))
-                    if lengths.numel() != 0
+                    if pt2_guard_size_oblivious(lengths.numel() != 0)
                     else lengths
                 ),
                 dim=0,
