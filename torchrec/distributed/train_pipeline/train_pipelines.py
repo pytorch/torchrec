@@ -106,6 +106,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
+        use_compute_losses: bool = False,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -304,6 +305,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         apply_jit: bool = False,
         context_type: Type[TrainPipelineContext] = TrainPipelineContext,
         pipeline_preproc: bool = False,
+        use_compute_losses: bool = False,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -707,6 +709,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         start_batch: int = 900,
         stash_gradients: bool = False,
         pipeline_preproc: bool = False,
+        use_compute_losses: bool = False,
     ) -> None:
         super().__init__(
             model=model,
@@ -739,6 +742,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._embedding_odd_streams: List[Optional[torch.Stream]] = []
         self._embedding_even_streams: List[Optional[torch.Stream]] = []
         self._gradients: Dict[str, torch.Tensor] = {}
+        self._use_compute_losses = use_compute_losses
 
     def _grad_swap(self) -> None:
         for name, param in self._model.named_parameters():
@@ -832,7 +836,20 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                 self.contexts[2],
             )
 
-        losses, output = self._mlp_forward(cast(In, self.batches[0]), self.contexts[0])
+        if self._use_compute_losses:
+            losses, output = self._mlp_forward_use_compute_losses(
+                cast(In, self.batches[0])
+            )
+        else:
+            losses, output = self._mlp_forward(
+                cast(In, self.batches[0]), self.contexts[0]
+            )
+
+        # batch i+2
+        self.enqueue_batch(dataloader_iter)
+
+        # batch i+3
+        # py
 
         # batch i+3
         self.enqueue_batch(dataloader_iter)
@@ -878,6 +895,16 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                 batch, context, torch.get_device_module(self._device).current_stream()
             )
             return cast(Tuple[torch.Tensor, Out], self._model(batch))
+
+    def _mlp_forward_use_compute_losses(self, batch: In) -> Tuple[torch.Tensor, Out]:
+        labels_and_weights, loss_configs_or_logits = self._model(batch)
+        losses = self._model.module.compute_loss(
+            labels_and_weights, loss_configs_or_logits
+        )
+        output = self._model.module.get_metric_tensors(
+            labels_and_weights, loss_configs_or_logits
+        )
+        return (losses, output)
 
     def embedding_backward(self, context: EmbeddingTrainPipelineContext) -> None:
         default_stream = torch.get_device_module(self._device).current_stream()
