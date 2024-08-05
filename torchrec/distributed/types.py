@@ -371,8 +371,9 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
         else:
             return obj
 
+    @classmethod
     # pyre-ignore [2, 3]
-    def __torch_function__(self, func, types, args=(), kwargs=None):
+    def __torch_function__(cls, func, types, args=(), kwargs=None):
         """
         The LazyAwaitable type has a `__torch_function__` implementation.
         This means when this type is seens as an argument to a PyTorch
