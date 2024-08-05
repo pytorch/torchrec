@@ -5,18 +5,18 @@ name: Unit Test CI
 
 on:
   # TODO: re-enable when GPU unit tests are working
-  # push:
-  #   paths-ignore:
-  #     - "docs/*"
-  #     - "third_party/*"
-  #     - .gitignore
-  #     - "*.md"
-  # pull_request:
-  #   paths-ignore:
-  #     - "docs/*"
-  #     - "third_party/*"
-  #     - .gitignore
-  #     - "*.md"
+  push:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
   workflow_dispatch:
 
 jobs:
@@ -36,12 +36,12 @@ jobs:
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Update pip
       run: |
         sudo yum update -y
         sudo yum -y install git python3-pip
-        sudo pip3 install --upgrade pip
+        # sudo pip3 install --upgrade pip
     - name: Setup conda
       run: |
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
@@ -97,7 +97,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [linux.4xlarge.nvidia.gpu]
+        os: [linux.gcp.a100.large]
         python-version: [3.8]
         cuda-tag: ["cu11"]
     needs: build_on_cpu
@@ -135,7 +135,7 @@ jobs:
         sudo lshw -C display
     # Checkout the repository to the GitHub Actions runner
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Update pip
       run: |
         sudo yum update -y
@@ -181,7 +181,7 @@ jobs:
     - name: Install TorchRec GPU
       run: |
         rm -r dist || true
-        conda run -n build_binary python -m pip install dist/*.whl
+        conda run -n build_binary python -m pip install *.whl
     - name: Test torchrec installation
       shell: bash
       run: |
