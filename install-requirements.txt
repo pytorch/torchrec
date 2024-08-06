@@ -1,3 +1,5 @@
 fbgemm-gpu
 torchmetrics==1.0.3
 tqdm
+iopath
+pyre-extensions
