@@ -13,7 +13,10 @@ import torch
 from torchrec.metrics.rec_metric import RecTaskInfo
 
 
-def session_ids_to_tensor(session_ids: List[str]) -> torch.Tensor:
+def session_ids_to_tensor(
+    session_ids: List[str],
+    device: Optional[torch.device] = None,
+) -> torch.Tensor:
     """
     This function is used to prepare model outputs with session_ids as List[str] to tensor to be consumed by the Metric computation
     """
@@ -28,7 +31,7 @@ def session_ids_to_tensor(session_ids: List[str]) -> torch.Tensor:
             curr_id += 1
 
     session_lengths_list.append(curr_id)
-    return torch.tensor(session_lengths_list[1:])
+    return torch.tensor(session_lengths_list[1:], device=device)
 
 
 def is_empty_signals(
@@ -86,6 +89,7 @@ def parse_required_inputs(
     model_out: Dict[str, torch.Tensor],
     required_inputs_list: List[str],
     ndcg_transform_input: bool = False,
+    device: Optional[torch.device] = None,
 ) -> Dict[str, torch.Tensor]:
     required_inputs: Dict[str, torch.Tensor] = {}
     for feature in required_inputs_list:
@@ -93,7 +97,7 @@ def parse_required_inputs(
         if ndcg_transform_input:
             model_out[feature] = (
                 # pyre-ignore[6]
-                session_ids_to_tensor(model_out[feature])
+                session_ids_to_tensor(model_out[feature], device=device)
                 if isinstance(model_out[feature], list)
                 else model_out[feature]
             )
@@ -136,7 +140,10 @@ def parse_task_model_outputs(
 
     if required_inputs_list is not None:
         all_required_inputs = parse_required_inputs(
-            model_out, required_inputs_list, ndcg_transform_input
+            model_out,
+            required_inputs_list,
+            ndcg_transform_input,
+            device=labels.device,
         )
 
     return all_labels, all_predictions, all_weights, all_required_inputs
