@@ -587,34 +587,48 @@ class KeyValueParams:
     Attributes:
         ssd_storage_directory (Optional[str]): Directory for SSD. If we want directory
             to be f"data00_nvidia{local_rank}", pass in "data00_nvidia@local_rank".
-        ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
-            and ports. Example: (("::1", 2000), ("::1", 2001), ("::1", 2002)).
-            Reason for using tuple is we want it hashable.
         ssd_rocksdb_write_buffer_size: Optional[int]: rocksdb write buffer size per tbe,
             relavant to rocksdb compaction frequency
         ssd_rocksdb_shards: Optional[int]: rocksdb shards number
         gather_ssd_cache_stats: bool: whether enable ssd stats collection, std reporter and ods reporter
         report_interval: int: report interval in train iteration if gather_ssd_cache_stats is enabled
         ods_prefix: str: ods prefix for ods reporting
+
+        # Parameter Server (PS) Attributes
+        ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
+            and ports. Example: (("::1", 2000), ("::1", 2001), ("::1", 2002)).
+            Reason for using tuple is we want it hashable.
+        ps_client_thread_num (int): Number of threads to use for PS client
+        ps_max_key_per_request (int): Maximum number of keys to send per request
+        ps_max_local_index_length(int): Maximum local index length
     """
 
     ssd_storage_directory: Optional[str] = None
-    ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
     ssd_rocksdb_write_buffer_size: Optional[int] = None
     ssd_rocksdb_shards: Optional[int] = None
     gather_ssd_cache_stats: Optional[bool] = None
     stats_reporter_config: Optional[TBEStatsReporterConfig] = None
     use_passed_in_path: bool = True
 
+    # Parameter Server (PS) Attributes
+    ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
+    ps_client_thread_num: Optional[int] = None
+    ps_max_key_per_request: Optional[int] = None
+    ps_max_local_index_length: Optional[int] = None
+
     def __hash__(self) -> int:
         return hash(
             (
                 self.ssd_storage_directory,
-                self.ps_hosts,
                 self.ssd_rocksdb_write_buffer_size,
                 self.ssd_rocksdb_shards,
                 self.gather_ssd_cache_stats,
                 self.stats_reporter_config,
+                # Parameter Server (PS) Attributes
+                self.ps_hosts,
+                self.ps_client_thread_num,
+                self.ps_max_key_per_request,
+                self.ps_max_local_index_length,
             )
         )
 
