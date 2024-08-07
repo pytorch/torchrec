@@ -10,12 +10,15 @@
 import unittest
 
 import torch
-from torchrec.metrics.metrics_config import DefaultTaskInfo
+from torchrec.metrics.metrics_config import DefaultTaskInfo, RecTaskInfo
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import gen_test_batch, gen_test_tasks
+
+
+_CUDA_UNAVAILABLE: bool = not torch.cuda.is_available()
 
 
 class RecMetricTest(unittest.TestCase):
@@ -272,3 +275,29 @@ class RecMetricTest(unittest.TestCase):
         ne.reset()
         window_buffer = ne._batch_window_buffers["window_cross_entropy_sum"].buffers
         self.assertEqual(len(window_buffer), 0)
+
+    @unittest.skipIf(_CUDA_UNAVAILABLE, "Test needs to run on GPU")
+    def test_parse_task_model_outputs_ndcg(self) -> None:
+        _, _, _, required_inputs = parse_task_model_outputs(
+            tasks=[
+                RecTaskInfo(
+                    name="ndcg_example",
+                ),
+            ],
+            # pyre-fixme[6]: for argument model_out, expected Dict[str, Tensor] but
+            # got Dict[str, Union[List[str], Tensor]]
+            model_out={
+                "label": torch.tensor(
+                    [0.0, 1.0, 0.0, 1.0], device=torch.device("cuda:0")
+                ),
+                "weight": torch.tensor(
+                    [1.0, 1.0, 1.0, 1.0], device=torch.device("cuda:0")
+                ),
+                "prediction": torch.tensor(
+                    [0.0, 1.0, 0.0, 1.0], device=torch.device("cuda:0")
+                ),
+                "session_id": ["1", "1", "2", "2"],
+            },
+            required_inputs_list=["session_id"],
+        )
+        self.assertEqual(required_inputs["session_id"].device, torch.device("cuda:0"))
