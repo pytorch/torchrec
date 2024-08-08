@@ -1952,7 +1952,6 @@ class InferShardingsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model,
-            # pyre-ignore
             sharders=[sharder],
             device=local_device,
             plan=plan,
@@ -2107,7 +2106,6 @@ class InferShardingsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model,
-            # pyre-ignore
             sharders=[sharder],
             # shard on meta to simulate device movement from cpu -> meta QFPEBC
             device=torch.device("meta"),

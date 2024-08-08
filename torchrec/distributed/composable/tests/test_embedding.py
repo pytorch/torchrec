@@ -101,7 +101,6 @@ def _test_sharding(  # noqa C901
             # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
-            # pyre-ignore
             sharders=[sharder],
             device=ctx.device,
         )

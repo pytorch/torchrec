@@ -109,6 +109,7 @@ class KTRegroupAsDictTest(unittest.TestCase):
         gm = torch.fx.symbolic_trace(regroup_module)
         jit_gm = torch.jit.script(gm)
 
+        # pyre-fixme[29]: `Never` is not a function.
         out = jit_gm(self.kts)
         eager_out = regroup_module(self.kts)
         for key in out.keys():
@@ -128,6 +129,7 @@ class KTRegroupAsDictTest(unittest.TestCase):
         gm = torch.fx.symbolic_trace(regroup_module)
         jit_gm = torch.jit.script(gm)
 
+        # pyre-fixme[29]: `Never` is not a function.
         out = jit_gm(self.kts)
         eager_out = regroup_module(self.kts)
         for key in out.keys():
