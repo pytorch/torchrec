@@ -132,6 +132,8 @@ def convert_list_of_modules_to_modulelist(
         #  `Iterable[torch.nn.Module]`.
         len(modules)
         == sizes[0]
+        # pyre-fixme[6]: For 1st argument expected `pyre_extensions.ReadOnly[Sized]` but
+        #  got `Iterable[Module]`.
     ), f"the counts of modules ({len(modules)}) do not match with the required counts {sizes}"
     if len(sizes) == 1:
         return torch.nn.ModuleList(modules)

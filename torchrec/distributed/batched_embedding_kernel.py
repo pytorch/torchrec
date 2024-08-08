@@ -605,13 +605,24 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
         self.table_name_to_count: Dict[str, int] = {}
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = {}
 
+        # pyre-fixme[9]: config has type `GroupedEmbeddingConfig`; used as
+        #  `ShardedEmbeddingTable`.
         for idx, config in enumerate(self._config.embedding_tables):
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_rows`.
             self._local_rows.append(config.local_rows)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_min`.
             self._weight_init_mins.append(config.get_weight_init_min())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_max`.
             self._weight_init_maxs.append(config.get_weight_init_max())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `num_embeddings`.
             self._num_embeddings.append(config.num_embeddings)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_cols`.
             self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `name`.
             if config.name not in self.table_name_to_count:
                 self.table_name_to_count[config.name] = 0
             self.table_name_to_count[config.name] += 1
@@ -1011,13 +1022,24 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         self.table_name_to_count: Dict[str, int] = {}
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = {}
 
+        # pyre-fixme[9]: config has type `GroupedEmbeddingConfig`; used as
+        #  `ShardedEmbeddingTable`.
         for idx, config in enumerate(self._config.embedding_tables):
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_rows`.
             self._local_rows.append(config.local_rows)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_min`.
             self._weight_init_mins.append(config.get_weight_init_min())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_max`.
             self._weight_init_maxs.append(config.get_weight_init_max())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `num_embeddings`.
             self._num_embeddings.append(config.num_embeddings)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_cols`.
             self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `name`.
             if config.name not in self.table_name_to_count:
                 self.table_name_to_count[config.name] = 0
             self.table_name_to_count[config.name] += 1

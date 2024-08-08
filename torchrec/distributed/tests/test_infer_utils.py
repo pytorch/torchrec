@@ -103,7 +103,6 @@ class UtilsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model[0],
-            # pyre-ignore
             sharders=[sharder],
             device=device,
             plan=plan,
@@ -178,7 +177,6 @@ class UtilsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model[0],
-            # pyre-ignore
             sharders=[sharder],
             device=device,
             plan=plan,
@@ -256,7 +254,6 @@ class UtilsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model[0],
-            # pyre-ignore
             sharders=[sharder],
             device=device,
             plan=plan,

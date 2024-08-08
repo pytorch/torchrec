@@ -480,7 +480,6 @@ def transform_module(
 
             sharded_module = _shard_modules(
                 module=copied_module,
-                # pyre-ignore [6]
                 sharders=[sharder],
                 device=device,
                 plan=plan,
@@ -489,13 +488,9 @@ def transform_module(
 
     if compile_mode == CompileMode.FX_SCRIPT:
         return fx_script_module(
-            # pyre-ignore [6]
-            sharded_module
-            if not benchmark_unsharded_module
-            else module
+            sharded_module if not benchmark_unsharded_module else module
         )
     else:
-        # pyre-ignore [7]
         return sharded_module if not benchmark_unsharded_module else module
 
 
@@ -611,7 +606,11 @@ def benchmark(
         if device_type == "cuda":
             with torch.profiler.profile(
                 activities=[
+                    # pyre-fixme[16]: Module `profiler` has no attribute
+                    #  `ProfilerActivity`.
                     torch.profiler.ProfilerActivity.CPU,
+                    # pyre-fixme[16]: Module `profiler` has no attribute
+                    #  `ProfilerActivity`.
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
                 record_shapes=True,

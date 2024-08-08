@@ -858,7 +858,6 @@ def shard_qebc(
     quant_model_copy = copy.deepcopy(mi.quant_model)
     sharded_model = _shard_modules(
         module=quant_model_copy,
-        # pyre-ignore
         sharders=[sharder],
         device=device,
         plan=plan,
@@ -908,7 +907,6 @@ def shard_qec(
     quant_model_copy = copy.deepcopy(mi.quant_model)
     sharded_model = _shard_modules(
         module=quant_model_copy,
-        # pyre-ignore
         sharders=[sharder],
         device=device,
         plan=plan,
