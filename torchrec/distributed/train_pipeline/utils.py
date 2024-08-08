@@ -790,6 +790,12 @@ def _get_node_args_helper(
                     arg = child_node.kwargs["values"]
                 else:
                     arg = child_node.args[1]
+            elif child_node.op == "call_method" and child_node.target == "get":
+                # pyre-ignore[6]
+                arg_info.input_attrs.insert(0, child_node.args[1])
+                arg_info.is_getitems.insert(0, True)
+                arg_info.preproc_modules.insert(0, None)
+                arg = child_node.args[0]
             elif child_node.op == "call_module":
                 preproc_module_fqn = str(child_node.target)
                 preproc_module = getattr(model, preproc_module_fqn, None)
