@@ -559,14 +559,25 @@ def variable_batch_all2all_pooled_sync(
         ]
 
     with record_function("## alltoall_fwd_single ##"):
-        sharded_output_embeddings = torch.ops.torchrec.all_to_all_single(
-            sharded_input_embeddings,
-            output_split_sizes,
-            input_split_sizes,
-            pg_name(pg),
-            pg.size(),
-            get_gradient_division(),
-        )
+        if pg._get_backend_name() == "fake":
+            sharded_output_embeddings = torch.empty(
+                sum(output_split_sizes),
+                device=sharded_input_embeddings.device,
+                dtype=sharded_input_embeddings.dtype,
+            )
+            s0 = sharded_output_embeddings.size(0)
+            # Bad assumption that our rank GE than other
+            torch._check(s0 <= sharded_input_embeddings.size(0))
+            sharded_output_embeddings.copy_(sharded_input_embeddings[:s0])
+        else:
+            sharded_output_embeddings = torch.ops.torchrec.all_to_all_single(
+                sharded_input_embeddings,
+                output_split_sizes,
+                input_split_sizes,
+                pg_name(pg),
+                pg.size(),
+                get_gradient_division(),
+            )
 
     if a2ai.codecs is not None:
         codecs = none_throws(a2ai.codecs)
