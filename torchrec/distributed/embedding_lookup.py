@@ -20,6 +20,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
+from fbgemm_gpu.tbe.ssd.training import SSDTableBatchedEmbeddingBags
 from torch import nn
 
 from torch.autograd.function import FunctionCtx
@@ -182,7 +183,10 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             config: GroupedEmbeddingConfig,
         ) -> BaseEmbedding:
             for table in config.embedding_tables:
-                if table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING:
+                if (
+                    table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
+                    or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
+                ):
                     self._need_prefetch = True
             if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbedding(
@@ -254,11 +258,18 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
                         "If you don’t turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
                     )
                 if hasattr(emb_op.emb_module, "prefetch"):
-                    emb_op.emb_module.prefetch(
-                        indices=features.values(),
-                        offsets=features.offsets(),
-                        forward_stream=forward_stream,
-                    )
+                    if isinstance(emb_op.emb_module, SSDTableBatchedEmbeddingBags):
+                        # only takes indices and offsets
+                        emb_op.emb_module.prefetch(
+                            indices=features.values(),
+                            offsets=features.offsets(),
+                        )
+                    else:
+                        emb_op.emb_module.prefetch(
+                            indices=features.values(),
+                            offsets=features.offsets(),
+                            forward_stream=forward_stream,
+                        )
 
     def forward(
         self,
@@ -455,7 +466,10 @@ class GroupedPooledEmbeddingsLookup(
     ) -> None:
         def _need_prefetch(config: GroupedEmbeddingConfig) -> bool:
             for table in config.embedding_tables:
-                if table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING:
+                if (
+                    table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
+                    or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
+                ):
                     return True
             return False
 
@@ -476,16 +490,23 @@ class GroupedPooledEmbeddingsLookup(
                         "If you don't turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
                     )
                 if hasattr(emb_op.emb_module, "prefetch"):
-                    emb_op.emb_module.prefetch(
-                        indices=features.values(),
-                        offsets=features.offsets(),
-                        forward_stream=forward_stream,
-                        batch_size_per_feature_per_rank=(
-                            features.stride_per_key_per_rank()
-                            if features.variable_stride_per_key()
-                            else None
-                        ),
-                    )
+                    if isinstance(emb_op.emb_module, SSDTableBatchedEmbeddingBags):
+                        # only takes indices and offsets
+                        emb_op.emb_module.prefetch(
+                            indices=features.values(),
+                            offsets=features.offsets(),
+                        )
+                    else:
+                        emb_op.emb_module.prefetch(
+                            indices=features.values(),
+                            offsets=features.offsets(),
+                            forward_stream=forward_stream,
+                            batch_size_per_feature_per_rank=(
+                                features.stride_per_key_per_rank()
+                                if features.variable_stride_per_key()
+                                else None
+                            ),
+                        )
 
     def _merge_variable_batch_embeddings(
         self, embeddings: List[torch.Tensor], splits: List[List[int]]

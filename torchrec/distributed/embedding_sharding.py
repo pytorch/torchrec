@@ -901,9 +901,9 @@ class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
     """
 
     def __init__(
-        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+        self,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
     @property
