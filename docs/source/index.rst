@@ -44,6 +44,7 @@ TorchRec API
    torchrec.optim.rst
    torchrec.quant.rst
    torchrec.sparse.rst
+   torchrec.metrics.rst
 
 Indices and tables
 ==================
