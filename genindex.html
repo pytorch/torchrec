@@ -307,6 +307,7 @@
 <li class="toctree-l1"><a class="reference internal" href="torchrec.optim.html">torchrec.optim</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.quant.html">torchrec.quant</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.sparse.html">torchrec.sparse</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.metrics.html">torchrec.metrics</a></li>
 </ul>
 
             
@@ -408,12 +409,17 @@
  | <a href="#U"><strong>U</strong></a>
  | <a href="#V"><strong>V</strong></a>
  | <a href="#W"><strong>W</strong></a>
+ | <a href="#X"><strong>X</strong></a>
  | <a href="#Z"><strong>Z</strong></a>
  
 </div>
 <h2 id="A">A</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.accuracy.AccuracyMetric">AccuracyMetric (class in torchrec.metrics.accuracy)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.accuracy.AccuracyMetricComputation">AccuracyMetricComputation (class in torchrec.metrics.accuracy)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.QuantConfig.activation">activation (torchrec.modules.embedding_configs.QuantConfig attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.ADAGRAD">ADAGRAD (torchrec.distributed.embedding_types.OptimType attribute)</a>
@@ -431,6 +437,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.add_params_from_parameter_sharding">add_params_from_parameter_sharding() (in module torchrec.distributed.utils)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.add_prefix_to_state_dict">add_prefix_to_state_dict() (in module torchrec.distributed.utils)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.WindowBuffer.aggregate_state">aggregate_state() (torchrec.metrics.rec_metric.WindowBuffer method)</a>
 </li>
       <li><a href="torchrec.distributed.html#id34">algorithm (torchrec.distributed.types.CacheParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.CacheParams.algorithm">[1]</a>
 </li>
@@ -458,10 +466,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2Allv_Wait">All2Allv_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllVInfo">All2AllVInfo (class in torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_gather_base_pooled">all_gather_base_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.all_gather_base_sync">all_gather_base_sync() (in module torchrec.distributed.comm_ops)</a>
@@ -499,6 +507,14 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection.apply_feature_processor">apply_feature_processor() (torchrec.distributed.quant_embeddingbag.ShardedQuantFeatureProcessedEmbeddingBagCollection method)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.apply_mc_method_to_jt_dict">apply_mc_method_to_jt_dict() (in module torchrec.modules.mc_modules)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auc.AUCMetric">AUCMetric (class in torchrec.metrics.auc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auc.AUCMetricComputation">AUCMetricComputation (class in torchrec.metrics.auc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auprc.AUPRCMetric">AUPRCMetric (class in torchrec.metrics.auprc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auprc.AUPRCMetricComputation">AUPRCMetricComputation (class in torchrec.metrics.auprc)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.average_threshold_filter">average_threshold_filter() (in module torchrec.modules.mc_modules)</a>
 </li>
@@ -597,6 +613,8 @@
       <ul>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.batch_size">(torchrec.distributed.planner.types.ShardingOption attribute)</a>
 </li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.batch_size">(torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
       </ul></li>
       <li><a href="torchrec.distributed.html#id28">batch_size_per_feature_pre_a2a (torchrec.distributed.comm_ops.VariableBatchAll2AllPooledInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.VariableBatchAll2AllPooledInfo.batch_size_per_feature_pre_a2a">[1]</a>
 </li>
@@ -631,6 +649,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.bucketize_kjt_inference">bucketize_kjt_inference() (in module torchrec.distributed.embedding_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.InputDistOutputs.bucketized_length">bucketized_length (torchrec.distributed.embedding_types.InputDistOutputs attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.WindowBuffer.buffers">buffers (torchrec.metrics.rec_metric.WindowBuffer property)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.build_affine_storage_model">build_affine_storage_model() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer static method)</a>
 </li>
@@ -680,6 +700,10 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.shard_estimators.calculate_shard_storages">calculate_shard_storages() (in module torchrec.distributed.planner.shard_estimators)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.calibration.CalibrationMetric">CalibrationMetric (class in torchrec.metrics.calibration)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.calibration.CalibrationMetricComputation">CalibrationMetricComputation (class in torchrec.metrics.calibration)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll.callbacks">callbacks (torchrec.distributed.dist_data.PooledEmbeddingsAllToAll property)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll.callbacks">[1]</a>
 
       <ul>
@@ -690,6 +714,8 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.Awaitable.callbacks">(torchrec.distributed.types.Awaitable property)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.check_memory_usage">check_memory_usage() (torchrec.metrics.metric_module.RecMetricModule method)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.check_module_output_dimension">check_module_output_dimension() (in module torchrec.modules.utils)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.LuusJaakolaSearch.clamp">clamp() (torchrec.distributed.planner.utils.LuusJaakolaSearch method)</a>
@@ -759,7 +785,21 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.compute">(torchrec.distributed.types.ShardedModule method)</a>
 </li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.compute">(torchrec.metrics.metric_module.RecMetricModule method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.compute">(torchrec.metrics.rec_metric.RecMetric method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation.compute">(torchrec.metrics.rec_metric.RecMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.compute">(torchrec.metrics.rec_metric.RecMetricList method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.throughput.ThroughputMetric.compute">(torchrec.metrics.throughput.ThroughputMetric method)</a>
+</li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.accuracy.compute_accuracy">compute_accuracy() (in module torchrec.metrics.accuracy)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.accuracy.compute_accuracy_sum">compute_accuracy_sum() (in module torchrec.metrics.accuracy)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.compute_and_output_dist">compute_and_output_dist() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
       <ul>
@@ -770,7 +810,35 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.compute_and_output_dist">(torchrec.distributed.types.ShardedModule method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auc.compute_auc">compute_auc() (in module torchrec.metrics.auc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auc.compute_auc_per_group">compute_auc_per_group() (in module torchrec.metrics.auc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auprc.compute_auprc">compute_auprc() (in module torchrec.metrics.auprc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auprc.compute_auprc_per_group">compute_auprc_per_group() (in module torchrec.metrics.auprc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.calibration.compute_calibration">compute_calibration() (in module torchrec.metrics.calibration)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.compute_count">compute_count (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ne.compute_cross_entropy">compute_cross_entropy() (in module torchrec.metrics.ne)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ctr.compute_ctr">compute_ctr() (in module torchrec.metrics.ctr)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology.compute_device">compute_device (torchrec.distributed.planner.types.Topology property)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mae.compute_error_sum">compute_error_sum() (in module torchrec.metrics.mae)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.mse.compute_error_sum">(in module torchrec.metrics.mse)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.xauc.compute_error_sum">(in module torchrec.metrics.xauc)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.recall.compute_false_neg_sum">compute_false_neg_sum() (in module torchrec.metrics.recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.precision.compute_false_pos_sum">compute_false_pos_sum() (in module torchrec.metrics.precision)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingAttributes.compute_kernel">compute_kernel (torchrec.distributed.embedding_types.EmbeddingAttributes attribute)</a>
 
@@ -796,15 +864,49 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.compute_kernels">(torchrec.distributed.types.ModuleSharder method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ne.compute_logloss">compute_logloss() (in module torchrec.metrics.ne)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mae.compute_mae">compute_mae() (in module torchrec.metrics.mae)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mse.compute_mse">compute_mse() (in module torchrec.metrics.mse)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.multiclass_recall.compute_multiclass_recall_at_k">compute_multiclass_recall_at_k() (in module torchrec.metrics.multiclass_recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ne.compute_ne">compute_ne() (in module torchrec.metrics.ne)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.precision.compute_precision">compute_precision() (in module torchrec.metrics.precision)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.compute_rauc">compute_rauc() (in module torchrec.metrics.rauc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.compute_rauc_per_group">compute_rauc_per_group() (in module torchrec.metrics.rauc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.recall.compute_recall">compute_recall() (in module torchrec.metrics.recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mse.compute_rmse">compute_rmse() (in module torchrec.metrics.mse)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.precision.compute_true_pos_sum">compute_true_pos_sum() (in module torchrec.metrics.precision)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.recall.compute_true_pos_sum">(in module torchrec.metrics.recall)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.multiclass_recall.compute_true_positives_at_k">compute_true_positives_at_k() (in module torchrec.metrics.multiclass_recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.xauc.compute_weighted_num_pairs">compute_weighted_num_pairs() (in module torchrec.metrics.xauc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.xauc.compute_xauc">compute_xauc() (in module torchrec.metrics.xauc)</a>
+</li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.ComputeJTDictToKJT">ComputeJTDictToKJT (class in torchrec.sparse.jagged_tensor)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ComputeKernel">ComputeKernel (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.ComputeKJTToJTDict">ComputeKJTToJTDict (class in torchrec.sparse.jagged_tensor)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat">concat() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor static method)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.conquer_and_count">conquer_and_count() (in module torchrec.metrics.rauc)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.CONSTANT">CONSTANT (torchrec.optim.warmup.WarmupPolicy attribute)</a>
 </li>
@@ -833,6 +935,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.CopyableMixin">CopyableMixin (class in torchrec.distributed.utils)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.COSINE_ANNEALING_WARM_RESTARTS">COSINE_ANNEALING_WARM_RESTARTS (torchrec.optim.warmup.WarmupPolicy attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.count_reverse_pairs_divide_and_conquer">count_reverse_pairs_divide_and_conquer() (in module torchrec.metrics.rauc)</a>
 </li>
       <li><a href="torchrec.fx.html#torchrec.fx.tracer.Tracer.create_arg">create_arg() (torchrec.fx.tracer.Tracer method)</a>
 </li>
@@ -942,6 +1046,10 @@
       </ul></li>
       <li><a href="torchrec.modules.html#torchrec.modules.crossnet.CrossNet">CrossNet (class in torchrec.modules.crossnet)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ctr.CTRMetric">CTRMetric (class in torchrec.metrics.ctr)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ctr.CTRMetricComputation">CTRMetricComputation (class in torchrec.metrics.ctr)</a>
+</li>
       <li><a href="torchrec.distributed.html#id2">cumsum_dim_sum_per_rank_tensor (torchrec.distributed.comm_ops.All2AllPooledInfo attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllPooledInfo.cumsum_dim_sum_per_rank_tensor">[1]</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.CustomTopologyData">CustomTopologyData (class in torchrec.distributed.planner.types)</a>
@@ -999,6 +1107,8 @@
       <li><a href="torchrec.models.html#torchrec.models.deepfm.DenseArch">DenseArch (class in torchrec.models.deepfm)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.dependency">dependency (torchrec.distributed.planner.types.ShardingOption attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.MetricComputationReport.description">description (torchrec.metrics.rec_metric.MetricComputationReport attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.deterministic_dedup">deterministic_dedup() (in module torchrec.modules.utils)</a>
 </li>
@@ -1063,6 +1173,8 @@
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.DistanceLFU_EvictionPolicy">DistanceLFU_EvictionPolicy (class in torchrec.modules.mc_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel">DistributedModelParallel (class in torchrec.distributed.model_parallel)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.divide">divide() (in module torchrec.metrics.rauc)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.divisor">divisor (torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext attribute)</a>
 </li>
@@ -1722,13 +1834,21 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.gb_to_bytes">gb_to_bytes() (in module torchrec.distributed.planner.utils)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.generate_metric_module">generate_metric_module() (in module torchrec.metrics.metric_module)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.GenericMeta">GenericMeta (class in torchrec.distributed.types)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.accuracy.get_accuracy_states">get_accuracy_states() (in module torchrec.metrics.accuracy)</a>
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.get_block_sizes_runtime_device">get_block_sizes_runtime_device() (in module torchrec.distributed.sharding.rw_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.get_budget">get_budget() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer static method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.get_cacheability">get_cacheability() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer static method)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.calibration.get_calibration_states">get_calibration_states() (in module torchrec.metrics.calibration)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ctr.get_ctr_states">get_ctr_states() (in module torchrec.metrics.ctr)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.CustomTopologyData.get_data">get_data() (torchrec.distributed.planner.types.CustomTopologyData method)</a>
 </li>
@@ -1758,18 +1878,48 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm.get_local_size">get_local_size() (in module torchrec.distributed.comm)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mae.get_mae_states">get_mae_states() (in module torchrec.metrics.mae)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.weighted_avg.get_mean">get_mean() (in module torchrec.metrics.weighted_avg)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.get_memory_usage">get_memory_usage() (torchrec.metrics.metric_module.RecMetricModule method)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.get_memory_usage">(torchrec.metrics.rec_metric.RecMetric method)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.StateMetric.get_metrics">get_metrics() (torchrec.metrics.metric_module.StateMetric method)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.get_module">get_module() (in module torchrec.distributed.model_parallel)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.get_module_output_dimension">get_module_output_dimension() (in module torchrec.modules.utils)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mse.get_mse_states">get_mse_states() (in module torchrec.metrics.mse)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.multiclass_recall.get_multiclass_recall_states">get_multiclass_recall_states() (in module torchrec.metrics.multiclass_recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ne.get_ne_states">get_ne_states() (in module torchrec.metrics.ne)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm.get_num_groups">get_num_groups() (in module torchrec.distributed.comm)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.enumerators.get_partition_by_type">get_partition_by_type() (in module torchrec.distributed.planner.enumerators)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.get_plan_for_module">get_plan_for_module() (torchrec.distributed.types.ShardingPlan method)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.precision.get_precision_states">get_precision_states() (in module torchrec.metrics.precision)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.recall.get_recall_states">get_recall_states() (in module torchrec.metrics.recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.get_required_inputs">get_required_inputs() (torchrec.metrics.metric_module.RecMetricModule method)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.get_required_inputs">(torchrec.metrics.rec_metric.RecMetric method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.get_required_inputs">(torchrec.metrics.rec_metric.RecMetricList method)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup.get_tbes_to_register">get_tbes_to_register() (torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup method)</a>
 
       <ul>
@@ -1793,6 +1943,12 @@
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_max">get_weight_init_max() (torchrec.modules.embedding_configs.BaseEmbeddingConfig method)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.get_weight_init_min">get_weight_init_min() (torchrec.modules.embedding_configs.BaseEmbeddingConfig method)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation.get_window_state">get_window_state() (torchrec.metrics.rec_metric.RecMetricComputation method)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation.get_window_state_name">get_window_state_name() (torchrec.metrics.rec_metric.RecMetricComputation static method)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.xauc.get_xauc_states">get_xauc_states() (in module torchrec.metrics.xauc)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.GetItemLazyAwaitable">GetItemLazyAwaitable (class in torchrec.distributed.types)</a>
 </li>
@@ -2084,9 +2240,13 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.labels">labels (torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.LABELS">LABELS (torchrec.metrics.rec_metric.RecMetric attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.LAMB">LAMB (torchrec.distributed.embedding_types.OptimType attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.LARS_SGD">LARS_SGD (torchrec.distributed.embedding_types.OptimType attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.last_compute_time">last_compute_time (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.lazy_extension.lazy_apply">lazy_apply() (in module torchrec.modules.lazy_extension)</a>
 </li>
@@ -2176,6 +2336,16 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ShardedConfig.local_cols">local_cols (torchrec.distributed.embedding_types.ShardedConfig attribute)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.local_compute">local_compute() (torchrec.metrics.metric_module.RecMetricModule method)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.local_compute">(torchrec.metrics.rec_metric.RecMetric method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation.local_compute">(torchrec.metrics.rec_metric.RecMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.local_compute">(torchrec.metrics.rec_metric.RecMetricList method)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ShardedMetaConfig.local_metadata">local_metadata (torchrec.distributed.embedding_types.ShardedMetaConfig attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ShardedConfig.local_rows">local_rows (torchrec.distributed.embedding_types.ShardedConfig attribute)</a>
@@ -2210,6 +2380,10 @@
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mae.MAEMetric">MAEMetric (class in torchrec.metrics.mae)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mae.MAEMetricComputation">MAEMetricComputation (class in torchrec.metrics.mae)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionCollection">ManagedCollisionCollection (class in torchrec.modules.mc_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.mc_modules.ManagedCollisionCollectionAwaitable">ManagedCollisionCollectionAwaitable (class in torchrec.distributed.mc_modules)</a>
@@ -2242,6 +2416,10 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.PoolingType.MEAN">MEAN (torchrec.modules.embedding_configs.PoolingType attribute)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.memory_usage_limit_mb">memory_usage_limit_mb (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.memory_usage_mb_avg">memory_usage_mb_avg (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.MemoryBalancedPartitioner">MemoryBalancedPartitioner (class in torchrec.distributed.planner.partitioners)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.merge_fused_params">merge_fused_params() (in module torchrec.distributed.utils)</a>
@@ -2265,6 +2443,10 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup">MetaInferGroupedEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup">MetaInferGroupedPooledEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.MetricComputationReport.metric_prefix">metric_prefix (torchrec.metrics.rec_metric.MetricComputationReport attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.MetricComputationReport">MetricComputationReport (class in torchrec.metrics.rec_metric)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#id9">min_partition (torchrec.distributed.planner.types.ParameterConstraints attribute)</a>, <a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ParameterConstraints.min_partition">[1]</a>
 </li>
@@ -2362,6 +2544,44 @@
 </li>
         <li><a href="torchrec.inference.html#module-torchrec.inference.modules">torchrec.inference.modules</a>
 </li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics">torchrec.metrics</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.accuracy">torchrec.metrics.accuracy</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.auc">torchrec.metrics.auc</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.auprc">torchrec.metrics.auprc</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.calibration">torchrec.metrics.calibration</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.ctr">torchrec.metrics.ctr</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.mae">torchrec.metrics.mae</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.metric_module">torchrec.metrics.metric_module</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.mse">torchrec.metrics.mse</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.multiclass_recall">torchrec.metrics.multiclass_recall</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.ndcg">torchrec.metrics.ndcg</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.ne">torchrec.metrics.ne</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.precision">torchrec.metrics.precision</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.rauc">torchrec.metrics.rauc</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.rec_metric">torchrec.metrics.rec_metric</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.recall">torchrec.metrics.recall</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.throughput">torchrec.metrics.throughput</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.weighted_avg">torchrec.metrics.weighted_avg</a>
+</li>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.xauc">torchrec.metrics.xauc</a>
+</li>
         <li><a href="torchrec.models.html#module-torchrec.models.deepfm">torchrec.models.deepfm</a>
 </li>
         <li><a href="torchrec.modules.html#module-torchrec.modules">torchrec.modules</a>
@@ -2445,6 +2665,14 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleShardingPlan">ModuleShardingPlan (class in torchrec.distributed.types)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mse.MSEMetric">MSEMetric (class in torchrec.metrics.mse)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.mse.MSEMetricComputation">MSEMetricComputation (class in torchrec.metrics.mse)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.multiclass_recall.MulticlassRecallMetric">MulticlassRecallMetric (class in torchrec.metrics.multiclass_recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.multiclass_recall.MulticlassRecallMetricComputation">MulticlassRecallMetricComputation (class in torchrec.metrics.multiclass_recall)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.CacheParams.multipass_prefetch_config">multipass_prefetch_config (torchrec.distributed.types.CacheParams attribute)</a>
 </li>
   </ul></td>
@@ -2456,6 +2684,8 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.name">name (torchrec.distributed.planner.types.ShardingOption attribute)</a>
 
       <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.MetricComputationReport.name">(torchrec.metrics.rec_metric.MetricComputationReport attribute)</a>
+</li>
         <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.name">(torchrec.modules.embedding_configs.BaseEmbeddingConfig attribute)</a>
 </li>
       </ul></li>
@@ -2505,6 +2735,10 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup.named_parameters_by_table">(torchrec.distributed.embedding_lookup.GroupedPooledEmbeddingsLookup method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ndcg.NDCGComputation">NDCGComputation (class in torchrec.metrics.ndcg)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ndcg.NDCGMetric">NDCGMetric (class in torchrec.metrics.ndcg)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingCollection.need_indices">need_indices() (torchrec.modules.embedding_modules.EmbeddingCollection method)</a>
 
       <ul>
@@ -2518,6 +2752,10 @@
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.need_pos">need_pos (torchrec.modules.embedding_configs.BaseEmbeddingConfig attribute)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.QualNameMetadata.need_preproc">need_preproc (torchrec.inference.modules.QualNameMetadata attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ne.NEMetric">NEMetric (class in torchrec.metrics.ne)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.ne.NEMetricComputation">NEMetricComputation (class in torchrec.metrics.ne)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.BinarySearchPredicate.next">next() (torchrec.distributed.planner.utils.BinarySearchPredicate method)</a>
 
@@ -2609,6 +2847,8 @@
       </ul></li>
       <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.offsets_to_range_traceble">offsets_to_range_traceble() (in module torchrec.modules.feature_processor)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.oom_count">oom_count (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.mc_modules.ShardedManagedCollisionCollection.open_slots">open_slots() (torchrec.distributed.mc_modules.ShardedManagedCollisionCollection method)</a>
 
       <ul>
@@ -2625,10 +2865,10 @@
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.OptimizerWrapper">OptimizerWrapper (class in torchrec.optim.keyed)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType">OptimType (class in torchrec.distributed.embedding_types)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType">OptimType (class in torchrec.distributed.embedding_types)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.OrderedDeviceHardware">OrderedDeviceHardware (class in torchrec.distributed.planner.partitioners)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerErrorType.OTHER">OTHER (torchrec.distributed.planner.types.PlannerErrorType attribute)</a>
@@ -2795,12 +3035,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">PooledEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">[1]</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">PooledEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter">PooledEmbeddingsReduceScatter (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter">[1]</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.GroupedEmbeddingConfig.pooling">pooling (torchrec.distributed.embedding_types.GroupedEmbeddingConfig attribute)</a>
 
       <ul>
@@ -2839,7 +3079,13 @@
         <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupOptimizer.post_load_state_dict">(torchrec.optim.warmup.WarmupOptimizer method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation.pre_compute">pre_compute() (torchrec.metrics.rec_metric.RecMetricComputation method)</a>
+</li>
       <li><a href="torchrec.distributed.html#id36">precision (torchrec.distributed.types.CacheParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.CacheParams.precision">[1]</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.precision.PrecisionMetric">PrecisionMetric (class in torchrec.metrics.precision)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.precision.PrecisionMetricComputation">PrecisionMetricComputation (class in torchrec.metrics.precision)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.PredictModule.predict_forward">predict_forward() (torchrec.inference.modules.PredictModule method)</a>
 </li>
@@ -2848,6 +3094,8 @@
       <li><a href="torchrec.inference.html#torchrec.inference.modules.PredictFactory">PredictFactory (class in torchrec.inference.modules)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.model_packager.PredictFactoryPackager">PredictFactoryPackager (class in torchrec.inference.model_packager)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.PREDICTIONS">PREDICTIONS (torchrec.metrics.rec_metric.RecMetric attribute)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.PredictModule">PredictModule (class in torchrec.inference.modules)</a>
 </li>
@@ -2997,13 +3245,39 @@
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PerfModel.rate">(torchrec.distributed.planner.types.PerfModel method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.RAUCMetric">RAUCMetric (class in torchrec.metrics.rauc)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.RAUCMetricComputation">RAUCMetricComputation (class in torchrec.metrics.rauc)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionModule.rebuild_with_output_id_range">rebuild_with_output_id_range() (torchrec.modules.mc_modules.ManagedCollisionModule method)</a>
 
       <ul>
         <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.rebuild_with_output_id_range">(torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.rec_metrics">rec_metrics (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.rec_metrics">(torchrec.metrics.rec_metric.RecMetricList attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.rec_tasks">rec_tasks (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.recall.RecallMetric">RecallMetric (class in torchrec.metrics.recall)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.recall.RecallMetricComputation">RecallMetricComputation (class in torchrec.metrics.recall)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.recat">recat (torchrec.modules.utils.SequenceVBEContext attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric">RecMetric (class in torchrec.metrics.rec_metric)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation">RecMetricComputation (class in torchrec.metrics.rec_metric)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricException">RecMetricException</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList">RecMetricList (class in torchrec.metrics.rec_metric)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule">RecMetricModule (class in torchrec.metrics.metric_module)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.DistanceLFU_EvictionPolicy.record_history_metadata">record_history_metadata() (torchrec.modules.mc_modules.DistanceLFU_EvictionPolicy method)</a>
 
@@ -3067,12 +3341,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Req">ReduceScatter_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait">ReduceScatter_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req">ReduceScatterBase_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Wait">ReduceScatterBase_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBaseInfo">ReduceScatterBaseInfo (class in torchrec.distributed.comm_ops)</a>
@@ -3111,6 +3385,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.Request">Request (class in torchrec.distributed.comm_ops)</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.required_inputs">required_inputs (torchrec.metrics.rec_metric.RecMetricList attribute)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.storage_reservations.FixedPercentageStorageReservation.reserve">reserve() (torchrec.distributed.planner.storage_reservations.FixedPercentageStorageReservation method)</a>
 
       <ul>
@@ -3123,6 +3399,22 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#id38">reserved_memory (torchrec.distributed.types.CacheParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.CacheParams.reserved_memory">[1]</a>
 </li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.auc.AUCMetricComputation.reset">reset() (torchrec.metrics.auc.AUCMetricComputation method)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.auprc.AUPRCMetricComputation.reset">(torchrec.metrics.auprc.AUPRCMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.reset">(torchrec.metrics.metric_module.RecMetricModule method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.RAUCMetricComputation.reset">(torchrec.metrics.rauc.RAUCMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.reset">(torchrec.metrics.rec_metric.RecMetric method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation.reset">(torchrec.metrics.rec_metric.RecMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.reset">(torchrec.metrics.rec_metric.RecMetricList method)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.reset_parameters">reset_parameters() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
       <ul>
@@ -3335,10 +3627,10 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder.sharding_types">(torchrec.distributed.types.ModuleSharder method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingEnv">ShardingEnv (class in torchrec.distributed.types)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption">ShardingOption (class in torchrec.distributed.planner.types)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.ShardingOptionGroup">ShardingOptionGroup (class in torchrec.distributed.planner.partitioners)</a>
@@ -3360,6 +3652,8 @@
 </li>
       </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.shards">shards (torchrec.distributed.planner.types.ShardingOption attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.should_compute">should_compute() (torchrec.metrics.metric_module.RecMetricModule method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.LuusJaakolaSearch.shrink_right">shrink_right() (torchrec.distributed.planner.utils.LuusJaakolaSearch method)</a>
 </li>
@@ -3414,6 +3708,8 @@
 </li>
         <li><a href="torchrec.inference.html#torchrec.inference.modules.PredictModule.state_dict">(torchrec.inference.modules.PredictModule method)</a>
 </li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.state_dict">(torchrec.metrics.rec_metric.RecMetric method)</a>
+</li>
         <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.PositionWeightedProcessor.state_dict">(torchrec.modules.feature_processor.PositionWeightedProcessor method)</a>
 </li>
         <li><a href="torchrec.optim.html#torchrec.optim.keyed.KeyedOptimizer.state_dict">(torchrec.optim.keyed.KeyedOptimizer method)</a>
@@ -3421,6 +3717,10 @@
         <li><a href="torchrec.optim.html#torchrec.optim.keyed.OptimizerWrapper.state_dict">(torchrec.optim.keyed.OptimizerWrapper method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.state_metrics">state_metrics (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.StateMetric">StateMetric (class in torchrec.metrics.metric_module)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Stats">Stats (class in torchrec.distributed.planner.types)</a>
 </li>
       <li><a href="torchrec.distributed.html#id39">stats (torchrec.distributed.types.CacheParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.CacheParams.stats">[1]</a>
@@ -3495,8 +3795,16 @@
 </li>
       <li><a href="torchrec.fx.html#torchrec.fx.tracer.symbolic_trace">symbolic_trace() (in module torchrec.fx.tracer)</a>
 </li>
-      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.sync">sync() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.sync">sync() (torchrec.metrics.metric_module.RecMetricModule method)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.sync">(torchrec.metrics.rec_metric.RecMetric method)</a>
 </li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.sync">(torchrec.metrics.rec_metric.RecMetricList method)</a>
+</li>
+        <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.sync">(torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+</li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -3544,6 +3852,10 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable">TensorAllToAllValuesAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.TensorAllToAllValuesAwaitable">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.TensorValuesAllToAll">TensorValuesAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.TensorValuesAllToAll">[1]</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.throughput_metric">throughput_metric (torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.throughput.ThroughputMetric">ThroughputMetric (class in torchrec.metrics.throughput)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor.to">to() (torchrec.sparse.jagged_tensor.JaggedTensor method)</a>
 
@@ -3871,6 +4183,141 @@
 </li>
       </ul></li>
       <li>
+    torchrec.metrics
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.accuracy
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.accuracy">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.auc
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.auc">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.auprc
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.auprc">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.calibration
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.calibration">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.ctr
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.ctr">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.mae
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.mae">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.metric_module
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.metric_module">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.mse
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.mse">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.multiclass_recall
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.multiclass_recall">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.ndcg
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.ndcg">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.ne
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.ne">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.precision
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.precision">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.rauc
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.rauc">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.rec_metric
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.rec_metric">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.recall
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.recall">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.throughput
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.throughput">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.weighted_avg
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.weighted_avg">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.metrics.xauc
+
+      <ul>
+        <li><a href="torchrec.metrics.html#module-torchrec.metrics.xauc">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
     torchrec.models.deepfm
 
       <ul>
@@ -3940,8 +4387,6 @@
         <li><a href="torchrec.modules.html#module-torchrec.modules.mc_embedding_modules">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.modules.mc_modules
 
@@ -4266,16 +4711,66 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PartitionByType.UNIFORM">UNIFORM (torchrec.distributed.planner.types.PartitionByType attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.LuusJaakolaSearch.uniform">uniform() (torchrec.distributed.planner.utils.LuusJaakolaSearch method)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.UniformProposer">UniformProposer (class in torchrec.distributed.planner.proposers)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.unpadded_lengths">unpadded_lengths (torchrec.modules.utils.SequenceVBEContext attribute)</a>
 </li>
-      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.unsync">unsync() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.unsync">unsync() (torchrec.metrics.metric_module.RecMetricModule method)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.unsync">(torchrec.metrics.rec_metric.RecMetric method)</a>
 </li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.unsync">(torchrec.metrics.rec_metric.RecMetricList method)</a>
+</li>
+        <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.unsync">(torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.accuracy.AccuracyMetricComputation.update">update() (torchrec.metrics.accuracy.AccuracyMetricComputation method)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.auc.AUCMetricComputation.update">(torchrec.metrics.auc.AUCMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.auprc.AUPRCMetricComputation.update">(torchrec.metrics.auprc.AUPRCMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.calibration.CalibrationMetricComputation.update">(torchrec.metrics.calibration.CalibrationMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.ctr.CTRMetricComputation.update">(torchrec.metrics.ctr.CTRMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.mae.MAEMetricComputation.update">(torchrec.metrics.mae.MAEMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.update">(torchrec.metrics.metric_module.RecMetricModule method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.mse.MSEMetricComputation.update">(torchrec.metrics.mse.MSEMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.multiclass_recall.MulticlassRecallMetricComputation.update">(torchrec.metrics.multiclass_recall.MulticlassRecallMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.ndcg.NDCGComputation.update">(torchrec.metrics.ndcg.NDCGComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.ne.NEMetricComputation.update">(torchrec.metrics.ne.NEMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.precision.PrecisionMetricComputation.update">(torchrec.metrics.precision.PrecisionMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.RAUCMetricComputation.update">(torchrec.metrics.rauc.RAUCMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.update">(torchrec.metrics.rec_metric.RecMetric method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricComputation.update">(torchrec.metrics.rec_metric.RecMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.update">(torchrec.metrics.rec_metric.RecMetricList method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.recall.RecallMetricComputation.update">(torchrec.metrics.recall.RecallMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.throughput.ThroughputMetric.update">(torchrec.metrics.throughput.ThroughputMetric method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.weighted_avg.WeightedAvgMetricComputation.update">(torchrec.metrics.weighted_avg.WeightedAvgMetricComputation method)</a>
+</li>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.xauc.XAUCMetricComputation.update">(torchrec.metrics.xauc.XAUCMetricComputation method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.DistanceLFU_EvictionPolicy.update_metadata_and_generate_eviction_scores">update_metadata_and_generate_eviction_scores() (torchrec.modules.mc_modules.DistanceLFU_EvictionPolicy method)</a>
 
       <ul>
@@ -4294,6 +4789,8 @@
 <h2 id="V">V</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.MetricComputationReport.value">value (torchrec.metrics.rec_metric.MetricComputationReport attribute)</a>
+</li>
       <li><a href="torchrec.optim.html#torchrec.optim.clipping.GradientClipping.VALUE">VALUE (torchrec.optim.clipping.GradientClipping attribute)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupStage.value">value (torchrec.optim.warmup.WarmupStage attribute)</a>
@@ -4352,9 +4849,15 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.weight_init_min">weight_init_min (torchrec.modules.embedding_configs.BaseEmbeddingConfig attribute)</a>
 </li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology.weighted_feature_bwd_compute_multiplier">weighted_feature_bwd_compute_multiplier (torchrec.distributed.planner.types.Topology property)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.weighted_avg.WeightedAvgMetric">WeightedAvgMetric (class in torchrec.metrics.weighted_avg)</a>
+</li>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.weighted_avg.WeightedAvgMetricComputation">WeightedAvgMetricComputation (class in torchrec.metrics.weighted_avg)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology.weighted_feature_bwd_compute_multiplier">weighted_feature_bwd_compute_multiplier (torchrec.distributed.planner.types.Topology property)</a>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.WEIGHTS">WEIGHTS (torchrec.metrics.rec_metric.RecMetric attribute)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor.weights">weights() (torchrec.sparse.jagged_tensor.JaggedTensor method)</a>
 
@@ -4368,14 +4871,32 @@
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights_or_none">(torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       </ul></li>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology.world_size">world_size (torchrec.distributed.planner.types.Topology property)</a>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.WindowBuffer">WindowBuffer (class in torchrec.metrics.rec_metric)</a>
 </li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology.world_size">world_size (torchrec.distributed.planner.types.Topology property)</a>
+
+      <ul>
+        <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.world_size">(torchrec.metrics.metric_module.RecMetricModule attribute)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DataParallelWrapper.wrap">wrap() (torchrec.distributed.model_parallel.DataParallelWrapper method)</a>
 
       <ul>
         <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DefaultDataParallelWrapper.wrap">(torchrec.distributed.model_parallel.DefaultDataParallelWrapper method)</a>
 </li>
       </ul></li>
+  </ul></td>
+</tr></table>
+
+<h2 id="X">X</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.xauc.XAUCMetric">XAUCMetric (class in torchrec.metrics.xauc)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.metrics.html#torchrec.metrics.xauc.XAUCMetricComputation">XAUCMetricComputation (class in torchrec.metrics.xauc)</a>
+</li>
   </ul></td>
 </tr></table>
 
