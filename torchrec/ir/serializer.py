@@ -8,15 +8,15 @@
 # pyre-strict
 
 import json
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Type
 
 import torch
-
 from torch import nn
 from torchrec.ir.schema import (
     EBCMetadata,
     EmbeddingBagConfigMetadata,
     FPEBCMetadata,
+    KTRegroupAsDictMetadata,
     PositionWeightedModuleCollectionMetadata,
     PositionWeightedModuleMetadata,
 )
@@ -32,6 +32,7 @@ from torchrec.modules.feature_processor_ import (
     PositionWeightedModuleCollection,
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
@@ -123,6 +124,22 @@ def fpebc_meta_forward(
         values=torch.cat(outputs, dim=1),
         length_per_key=ebc._lengths_per_embedding,
     )
+
+
+def kt_regroup_meta_forward(
+    op_module: KTRegroupAsDict, keyed_tensors: List[KeyedTensor]
+) -> Dict[str, torch.Tensor]:
+    lengths_dict: Dict[str, int] = {}
+    batch_size = keyed_tensors[0].values().size(0)
+    for kt in keyed_tensors:
+        for key, length in zip(kt.keys(), kt.length_per_key()):
+            lengths_dict[key] = length
+    out_lengths: List[int] = [0] * len(op_module._groups)
+    for i, group in enumerate(op_module._groups):
+        out_lengths[i] = sum(lengths_dict[key] for key in group)
+    arg_list = [kt.values() for kt in keyed_tensors]
+    outputs = torch.ops.torchrec.ir_custom_op(arg_list, batch_size, out_lengths)
+    return dict(zip(op_module._keys, outputs))
 
 
 class JsonSerializer(SerializerInterface):
@@ -363,4 +380,43 @@ class FPEBCJsonSerializer(JsonSerializer):
 
 JsonSerializer.module_to_serializer_cls["FeatureProcessedEmbeddingBagCollection"] = (
     FPEBCJsonSerializer
+)
+
+
+class KTRegroupAsDictJsonSerializer(JsonSerializer):
+    _module_cls = KTRegroupAsDict
+
+    @classmethod
+    def swap_meta_forward(cls, module: nn.Module) -> None:
+        assert isinstance(module, cls._module_cls)
+        # pyre-ignore
+        module.forward = kt_regroup_meta_forward.__get__(module, cls._module_cls)
+
+    @classmethod
+    def serialize_to_dict(
+        cls,
+        module: nn.Module,
+    ) -> Dict[str, Any]:
+        metadata = KTRegroupAsDictMetadata(
+            keys=module._keys,
+            groups=module._groups,
+        )
+        return metadata.__dict__
+
+    @classmethod
+    def deserialize_from_dict(
+        cls,
+        metadata_dict: Dict[str, Any],
+        device: Optional[torch.device] = None,
+        unflatten_ep: Optional[nn.Module] = None,
+    ) -> nn.Module:
+        metadata = KTRegroupAsDictMetadata(**metadata_dict)
+        return KTRegroupAsDict(
+            keys=metadata.keys,
+            groups=metadata.groups,
+        )
+
+
+JsonSerializer.module_to_serializer_cls["KTRegroupAsDict"] = (
+    KTRegroupAsDictJsonSerializer
 )

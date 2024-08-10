@@ -48,3 +48,9 @@ class PositionWeightedModuleMetadata:
 @dataclass
 class PositionWeightedModuleCollectionMetadata:
     max_feature_lengths: List[Tuple[str, int]]
+
+
+@dataclass
+class KTRegroupAsDictMetadata:
+    groups: List[List[str]]
+    keys: List[str]
