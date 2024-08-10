@@ -766,7 +766,6 @@ class TestPt2Train(MultiProcessTestBase):
         torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires one GPU",
     )
-    @settings(verbosity=Verbosity.verbose, deadline=None)
     def test_compile_multiprocess_fake_pg(
         self,
     ) -> None:
