@@ -657,7 +657,9 @@ class ShardedEmbeddingBagCollection(
                     broadcast_buffers=True,
                     static_graph=True,
                 )
-        self._initialize_torch_state()
+
+        if env.process_group and dist.get_backend(env.process_group) != "fake":
+            self._initialize_torch_state()
 
         # TODO[zainhuda]: support module device coming from CPU
         if module.device not in ["meta", "cpu"] and module.device.type not in [

@@ -239,12 +239,25 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
             # https://github.com/pytorch/pytorch/issues/122788
             with record_function("## all2all_data:kjt splits ##"):
                 input_tensor = torch.stack(input_tensors, dim=1).flatten()
-                self._output_tensor = dist._functional_collectives.all_to_all_single(
-                    input_tensor,
-                    output_split_sizes=None,
-                    input_split_sizes=None,
-                    group=pg,
-                )
+                if pg._get_backend_name() == "fake":
+                    self._output_tensor = torch.empty(
+                        [self.num_workers * len(input_tensors)],
+                        device=input_tensors[0].device,
+                        dtype=input_tensors[0].dtype,
+                    )
+
+                    self._output_tensor = input_tensor[
+                        : input_tensor.size(0) // 2
+                    ].repeat(2)
+                else:
+                    self._output_tensor = (
+                        dist._functional_collectives.all_to_all_single(
+                            input_tensor,
+                            output_split_sizes=None,
+                            input_split_sizes=None,
+                            group=pg,
+                        )
+                    )
             # To avoid hasattr in _wait_impl to check self._splits_awaitable
             # pyre-ignore
             self._splits_awaitable = None
@@ -342,6 +355,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
         self._output_tensors: List[torch.Tensor] = []
         self._awaitables: List[dist.Work] = []
         self._world_size: int = self._pg.size()
+        rank = dist.get_rank(self._pg)
 
         for input_split, output_split, input_tensor, label in zip(
             input_splits,
@@ -353,12 +367,28 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
                 # TODO(ivankobzarev) Remove this dynamo condition once dynamo functional collectives remapping does not emit copy_
                 # https://github.com/pytorch/pytorch/issues/122788
                 with record_function(f"## all2all_data:kjt {label} ##"):
-                    output_tensor = dist._functional_collectives.all_to_all_single(
-                        input_tensor,
-                        output_split,
-                        input_split,
-                        pg,
-                    )
+                    if self._pg._get_backend_name() == "fake":
+                        output_tensor = torch.empty(
+                            sum(output_split),
+                            device=self._device,
+                            dtype=input_tensor.dtype,
+                        )
+                        _l = sum(output_split[:rank])
+                        _r = _l + output_split[rank]
+                        torch._check(_r < input_tensor.size(0))
+                        torch._check(_l < input_tensor.size(0))
+                        torch._check(_l <= _r)
+                        torch._check(2 * (_r - _l) == output_tensor.size(0))
+                        output_tensor.copy_(
+                            input_tensor[_l:_r].repeat(self._world_size)
+                        )
+                    else:
+                        output_tensor = dist._functional_collectives.all_to_all_single(
+                            input_tensor,
+                            output_split,
+                            input_split,
+                            pg,
+                        )
                     self._output_tensors.append(output_tensor)
             else:
                 output_tensor = torch.empty(

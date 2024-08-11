@@ -25,6 +25,8 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import distributed as dist
 from torch._dynamo.testing import reduce_to_scalar_loss
+from torch.distributed import ProcessGroup
+from torch.testing._internal.distributed.fake_pg import FakeStore
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fbgemm_qcomm_codec import QCommsConfig
@@ -499,6 +501,184 @@ def _test_compile_rank_fn(
         ##### NUMERIC CHECK END #####
 
 
+def _test_compile_fake_pg_fn(
+    rank: int,
+    world_size: int,
+) -> None:
+    sharding_type = ShardingType.TABLE_WISE.value
+    input_type = _InputType.SINGLE_BATCH
+    torch_compile_backend = "eager"
+    config = _TestConfig()
+    num_embeddings = 256
+    # emb_dim must be % 4 == 0 for fbgemm
+    emb_dim = 12
+    batch_size = 10
+    num_features: int = 5
+
+    num_float_features: int = 8
+    num_weighted_features: int = 1
+
+    device: torch.Device = torch.device("cuda")
+    store = FakeStore()
+    dist.init_process_group(backend="fake", rank=0, world_size=2, store=store)
+    pg: ProcessGroup = dist.distributed_c10d._get_default_group()
+
+    topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+    mi = TestModelInfo(
+        dense_device=device,
+        sparse_device=device,
+        num_features=num_features,
+        num_float_features=num_float_features,
+        num_weighted_features=num_weighted_features,
+        topology=topology,
+    )
+
+    mi.planner = EmbeddingShardingPlanner(
+        topology=topology,
+        batch_size=batch_size,
+        enumerator=EmbeddingEnumerator(
+            topology=topology,
+            batch_size=batch_size,
+            estimator=[
+                EmbeddingPerfEstimator(topology=topology),
+                EmbeddingStorageEstimator(topology=topology),
+            ],
+        ),
+    )
+
+    mi.tables = [
+        EmbeddingBagConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="table_" + str(i),
+            feature_names=["feature_" + str(i)],
+        )
+        for i in range(mi.num_features)
+    ]
+
+    mi.weighted_tables = [
+        EmbeddingBagConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=emb_dim,
+            name="weighted_table_" + str(i),
+            feature_names=["weighted_feature_" + str(i)],
+        )
+        for i in range(mi.num_weighted_features)
+    ]
+
+    mi.model = _gen_model(_ModelType.EBC, mi)
+    mi.model.training = True
+
+    model = mi.model
+
+    planner = EmbeddingShardingPlanner(
+        topology=Topology(world_size, device.type),
+        constraints=None,
+    )
+
+    sharders = [
+        EBCSharderFixedShardingType(sharding_type),
+        ECSharderFixedShardingType(sharding_type),
+    ]
+
+    plan: ShardingPlan = planner.plan(model, sharders)  # pyre-ignore
+
+    def _dmp(m: torch.nn.Module) -> DistributedModelParallel:  # pyre-ignore
+        return DistributedModelParallel(
+            m,
+            env=ShardingEnv(world_size, rank, pg),
+            plan=plan,
+            sharders=sharders,
+            device=device,
+            init_data_parallel=False,
+        )
+
+    dmp = _dmp(model)
+    dmp_compile = _dmp(model)
+
+    # TODO: Fix some data dependent failures on subsequent inputs
+    n_extra_numerics_checks = config.n_extra_numerics_checks_inputs
+    ins = []
+
+    for _ in range(1 + n_extra_numerics_checks):
+        if input_type == _InputType.VARIABLE_BATCH:
+            (
+                _,
+                local_model_inputs,
+            ) = ModelInput.generate_variable_batch_input(
+                average_batch_size=batch_size,
+                world_size=world_size,
+                num_float_features=num_float_features,
+                # pyre-ignore
+                tables=mi.tables,
+            )
+        else:
+            (
+                _,
+                local_model_inputs,
+            ) = ModelInput.generate(
+                batch_size=batch_size,
+                world_size=world_size,
+                num_float_features=num_float_features,
+                tables=mi.tables,
+                weighted_tables=mi.weighted_tables,
+                variable_batch_size=False,
+            )
+        ins.append(local_model_inputs)
+
+    local_model_input = ins[0][rank].to(device)
+
+    kjt = local_model_input.idlist_features
+    ff = local_model_input.float_features
+    ff.requires_grad = True
+    kjt_ft = kjt_for_pt2_tracing(kjt, convert_to_vb=True)
+
+    compile_input_ff = ff.clone().detach()
+    compile_input_ff.requires_grad = True
+
+    torchrec.distributed.comm_ops.set_use_sync_collectives(True)
+    torchrec.pt2.checks.set_use_torchdynamo_compiling_path(True)
+
+    dmp.train(True)
+    dmp_compile.train(True)
+
+    def get_weights(dmp: DistributedModelParallel) -> torch.Tensor:
+        tbe = dmp._dmp_wrapped_module._ebc._lookups[0]._emb_modules[0]._emb_module
+        assert isinstance(tbe, SplitTableBatchedEmbeddingBagsCodegen)
+        return tbe.weights_dev.clone().detach()
+
+    original_weights = get_weights(dmp)
+    original_weights.zero_()
+    original_compile_weights = get_weights(dmp_compile)
+    original_compile_weights.zero_()
+
+    eager_out = dmp(kjt_ft, ff)
+    reduce_to_scalar_loss(eager_out).backward()
+
+    if torch_compile_backend is None:
+        return
+
+    ##### COMPILE #####
+    with unittest.mock.patch(
+        "torch._dynamo.config.skip_torchrec",
+        False,
+    ):
+        torch._dynamo.config.capture_scalar_outputs = True
+        torch._dynamo.config.capture_dynamic_output_shape_ops = True
+        torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = True
+
+        opt_fn = torch.compile(
+            dmp_compile,
+            backend=torch_compile_backend,
+            fullgraph=True,
+        )
+        compile_out = opt_fn(
+            kjt_for_pt2_tracing(kjt, convert_to_vb=True), compile_input_ff
+        )
+        torch.testing.assert_close(eager_out, compile_out, atol=1e-3, rtol=1e-3)
+    ##### COMPILE END #####
+
+
 class TestPt2Train(MultiProcessTestBase):
     def disable_cuda_tf32(self) -> bool:
         return True
@@ -579,4 +759,17 @@ class TestPt2Train(MultiProcessTestBase):
             convert_to_vb=tovb == _ConvertToVariableBatch.TRUE,
             config=config,
             torch_compile_backend=compile_backend,
+        )
+
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs, this test requires one GPU",
+    )
+    def test_compile_multiprocess_fake_pg(
+        self,
+    ) -> None:
+        _test_compile_fake_pg_fn(
+            rank=0,
+            world_size=2,
         )
