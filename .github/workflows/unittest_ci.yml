@@ -181,7 +181,7 @@ jobs:
     - name: Install TorchRec GPU
       run: |
         rm -r dist || true
-        conda run -n build_binary python -m pip install dist/*.whl
+        conda run -n build_binary python -m pip install /home/ec2-user/actions-runner/_work/torchrec/torchrec/*.whl
     - name: Test torchrec installation
       shell: bash
       run: |
@@ -191,5 +191,7 @@ jobs:
       run: |
         conda run -n build_binary \
           python -m pip install pytest
+        conda run -n build_binary \
+          pip install -r requirements.txt
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors
