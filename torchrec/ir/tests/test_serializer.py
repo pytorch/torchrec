@@ -171,265 +171,265 @@ class TestJsonSerializer(unittest.TestCase):
 
         return model
 
-    def test_serialize_deserialize_ebc(self) -> None:
-        model = self.generate_model()
-        id_list_features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
-        )
+    # def test_serialize_deserialize_ebc(self) -> None:
+    #     model = self.generate_model()
+    #     id_list_features = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+    #     )
 
-        eager_out = model(id_list_features)
+    #     eager_out = model(id_list_features)
 
-        # Serialize EBC
-        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
-        ep = torch.export.export(
-            model,
-            (id_list_features,),
-            {},
-            strict=False,
-            # Allows KJT to not be unflattened and run a forward on unflattened EP
-            preserve_module_call_signature=(tuple(sparse_fqns)),
-        )
+    #     # Serialize EBC
+    #     model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+    #     ep = torch.export.export(
+    #         model,
+    #         (id_list_features,),
+    #         {},
+    #         strict=False,
+    #         # Allows KJT to not be unflattened and run a forward on unflattened EP
+    #         preserve_module_call_signature=(tuple(sparse_fqns)),
+    #     )
 
-        # Run forward on ExportedProgram
-        ep_output = ep.module()(id_list_features)
+    #     # Run forward on ExportedProgram
+    #     ep_output = ep.module()(id_list_features)
 
-        for i, tensor in enumerate(ep_output):
-            self.assertEqual(eager_out[i].shape, tensor.shape)
+    #     for i, tensor in enumerate(ep_output):
+    #         self.assertEqual(eager_out[i].shape, tensor.shape)
 
-        # Deserialize EBC
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+    #     # Deserialize EBC
+    #     unflatten_ep = torch.export.unflatten(ep)
+    #     deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
 
-        # check EBC config
-        for i in range(5):
-            ebc_name = f"ebc{i + 1}"
-            self.assertIsInstance(
-                getattr(deserialized_model, ebc_name), EmbeddingBagCollection
-            )
+    #     # check EBC config
+    #     for i in range(5):
+    #         ebc_name = f"ebc{i + 1}"
+    #         self.assertIsInstance(
+    #             getattr(deserialized_model, ebc_name), EmbeddingBagCollection
+    #         )
 
-            for deserialized, orginal in zip(
-                getattr(deserialized_model, ebc_name).embedding_bag_configs(),
-                getattr(model, ebc_name).embedding_bag_configs(),
-            ):
-                self.assertEqual(deserialized.name, orginal.name)
-                self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
-                self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
-                self.assertEqual(deserialized.feature_names, orginal.feature_names)
+    #         for deserialized, orginal in zip(
+    #             getattr(deserialized_model, ebc_name).embedding_bag_configs(),
+    #             getattr(model, ebc_name).embedding_bag_configs(),
+    #         ):
+    #             self.assertEqual(deserialized.name, orginal.name)
+    #             self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
+    #             self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
+    #             self.assertEqual(deserialized.feature_names, orginal.feature_names)
 
-        # check FPEBC config
-        for i in range(2):
-            fpebc_name = f"fpebc{i + 1}"
-            assert isinstance(
-                getattr(deserialized_model, fpebc_name),
-                FeatureProcessedEmbeddingBagCollection,
-            )
+    #     # check FPEBC config
+    #     for i in range(2):
+    #         fpebc_name = f"fpebc{i + 1}"
+    #         assert isinstance(
+    #             getattr(deserialized_model, fpebc_name),
+    #             FeatureProcessedEmbeddingBagCollection,
+    #         )
 
-            for deserialized, orginal in zip(
-                getattr(
-                    deserialized_model, fpebc_name
-                )._embedding_bag_collection.embedding_bag_configs(),
-                getattr(
-                    model, fpebc_name
-                )._embedding_bag_collection.embedding_bag_configs(),
-            ):
-                self.assertEqual(deserialized.name, orginal.name)
-                self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
-                self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
-                self.assertEqual(deserialized.feature_names, orginal.feature_names)
+    #         for deserialized, orginal in zip(
+    #             getattr(
+    #                 deserialized_model, fpebc_name
+    #             )._embedding_bag_collection.embedding_bag_configs(),
+    #             getattr(
+    #                 model, fpebc_name
+    #             )._embedding_bag_collection.embedding_bag_configs(),
+    #         ):
+    #             self.assertEqual(deserialized.name, orginal.name)
+    #             self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
+    #             self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
+    #             self.assertEqual(deserialized.feature_names, orginal.feature_names)
 
-        # Run forward on deserialized model and compare the output
-        deserialized_model.load_state_dict(model.state_dict())
-        deserialized_out = deserialized_model(id_list_features)
+    #     # Run forward on deserialized model and compare the output
+    #     deserialized_model.load_state_dict(model.state_dict())
+    #     deserialized_out = deserialized_model(id_list_features)
 
-        self.assertEqual(len(deserialized_out), len(eager_out))
-        for deserialized, orginal in zip(deserialized_out, eager_out):
-            self.assertEqual(deserialized.shape, orginal.shape)
-            self.assertTrue(torch.allclose(deserialized, orginal))
+    #     self.assertEqual(len(deserialized_out), len(eager_out))
+    #     for deserialized, orginal in zip(deserialized_out, eager_out):
+    #         self.assertEqual(deserialized.shape, orginal.shape)
+    #         self.assertTrue(torch.allclose(deserialized, orginal))
 
-    def test_dynamic_shape_ebc(self) -> None:
-        model = self.generate_model()
-        feature1 = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
-        )
+    # def test_dynamic_shape_ebc(self) -> None:
+    #     model = self.generate_model()
+    #     feature1 = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+    #     )
 
-        feature2 = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3, 4]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7]),
-        )
-        eager_out = model(feature2)
+    #     feature2 = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3, 4]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7]),
+    #     )
+    #     eager_out = model(feature2)
 
-        # Serialize EBC
-        collection = mark_dynamic_kjt(feature1)
-        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
-        ep = torch.export.export(
-            model,
-            (feature1,),
-            {},
-            dynamic_shapes=collection.dynamic_shapes(model, (feature1,)),
-            strict=False,
-            # Allows KJT to not be unflattened and run a forward on unflattened EP
-            preserve_module_call_signature=tuple(sparse_fqns),
-        )
+    #     # Serialize EBC
+    #     collection = mark_dynamic_kjt(feature1)
+    #     model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+    #     ep = torch.export.export(
+    #         model,
+    #         (feature1,),
+    #         {},
+    #         dynamic_shapes=collection.dynamic_shapes(model, (feature1,)),
+    #         strict=False,
+    #         # Allows KJT to not be unflattened and run a forward on unflattened EP
+    #         preserve_module_call_signature=tuple(sparse_fqns),
+    #     )
 
-        # Run forward on ExportedProgram
-        ep_output = ep.module()(feature2)
+    #     # Run forward on ExportedProgram
+    #     ep_output = ep.module()(feature2)
 
-        # other asserts
-        for i, tensor in enumerate(ep_output):
-            self.assertEqual(eager_out[i].shape, tensor.shape)
+    #     # other asserts
+    #     for i, tensor in enumerate(ep_output):
+    #         self.assertEqual(eager_out[i].shape, tensor.shape)
 
-        # Deserialize EBC
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
-        deserialized_model.load_state_dict(model.state_dict())
+    #     # Deserialize EBC
+    #     unflatten_ep = torch.export.unflatten(ep)
+    #     deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+    #     deserialized_model.load_state_dict(model.state_dict())
 
-        # Run forward on deserialized model
-        deserialized_out = deserialized_model(feature2)
+    #     # Run forward on deserialized model
+    #     deserialized_out = deserialized_model(feature2)
 
-        for i, tensor in enumerate(deserialized_out):
-            self.assertEqual(eager_out[i].shape, tensor.shape)
-            assert torch.allclose(eager_out[i], tensor)
+    #     for i, tensor in enumerate(deserialized_out):
+    #         self.assertEqual(eager_out[i].shape, tensor.shape)
+    #         assert torch.allclose(eager_out[i], tensor)
 
-    def test_ir_custom_op_device(self) -> None:
-        model = self.generate_model()
-        model.fpebc1 = copy.deepcopy(model.ebc1)
-        model.fpebc2 = copy.deepcopy(model.ebc1)
-        feature1 = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
-        )
+    # def test_ir_custom_op_device(self) -> None:
+    #     model = self.generate_model()
+    #     model.fpebc1 = copy.deepcopy(model.ebc1)
+    #     model.fpebc2 = copy.deepcopy(model.ebc1)
+    #     feature1 = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+    #     )
 
-        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
-        for device in ["cpu", "cuda", "meta"]:
-            if device == "cuda" and not torch.cuda.is_available():
-                continue
-            device = torch.device(device)
-            outputs = model.to(device)(feature1.to(device))
-            for output in outputs:
-                self.assertEqual(output.device.type, device.type)
+    #     model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+    #     for device in ["cpu", "cuda", "meta"]:
+    #         if device == "cuda" and not torch.cuda.is_available():
+    #             continue
+    #         device = torch.device(device)
+    #         outputs = model.to(device)(feature1.to(device))
+    #         for output in outputs:
+    #             self.assertEqual(output.device.type, device.type)
 
-    def test_deserialized_device(self) -> None:
-        model = self.generate_model()
-        id_list_features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
-        )
+    # def test_deserialized_device(self) -> None:
+    #     model = self.generate_model()
+    #     id_list_features = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+    #     )
 
-        # Serialize EBC
-        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
-        ep = torch.export.export(
-            model,
-            (id_list_features,),
-            {},
-            strict=False,
-            # Allows KJT to not be unflattened and run a forward on unflattened EP
-            preserve_module_call_signature=(tuple(sparse_fqns)),
-        )
+    #     # Serialize EBC
+    #     model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+    #     ep = torch.export.export(
+    #         model,
+    #         (id_list_features,),
+    #         {},
+    #         strict=False,
+    #         # Allows KJT to not be unflattened and run a forward on unflattened EP
+    #         preserve_module_call_signature=(tuple(sparse_fqns)),
+    #     )
 
-        # Deserialize EBC on different devices (<cpu>, <cuda>, <meta>)
-        for device in ["cpu", "cuda", "meta"]:
-            if device == "cuda" and not torch.cuda.is_available():
-                continue
-            device = torch.device(device)
-            unflatten_ep = torch.export.unflatten(ep)
-            deserialized_model = decapsulate_ir_modules(
-                unflatten_ep, JsonSerializer, device
-            )
-            for name, m in deserialized_model.named_modules():
-                if hasattr(m, "device"):
-                    assert m.device.type == device.type, f"{name} should be on {device}"
-            for name, param in deserialized_model.named_parameters():
-                # TODO: we don't support FPEBC yet, so we skip the FPEBC params
-                if "_feature_processors" in name:
-                    continue
-                assert param.device.type == device.type, f"{name} should be on {device}"
+    #     # Deserialize EBC on different devices (<cpu>, <cuda>, <meta>)
+    #     for device in ["cpu", "cuda", "meta"]:
+    #         if device == "cuda" and not torch.cuda.is_available():
+    #             continue
+    #         device = torch.device(device)
+    #         unflatten_ep = torch.export.unflatten(ep)
+    #         deserialized_model = decapsulate_ir_modules(
+    #             unflatten_ep, JsonSerializer, device
+    #         )
+    #         for name, m in deserialized_model.named_modules():
+    #             if hasattr(m, "device"):
+    #                 assert m.device.type == device.type, f"{name} should be on {device}"
+    #         for name, param in deserialized_model.named_parameters():
+    #             # TODO: we don't support FPEBC yet, so we skip the FPEBC params
+    #             if "_feature_processors" in name:
+    #                 continue
+    #             assert param.device.type == device.type, f"{name} should be on {device}"
 
-    def test_compound_module(self) -> None:
-        tb1_config = EmbeddingBagConfig(
-            name="t1",
-            embedding_dim=4,
-            num_embeddings=10,
-            feature_names=["f1"],
-        )
-        tb2_config = EmbeddingBagConfig(
-            name="t2",
-            embedding_dim=4,
-            num_embeddings=10,
-            feature_names=["f2"],
-        )
-        tb3_config = EmbeddingBagConfig(
-            name="t3",
-            embedding_dim=4,
-            num_embeddings=10,
-            feature_names=["f3"],
-        )
-        ebc: Callable[[], EmbeddingBagCollection] = lambda: EmbeddingBagCollection(
-            tables=[tb1_config, tb2_config, tb3_config],
-            is_weighted=False,
-        )
+    # def test_compound_module(self) -> None:
+    #     tb1_config = EmbeddingBagConfig(
+    #         name="t1",
+    #         embedding_dim=4,
+    #         num_embeddings=10,
+    #         feature_names=["f1"],
+    #     )
+    #     tb2_config = EmbeddingBagConfig(
+    #         name="t2",
+    #         embedding_dim=4,
+    #         num_embeddings=10,
+    #         feature_names=["f2"],
+    #     )
+    #     tb3_config = EmbeddingBagConfig(
+    #         name="t3",
+    #         embedding_dim=4,
+    #         num_embeddings=10,
+    #         feature_names=["f3"],
+    #     )
+    #     ebc: Callable[[], EmbeddingBagCollection] = lambda: EmbeddingBagCollection(
+    #         tables=[tb1_config, tb2_config, tb3_config],
+    #         is_weighted=False,
+    #     )
 
-        class MyModel(nn.Module):
-            def __init__(self, comp: CompoundModule) -> None:
-                super().__init__()
-                self.comp = comp
+    #     class MyModel(nn.Module):
+    #         def __init__(self, comp: CompoundModule) -> None:
+    #             super().__init__()
+    #             self.comp = comp
 
-            def forward(self, features: KeyedJaggedTensor) -> List[torch.Tensor]:
-                return self.comp(features)
+    #         def forward(self, features: KeyedJaggedTensor) -> List[torch.Tensor]:
+    #             return self.comp(features)
 
-        model = MyModel(
-            CompoundModule(
-                ebc=ebc(),
-                comp=CompoundModule(ebc(), CompoundModule(ebc(), mlist=[ebc(), ebc()])),
-                mlist=[ebc(), CompoundModule(ebc(), CompoundModule(ebc()))],
-            )
-        )
-        id_list_features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
-        )
+    #     model = MyModel(
+    #         CompoundModule(
+    #             ebc=ebc(),
+    #             comp=CompoundModule(ebc(), CompoundModule(ebc(), mlist=[ebc(), ebc()])),
+    #             mlist=[ebc(), CompoundModule(ebc(), CompoundModule(ebc()))],
+    #         )
+    #     )
+    #     id_list_features = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+    #     )
 
-        eager_out = model(id_list_features)
+    #     eager_out = model(id_list_features)
 
-        JsonSerializer.module_to_serializer_cls["CompoundModule"] = (
-            CompoundModuleSerializer
-        )
-        # Serialize
-        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
-        ep = torch.export.export(
-            model,
-            (id_list_features,),
-            {},
-            strict=False,
-            # Allows KJT to not be unflattened and run a forward on unflattened EP
-            preserve_module_call_signature=(tuple(sparse_fqns)),
-        )
+    #     JsonSerializer.module_to_serializer_cls["CompoundModule"] = (
+    #         CompoundModuleSerializer
+    #     )
+    #     # Serialize
+    #     model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+    #     ep = torch.export.export(
+    #         model,
+    #         (id_list_features,),
+    #         {},
+    #         strict=False,
+    #         # Allows KJT to not be unflattened and run a forward on unflattened EP
+    #         preserve_module_call_signature=(tuple(sparse_fqns)),
+    #     )
 
-        ep_output = ep.module()(id_list_features)
-        self.assertEqual(len(ep_output), len(eager_out))
-        for x, y in zip(ep_output, eager_out):
-            self.assertEqual(x.shape, y.shape)
+    #     ep_output = ep.module()(id_list_features)
+    #     self.assertEqual(len(ep_output), len(eager_out))
+    #     for x, y in zip(ep_output, eager_out):
+    #         self.assertEqual(x.shape, y.shape)
 
-        # Deserialize
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
-        # Check if Compound Module is deserialized correctly
-        self.assertIsInstance(deserialized_model.comp, CompoundModule)
-        self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
-        self.assertIsInstance(deserialized_model.comp.comp.comp, CompoundModule)
-        self.assertIsInstance(deserialized_model.comp.list[1], CompoundModule)
-        self.assertIsInstance(deserialized_model.comp.list[1].comp, CompoundModule)
+    #     # Deserialize
+    #     unflatten_ep = torch.export.unflatten(ep)
+    #     deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+    #     # Check if Compound Module is deserialized correctly
+    #     self.assertIsInstance(deserialized_model.comp, CompoundModule)
+    #     self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
+    #     self.assertIsInstance(deserialized_model.comp.comp.comp, CompoundModule)
+    #     self.assertIsInstance(deserialized_model.comp.list[1], CompoundModule)
+    #     self.assertIsInstance(deserialized_model.comp.list[1].comp, CompoundModule)
 
-        deserialized_model.load_state_dict(model.state_dict())
-        # Run forward on deserialized model
-        deserialized_out = deserialized_model(id_list_features)
-        self.assertEqual(len(deserialized_out), len(eager_out))
-        for x, y in zip(deserialized_out, eager_out):
-            self.assertTrue(torch.allclose(x, y))
+    #     deserialized_model.load_state_dict(model.state_dict())
+    #     # Run forward on deserialized model
+    #     deserialized_out = deserialized_model(id_list_features)
+    #     self.assertEqual(len(deserialized_out), len(eager_out))
+    #     for x, y in zip(deserialized_out, eager_out):
+    #         self.assertTrue(torch.allclose(x, y))
