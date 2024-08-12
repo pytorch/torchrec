@@ -10,6 +10,7 @@
 import copy
 import itertools
 import logging
+from collections import OrderedDict
 from decimal import Decimal
 from typing import cast, Dict, List, Optional, Set, Tuple, Union
 
@@ -277,6 +278,147 @@ class GridSearchProposer(Proposer):
     ) -> None:
         # static strategy, ignore feedback and just provide next proposal
         self._proposal_index += 1
+
+
+def _bytes_to_float_bin(num_bytes: Union[float, int], bin_size: float) -> float:
+    return float(num_bytes) / bin_size
+
+
+class DpProposer(Proposer):
+    """Proposes sharding plans in dynamic programming fashion.
+
+    Args:
+        hbm_bins_per_device (int): hdm bins for dynamic programming precision.
+    """
+
+    def __init__(self, hbm_bins_per_device: int = 100) -> None:
+        self._inited: bool = False
+        self._hbm_bins_per_device: int = hbm_bins_per_device
+        self._sharding_options_by_fqn: OrderedDict[str, List[ShardingOption]] = (
+            OrderedDict()
+        )
+        self._proposal_indices: List[List[int]] = []
+        self._current_proposal: int = -1
+
+    def load(
+        self,
+        search_space: List[ShardingOption],
+        enumerator: Optional[Enumerator] = None,
+    ) -> None:
+        """Load search space."""
+        self._reset()
+        for sharding_option in sorted(search_space, key=lambda x: x.total_storage.hbm):
+            fqn = sharding_option.fqn
+            if fqn not in self._sharding_options_by_fqn:
+                self._sharding_options_by_fqn[fqn] = []
+            self._sharding_options_by_fqn[fqn].append(sharding_option)
+
+    def _reset(self) -> None:
+        self._sharding_options_by_fqn = OrderedDict()
+        self._proposal_indices = []
+        self._current_proposal = -1
+
+    def propose(self) -> Optional[List[ShardingOption]]:
+        """Propose a sharding plan."""
+        if not self._inited:
+            proposal_index = [0] * len(self._sharding_options_by_fqn)
+            return [
+                self._sharding_options_by_fqn[fqn][index]
+                for fqn, index in zip(
+                    self._sharding_options_by_fqn.keys(), proposal_index
+                )
+            ]
+        elif self._current_proposal >= 0:
+            proposal_index = self._proposal_indices[self._current_proposal]
+            return [
+                self._sharding_options_by_fqn[fqn][index]
+                for fqn, index in zip(
+                    self._sharding_options_by_fqn.keys(), proposal_index
+                )
+            ]
+        else:
+            return None
+
+    def feedback(
+        self,
+        partitionable: bool,
+        plan: Optional[List[ShardingOption]] = None,
+        perf_rating: Optional[float] = None,
+        storage_constraint: Optional[Topology] = None,
+    ) -> None:
+        """Feedback last proposed plan."""
+        if not self._inited:
+            self._inited = True
+            M = len(self._sharding_options_by_fqn)
+            N = max([len(x) for x in self._sharding_options_by_fqn.values()])
+
+            assert storage_constraint is not None
+            hbm_total = sum([x.storage.hbm for x in storage_constraint.devices])
+            K = self._hbm_bins_per_device * len(storage_constraint.devices)
+            bin_size = float(hbm_total) / K
+
+            dp = [
+                [[(float("inf"), float("inf"))] * K for _ in range(N)] for _ in range(M)
+            ]
+            backtrack = [[[(-1, -1)] * K for _ in range(N)] for _ in range(M)]
+
+            hbm_by_fqn = [[float("inf") for _ in range(N)] for _ in range(M)]
+            perf_by_fqn = [[float("inf") for _ in range(N)] for _ in range(M)]
+            for m, sharding_options in enumerate(
+                self._sharding_options_by_fqn.values()
+            ):
+                for n, sharding_option in enumerate(sharding_options):
+                    hbm_by_fqn[m][n] = _bytes_to_float_bin(
+                        sharding_option.total_storage.hbm, bin_size
+                    )
+                    perf_by_fqn[m][n] = sharding_option.total_perf
+
+            for j in range(N):
+                if hbm_by_fqn[0][j] < K:
+                    hbm_i = int(hbm_by_fqn[0][j])
+                    dp[0][j][hbm_i] = (perf_by_fqn[0][j], hbm_by_fqn[0][j])
+
+            for i in range(1, M):
+                for j in range(N):
+                    for c in range(K):
+                        if c + hbm_by_fqn[i][j] >= K:
+                            continue
+                        for nj in range(N):
+                            prev_perf, perv_hbm = dp[i - 1][nj][c]
+                            if prev_perf < float("inf"):
+                                new_hbm = perv_hbm + hbm_by_fqn[i][j]
+                                new_hbm_i = int(new_hbm)
+                                if new_hbm < K:
+                                    new_perf = prev_perf + perf_by_fqn[i][j]
+                                    if dp[i][j][new_hbm_i][0] > new_perf:
+                                        dp[i][j][new_hbm_i] = (new_perf, new_hbm)
+                                        backtrack[i][j][new_hbm_i] = (nj, c)
+
+            last_backtrace_index = [(-1, -1)] * K
+            min_perf = [float("inf")] * K
+            for j in range(N):
+                for c in range(K):
+                    if dp[M - 1][j][c][0] < min_perf[c]:
+                        min_perf[c] = dp[M - 1][j][c][0]
+                        last_backtrace_index[c] = (j, c)
+
+            self._proposal_indices = []
+            for c in range(K - 1, -1, -1):
+                cur_col_idx, cur_hbm_idx = last_backtrace_index[c]
+                if cur_col_idx >= 0:
+                    column_indices = [-1] * M
+                    column_indices[M - 1] = cur_col_idx
+                    for i in range(M - 2, -1, -1):
+                        column_indices[i], cur_hbm_idx = backtrack[i + 1][
+                            column_indices[i + 1]
+                        ][cur_hbm_idx]
+                    self._proposal_indices.append(column_indices)
+            if len(self._proposal_indices) > 0:
+                self._current_proposal = 0
+        else:
+            self._current_proposal += 1
+            if self._current_proposal >= len(self._proposal_indices):
+                self._current_proposal = -1
 
 
 class EmbeddingOffloadScaleupProposer(Proposer):
