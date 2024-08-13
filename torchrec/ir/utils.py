@@ -38,42 +38,60 @@ def get_device(tensors: List[Optional[torch.Tensor]]) -> Optional[torch.device]:
     return None
 
 
-@torch.library.custom_op("torchrec::ir_custom_op", mutates_args={})
-def ir_custom_op_impl(
+@torch.library.custom_op("torchrec::ir_emb_lookup", mutates_args={})
+def ir_emb_lookup_impl(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
-    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dims}) {device}")
+    logger.info(f"torch.ops.torchrec.ir_emb_lookup -> ({batch_size}, {dims}) {device}")
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
-@torch.library.register_fake("torchrec::ir_custom_op")
-def ir_custom_op_fake(
+@torch.library.register_fake("torchrec::ir_emb_lookup")
+def ir_emb_lookup_fake(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
-    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dims}) {device}")
+    logger.info(f"ir_emb_lookup_fake -> ({batch_size}, {dims}) {device}")
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
-@torch.library.custom_op("torchrec::ir_dynamic_batch_op", mutates_args={})
-def ir_dynamic_batch_op_impl(
+@torch.library.custom_op("torchrec::ir_kt_regroup", mutates_args={})
+def ir_kt_regroup_impl(
+    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    logger.info(f"torch.ops.torchrec.ir_kt_regroup -> ({batch_size}, {dims}) {device}")
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+
+
+@torch.library.register_fake("torchrec::ir_kt_regroup")
+def ir_kt_regroup_fake(
+    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    logger.info(f"ir_kt_regroup_fake -> ({batch_size}, {dims}) {device}")
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+
+
+@torch.library.custom_op("torchrec::ir_dynamic_batch_emb_lookup", mutates_args={})
+def ir_dynamic_batch_emb_lookup_impl(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
     logger.info(
-        f"torch.ops.torchrec.ir_dynamic_batch_op -> ({batch_size}, {dims}) {device}"
+        f"torch.ops.torchrec.ir_dynamic_batch_emb_lookup -> ({batch_size}, {dims}) {device}"
     )
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
-@torch.library.register_fake("torchrec::ir_dynamic_batch_op")
-def ir_dynamic_batch_op_fake(
+@torch.library.register_fake("torchrec::ir_dynamic_batch_emb_lookup")
+def ir_dynamic_batch_emb_lookup_fake(
     tensors: List[Optional[torch.Tensor]], batch_dize: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
     batch_size = torch.library.get_ctx().new_dynamic_size()
-    logger.info(f"ir_dynamic_batch_op_fake -> ({batch_size}, {dims}) {device}")
+    logger.info(f"ir_dynamic_batch_emb_lookup_fake -> ({batch_size}, {dims}) {device}")
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
