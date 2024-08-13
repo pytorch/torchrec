@@ -257,11 +257,11 @@ class TowerQPSMetricTest(unittest.TestCase):
                     labels={"DefaultTask": model_output["label"]},
                     weights={"DefaultTask": model_output["weight"]},
                 )
-            self.assertEquals(
+            self.assertEqual(
                 qps._metrics_computations[0].warmup_examples,
                 batch_size * warmup_steps * (i + 1),
             )
-            self.assertEquals(
+            self.assertEqual(
                 qps._metrics_computations[0].num_examples,
                 batch_size * (warmup_steps + extra_steps) * (i + 1),
             )
@@ -303,9 +303,9 @@ class TowerQPSMetricTest(unittest.TestCase):
             else:
                 del labels["t2"]
             qps.update(predictions=predictions, labels=labels, weights=weights)
-            self.assertEquals(
+            self.assertEqual(
                 qps._metrics_computations[0].num_examples, (step + 1) // 2 * batch_size
             )
-            self.assertEquals(
+            self.assertEqual(
                 qps._metrics_computations[1].num_examples, (step + 2) // 2 * batch_size
             )
