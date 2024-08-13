@@ -825,11 +825,15 @@ def shard_qebc(
     expected_shards: Optional[List[List[Tuple[Tuple[int, int, int, int], str]]]] = None,
     plan: Optional[ShardingPlan] = None,
     ebc_fqn: str = "_module.sparse.ebc",
+    shard_score_ebc: bool = False,
 ) -> torch.nn.Module:
     sharder = TestQuantEBCSharder(
         sharding_type=sharding_type.value,
         kernel_type=EmbeddingComputeKernel.QUANT.value,
-        shardable_params=[table.name for table in mi.tables],
+        shardable_params=(
+            [table.name for table in mi.tables]
+            + ([table.name for table in mi.weighted_tables] if shard_score_ebc else [])
+        ),
     )
     if not plan:
         # pyre-ignore

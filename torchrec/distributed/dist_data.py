@@ -1050,7 +1050,7 @@ class EmbeddingsAllToOne(nn.Module):
         Returns:
             Awaitable[torch.Tensor]: awaitable of the merged embeddings.
         """
-        assert len(tensors) == self._world_size
+        assert len(tensors) <= self._world_size
 
         is_target_device_cpu: bool = self._device.type == "cpu"
 

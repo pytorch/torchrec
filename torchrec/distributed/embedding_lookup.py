@@ -1014,20 +1014,42 @@ class InferGroupedPooledEmbeddingsLookup(
                 "meta" if device is not None and device.type == "meta" else "cuda"
             )
 
+        self._is_empty_rank: List[bool] = []
         for rank in range(world_size):
-            self._embedding_lookups_per_rank.append(
-                # TODO add position weighted module support
-                MetaInferGroupedPooledEmbeddingsLookup(
-                    grouped_configs=grouped_configs_per_rank[rank],
-                    device=rank_device(device_type, rank),
-                    fused_params=fused_params,
+            empty_rank = len(grouped_configs_per_rank[rank]) == 0
+            self._is_empty_rank.append(empty_rank)
+            if not empty_rank:
+                self._embedding_lookups_per_rank.append(
+                    # TODO add position weighted module support
+                    MetaInferGroupedPooledEmbeddingsLookup(
+                        grouped_configs=grouped_configs_per_rank[rank],
+                        device=rank_device(device_type, rank),
+                        fused_params=fused_params,
+                    )
                 )
-            )
 
     def get_tbes_to_register(
         self,
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return get_tbes_to_register_from_iterable(self._embedding_lookups_per_rank)
+
+    def forward(
+        self,
+        input_dist_outputs: InputDistOutputs,
+    ) -> List[torch.Tensor]:
+        embeddings: List[torch.Tensor] = []
+        sparse_features = [
+            input_dist_outputs.features[i]
+            for i, is_empty in enumerate(self._is_empty_rank)
+            if not is_empty
+        ]
+        # syntax for torchscript
+        for i, embedding_lookup in enumerate(
+            self._embedding_lookups_per_rank,
+        ):
+            sparse_features_rank = sparse_features[i]
+            embeddings.append(embedding_lookup.forward(sparse_features_rank))
+        return embeddings
 
 
 class InferGroupedEmbeddingsLookup(
