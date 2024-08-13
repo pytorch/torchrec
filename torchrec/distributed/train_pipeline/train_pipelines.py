@@ -106,6 +106,9 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         model: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         device: torch.device,
+        custom_model_fwd: Optional[
+            Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+        ] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -304,6 +307,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         apply_jit: bool = False,
         context_type: Type[TrainPipelineContext] = TrainPipelineContext,
         pipeline_preproc: bool = False,
+        custom_model_fwd: Optional[
+            Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+        ] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -707,6 +713,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         start_batch: int = 900,
         stash_gradients: bool = False,
         pipeline_preproc: bool = False,
+        custom_model_fwd: Optional[
+            Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+        ] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -739,6 +748,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._embedding_odd_streams: List[Optional[torch.Stream]] = []
         self._embedding_even_streams: List[Optional[torch.Stream]] = []
         self._gradients: Dict[str, torch.Tensor] = {}
+        self._model_fwd: Union[
+            torch.nn.Module, Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+        ] = (custom_model_fwd if custom_model_fwd is not None else model)
 
     def _grad_swap(self) -> None:
         for name, param in self._model.named_parameters():
@@ -877,7 +889,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             _wait_for_events(
                 batch, context, torch.get_device_module(self._device).current_stream()
             )
-            return cast(Tuple[torch.Tensor, Out], self._model(batch))
+            return cast(Tuple[torch.Tensor, Out], self._model_fwd(batch))
 
     def embedding_backward(self, context: EmbeddingTrainPipelineContext) -> None:
         default_stream = torch.get_device_module(self._device).current_stream()
