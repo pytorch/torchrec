@@ -10,7 +10,6 @@
 #!/usr/bin/env python3
 
 import abc
-from collections import defaultdict
 from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import torch
@@ -30,23 +29,15 @@ except ImportError:
 
 @torch.fx.wrap
 def apply_mc_method_to_jt_dict(
+    mc_module: nn.Module,
     method: str,
     features_dict: Dict[str, JaggedTensor],
-    table_to_features: Dict[str, List[str]],
-    managed_collisions: nn.ModuleDict,
 ) -> Dict[str, JaggedTensor]:
     """
     Applies an MC method to a dictionary of JaggedTensors, returning the updated dictionary with same ordering
     """
-    mc_output: Dict[str, JaggedTensor] = features_dict.copy()
-    for table, features in table_to_features.items():
-        mc_input: Dict[str, JaggedTensor] = {}
-        for feature in features:
-            mc_input[feature] = features_dict[feature]
-        mc_module = managed_collisions[table]
-        attr = getattr(mc_module, method)
-        mc_output.update(attr(mc_input))
-    return mc_output
+    attr = getattr(mc_module, method)
+    return attr(features_dict)
 
 
 @torch.no_grad()
@@ -154,6 +145,14 @@ class ManagedCollisionModule(nn.Module):
         pass
 
     @abc.abstractmethod
+    def remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+        pass
+
+    @abc.abstractmethod
+    def profile(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+        pass
+
+    @abc.abstractmethod
     def forward(
         self,
         features: Dict[str, JaggedTensor],
@@ -203,6 +202,8 @@ class ManagedCollisionCollection(nn.Module):
         embedding_confgs (List[BaseEmbeddingConfig]): List of embedding configs, for each table with a managed collsion module
     """
 
+    _table_to_features: Dict[str, List[str]]
+
     def __init__(
         self,
         managed_collision_modules: Dict[str, ManagedCollisionModule],
@@ -216,10 +217,13 @@ class ManagedCollisionCollection(nn.Module):
             for config in embedding_configs
             for feature in config.feature_names
         }
-        self._table_to_features: Dict[str, List[str]] = defaultdict(list)
+        self._table_to_features = {}
 
         self._compute_jt_dict_to_kjt = ComputeJTDictToKJT()
         for feature, table in self._feature_to_table.items():
+            if table not in self._table_to_features:
+                self._table_to_features[table] = []
+
             self._table_to_features[table].append(feature)
 
         table_to_config = {config.name: config for config in embedding_configs}
@@ -243,25 +247,18 @@ class ManagedCollisionCollection(nn.Module):
         self,
         features: KeyedJaggedTensor,
     ) -> KeyedJaggedTensor:
-        features_dict = apply_mc_method_to_jt_dict(
-            "preprocess",
-            features_dict=features.to_dict(),
-            table_to_features=self._table_to_features,
-            managed_collisions=self._managed_collision_modules,
-        )
-        features_dict = apply_mc_method_to_jt_dict(
-            "profile",
-            features_dict=features_dict,
-            table_to_features=self._table_to_features,
-            managed_collisions=self._managed_collision_modules,
-        )
-        features_dict = apply_mc_method_to_jt_dict(
-            "remap",
-            features_dict=features_dict,
-            table_to_features=self._table_to_features,
-            managed_collisions=self._managed_collision_modules,
-        )
-        return self._compute_jt_dict_to_kjt(features_dict)
+        features_dict = features.to_dict()
+        output: Dict[str, JaggedTensor] = features_dict.copy()
+        for table, mc_module in self._managed_collision_modules.items():
+            feature_list: List[str] = self._table_to_features[table]
+            mc_input: Dict[str, JaggedTensor] = {}
+            for feature in feature_list:
+                mc_input[feature] = features_dict[feature]
+            mc_input = mc_module.preprocess(mc_input)
+            mc_input = mc_module.profile(mc_input)
+            mc_input = mc_module.remap(mc_input)
+            output.update(mc_input)
+        return self._compute_jt_dict_to_kjt(output)
 
     def evict(self) -> Dict[str, Optional[torch.Tensor]]:
         evictions: Dict[str, Optional[torch.Tensor]] = {}
@@ -933,7 +930,17 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                 self._history_metadata[metadata_name] = getattr(self, buffer_name)
 
     @torch.no_grad()
-    def preprocess(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+    def preprocess(
+        self,
+        features: Dict[str, JaggedTensor],
+    ) -> Dict[str, JaggedTensor]:
+        return apply_mc_method_to_jt_dict(
+            self,
+            "_preprocess",
+            features,
+        )
+
+    def _preprocess(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
         if self._input_hash_func is None:
             return features
         preprocessed_features: Dict[str, JaggedTensor] = {}
@@ -1071,6 +1078,16 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self,
         features: Dict[str, JaggedTensor],
     ) -> Dict[str, JaggedTensor]:
+        return apply_mc_method_to_jt_dict(
+            self,
+            "_profile",
+            features,
+        )
+
+    def _profile(
+        self,
+        features: Dict[str, JaggedTensor],
+    ) -> Dict[str, JaggedTensor]:
         if not self.training:
             return features
 
@@ -1115,7 +1132,17 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         return features
 
     @torch.no_grad()
-    def remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+    def remap(
+        self,
+        features: Dict[str, JaggedTensor],
+    ) -> Dict[str, JaggedTensor]:
+        return apply_mc_method_to_jt_dict(
+            self,
+            "_remap",
+            features,
+        )
+
+    def _remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
 
         remapped_features: Dict[str, JaggedTensor] = {}
         for name, feature in features.items():

@@ -51,10 +51,7 @@ from torchrec.distributed.types import (
     ShardMetadata,
 )
 from torchrec.distributed.utils import append_prefix
-from torchrec.modules.mc_modules import (
-    apply_mc_method_to_jt_dict,
-    ManagedCollisionCollection,
-)
+from torchrec.modules.mc_modules import ManagedCollisionCollection
 from torchrec.modules.utils import construct_jagged_tensors
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
@@ -191,16 +188,20 @@ class ShardedManagedCollisionCollection(
                 if name not in shardable_buffers:
                     continue
 
+                sharded_sizes = list(tensor.shape)
+                sharded_sizes[0] = shard_size
+                shard_offsets = [0] * len(sharded_sizes)
+                shard_offsets[0] = shard_offset
+                global_sizes = list(tensor.shape)
+                global_sizes[0] = global_size
                 self._model_parallel_mc_buffer_name_to_sharded_tensor[name] = (
                     ShardedTensor._init_from_local_shards(
                         [
                             Shard(
                                 tensor=tensor,
                                 metadata=ShardMetadata(
-                                    # pyre-ignore [6]
-                                    shard_offsets=[shard_offset],
-                                    # pyre-ignore [6]
-                                    shard_sizes=[shard_size],
+                                    shard_offsets=shard_offsets,
+                                    shard_sizes=sharded_sizes,
                                     placement=(
                                         f"rank:{self._env.rank}/cuda:"
                                         f"{get_local_rank(self._env.world_size, self._env.rank)}"
@@ -208,8 +209,7 @@ class ShardedManagedCollisionCollection(
                                 ),
                             )
                         ],
-                        # pyre-ignore [6]
-                        torch.Size([global_size]),
+                        torch.Size(global_sizes),
                         process_group=self._env.process_group,
                     )
                 )
@@ -256,9 +256,7 @@ class ShardedManagedCollisionCollection(
         self, module: ManagedCollisionCollection
     ) -> None:
 
-        self._mc_module_name_shard_metadata: DefaultDict[
-            str, DefaultDict[str, List[int]]
-        ] = defaultdict(lambda: defaultdict(list))
+        self._mc_module_name_shard_metadata: DefaultDict[str, List[int]] = defaultdict()
         self._feature_to_offset: Dict[str, int] = {}
 
         for sharding in self._embedding_shardings:
@@ -392,15 +390,19 @@ class ShardedManagedCollisionCollection(
             self._has_uninitialized_input_dists = False
 
         with torch.no_grad():
+            features_dict = features.to_dict()
+            output: Dict[str, JaggedTensor] = features_dict.copy()
+            for table, mc_module in self._managed_collision_modules.items():
+                feature_list: List[str] = self._table_to_features[table]
+                mc_input: Dict[str, JaggedTensor] = {}
+                for feature in feature_list:
+                    mc_input[feature] = features_dict[feature]
+                mc_input = mc_module.preprocess(mc_input)
+                output.update(mc_input)
+
             # NOTE shared features not currently supported
-            features = KeyedJaggedTensor.from_jt_dict(
-                apply_mc_method_to_jt_dict(
-                    "preprocess",
-                    features.to_dict(),
-                    self._table_to_features,
-                    self._managed_collision_modules,
-                )
-            )
+            features = KeyedJaggedTensor.from_jt_dict(output)
+
             if self._features_order:
                 features = features.permute(
                     self._features_order,
@@ -456,19 +458,17 @@ class ShardedManagedCollisionCollection(
                 -1, features.stride()
             )
             features_dict = features.to_dict()
-            features_dict = apply_mc_method_to_jt_dict(
-                "profile",
-                features_dict=features_dict,
-                table_to_features=self._table_to_features,
-                managed_collisions=self._managed_collision_modules,
-            )
-            features_dict = apply_mc_method_to_jt_dict(
-                "remap",
-                features_dict=features_dict,
-                table_to_features=self._table_to_features,
-                managed_collisions=self._managed_collision_modules,
-            )
-            remapped_kjts.append(KeyedJaggedTensor.from_jt_dict(features_dict))
+            output: Dict[str, JaggedTensor] = features_dict.copy()
+            for table, mc_module in self._managed_collision_modules.items():
+                feature_list: List[str] = self._table_to_features[table]
+                mc_input: Dict[str, JaggedTensor] = {}
+                for feature in feature_list:
+                    mc_input[feature] = features_dict[feature]
+                mc_input = mc_module.profile(mc_input)
+                mc_input = mc_module.remap(mc_input)
+                output.update(mc_input)
+
+            remapped_kjts.append(KeyedJaggedTensor.from_jt_dict(output))
 
         return KJTList(remapped_kjts)
 
@@ -522,6 +522,7 @@ class ShardedManagedCollisionCollection(
         return ManagedCollisionCollectionContext(sharding_contexts=[])
 
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        # TODO (bwen): this does not include `_hash_zch_identities`
         for fqn, _ in self.named_buffers():
             yield append_prefix(prefix, fqn)
 
