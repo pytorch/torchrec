@@ -623,8 +623,13 @@ class RecMetric(nn.Module, abc.ABC):
                         else:
                             continue
                     if "required_inputs" in kwargs:
+                        # Expand scalars to match the shape of the predictions
                         kwargs["required_inputs"] = {
-                            k: v.view(task_labels.size())
+                            k: (
+                                v.view(task_labels.size())
+                                if v.numel() > 1
+                                else v.expand(task_labels.size())
+                            )
                             for k, v in kwargs["required_inputs"].items()
                         }
                     metric_.update(

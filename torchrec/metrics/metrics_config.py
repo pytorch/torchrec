@@ -41,6 +41,7 @@ class RecMetricEnum(RecMetricEnumBase):
     RECALL = "recall"
     SERVING_NE = "serving_ne"
     SERVING_CALIBRATION = "serving_calibration"
+    OUTPUT = "output"
 
 
 @dataclass(unsafe_hash=True, eq=True)
