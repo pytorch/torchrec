@@ -41,6 +41,7 @@ from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
 from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
+from torchrec.metrics.output import OutputMetric
 from torchrec.metrics.precision import PrecisionMetric
 from torchrec.metrics.rauc import RAUCMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
@@ -80,6 +81,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.RECALL: RecallMetric,
     RecMetricEnum.SERVING_NE: ServingNEMetric,
     RecMetricEnum.SERVING_CALIBRATION: ServingCalibrationMetric,
+    RecMetricEnum.OUTPUT: OutputMetric,
 }
 
 
