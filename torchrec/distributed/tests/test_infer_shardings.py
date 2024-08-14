@@ -210,6 +210,79 @@ class InferShardingsTest(unittest.TestCase):
     )
     # pyre-ignore
     @given(
+        weight_dtype=st.sampled_from([torch.qint8]),
+        device_type=st.sampled_from(["cuda"]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_tw_ebc_full_rank_weighted_ebc_with_empty_rank(
+        self, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
+        set_propogate_device(True)
+        num_embeddings = 256
+        emb_dim = 16
+        world_size = 2
+        batch_size = 4
+        local_device = torch.device(f"{device_type}:0")
+        mi = create_test_model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+            num_features=6,  # 6 sparse features on ebc
+            num_weighted_features=1,  # only 1 weighted sparse feature on weighted_ebc
+        )
+
+        non_sharded_model = mi.quant_model
+
+        sharded_model = shard_qebc(
+            mi,
+            sharding_type=ShardingType.TABLE_WISE,
+            device=local_device,
+            expected_shards=None,
+            shard_score_ebc=True,
+        )
+
+        self.assertEqual(
+            len(
+                sharded_model._module.sparse.ebc._lookups[0]._embedding_lookups_per_rank
+            ),
+            2,
+        )
+        self.assertEqual(
+            len(
+                sharded_model._module.sparse.weighted_ebc._lookups[
+                    0
+                ]._embedding_lookups_per_rank
+            ),
+            1,
+        )
+
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(sharded_output, non_sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
         device_type=st.sampled_from(["cuda", "cpu"]),
     )
