@@ -110,7 +110,9 @@ class InferHeteroShardingsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=non_sharded_model,
-            # pyre-ignore
+            # pyre-fixme[6]: For 2nd argument expected
+            #  `Optional[List[ModuleSharder[Module]]]` but got
+            #  `List[QuantEmbeddingCollectionSharder]`.
             sharders=[sharder],
             device=torch.device(sharding_device),
             plan=plan,
@@ -201,7 +203,9 @@ class InferHeteroShardingsTest(unittest.TestCase):
         }
         sharded_model = _shard_modules(
             module=non_sharded_model,
-            # pyre-ignore
+            # pyre-fixme[6]: For 2nd argument expected
+            #  `Optional[List[ModuleSharder[Module]]]` but got
+            #  `List[QuantEmbeddingBagCollectionSharder]`.
             sharders=[sharder],
             device=torch.device("cpu"),
             plan=plan,
