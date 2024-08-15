@@ -274,7 +274,7 @@ class TestCombinedOptimizer(unittest.TestCase):
         bytesIO = io.BytesIO()
         torch.save(combined_optimizer, bytesIO)
         bytesIO.seek(0)
-        reload_combined_optimizer = torch.load(bytesIO, weights_only=True)
+        reload_combined_optimizer = torch.load(bytesIO, weights_only=False)
 
         for k in reload_combined_optimizer.state_dict():
             self.assertEqual(
