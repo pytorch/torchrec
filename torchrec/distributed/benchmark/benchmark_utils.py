@@ -480,7 +480,9 @@ def transform_module(
 
             sharded_module = _shard_modules(
                 module=copied_module,
-                # pyre-ignore [6]
+                # pyre-fixme[6]: For 2nd argument expected
+                #  `Optional[List[ModuleSharder[Module]]]` but got
+                #  `List[ModuleSharder[Variable[T (bound to Module)]]]`.
                 sharders=[sharder],
                 device=device,
                 plan=plan,
@@ -489,13 +491,14 @@ def transform_module(
 
     if compile_mode == CompileMode.FX_SCRIPT:
         return fx_script_module(
-            # pyre-ignore [6]
+            # pyre-fixme[6]: For 1st argument expected `Module` but got
+            #  `Optional[Module]`.
             sharded_module
             if not benchmark_unsharded_module
             else module
         )
     else:
-        # pyre-ignore [7]
+        # pyre-fixme[7]: Expected `Module` but got `Optional[Module]`.
         return sharded_module if not benchmark_unsharded_module else module
 
 

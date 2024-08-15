@@ -103,7 +103,9 @@ class UtilsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model[0],
-            # pyre-ignore
+            # pyre-fixme[6]: For 2nd argument expected
+            #  `Optional[List[ModuleSharder[Module]]]` but got
+            #  `List[TestQuantEBCSharder]`.
             sharders=[sharder],
             device=device,
             plan=plan,
@@ -178,7 +180,9 @@ class UtilsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model[0],
-            # pyre-ignore
+            # pyre-fixme[6]: For 2nd argument expected
+            #  `Optional[List[ModuleSharder[Module]]]` but got
+            #  `List[TestQuantECSharder]`.
             sharders=[sharder],
             device=device,
             plan=plan,
@@ -256,7 +260,9 @@ class UtilsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model[0],
-            # pyre-ignore
+            # pyre-fixme[6]: For 2nd argument expected
+            #  `Optional[List[ModuleSharder[Module]]]` but got
+            #  `List[TestQuantEBCSharder]`.
             sharders=[sharder],
             device=device,
             plan=plan,
