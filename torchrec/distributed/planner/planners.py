@@ -26,7 +26,7 @@ from torchrec.distributed.planner.partitioners import (
 )
 from torchrec.distributed.planner.perf_models import NoopPerfModel
 from torchrec.distributed.planner.proposers import (
-    DpProposer,
+    DynamicProgrammingProposer,
     GreedyProposer,
     GridSearchProposer,
     UniformProposer,
@@ -189,7 +189,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             )
         else:
             self._proposers = [
-                DpProposer(),
+                DynamicProgrammingProposer(),
                 UniformProposer(),
             ]
         self._perf_model: PerfModel = (

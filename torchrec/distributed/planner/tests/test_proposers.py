@@ -17,7 +17,7 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import (
-    DpProposer,
+    DynamicProgrammingProposer,
     EmbeddingOffloadScaleupProposer,
     GreedyProposer,
     GridSearchProposer,
@@ -93,7 +93,7 @@ class TestProposers(unittest.TestCase):
         self.greedy_proposer = GreedyProposer()
         self.uniform_proposer = UniformProposer()
         self.grid_search_proposer = GridSearchProposer()
-        self.dp_proposer = DpProposer()
+        self.dynamic_programming_proposer = DynamicProgrammingProposer()
 
     def test_greedy_two_table(self) -> None:
         tables = [
@@ -352,7 +352,7 @@ class TestProposers(unittest.TestCase):
 
         self.assertEqual(num_pruned_options ** len(tables), num_proposals)
 
-    def test_dp_three_table(self) -> None:
+    def test_dynamic_programming_three_table(self) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=100 * i,
@@ -370,19 +370,19 @@ class TestProposers(unittest.TestCase):
             ],
         )
 
-        self.dp_proposer.load(search_space)
+        self.dynamic_programming_proposer.load(search_space)
 
         num_proposals = 0
-        proposal = self.dp_proposer.propose()
+        proposal = self.dynamic_programming_proposer.propose()
         GB = 1024 * 1024 * 1024
         storage_constraint = Topology(
             world_size=2, compute_device="cuda", hbm_cap=100 * GB, ddr_cap=1000 * GB
         )
         while proposal:
-            self.dp_proposer.feedback(
+            self.dynamic_programming_proposer.feedback(
                 partitionable=True, storage_constraint=storage_constraint
             )
-            proposal = self.dp_proposer.propose()
+            proposal = self.dynamic_programming_proposer.propose()
             num_proposals += 1
         self.assertEqual(2, num_proposals)
 

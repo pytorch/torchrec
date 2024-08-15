@@ -284,8 +284,41 @@ def _bytes_to_float_bin(num_bytes: Union[float, int], bin_size: float) -> float:
     return float(num_bytes) / bin_size
 
 
-class DpProposer(Proposer):
+class DynamicProgrammingProposer(Proposer):
     """Proposes sharding plans in dynamic programming fashion.
+
+        The problem of the Embedding Sharding Plan can be framed as follows: Given
+    :math:`M` tables and their corresponding :math:`N` Sharding Options, we need to
+    select one sharding option for each table such that the total performance is
+    minimized, while keeping the overall HBM constraint :math:`K` in check. This can
+    be abstracted into the following mathematical formulation:
+
+    Given a matrix :math:`A` of dimensions :math:`(M, N)` and another matrix :math:`B`
+    of the same dimensions, let the elements of matrix :math:`A` be denoted as
+    :math:`a_{i,j}` and the elements of matrix :math:`B` as :math:`b_{i,j}`. We aim
+    to find a set of column indices :math:`\{ j_0, j_1, \ldots, j_{M-1} \}` such that
+    the following conditions are satisfied:
+
+    1. :math:`\sum_{i=0}^{M-1} a_{i,j_i} \leq K`, where :math:`K` is a float.
+    2. :math:`\sum_{i=0}^{M-1} b_{i,j_i}` is minimized.
+
+    This problem can be tackled using dynamic programming. First, discretize :math:`K`
+    into :math:`K_i`, and denote the discretization function as :math:`f`.
+
+    Define the state :math:`dp[i][f(k)]` to represent the minimum value of :math:`B`
+    when considering the first :math:`i` rows and the total sum of :math:`A` is equal to
+    the discretized value :math:`k`.
+
+    The state transition can then be represented as:
+
+    .. math::
+        dp[i][f(k)] = \min_{j=0}^{N-1} \left( dp[i-1][f(k - A[i][j])] + B[i][j] \right)
+
+    Since :math:`K` is the sum allocated across all HBM, simply satisfying that the
+    total HBM in the plan equals :math:`K` does not guarantee that the allocation will
+    fit on all cards. Therefore, it is essential to maintain all the states of the last
+    layer of :math:`dp`. This allows us to propose different plans under varying total
+    HBM constraints.
 
     Args:
         hbm_bins_per_device (int): hdm bins for dynamic programming precision.
@@ -293,7 +326,7 @@ class DpProposer(Proposer):
 
     def __init__(self, hbm_bins_per_device: int = 100) -> None:
         self._inited: bool = False
-        self._hbm_bins_per_device: int = hbm_bins_per_device
+        self._hbm_bins_per_device: int = max(hbm_bins_per_device, 1)
         self._sharding_options_by_fqn: OrderedDict[str, List[ShardingOption]] = (
             OrderedDict()
         )
@@ -321,12 +354,9 @@ class DpProposer(Proposer):
     def propose(self) -> Optional[List[ShardingOption]]:
         """Propose a sharding plan."""
         if not self._inited:
-            proposal_index = [0] * len(self._sharding_options_by_fqn)
             return [
-                self._sharding_options_by_fqn[fqn][index]
-                for fqn, index in zip(
-                    self._sharding_options_by_fqn.keys(), proposal_index
-                )
+                sharding_options[0]
+                for sharding_options in self._sharding_options_by_fqn.values()
             ]
         elif self._current_proposal >= 0:
             proposal_index = self._proposal_indices[self._current_proposal]
@@ -357,10 +387,8 @@ class DpProposer(Proposer):
             K = self._hbm_bins_per_device * len(storage_constraint.devices)
             bin_size = float(hbm_total) / K
 
-            dp = [
-                [[(float("inf"), float("inf"))] * K for _ in range(N)] for _ in range(M)
-            ]
-            backtrack = [[[(-1, -1)] * K for _ in range(N)] for _ in range(M)]
+            dp = [[(float("inf"), float("inf"))] * K for _ in range(M)]
+            backtrack = [[(-1, -1)] * K for _ in range(M)]
 
             hbm_by_fqn = [[float("inf") for _ in range(N)] for _ in range(M)]
             perf_by_fqn = [[float("inf") for _ in range(N)] for _ in range(M)]
@@ -376,42 +404,31 @@ class DpProposer(Proposer):
             for j in range(N):
                 if hbm_by_fqn[0][j] < K:
                     hbm_i = int(hbm_by_fqn[0][j])
-                    dp[0][j][hbm_i] = (perf_by_fqn[0][j], hbm_by_fqn[0][j])
+                    if dp[0][hbm_i][0] > perf_by_fqn[0][j]:
+                        dp[0][hbm_i] = (perf_by_fqn[0][j], hbm_by_fqn[0][j])
+                        backtrack[0][hbm_i] = (j, -1)
 
             for i in range(1, M):
                 for j in range(N):
                     for c in range(K):
-                        if c + hbm_by_fqn[i][j] >= K:
-                            continue
-                        for nj in range(N):
-                            prev_perf, perv_hbm = dp[i - 1][nj][c]
-                            if prev_perf < float("inf"):
-                                new_hbm = perv_hbm + hbm_by_fqn[i][j]
+                        prev_perf, perv_hbm = dp[i - 1][c]
+                        if prev_perf < float("inf"):
+                            new_hbm = perv_hbm + hbm_by_fqn[i][j]
+                            if new_hbm < K:
                                 new_hbm_i = int(new_hbm)
-                                if new_hbm < K:
-                                    new_perf = prev_perf + perf_by_fqn[i][j]
-                                    if dp[i][j][new_hbm_i][0] > new_perf:
-                                        dp[i][j][new_hbm_i] = (new_perf, new_hbm)
-                                        backtrack[i][j][new_hbm_i] = (nj, c)
-
-            last_backtrace_index = [(-1, -1)] * K
-            min_perf = [float("inf")] * K
-            for j in range(N):
-                for c in range(K):
-                    if dp[M - 1][j][c][0] < min_perf[c]:
-                        min_perf[c] = dp[M - 1][j][c][0]
-                        last_backtrace_index[c] = (j, c)
+                                new_perf = prev_perf + perf_by_fqn[i][j]
+                                if dp[i][new_hbm_i][0] > new_perf:
+                                    dp[i][new_hbm_i] = (new_perf, new_hbm)
+                                    backtrack[i][new_hbm_i] = (j, c)
 
             self._proposal_indices = []
             for c in range(K - 1, -1, -1):
-                cur_col_idx, cur_hbm_idx = last_backtrace_index[c]
+                cur_col_idx, cur_hbm_idx = backtrack[M - 1][c]
                 if cur_col_idx >= 0:
                     column_indices = [-1] * M
                     column_indices[M - 1] = cur_col_idx
                     for i in range(M - 2, -1, -1):
-                        column_indices[i], cur_hbm_idx = backtrack[i + 1][
-                            column_indices[i + 1]
-                        ][cur_hbm_idx]
+                        column_indices[i], cur_hbm_idx = backtrack[i][cur_hbm_idx]
                     self._proposal_indices.append(column_indices)
             if len(self._proposal_indices) > 0:
                 self._current_proposal = 0
