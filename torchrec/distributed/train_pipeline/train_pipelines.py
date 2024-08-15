@@ -249,6 +249,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
                     True
                 )
                 torch._dynamo.config.skip_torchrec = False
+                torch._dynamo.config.optimize_ddp = False
 
                 # Importing only before compilation to not slow-done train_pipelines import
                 torch.ops.import_module("fbgemm_gpu.sparse_ops")
