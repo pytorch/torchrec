@@ -973,10 +973,16 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # preproc args
         self.assertEqual(len(pipeline._pipelined_preprocs), 2)
-        for i, input_attr_name in [(0, "idlist_features"), (1, "idscore_features")]:
+        input_attr_names = {"idlist_features", "idscore_features"}
+        for i in range(len(pipeline._pipelined_preprocs)):
             preproc_mod = pipeline._pipelined_preprocs[i]
             self.assertEqual(len(preproc_mod._args), 1)
+
+            input_attr_name = preproc_mod._args[0].input_attrs[1]
+            self.assertTrue(input_attr_name in input_attr_names)
             self.assertEqual(preproc_mod._args[0].input_attrs, ["", input_attr_name])
+            input_attr_names.remove(input_attr_name)
+
             self.assertEqual(preproc_mod._args[0].is_getitems, [False, False])
             # no parent preproc module in FX graph
             self.assertEqual(preproc_mod._args[0].preproc_modules, [None, None])
