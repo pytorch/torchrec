@@ -136,7 +136,7 @@ def infer(
             # pyre-ignore[16]
             faiss.read_index(f"{load_dir}/faiss.index"),
         )
-        two_tower_sd = torch.load(f"{load_dir}/model.pt")
+        two_tower_sd = torch.load(f"{load_dir}/model.pt", weights_only=True)
         retrieval_sd = convert_TwoTower_to_TwoTowerRetrieval(
             two_tower_sd,
             [f"t_{two_tower_column_names[0]}"],
