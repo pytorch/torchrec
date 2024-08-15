@@ -281,11 +281,12 @@ class PredictModule(nn.Module):
     def __init__(
         self,
         module: nn.Module,
+        device: Optional[str] = None,
     ) -> None:
         super().__init__()
         self._module: nn.Module = module
         # lazy init device from thread inited device guard
-        self._device: Optional[torch.device] = None
+        self._device: Optional[torch.device] = torch.device(device) if device else None
         self._module.eval()
 
     @property
@@ -303,7 +304,7 @@ class PredictModule(nn.Module):
     def forward(self, batch: Dict[str, torch.Tensor]) -> Any:
         if self._device is None:
             self._device = torch.device("cuda", torch.cuda.current_device())
-        with torch.cuda.device(self._device), torch.inference_mode():
+        with torch.inference_mode():
             return self.predict_forward(batch)
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
@@ -348,12 +349,43 @@ def quantize_dense(
 
 def quantize_inference_model(
     model: torch.nn.Module,
+    quantization_dtype: torch.dtype = DEFAULT_QUANTIZATION_DTYPE,
     quantization_mapping: Optional[Dict[str, Type[torch.nn.Module]]] = None,
     per_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None,
     fp_weight_dtype: torch.dtype = DEFAULT_QUANTIZATION_DTYPE,
+    output_dtype: torch.dtype = torch.float,
 ) -> torch.nn.Module:
     """
-    Quantize the model.
+    Quantize the model, module swapping TorchRec train modules with its
+    quantized counterpart, (e.g. EmbeddingBagCollection -> QuantEmbeddingBagCollection).
+
+    Args:
+        model (torch.nn.Module): the model to be quantized
+        quantization_mapping (Optional[Dict[str, Type[torch.nn.Module]]]): a mapping from
+            the original module type to the quantized module type. If not provided, the default mapping will be used:
+            (EmbeddingBagCollection -> QuantEmbeddingBagCollection, EmbeddingCollection -> QuantEmbeddingCollection).
+        per_table_weight_dtype (Optional[Dict[str, torch.dtype]]): a mapping from table name to weight dtype.
+            If not provided, the default quantization dtype will be used (int8).
+        fp_weight_dtype (torch.dtype): the desired quantized dtype for feature processor weights in
+            FeatureProcessedEmbeddingBagCollection if used. Default is int8.
+
+    Returns:
+        torch.nn.Module: the quantized model
+
+    Example::
+
+        ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device("meta"))
+
+        module = DLRMPredictModule(
+            embedding_bag_collection=ebc,
+            dense_in_features=self.model_config.dense_in_features,
+            dense_arch_layer_sizes=self.model_config.dense_arch_layer_sizes,
+            over_arch_layer_sizes=self.model_config.over_arch_layer_sizes,
+            id_list_features_keys=self.model_config.id_list_features_keys,
+            dense_device=device,
+        )
+
+        quant_model = quantize_inference_model(module)
     """
 
     if quantization_mapping is None:
@@ -397,15 +429,16 @@ def quantize_inference_model(
     quant_prep_enable_register_tbes(model, list(additional_mapping.keys()))
     quantize_embeddings(
         model,
-        dtype=DEFAULT_QUANTIZATION_DTYPE,
+        dtype=quantization_dtype,
         additional_qconfig_spec_keys=additional_qconfig_spec_keys,
         additional_mapping=additional_mapping,
         inplace=True,
         per_table_weight_dtype=per_table_weight_dtype,
+        output_dtype=output_dtype,
     )
 
     logger.info(
-        f"Default quantization dtype is {DEFAULT_QUANTIZATION_DTYPE}, {per_table_weight_dtype=}."
+        f"Default quantization dtype is {quantization_dtype}, {per_table_weight_dtype=}."
     )
 
     return model
@@ -415,20 +448,53 @@ def shard_quant_model(
     model: torch.nn.Module,
     world_size: int = 1,
     compute_device: str = "cuda",
+    sharding_device: str = "meta",
     sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
-    fused_params: Optional[Dict[str, Any]] = None,
     device_memory_size: Optional[int] = None,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
 ) -> Tuple[torch.nn.Module, ShardingPlan]:
     """
-    Shard the model.
+    Shard a quantized TorchRec model, used for generating the most optimal model for inference and
+    necessary for distributed inference.
+
+    Args:
+        model (torch.nn.Module): the quantized model to be sharded
+        world_size (int): the number of devices to shard the model, default to 1
+        compute_device (str): the device to run the model, default to "cuda"
+        sharding_device (str): the device to run the sharding, default to "meta"
+        sharders (Optional[List[ModuleSharder[torch.nn.Module]]]): sharders to use for sharding
+            quantized model, default to QuantEmbeddingBagCollectionSharder, QuantEmbeddingCollectionSharder,
+            QuantFeatureProcessedEmbeddingBagCollectionSharder.
+        device_memory_size (Optional[int]): the memory limit for cuda devices, default to None
+        constraints (Optional[Dict[str, ParameterConstraints]]): constraints to use for sharding, default to None
+            which will then implement default constraints with QuantEmbeddingBagCollection being sharded TableWise
+
+    Returns:
+        Tuple[torch.nn.Module, ShardingPlan]: the sharded model and the sharding plan
+
+    Example::
+        ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device("meta"))
+
+        module = DLRMPredictModule(
+            embedding_bag_collection=ebc,
+            dense_in_features=self.model_config.dense_in_features,
+            dense_arch_layer_sizes=self.model_config.dense_arch_layer_sizes,
+            over_arch_layer_sizes=self.model_config.over_arch_layer_sizes,
+            id_list_features_keys=self.model_config.id_list_features_keys,
+            dense_device=device,
+        )
+
+        quant_model = quantize_inference_model(module)
+        sharded_model, _ = shard_quant_model(quant_model)
     """
 
     if constraints is None:
         table_fqns = []
-        for name, _ in model.named_modules():
-            if "table" in name:
-                table_fqns.append(name.split(".")[-1])
+
+        for module in model.modules():
+            if isinstance(module, QuantEmbeddingBagCollection):
+                for table in module.embedding_bags:
+                    table_fqns.append(table)
 
         # Default table wise constraints
         constraints = {}
@@ -479,7 +545,7 @@ def shard_quant_model(
 
     model = _shard_modules(
         module=model,
-        device=torch.device("meta"),
+        device=torch.device(sharding_device),
         plan=model_plan,
         env=trec_dist.ShardingEnv.from_local(
             world_size,
