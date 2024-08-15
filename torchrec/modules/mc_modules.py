@@ -10,6 +10,7 @@
 #!/usr/bin/env python3
 
 import abc
+from logging import getLogger, Logger
 from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import torch
@@ -18,6 +19,7 @@ from torch import nn
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
+
 try:
     from torchrec.sparse.jagged_tensor import ComputeJTDictToKJT
 except ImportError:
@@ -25,6 +27,8 @@ except ImportError:
     torch._C._log_api_usage_once(
         "ImportError ComputeJTDictToKJT, ignoring, but possible incompatiblity with torch.package"
     )
+
+logger: Logger = getLogger(__name__)
 
 
 @torch.fx.wrap
@@ -786,7 +790,7 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
 
 class MCHManagedCollisionModule(ManagedCollisionModule):
     """
-    ZCH / MCH managed collision module
+    ZCH managed collision module
 
     Args:
         zch_size (int): range of output ids, within [output_size_offset, output_size_offset + zch_size - 1)
@@ -795,8 +799,8 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         eviction_interval (int): interval of eviction policy is triggered
         input_hash_size (int): input feature id range, will be passed to input_hash_func as second arg
         input_hash_func (Optional[Callable]): function used to generate hashes for input features.  This function is typically used to drive uniform distribution over range same or greater than input data
-        mch_size (Optional[int]): size of residual output (ie. legacy MCH), experimental feature.  Ids are internally shifted by output_size_offset + zch_output_range
-        mch_hash_func (Optional[Callable]): function used to generate hashes for residual feature. will hash down to mch_size.
+        mch_size (Optional[int]): DEPRECIATED - size of residual output (ie. legacy MCH), experimental feature.  Ids are internally shifted by output_size_offset + zch_output_range
+        mch_hash_func (Optional[Callable]): DEPRECIATED - function used to generate hashes for residual feature. will hash down to mch_size.
         output_global_offset (int): offset of the output id for output range, typically only used in sharding applications.
     """
 
@@ -808,26 +812,24 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         eviction_interval: int,
         input_hash_size: int = (2**63) - 1,
         input_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
-        mch_size: Optional[int] = None,  # experimental
+        mch_size: Optional[int] = None,
         mch_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
         name: Optional[str] = None,
         output_global_offset: int = 0,  # typically not provided by user
     ) -> None:
         super().__init__(device)
 
+        if mch_size is not None or mch_hash_func is not None:
+            logger.warning(
+                "co-locating a hash table for missing ids is depreciated (ie. mch_size, mch_hash_func), values will be ignored"
+            )
+
         self._name = name
         self._input_history_buffer_size: int = -1
         self._input_hash_size = input_hash_size
         self._zch_size: int = zch_size
         assert self._zch_size > 0, "zch_size must be > 0"
-        self._mch_size: int = 0
-        if mch_size is not None:
-            self._mch_size = mch_size
-            assert (
-                mch_hash_func is not None
-            ), "mch_hash_func must be provided if mch_size is provided"
         self._output_global_offset: int = output_global_offset
-        self._mch_hash_func = mch_hash_func
         self._input_hash_func = input_hash_func
 
         self._eviction_interval = eviction_interval
@@ -860,7 +862,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             ),
         )
         self.register_buffer(
-            "_zch_slots",
+            "_mch_slots",
             torch.tensor(
                 [(self._zch_size - 1)],
                 dtype=torch.int64,
@@ -1158,18 +1160,8 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             remapped_ids[matching_indices] = self._mch_remapped_ids_mapping[
                 searched_indices[matching_indices]
             ]
-            # select non-matching values
-
-            if self._mch_size:
-                non_matching_values = values[~matching_indices]
-                # pyre-ignore [29]
-                hashed_non_matching = self._mch_hash_func(
-                    non_matching_values, self._mch_size
-                ).add(self._zch_size)
-                # offset hash ids to their starting range
-                remapped_ids[~matching_indices] = hashed_non_matching
-            else:
-                remapped_ids[~matching_indices] = self._zch_size - 1
+            # default embedding for non-matching ids
+            remapped_ids[~matching_indices] = self._zch_size - 1
 
             remapped_features[name] = JaggedTensor(
                 values=remapped_ids,
@@ -1195,13 +1187,13 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         return self.remap(features)
 
     def output_size(self) -> int:
-        return self._zch_size + self._mch_size
+        return self._zch_size
 
     def input_size(self) -> int:
         return self._input_hash_size
 
     def open_slots(self) -> torch.Tensor:
-        return self._zch_slots - torch.searchsorted(
+        return self._mch_slots - torch.searchsorted(
             self._mch_sorted_raw_ids, self._delimiter
         )
 
@@ -1219,10 +1211,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         device: Optional[torch.device] = None,
     ) -> "MCHManagedCollisionModule":
 
-        new_output_size = output_id_range[1] - output_id_range[0]
-
-        new_zch_size = int(self._zch_size * (new_output_size / self.output_size()))
-        new_mch_size = new_output_size - new_zch_size
+        new_zch_size = output_id_range[1] - output_id_range[0]
 
         return type(self)(
             name=self._name,
@@ -1232,7 +1221,5 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             eviction_interval=self._eviction_interval,
             input_hash_size=self._input_hash_size,
             input_hash_func=self._input_hash_func,
-            mch_size=new_mch_size if new_mch_size > 0 else None,
-            mch_hash_func=self._mch_hash_func,
             output_global_offset=output_id_range[0],
         )
