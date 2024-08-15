@@ -238,7 +238,7 @@ class TestKeyedOptimizer(unittest.TestCase):
         bytesIO = io.BytesIO()
         torch.save(opt, bytesIO)
         bytesIO.seek(0)
-        reload_opt = torch.load(bytesIO, weights_only=True)
+        reload_opt = torch.load(bytesIO, weights_only=False)
 
         for k in reload_opt.state_dict():
             self.assertEqual(
