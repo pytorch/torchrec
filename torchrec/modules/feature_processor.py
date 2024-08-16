@@ -220,6 +220,8 @@ class PositionWeightedProcessor(BaseGroupedFeatureProcessor):
             length_per_key = features.length_per_key()
             weights = features.weights_or_none()
             batch_size = features.stride()
+            vbe = features.variable_stride_per_key()
+            stride_per_key_per_rank = features.stride_per_key_per_rank()
 
             has_fp_id_list_feature = False
             has_normal_id_list_feature = False
@@ -265,6 +267,9 @@ class PositionWeightedProcessor(BaseGroupedFeatureProcessor):
                         length_per_key=length_per_key,
                         offset_per_key=features.offset_per_key(),
                         index_per_key=features._key_indices(),
+                        stride_per_key_per_rank=(
+                            stride_per_key_per_rank if vbe else None
+                        ),
                     )
                 # for unsharded or sharded non-pipeling
                 else:
@@ -274,6 +279,7 @@ class PositionWeightedProcessor(BaseGroupedFeatureProcessor):
                     processed_features_lengths: List[torch.Tensor] = []
                     processed_features_values: List[torch.Tensor] = []
                     processed_features_weights: List[torch.Tensor] = []
+                    processed_features_batch_sizes = []
                     for feature_index, feature_name in enumerate(feature_names):
                         if feature_name in self.max_feature_lengths:
                             feature_value = feature_values[feature_index]
@@ -287,11 +293,18 @@ class PositionWeightedProcessor(BaseGroupedFeatureProcessor):
                             processed_features_lengths.append(feature_length)
                             processed_features_values.append(feature_value)
                             processed_features_weights.append(processed_weight)
+                            if vbe:
+                                processed_features_batch_sizes.append(
+                                    stride_per_key_per_rank[feature_index]
+                                )
                     fp_features = KeyedJaggedTensor.from_lengths_sync(
                         keys=processed_features_names,
                         values=torch.cat(processed_features_values),
                         lengths=torch.cat(processed_features_lengths),
                         weights=torch.cat(processed_features_weights),
+                        stride_per_key_per_rank=(
+                            processed_features_batch_sizes if vbe else None
+                        ),
                     )
                 return fp_features
             # normal id_list feature

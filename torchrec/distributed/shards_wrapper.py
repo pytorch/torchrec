@@ -27,7 +27,9 @@ from torch.distributed.checkpoint.planner import (
 aten = torch.ops.aten  # pyre-ignore[5]
 
 
-class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new__
+# pyre-fixme[13]: Attribute `_local_shards` is never initialized.
+# pyre-fixme[13]: Attribute `_storage_meta` is never initialized.
+class LocalShardsWrapper(torch.Tensor):
     """
     A wrapper class to hold local shards of a DTensor.
     This class is used largely for checkpointing purposes and implicity subtypes

@@ -13,10 +13,13 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+import fbgemm_gpu.sparse_ops  # noqa: F401
+
 import torch
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.datasets.random import RandomRecDataset
 from torchrec.datasets.utils import Batch
+from torchrec.distributed.global_settings import set_propogate_device
 from torchrec.fx.tracer import Tracer
 from torchrec.inference.modules import (
     PredictFactory,
@@ -48,6 +51,10 @@ def create_training_batch(args) -> Batch:
 
 @dataclass
 class DLRMModelConfig:
+    """
+    Model Config for specifying DLRM model parameters.
+    """
+
     dense_arch_layer_sizes: List[int]
     dense_in_features: int
     embedding_dim: int
@@ -91,7 +98,7 @@ class DLRMPredictModule(PredictModule):
             over_arch_layer_sizes=over_arch_layer_sizes,
             dense_device=dense_device,
         )
-        super().__init__(module)
+        super().__init__(module, dense_device)
 
         self.id_list_features_keys: List[str] = id_list_features_keys
 
@@ -136,12 +143,20 @@ class DLRMPredictModule(PredictModule):
 
 
 class DLRMPredictFactory(PredictFactory):
+    """
+    Factory Class for generating TorchScript DLRM Model for C++ inference.
+
+    Args:
+        model_config (DLRMModelConfig): model config
+
+    """
+
     def __init__(self, model_config: DLRMModelConfig) -> None:
         self.model_config = model_config
 
-    def create_predict_module(self, world_size: int) -> torch.nn.Module:
+    def create_predict_module(self, world_size: int, device: str) -> torch.nn.Module:
         logging.basicConfig(level=logging.INFO)
-        device = torch.device("cuda:0")
+        set_propogate_device(True)
 
         eb_configs = [
             EmbeddingBagConfig(
@@ -169,21 +184,20 @@ class DLRMPredictFactory(PredictFactory):
             dense_device=device,
         )
 
-        table_fqns = []
-        for name, _ in module.named_modules():
-            if "t_" in name:
-                table_fqns.append(name.split(".")[-1])
-
         quant_model = quantize_inference_model(module)
-        sharded_model, _ = shard_quant_model(quant_model)
+        sharded_model, _ = shard_quant_model(
+            quant_model, compute_device=device, sharding_device=device
+        )
 
         batch = {}
-        batch["float_features"] = self.model_config.sample_input.dense_features.cuda()
+        batch["float_features"] = self.model_config.sample_input.dense_features.to(
+            device
+        )
         batch["id_list_features.lengths"] = (
-            self.model_config.sample_input.sparse_features.lengths().cuda()
+            self.model_config.sample_input.sparse_features.lengths().to(device)
         )
         batch["id_list_features.values"] = (
-            self.model_config.sample_input.sparse_features.values().cuda()
+            self.model_config.sample_input.sparse_features.values().to(device)
         )
 
         sharded_model(batch)

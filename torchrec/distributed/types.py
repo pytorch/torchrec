@@ -44,7 +44,8 @@ try:
     # other metaclasses (i.e. AwaitableMeta) for customized
     # behaviors, as Generic is non-trival metaclass in
     # python 3.6 and below
-    from typing import GenericMeta  # pyre-ignore: python 3.6
+    # pyre-fixme[21]: Could not find name `GenericMeta` in `typing` (stubbed).
+    from typing import GenericMeta
 except ImportError:
     # In python 3.7+, GenericMeta doesn't exist as it's no
     # longer a non-trival metaclass,
