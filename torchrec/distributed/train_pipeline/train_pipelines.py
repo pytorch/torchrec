@@ -248,6 +248,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
                 torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = (
                     True
                 )
+                torch._dynamo.config.skip_torchrec = False
 
                 # Importing only before compilation to not slow-done train_pipelines import
                 torch.ops.import_module("fbgemm_gpu.sparse_ops")
