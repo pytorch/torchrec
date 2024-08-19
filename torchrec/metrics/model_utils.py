@@ -7,10 +7,14 @@
 
 # pyre-strict
 
+import logging
 from typing import Dict, List, Optional, Tuple
 
 import torch
 from torchrec.metrics.rec_metric import RecTaskInfo
+
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def session_ids_to_tensor(
@@ -64,13 +68,48 @@ def parse_model_outputs(
 
     if not is_empty_signals(labels, predictions, weights):
         if labels.dim() == predictions.dim():
-            assert (torch.numel(labels) == torch.numel(predictions)) and (
-                torch.numel(labels) == torch.numel(weights)
-            ), (
-                "Expect the same number of elements in labels, predictions, and weights. "
-                f"Instead got {torch.numel(labels)}, {torch.numel(predictions)}, "
-                f"{torch.numel(weights)}"
+            # For vector valued label and prediction we should have shapes
+            # labels.size() == (batch_size, dim_vector_valued_label)
+            # predictions.size() == (batch_size, dim_vector_valued_prediction)
+            # weights.size() == (batch_size,)
+            is_vector_valued_label_and_prediction = (
+                (labels.dim() == 2)
+                and (weights.dim() == 1)
+                and (labels.size()[0] == predictions.size()[0])
+                and (labels.size()[0] == weights.size()[0])
             )
+            if is_vector_valued_label_and_prediction:
+                logger.warning(
+                    f"""
+                    Vector valued labels and predictions are provided. 
+
+                    For vector valued label and prediction we should have shapes 
+                    labels.shape: (batch_size, dim_vector_valued_label)
+                    predictions.shape: (batch_size, dim_vector_valued_prediction)
+                    weights.shape: (batch_size,)
+
+                    The provided labels, predictions and weights comply with the conditions for vector valued labels and predictions. 
+                    These conditions are: 
+                    1. labels.dim() == 2
+                    2. predictions.dim() == 2
+                    3. weights.dim() == 1
+                    4. labels.size()[0] == predictions.size()[0]
+                    5. labels.size()[0] == weights.size()[0]
+
+                    The shapes of labels, predictions and weights are: 
+                    labels.shape == {labels.shape}, 
+                    predictions.shape == {predictions.shape}, 
+                    weights.shape == {weights.shape} 
+                    """
+                )
+            else:
+                assert (torch.numel(labels) == torch.numel(predictions)) and (
+                    torch.numel(labels) == torch.numel(weights)
+                ), (
+                    "Expect the same number of elements in labels, predictions, and weights. "
+                    f"Instead got {torch.numel(labels)}, {torch.numel(predictions)}, "
+                    f"{torch.numel(weights)}"
+                )
         else:  # For multiclass models, labels.size() = (batch_size), and predictions.size() = (batch_size, number_of_classes)
             assert torch.numel(labels) == torch.numel(predictions) / predictions.size()[
                 -1
