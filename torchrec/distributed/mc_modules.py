@@ -258,6 +258,7 @@ class ShardedManagedCollisionCollection(
 
         self._mc_module_name_shard_metadata: DefaultDict[str, List[int]] = defaultdict()
         self._feature_to_offset: Dict[str, int] = {}
+        self._table_to_offset: Dict[str, int] = {}
 
         for sharding in self._embedding_shardings:
             assert isinstance(sharding, BaseRwEmbeddingSharding)
@@ -274,15 +275,11 @@ class ShardedManagedCollisionCollection(
 
                     mc_module = module._managed_collision_modules[table.name]
 
-                    # TODO:
-                    #  1) need to make TBE accept global indices for now force to local indices
-                    #  2) MCH is particularly nasty with a portion of each shard; ideally dont do this
-                    #  3) now create a feature_to_offset and pass into awaitable callbacks to act as raw id adder
                     self._managed_collision_modules[table.name] = (
                         mc_module.rebuild_with_output_id_range(
                             output_id_range=(
-                                0,  # new_min_output_id,
-                                new_range_size,  # new_min_output_id + new_range_size,
+                                new_min_output_id,
+                                new_min_output_id + new_range_size,
                             ),
                             device=self._device,
                         )
@@ -323,6 +320,7 @@ class ShardedManagedCollisionCollection(
                     )
                     for feature in table.feature_names:
                         self._feature_to_offset[feature] = new_min_output_id
+                    self._table_to_offset[table.name] = new_min_output_id
 
     def _create_input_dists(
         self,
@@ -346,6 +344,7 @@ class ShardedManagedCollisionCollection(
                 is_sequence=True,
                 has_feature_processor=sharding._has_feature_processor,
                 need_pos=False,
+                keep_original_indices=True,
             )
             self._input_dists.append(input_dist)
             feature_names.extend(sharding.feature_names())
@@ -443,6 +442,14 @@ class ShardedManagedCollisionCollection(
             remapped_ids_ret.append(new_kjt.values().view(-1, 1))
         return remapped_ids_ret
 
+    def global_to_local_index(
+        self,
+        feature_dict: Dict[str, JaggedTensor],
+    ) -> Dict[str, JaggedTensor]:
+        for feature, jt in feature_dict.items():
+            jt._values = jt.values() - self._feature_to_offset[feature]
+        return feature_dict
+
     def compute(
         self,
         ctx: ManagedCollisionCollectionContext,
@@ -466,10 +473,10 @@ class ShardedManagedCollisionCollection(
                     mc_input[feature] = features_dict[feature]
                 mc_input = mc_module.profile(mc_input)
                 mc_input = mc_module.remap(mc_input)
+                mc_input = self.global_to_local_index(mc_input)
                 output.update(mc_input)
 
             remapped_kjts.append(KeyedJaggedTensor.from_jt_dict(output))
-
         return KJTList(remapped_kjts)
 
     def evict(self) -> Dict[str, Optional[torch.Tensor]]:
@@ -478,7 +485,13 @@ class ShardedManagedCollisionCollection(
             table,
             managed_collision_module,
         ) in self._managed_collision_modules.items():
-            evictions[table] = managed_collision_module.evict()
+            global_indices_to_evict = managed_collision_module.evict()
+            local_indices_to_evict = None
+            if global_indices_to_evict is not None:
+                local_indices_to_evict = (
+                    global_indices_to_evict - self._table_to_offset[table]
+                )
+            evictions[table] = local_indices_to_evict
         return evictions
 
     def open_slots(self) -> Dict[str, torch.Tensor]:
