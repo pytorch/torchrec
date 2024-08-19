@@ -261,7 +261,7 @@ class ManagedCollisionCollection(nn.Module):
         }
         self._table_to_features = {}
 
-        self._compute_jt_dict_to_kjt = ComputeJTDictToKJT()
+        self._compute_jt_dict_to_kjt: torch.nn.Module = ComputeJTDictToKJT()
         for feature, table in self._feature_to_table.items():
             if table not in self._table_to_features:
                 self._table_to_features[table] = []
@@ -296,9 +296,7 @@ class ManagedCollisionCollection(nn.Module):
             mc_input: Dict[str, JaggedTensor] = {}
             for feature in feature_list:
                 mc_input[feature] = features_dict[feature]
-            mc_input = mc_module.preprocess(mc_input)
-            mc_input = mc_module.profile(mc_input)
-            mc_input = mc_module.remap(mc_input)
+            mc_input = mc_module(mc_input)
             output.update(mc_input)
         return self._compute_jt_dict_to_kjt(output)
 
@@ -826,6 +824,40 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
         return evicted_indices, selected_new_indices
 
 
+@torch.fx.wrap
+def _mch_remap(
+    features: Dict[str, JaggedTensor],
+    mch_sorted_raw_ids: torch.Tensor,
+    mch_remapped_ids_mapping: torch.Tensor,
+    zch_index: int,
+) -> Dict[str, JaggedTensor]:
+    """Remap feature ids to zch ids, TODO: create a custom kernel"""
+    remapped_features: Dict[str, JaggedTensor] = {}
+    for name, feature in features.items():
+        values = feature.values()
+        remapped_ids = torch.empty_like(values)
+
+        # compute overlap between incoming IDs and remapping table
+        searched_indices = torch.searchsorted(mch_sorted_raw_ids[:-1], values)
+        retrieved_indices = mch_sorted_raw_ids[searched_indices]
+        # identify matching inputs IDs
+        matching_indices = retrieved_indices == values
+        # update output with remapped matching IDs
+        remapped_ids[matching_indices] = mch_remapped_ids_mapping[
+            searched_indices[matching_indices]
+        ]
+        # default embedding for non-matching ids
+        remapped_ids[~matching_indices] = zch_index
+
+        remapped_features[name] = JaggedTensor(
+            values=remapped_ids,
+            lengths=feature.lengths(),
+            offsets=feature.offsets(),
+            weights=feature.weights_or_none(),
+        )
+    return remapped_features
+
+
 class MCHManagedCollisionModule(ManagedCollisionModule):
     """
     ZCH managed collision module
@@ -971,23 +1003,11 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                         dtype=torch.int64,
                         device=self.device,
                     ),
-                    # not checkpointed
                     persistent=False,
                 )
                 self._history_metadata[metadata_name] = getattr(self, buffer_name)
 
-    @torch.no_grad()
-    def preprocess(
-        self,
-        features: Dict[str, JaggedTensor],
-    ) -> Dict[str, JaggedTensor]:
-        return apply_mc_method_to_jt_dict(
-            self,
-            "_preprocess",
-            features,
-        )
-
-    def _preprocess(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+    def preprocess(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
         if self._input_hash_func is None:
             return features
         preprocessed_features: Dict[str, JaggedTensor] = {}
@@ -1121,18 +1141,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         # reset buffer offset
         self._current_history_buffer_offset = 0
 
-    @torch.no_grad()
     def profile(
-        self,
-        features: Dict[str, JaggedTensor],
-    ) -> Dict[str, JaggedTensor]:
-        return apply_mc_method_to_jt_dict(
-            self,
-            "_profile",
-            features,
-        )
-
-    def _profile(
         self,
         features: Dict[str, JaggedTensor],
     ) -> Dict[str, JaggedTensor]:
@@ -1179,47 +1188,14 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
         return features
 
-    @torch.no_grad()
-    def remap(
-        self,
-        features: Dict[str, JaggedTensor],
-    ) -> Dict[str, JaggedTensor]:
-        return apply_mc_method_to_jt_dict(
-            self,
-            "_remap",
+    def remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+        return _mch_remap(
             features,
+            self._mch_sorted_raw_ids,
+            self._mch_remapped_ids_mapping,
+            self._output_global_offset + self._zch_size - 1,
         )
 
-    def _remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
-
-        remapped_features: Dict[str, JaggedTensor] = {}
-        for name, feature in features.items():
-            values = feature.values()
-            remapped_ids = torch.empty_like(values)
-
-            # compute overlap between incoming IDs and remapping table
-            searched_indices = torch.searchsorted(self._mch_sorted_raw_ids[:-1], values)
-            retrieved_indices = self._mch_sorted_raw_ids[searched_indices]
-            # identify matching inputs IDs
-            matching_indices = retrieved_indices == values
-            # update output with remapped matching IDs
-            remapped_ids[matching_indices] = self._mch_remapped_ids_mapping[
-                searched_indices[matching_indices]
-            ]
-            # default embedding for non-matching ids
-            remapped_ids[~matching_indices] = (
-                self._output_global_offset + self._zch_size - 1
-            )
-
-            remapped_features[name] = JaggedTensor(
-                values=remapped_ids,
-                lengths=feature.lengths(),
-                offsets=feature.offsets(),
-                weights=feature.weights_or_none(),
-            )
-        return remapped_features
-
-    @torch.no_grad()
     def forward(
         self,
         features: Dict[str, JaggedTensor],
@@ -1231,6 +1207,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             Dict[str, JaggedTensor]: modified JT
         """
 
+        features = self.preprocess(features)
         features = self.profile(features)
         return self.remap(features)
 

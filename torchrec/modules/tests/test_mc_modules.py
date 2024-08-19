@@ -340,10 +340,22 @@ class TestEvictionPolicy(unittest.TestCase):
             mc_module.profile(features)
 
         _mch_sorted_raw_ids = mc_module._mch_sorted_raw_ids
-        print(f"henry {mc_module._mch_counts}")
         self.assertEqual(
             sorted(_mch_sorted_raw_ids.tolist()),
             [2, 3, 4, 5, torch.iinfo(torch.int64).max],
         )
         # _mch_counts is like
         # [80, 180, 160, 800, 9223372036854775807]
+
+    def test_fx_jit_script_not_training(self) -> None:
+        model = MCHManagedCollisionModule(
+            zch_size=5,
+            device=torch.device("cpu"),
+            eviction_policy=LFU_EvictionPolicy(),
+            eviction_interval=1,
+            input_hash_size=100,
+        )
+
+        model.train(False)
+        gm = torch.fx.symbolic_trace(model)
+        torch.jit.script(gm)
