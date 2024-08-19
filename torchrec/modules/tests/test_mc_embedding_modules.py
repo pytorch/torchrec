@@ -9,9 +9,10 @@
 
 import unittest
 from copy import deepcopy
-from typing import cast, Dict, List, Optional
+from typing import cast, Dict
 
 import torch
+from torchrec.fx import symbolic_trace
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
@@ -27,23 +28,11 @@ from torchrec.modules.mc_modules import (
     ManagedCollisionModule,
     MCHManagedCollisionModule,
 )
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
-
-
-class Tracer(torch.fx.Tracer):
-    _leaf_module_names: List[str]
-
-    def __init__(self, leaf_module_names: Optional[List[str]] = None) -> None:
-        super().__init__()
-        self._leaf_module_names = leaf_module_names or []
-
-    def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        if (
-            type(m).__name__ in self._leaf_module_names
-            or module_qualified_name in self._leaf_module_names
-        ):
-            return True
-        return super().is_leaf_module(m, module_qualified_name)
+from torchrec.sparse.jagged_tensor import (
+    ComputeJTDictToKJT,
+    KeyedJaggedTensor,
+    KeyedTensor,
+)
 
 
 class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
@@ -414,15 +403,5 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
             # pyre-ignore[6]
             embedding_configs=embedding_configs,
         )
-
-        mcc = ManagedCollisionCollection(
-            managed_collision_modules=mc_modules,
-            # pyre-ignore[6]
-            embedding_configs=embedding_configs,
-        )
-        trec_tracer = Tracer(["ComputeJTDictToKJT"])
-        graph: torch.fx.Graph = trec_tracer.trace(mcc)
-        gm: torch.fx.GraphModule = torch.fx.GraphModule(mcc, graph)
-        gm.print_readable()
-
-        # TODO: since this is unsharded module, also check torch.jit.script
+        mcc.train(False)
+        symbolic_trace(mcc, leaf_modules=[ComputeJTDictToKJT.__name__])
