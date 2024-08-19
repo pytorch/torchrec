@@ -122,11 +122,41 @@ class ManagedCollisionModule(nn.Module):
     def __init__(
         self,
         device: torch.device,
+        output_segments: List[int],
     ) -> None:
         # slots is the number of rows to map from global id to
         # for example, if we want to manage 1000 ids to 10 slots
         super().__init__()
         self._device = device
+
+        # limited to max of 1024 RW shards
+        assert (
+            len(output_segments) <= 1025
+        ), "ManagedCollisionModule limited to 1024 shards"
+        self.register_buffer(
+            "_output_segments_tensor",
+            torch.tensor(
+                output_segments + [-1] * (1025 - len(output_segments)),
+                dtype=torch.int64,
+                device=self.device,
+            ),
+        )
+        self.register_buffer(
+            "_current_iter_tensor",
+            torch.tensor(
+                [0],
+                dtype=torch.int64,
+                device=self.device,
+            ),
+        )
+
+        def _load_state_dict_post_hook(
+            module: "ManagedCollisionModule",
+            incompatible_keys: torch.nn.modules.module._IncompatibleKeys,
+        ) -> None:
+            module.validate_state()
+
+        self.register_load_state_dict_post_hook(_load_state_dict_post_hook)
 
     @abc.abstractmethod
     def preprocess(
@@ -178,6 +208,13 @@ class ManagedCollisionModule(nn.Module):
         pass
 
     @abc.abstractmethod
+    def validate_state(self) -> None:
+        """
+        Validates that the state of the module after loading from checkpoint
+        """
+        pass
+
+    @abc.abstractmethod
     def open_slots(self) -> torch.Tensor:
         """
         Returns number of unused slots in managed collision module
@@ -188,10 +225,11 @@ class ManagedCollisionModule(nn.Module):
     def rebuild_with_output_id_range(
         self,
         output_id_range: Tuple[int, int],
+        output_segments: List[int],
         device: Optional[torch.device] = None,
     ) -> "ManagedCollisionModule":
         """
-        Used for creating local MC modules for RW sharding, hack for now
+        Used for creating local MC modules for RW sharding
         """
         pass
 
@@ -816,14 +854,19 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         mch_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
         name: Optional[str] = None,
         output_global_offset: int = 0,  # typically not provided by user
+        output_segments: Optional[List[int]] = None,  # typically not provided by user
     ) -> None:
-        super().__init__(device)
-
+        if output_segments is None:
+            output_segments = [output_global_offset, output_global_offset + zch_size]
+        super().__init__(
+            device=device,
+            output_segments=output_segments,
+        )
         if mch_size is not None or mch_hash_func is not None:
             logger.warning(
                 "co-locating a hash table for missing ids is depreciated (ie. mch_size, mch_hash_func), values will be ignored"
             )
-
+        self._init_output_segments_tensor: torch.Tensor = self._output_segments_tensor
         self._name = name
         self._input_history_buffer_size: int = -1
         self._input_hash_size = input_hash_size
@@ -837,9 +880,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self._eviction_policy = eviction_policy
 
         self._current_iter: int = -1
-        self._current_iter_tensor = torch.nn.Parameter(
-            torch.zeros(1, dtype=torch.int32, device=self.device), requires_grad=False
-        )
         self._init_buffers()
 
         ## ------ history info ------
@@ -973,9 +1013,10 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
     @torch.no_grad()
     def _sort_mch_buffers(self) -> None:
-        mch_sorted_raw_ids = self._mch_sorted_raw_ids
-        argsorted_sorted_raw_ids = torch.argsort(mch_sorted_raw_ids, stable=True)
-        mch_sorted_raw_ids.copy_(mch_sorted_raw_ids[argsorted_sorted_raw_ids])
+        argsorted_sorted_raw_ids = torch.argsort(self._mch_sorted_raw_ids, stable=True)
+        self._mch_sorted_raw_ids.copy_(
+            self._mch_sorted_raw_ids[argsorted_sorted_raw_ids]
+        )
         self._mch_remapped_ids_mapping.copy_(
             self._mch_remapped_ids_mapping[argsorted_sorted_raw_ids]
         )
@@ -1212,9 +1253,22 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         else:
             return None
 
+    def validate_state(self) -> None:
+        start = self._output_global_offset
+        end = start + self._zch_size
+        assert (
+            start in self._output_segments_tensor
+            and end in self._output_segments_tensor
+        ), f"shard within range [{start}, {end}] cannot be built out of segements {self._output_segments_tensor}"
+
+        # update output segments and resort
+        self._output_segments_tensor = self._init_output_segments_tensor
+        self._sort_mch_buffers()
+
     def rebuild_with_output_id_range(
         self,
         output_id_range: Tuple[int, int],
+        output_segments: List[int],
         device: Optional[torch.device] = None,
     ) -> "MCHManagedCollisionModule":
 
@@ -1229,4 +1283,5 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             input_hash_size=self._input_hash_size,
             input_hash_func=self._input_hash_func,
             output_global_offset=output_id_range[0],
+            output_segments=output_segments,
         )
