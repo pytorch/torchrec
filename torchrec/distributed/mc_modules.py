@@ -9,7 +9,6 @@
 
 import copy
 from collections import defaultdict, OrderedDict
-from dataclasses import dataclass
 from typing import Any, DefaultDict, Dict, Iterator, List, Optional, Type
 
 import torch
@@ -170,49 +169,42 @@ class ShardedManagedCollisionCollection(
 
     def _initialize_torch_state(self) -> None:
         self._model_parallel_mc_buffer_name_to_sharded_tensor = OrderedDict()
-        for table_name, mc_module in self._managed_collision_modules.items():
-            assert (
-                self._table_name_to_parameter_sharding[table_name].sharding_type
-                == ShardingType.ROW_WISE.value
-            )
-            mc_module_state_dict = mc_module.state_dict(prefix=table_name + ".")
-            shardable_buffers = set.intersection(
-                {name for name, _ in mc_module.named_buffers(prefix=table_name)},
-                set(mc_module_state_dict.keys()),
-            )
+        shardable_params = set(
+            self.sharded_parameter_names(prefix="_managed_collision_modules")
+        )
+
+        for fqn, tensor in self.state_dict().items():
+            if fqn not in shardable_params:
+                continue
+            table_name = fqn.split(".")[
+                1
+            ]  #  "_managed_collision_modules.<table_name>.<param_name>"
             shard_offset, shard_size, global_size = self._mc_module_name_shard_metadata[
                 table_name
             ]
-            for name, tensor in mc_module_state_dict.items():
+            sharded_sizes = list(tensor.shape)
+            sharded_sizes[0] = shard_size
+            shard_offsets = [0] * len(sharded_sizes)
+            shard_offsets[0] = shard_offset
+            global_sizes = list(tensor.shape)
+            global_sizes[0] = global_size
 
-                if name not in shardable_buffers:
-                    continue
-
-                sharded_sizes = list(tensor.shape)
-                sharded_sizes[0] = shard_size
-                shard_offsets = [0] * len(sharded_sizes)
-                shard_offsets[0] = shard_offset
-                global_sizes = list(tensor.shape)
-                global_sizes[0] = global_size
-                self._model_parallel_mc_buffer_name_to_sharded_tensor[name] = (
-                    ShardedTensor._init_from_local_shards(
-                        [
-                            Shard(
-                                tensor=tensor,
-                                metadata=ShardMetadata(
-                                    shard_offsets=shard_offsets,
-                                    shard_sizes=sharded_sizes,
-                                    placement=(
-                                        f"rank:{self._env.rank}/cuda:"
-                                        f"{get_local_rank(self._env.world_size, self._env.rank)}"
-                                    ),
-                                ),
-                            )
-                        ],
-                        torch.Size(global_sizes),
-                        process_group=self._env.process_group,
-                    )
+            self._model_parallel_mc_buffer_name_to_sharded_tensor[fqn] = (
+                ShardedTensor._init_from_local_shards(
+                    [
+                        Shard(
+                            tensor=tensor,
+                            metadata=ShardMetadata(
+                                shard_offsets=shard_offsets,
+                                shard_sizes=sharded_sizes,
+                                placement=(f"rank:{self._env.rank}/{tensor.device}"),
+                            ),
+                        )
+                    ],
+                    torch.Size(global_sizes),
+                    process_group=self._env.process_group,
                 )
+            )
 
         def _post_state_dict_hook(
             module: ShardedManagedCollisionCollection,
@@ -224,7 +216,7 @@ class ShardedManagedCollisionCollection(
                 mc_buffer_name,
                 sharded_tensor,
             ) in module._model_parallel_mc_buffer_name_to_sharded_tensor.items():
-                destination_key = f"{prefix}_managed_collision_modules.{mc_buffer_name}"
+                destination_key = f"{prefix}{mc_buffer_name}"
                 destination[destination_key] = sharded_tensor
 
         def _load_state_dict_pre_hook(
@@ -237,7 +229,7 @@ class ShardedManagedCollisionCollection(
                 mc_buffer_name,
                 _sharded_tensor,
             ) in module._model_parallel_mc_buffer_name_to_sharded_tensor.items():
-                key = f"{prefix}_managed_collision_modules.{mc_buffer_name}"
+                key = f"{prefix}{mc_buffer_name}"
                 if key in state_dict:
                     if isinstance(state_dict[key], ShardedTensor):
                         local_shards = state_dict[key].local_shards()
@@ -272,7 +264,11 @@ class ShardedManagedCollisionCollection(
                     new_min_output_id = table.local_metadata.shard_offsets[0]
                     # pyre-ignore [16]
                     new_range_size = table.local_metadata.shard_sizes[0]
-
+                    output_segments = [
+                        x.shard_offsets[0]
+                        # pyre-ignore [16]
+                        for x in table.global_metadata.shards_metadata
+                    ] + [table.num_embeddings]
                     mc_module = module._managed_collision_modules[table.name]
 
                     self._managed_collision_modules[table.name] = (
@@ -281,6 +277,7 @@ class ShardedManagedCollisionCollection(
                                 new_min_output_id,
                                 new_min_output_id + new_range_size,
                             ),
+                            output_segments=output_segments,
                             device=self._device,
                         )
                     )
@@ -535,9 +532,16 @@ class ShardedManagedCollisionCollection(
         return ManagedCollisionCollectionContext(sharding_contexts=[])
 
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
-        # TODO (bwen): this does not include `_hash_zch_identities`
-        for fqn, _ in self.named_buffers():
-            yield append_prefix(prefix, fqn)
+        for name, module in self._managed_collision_modules.items():
+            module_prefix = append_prefix(prefix, name)
+            for name, _ in module.named_buffers():
+                if name in ["_output_segments_tensor", "_current_iter_tensor"]:
+                    continue
+                if name in module._non_persistent_buffers_set:
+                    continue
+                yield append_prefix(module_prefix, name)
+            for name, _ in module.named_parameters():
+                yield append_prefix(module_prefix, name)
 
 
 class ManagedCollisionCollectionSharder(
