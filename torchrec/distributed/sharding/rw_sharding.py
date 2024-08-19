@@ -282,6 +282,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
         is_sequence: bool = False,
         has_feature_processor: bool = False,
         need_pos: bool = False,
+        keep_original_indices: bool = False,
     ) -> None:
         super().__init__()
         self._world_size: int = pg.size()
@@ -306,6 +307,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
         self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
+        self._keep_original_indices = keep_original_indices
 
     def forward(
         self,
@@ -336,6 +338,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
                 if sparse_features.weights_or_none() is None
                 else self._need_pos
             ),
+            keep_original_indices=self._keep_original_indices,
         )
 
         return self._dist(bucketized_features)

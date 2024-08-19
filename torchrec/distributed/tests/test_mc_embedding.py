@@ -160,6 +160,8 @@ def _test_sharding_and_remapping(  # noqa C901
     world_size: int,
     kjt_input_per_rank: List[KeyedJaggedTensor],
     kjt_out_per_iter_per_rank: List[List[KeyedJaggedTensor]],
+    initial_state_per_rank: List[Dict[str, torch.Tensor]],
+    final_state_per_rank: List[Dict[str, torch.Tensor]],
     sharder: ModuleSharder[nn.Module],
     backend: str,
     local_size: Optional[int] = None,
@@ -227,8 +229,16 @@ def _test_sharding_and_remapping(  # noqa C901
             ShardedManagedCollisionCollection,
         )
 
-        test_state_dict = sharded_sparse_arch.state_dict()
-        sharded_sparse_arch.load_state_dict(test_state_dict)
+        initial_state_dict = sharded_sparse_arch.state_dict()
+        for key, sharded_tensor in initial_state_dict.items():
+            postfix = ".".join(key.split(".")[-2:])
+            if postfix in initial_state_per_rank[ctx.rank]:
+                tensor = sharded_tensor.local_shards()[0].tensor.cpu()
+                assert torch.equal(
+                    tensor, initial_state_per_rank[ctx.rank][postfix]
+                ), f"initial state {key} on {ctx.rank} does not match, got {tensor}, expect {initial_state_per_rank[rank][postfix]}"
+
+        sharded_sparse_arch.load_state_dict(initial_state_dict)
 
         # sharded model
         # each rank gets a subbatch
@@ -236,6 +246,16 @@ def _test_sharding_and_remapping(  # noqa C901
         loss1.backward()
         loss2, remapped_ids2 = sharded_sparse_arch(kjt_input)
         loss2.backward()
+
+        final_state_dict = sharded_sparse_arch.state_dict()
+        for key, sharded_tensor in final_state_dict.items():
+            postfix = ".".join(key.split(".")[-2:])
+            if postfix in final_state_per_rank[ctx.rank]:
+                tensor = sharded_tensor.local_shards()[0].tensor.cpu()
+                assert torch.equal(
+                    tensor, final_state_per_rank[ctx.rank][postfix]
+                ), f"initial state {key} on {ctx.rank} does not match, got {tensor}, expect {initial_state_per_rank[rank][postfix]}"
+
         remapped_ids = [remapped_ids1, remapped_ids2]
         for key in kjt_input.keys():
             for i, kjt_out in enumerate(kjt_out_per_iter):
@@ -411,12 +431,59 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
             ]
         )
 
+        initial_state_per_rank = [
+            {
+                "table_0._mch_remapped_ids_mapping": torch.arange(8, dtype=torch.int64),
+                "table_1._mch_remapped_ids_mapping": torch.arange(
+                    16, dtype=torch.int64
+                ),
+            },
+            {
+                "table_0._mch_remapped_ids_mapping": torch.arange(
+                    start=8, end=16, dtype=torch.int64
+                ),
+                "table_1._mch_remapped_ids_mapping": torch.arange(
+                    start=16, end=32, dtype=torch.int64
+                ),
+            },
+        ]
+        max_int = torch.iinfo(torch.int64).max
+
+        final_state_per_rank = [
+            {
+                "table_0._mch_sorted_raw_ids": torch.LongTensor(
+                    [1000, 1001, 1002, 1004] + [max_int] * 4
+                ),
+                "table_1._mch_sorted_raw_ids": torch.LongTensor([max_int] * 16),
+                "table_0._mch_remapped_ids_mapping": torch.LongTensor(
+                    [3, 4, 5, 6, 0, 1, 2, 7]
+                ),
+                "table_1._mch_remapped_ids_mapping": torch.arange(
+                    16, dtype=torch.int64
+                ),
+            },
+            {
+                "table_0._mch_sorted_raw_ids": torch.LongTensor([2000] + [max_int] * 7),
+                "table_1._mch_sorted_raw_ids": torch.LongTensor(
+                    [2000, 2001, 2002, 2004] + [max_int] * 12
+                ),
+                "table_0._mch_remapped_ids_mapping": torch.LongTensor(
+                    [14, 8, 9, 10, 11, 12, 13, 15]
+                ),
+                "table_1._mch_remapped_ids_mapping": torch.LongTensor(
+                    [27, 29, 28, 30, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 31]
+                ),
+            },
+        ]
+
         self._run_multi_process_test(
             callable=_test_sharding_and_remapping,
             world_size=WORLD_SIZE,
             tables=embedding_config,
             kjt_input_per_rank=kjt_input_per_rank,
             kjt_out_per_iter_per_rank=kjt_out_per_iter_per_rank,
+            initial_state_per_rank=initial_state_per_rank,
+            final_state_per_rank=final_state_per_rank,
             sharder=ManagedCollisionEmbeddingCollectionSharder(),
             backend=backend,
         )

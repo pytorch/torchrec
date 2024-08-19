@@ -879,7 +879,12 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         )
         self.register_buffer(
             "_mch_remapped_ids_mapping",
-            torch.arange(self._zch_size, dtype=torch.int64, device=self.device),
+            torch.arange(
+                start=self._output_global_offset,
+                end=self._output_global_offset + self._zch_size,
+                dtype=torch.int64,
+                device=self.device,
+            ),
         )
 
         self._evicted_emb_indices: torch.Tensor = torch.empty((1,), device=self.device)
@@ -1161,7 +1166,9 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                 searched_indices[matching_indices]
             ]
             # default embedding for non-matching ids
-            remapped_ids[~matching_indices] = self._zch_size - 1
+            remapped_ids[~matching_indices] = (
+                self._output_global_offset + self._zch_size - 1
+            )
 
             remapped_features[name] = JaggedTensor(
                 values=remapped_ids,
