@@ -473,7 +473,7 @@ class InferTwPooledEmbeddingDist(
                 `len(local_embs) == world_size`.
 
         Returns:
-            Awaitable[torch.Tensor]: awaitable of merged pooled embedding tensor.
+            torch.Tensor: merged pooled embedding tensor.
         """
 
         return self._dist(local_embs)
