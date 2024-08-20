@@ -16,7 +16,6 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Type
 import torch
 import torch.nn as nn
 import torch.quantization as quant
-import torchrec as trec
 import torchrec.distributed as trec_dist
 import torchrec.quant as trec_quant
 from torch.fx.passes.split_utils import getattr_recursive
@@ -144,10 +143,10 @@ def quantize_embeddings(
         per_table_weight_dtype=per_table_weight_dtype,
     )
     qconfig_spec: Dict[Type[nn.Module], QuantConfig] = {
-        trec.EmbeddingBagCollection: qconfig,
+        EmbeddingBagCollection: qconfig,
     }
     mapping: Dict[Type[nn.Module], Type[nn.Module]] = {
-        trec.EmbeddingBagCollection: trec_quant.EmbeddingBagCollection,
+        EmbeddingBagCollection: trec_quant.EmbeddingBagCollection,
     }
     if additional_qconfig_spec_keys is not None:
         for t in additional_qconfig_spec_keys:
