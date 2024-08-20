@@ -14,6 +14,7 @@ import torch.distributed as dist  # noqa
 from fbgemm_gpu.permute_pooled_embedding_modules_split import (
     PermutePooledEmbeddingsSplit,
 )
+from torch.distributed._tensor import Shard
 from torchrec.distributed.dist_data import EmbeddingsAllToOne
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -28,6 +29,7 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
+    DTensorMetadata,
     EmbeddingComputeKernel,
     InputDistOutputs,
     KJTList,
@@ -161,6 +163,18 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                 ),
             )
 
+            dtensor_metadata = None
+            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+                dtensor_metadata = DTensorMetadata(
+                    mesh=self._env.device_mesh,
+                    placements=(Shard(1),),
+                    size=(
+                        info.embedding_config.num_embeddings,
+                        info.embedding_config.embedding_dim,
+                    ),
+                    stride=info.param.stride(),
+                )
+
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):
                 tables_per_rank[rank].append(
@@ -181,6 +195,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                         ),
                         local_metadata=shards[i],
                         global_metadata=global_metadata,
+                        dtensor_metadata=dtensor_metadata,
                         fused_params=info.fused_params,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
