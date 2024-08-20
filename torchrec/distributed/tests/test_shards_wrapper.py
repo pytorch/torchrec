@@ -11,9 +11,8 @@ import unittest
 from typing import List, Optional, Union
 
 import torch
-from hypothesis import settings, Verbosity
 from torch import distributed as dist
-from torch.distributed._tensor._shards_wrapper import LocalShardsWrapper
+from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
