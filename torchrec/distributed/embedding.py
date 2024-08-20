@@ -494,6 +494,10 @@ class ShardedEmbeddingCollection(
                 if table_name in self._table_names
             },
         )
+        # output parameters as DTensor in state dict
+        self._output_dtensor: bool = (
+            fused_params.get("output_dtensor", False) if fused_params else False
+        )
 
         self._env = env
         # TODO get rid of get_ec_index_dedup global flag
@@ -641,10 +645,9 @@ class ShardedEmbeddingCollection(
                 if len(local_shards) == 0:
                     state_dict[key] = torch.empty(0)
                 elif len(local_shards) > 1:
-                    # TODO - add multiple shards on rank support
-                    raise RuntimeError(
-                        f"Multiple shards on rank is not supported for DTensor yet, got {len(local_shards)}"
-                    )
+                    state_dict[key] = torch.cat(
+                        [s.view(-1) for s in local_shards], dim=0
+                    ).view(-1, dim)
                 else:
                     state_dict[key] = local_shards[0].view(-1, dim)
             elif isinstance(state_dict[key], torch.Tensor):
@@ -782,21 +785,34 @@ class ShardedEmbeddingCollection(
                 EmbeddingComputeKernel.KEY_VALUE.value
             }:
                 continue
-
-            if shards_wrapper_map["local_tensors"]:
-                self._model_parallel_name_to_dtensor[table_name] = DTensor.from_local(
-                    local_tensor=LocalShardsWrapper(
-                        local_shards=shards_wrapper_map["local_tensors"],
-                        local_offsets=shards_wrapper_map["local_offsets"],
-                    ),
-                    device_mesh=self._env.device_mesh,
-                    placements=shards_wrapper_map["placements"],
-                    shape=shards_wrapper_map["global_size"],
-                    stride=shards_wrapper_map["global_stride"],
-                    run_check=False,
-                )
+            if self._output_dtensor:
+                if shards_wrapper_map["local_tensors"]:
+                    self._model_parallel_name_to_dtensor[table_name] = (
+                        DTensor.from_local(
+                            local_tensor=LocalShardsWrapper(
+                                local_shards=shards_wrapper_map["local_tensors"],
+                                local_offsets=shards_wrapper_map["local_offsets"],
+                            ),
+                            device_mesh=self._env.device_mesh,
+                            placements=shards_wrapper_map["placements"],
+                            shape=shards_wrapper_map["global_size"],
+                            stride=shards_wrapper_map["global_stride"],
+                            run_check=False,
+                        )
+                    )
+                else:
+                    # empty shard case
+                    self._model_parallel_name_to_dtensor[table_name] = (
+                        DTensor.from_local(
+                            local_tensor=LocalShardsWrapper(
+                                local_shards=[],
+                                local_offsets=[],
+                            ),
+                            device_mesh=self._env.device_mesh,
+                            run_check=False,
+                        )
+                    )
             else:
-                # if DTensors for table do not exist, create ShardedTensor
                 # created ShardedTensors once in init, use in post_state_dict_hook
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
                     ShardedTensor._init_from_local_shards(

@@ -44,11 +44,27 @@ class LocalShardsWrapper(torch.Tensor):
     def __new__(
         cls, local_shards: List[torch.Tensor], local_offsets: List[Tuple[int, ...]]
     ) -> "LocalShardsWrapper":
-        assert len(local_shards) > 0
-        assert len(local_shards) == len(local_offsets)
         assert all(
             tensor.device == local_shards[0].device for tensor in local_shards[1:]
         )
+
+        # if empty shard, we create a empty tensor
+        if len(local_shards) == 0:
+            r = torch.Tensor._make_wrapper_subclass(  # type: ignore[attr-defined])
+                cls,
+                torch.Size([0]),
+            )
+            r._local_shards = []  # this should be zero?
+            r._storage_meta = TensorStorageMetadata(
+                properties=TensorProperties(),
+                size=torch.Size([0, 0]),
+                chunks=[
+                    ChunkStorageMetadata(
+                        offsets=torch.Size([0, 0]), sizes=torch.Size([0, 0])
+                    )
+                ],
+            )
+            return r
 
         # we calculate the total tensor size by "concat" on second tensor dimension
         cat_tensor_shape = list(local_shards[0].size())
@@ -135,11 +151,26 @@ class LocalShardsWrapper(torch.Tensor):
     # pyre-fixme[3]: Return type must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
     def handle_view(args, kwargs):
-        # TODO, do we need to change the shape of associated offsets?
-        res_shards_list = [
-            aten.view.default(shard, args[1], **kwargs)
-            for shard in args[0].local_shards()
-        ]
+        view_shape = args[1]
+        res_shards_list = []
+        if (
+            len(args[0].local_shards()) > 1
+            and args[0].storage_metadata().size[0] == view_shape[0]
+            and args[0].storage_metadata().size[1] == view_shape[1]
+        ):
+            # This accounts for a DTensor quirk, when multiple shards are present on a rank, DTensor on
+            # init calls view_as() on the global tensor shape
+            # will fail because the view shape is not applicable to individual shards.
+            res_shards_list = [
+                aten.view.default(shard, shard.shape, **kwargs)
+                for shard in args[0].local_shards()
+            ]
+        else:
+            # view is called per shard
+            res_shards_list = [
+                aten.view.default(shard, args[1], **kwargs)
+                for shard in args[0].local_shards()
+            ]
         return LocalShardsWrapper(res_shards_list, args[0].local_offsets())
 
     @staticmethod
@@ -191,11 +222,13 @@ class LocalShardsWrapper(torch.Tensor):
 
     @property
     def device(self) -> torch._C.device:  # type: ignore[override]
-        return self._local_shards[0].device
+        return (
+            self._local_shards[0].device if self._local_shards else torch.device("meta")
+        )
 
     @property
     def is_meta(self) -> bool:  # type: ignore[override]
-        return self._local_shards[0].is_meta
+        return self._local_shards[0].is_meta if self._local_shards else True
 
     # pyre-ignore[14]
     def is_pinned(self) -> bool:  # type: ignore[override]
