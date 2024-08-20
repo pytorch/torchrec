@@ -122,11 +122,41 @@ class ManagedCollisionModule(nn.Module):
     def __init__(
         self,
         device: torch.device,
+        output_segments: List[int],
     ) -> None:
         # slots is the number of rows to map from global id to
         # for example, if we want to manage 1000 ids to 10 slots
         super().__init__()
         self._device = device
+
+        # limited to max of 1024 RW shards
+        assert (
+            len(output_segments) <= 1025
+        ), "ManagedCollisionModule limited to 1024 shards"
+        self.register_buffer(
+            "_output_segments_tensor",
+            torch.tensor(
+                output_segments + [-1] * (1025 - len(output_segments)),
+                dtype=torch.int64,
+                device=self.device,
+            ),
+        )
+        self.register_buffer(
+            "_current_iter_tensor",
+            torch.tensor(
+                [0],
+                dtype=torch.int64,
+                device=self.device,
+            ),
+        )
+
+        def _load_state_dict_post_hook(
+            module: "ManagedCollisionModule",
+            incompatible_keys: torch.nn.modules.module._IncompatibleKeys,
+        ) -> None:
+            module.validate_state()
+
+        self.register_load_state_dict_post_hook(_load_state_dict_post_hook)
 
     @abc.abstractmethod
     def preprocess(
@@ -178,6 +208,13 @@ class ManagedCollisionModule(nn.Module):
         pass
 
     @abc.abstractmethod
+    def validate_state(self) -> None:
+        """
+        Validates that the state of the module after loading from checkpoint
+        """
+        pass
+
+    @abc.abstractmethod
     def open_slots(self) -> torch.Tensor:
         """
         Returns number of unused slots in managed collision module
@@ -188,10 +225,11 @@ class ManagedCollisionModule(nn.Module):
     def rebuild_with_output_id_range(
         self,
         output_id_range: Tuple[int, int],
+        output_segments: List[int],
         device: Optional[torch.device] = None,
     ) -> "ManagedCollisionModule":
         """
-        Used for creating local MC modules for RW sharding, hack for now
+        Used for creating local MC modules for RW sharding
         """
         pass
 
@@ -223,7 +261,7 @@ class ManagedCollisionCollection(nn.Module):
         }
         self._table_to_features = {}
 
-        self._compute_jt_dict_to_kjt = ComputeJTDictToKJT()
+        self._compute_jt_dict_to_kjt: torch.nn.Module = ComputeJTDictToKJT()
         for feature, table in self._feature_to_table.items():
             if table not in self._table_to_features:
                 self._table_to_features[table] = []
@@ -258,9 +296,7 @@ class ManagedCollisionCollection(nn.Module):
             mc_input: Dict[str, JaggedTensor] = {}
             for feature in feature_list:
                 mc_input[feature] = features_dict[feature]
-            mc_input = mc_module.preprocess(mc_input)
-            mc_input = mc_module.profile(mc_input)
-            mc_input = mc_module.remap(mc_input)
+            mc_input = mc_module(mc_input)
             output.update(mc_input)
         return self._compute_jt_dict_to_kjt(output)
 
@@ -788,6 +824,40 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
         return evicted_indices, selected_new_indices
 
 
+@torch.fx.wrap
+def _mch_remap(
+    features: Dict[str, JaggedTensor],
+    mch_sorted_raw_ids: torch.Tensor,
+    mch_remapped_ids_mapping: torch.Tensor,
+    zch_index: int,
+) -> Dict[str, JaggedTensor]:
+    """Remap feature ids to zch ids, TODO: create a custom kernel"""
+    remapped_features: Dict[str, JaggedTensor] = {}
+    for name, feature in features.items():
+        values = feature.values()
+        remapped_ids = torch.empty_like(values)
+
+        # compute overlap between incoming IDs and remapping table
+        searched_indices = torch.searchsorted(mch_sorted_raw_ids[:-1], values)
+        retrieved_indices = mch_sorted_raw_ids[searched_indices]
+        # identify matching inputs IDs
+        matching_indices = retrieved_indices == values
+        # update output with remapped matching IDs
+        remapped_ids[matching_indices] = mch_remapped_ids_mapping[
+            searched_indices[matching_indices]
+        ]
+        # default embedding for non-matching ids
+        remapped_ids[~matching_indices] = zch_index
+
+        remapped_features[name] = JaggedTensor(
+            values=remapped_ids,
+            lengths=feature.lengths(),
+            offsets=feature.offsets(),
+            weights=feature.weights_or_none(),
+        )
+    return remapped_features
+
+
 class MCHManagedCollisionModule(ManagedCollisionModule):
     """
     ZCH managed collision module
@@ -816,14 +886,19 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         mch_hash_func: Optional[Callable[[torch.Tensor, int], torch.Tensor]] = None,
         name: Optional[str] = None,
         output_global_offset: int = 0,  # typically not provided by user
+        output_segments: Optional[List[int]] = None,  # typically not provided by user
     ) -> None:
-        super().__init__(device)
-
+        if output_segments is None:
+            output_segments = [output_global_offset, output_global_offset + zch_size]
+        super().__init__(
+            device=device,
+            output_segments=output_segments,
+        )
         if mch_size is not None or mch_hash_func is not None:
             logger.warning(
                 "co-locating a hash table for missing ids is depreciated (ie. mch_size, mch_hash_func), values will be ignored"
             )
-
+        self._init_output_segments_tensor: torch.Tensor = self._output_segments_tensor
         self._name = name
         self._input_history_buffer_size: int = -1
         self._input_hash_size = input_hash_size
@@ -837,9 +912,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self._eviction_policy = eviction_policy
 
         self._current_iter: int = -1
-        self._current_iter_tensor = torch.nn.Parameter(
-            torch.zeros(1, dtype=torch.int32, device=self.device), requires_grad=False
-        )
         self._init_buffers()
 
         ## ------ history info ------
@@ -879,7 +951,12 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         )
         self.register_buffer(
             "_mch_remapped_ids_mapping",
-            torch.arange(self._zch_size, dtype=torch.int64, device=self.device),
+            torch.arange(
+                start=self._output_global_offset,
+                end=self._output_global_offset + self._zch_size,
+                dtype=torch.int64,
+                device=self.device,
+            ),
         )
 
         self._evicted_emb_indices: torch.Tensor = torch.empty((1,), device=self.device)
@@ -926,23 +1003,11 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
                         dtype=torch.int64,
                         device=self.device,
                     ),
-                    # not checkpointed
                     persistent=False,
                 )
                 self._history_metadata[metadata_name] = getattr(self, buffer_name)
 
-    @torch.no_grad()
-    def preprocess(
-        self,
-        features: Dict[str, JaggedTensor],
-    ) -> Dict[str, JaggedTensor]:
-        return apply_mc_method_to_jt_dict(
-            self,
-            "_preprocess",
-            features,
-        )
-
-    def _preprocess(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+    def preprocess(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
         if self._input_hash_func is None:
             return features
         preprocessed_features: Dict[str, JaggedTensor] = {}
@@ -968,9 +1033,10 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
     @torch.no_grad()
     def _sort_mch_buffers(self) -> None:
-        mch_sorted_raw_ids = self._mch_sorted_raw_ids
-        argsorted_sorted_raw_ids = torch.argsort(mch_sorted_raw_ids, stable=True)
-        mch_sorted_raw_ids.copy_(mch_sorted_raw_ids[argsorted_sorted_raw_ids])
+        argsorted_sorted_raw_ids = torch.argsort(self._mch_sorted_raw_ids, stable=True)
+        self._mch_sorted_raw_ids.copy_(
+            self._mch_sorted_raw_ids[argsorted_sorted_raw_ids]
+        )
         self._mch_remapped_ids_mapping.copy_(
             self._mch_remapped_ids_mapping[argsorted_sorted_raw_ids]
         )
@@ -1075,18 +1141,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         # reset buffer offset
         self._current_history_buffer_offset = 0
 
-    @torch.no_grad()
     def profile(
-        self,
-        features: Dict[str, JaggedTensor],
-    ) -> Dict[str, JaggedTensor]:
-        return apply_mc_method_to_jt_dict(
-            self,
-            "_profile",
-            features,
-        )
-
-    def _profile(
         self,
         features: Dict[str, JaggedTensor],
     ) -> Dict[str, JaggedTensor]:
@@ -1133,45 +1188,14 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
 
         return features
 
-    @torch.no_grad()
-    def remap(
-        self,
-        features: Dict[str, JaggedTensor],
-    ) -> Dict[str, JaggedTensor]:
-        return apply_mc_method_to_jt_dict(
-            self,
-            "_remap",
+    def remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
+        return _mch_remap(
             features,
+            self._mch_sorted_raw_ids,
+            self._mch_remapped_ids_mapping,
+            self._output_global_offset + self._zch_size - 1,
         )
 
-    def _remap(self, features: Dict[str, JaggedTensor]) -> Dict[str, JaggedTensor]:
-
-        remapped_features: Dict[str, JaggedTensor] = {}
-        for name, feature in features.items():
-            values = feature.values()
-            remapped_ids = torch.empty_like(values)
-
-            # compute overlap between incoming IDs and remapping table
-            searched_indices = torch.searchsorted(self._mch_sorted_raw_ids[:-1], values)
-            retrieved_indices = self._mch_sorted_raw_ids[searched_indices]
-            # identify matching inputs IDs
-            matching_indices = retrieved_indices == values
-            # update output with remapped matching IDs
-            remapped_ids[matching_indices] = self._mch_remapped_ids_mapping[
-                searched_indices[matching_indices]
-            ]
-            # default embedding for non-matching ids
-            remapped_ids[~matching_indices] = self._zch_size - 1
-
-            remapped_features[name] = JaggedTensor(
-                values=remapped_ids,
-                lengths=feature.lengths(),
-                offsets=feature.offsets(),
-                weights=feature.weights_or_none(),
-            )
-        return remapped_features
-
-    @torch.no_grad()
     def forward(
         self,
         features: Dict[str, JaggedTensor],
@@ -1183,6 +1207,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             Dict[str, JaggedTensor]: modified JT
         """
 
+        features = self.preprocess(features)
         features = self.profile(features)
         return self.remap(features)
 
@@ -1205,9 +1230,22 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         else:
             return None
 
+    def validate_state(self) -> None:
+        start = self._output_global_offset
+        end = start + self._zch_size
+        assert (
+            start in self._output_segments_tensor
+            and end in self._output_segments_tensor
+        ), f"shard within range [{start}, {end}] cannot be built out of segements {self._output_segments_tensor}"
+
+        # update output segments and resort
+        self._output_segments_tensor = self._init_output_segments_tensor
+        self._sort_mch_buffers()
+
     def rebuild_with_output_id_range(
         self,
         output_id_range: Tuple[int, int],
+        output_segments: List[int],
         device: Optional[torch.device] = None,
     ) -> "MCHManagedCollisionModule":
 
@@ -1222,4 +1260,5 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             input_hash_size=self._input_hash_size,
             input_hash_func=self._input_hash_func,
             output_global_offset=output_id_range[0],
+            output_segments=output_segments,
         )

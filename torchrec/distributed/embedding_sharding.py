@@ -205,6 +205,7 @@ def bucketize_kjt_before_all2all(
     output_permute: bool = False,
     bucketize_pos: bool = False,
     block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
+    keep_original_indices: bool = False,
 ) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]:
     """
     Bucketizes the `values` in KeyedJaggedTensor into `num_buckets` buckets,
@@ -221,6 +222,7 @@ def bucketize_kjt_before_all2all(
         bucketize_pos (bool): output the changed position of the bucketized values or
             not.
         block_bucketize_row_pos (Optional[List[torch.Tensor]]): The offsets of shard size for each feature.
+        keep_original_indices (bool): whether to keep the original indices or not.
 
     Returns:
         Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]: the bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized value.
@@ -249,8 +251,8 @@ def bucketize_kjt_before_all2all(
         batch_size_per_feature=_fx_wrap_batch_size_per_feature(kjt),
         max_B=_fx_wrap_max_B(kjt),
         block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
+        keep_orig_idx=keep_original_indices,
     )
-
     return (
         KeyedJaggedTensor(
             # duplicate keys will be resolved by AllToAll
