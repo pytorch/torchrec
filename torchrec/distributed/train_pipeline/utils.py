@@ -1282,7 +1282,7 @@ class SparseDataDistUtil(Generic[In]):
 
     Args:
         model (torch.nn.Module): Model to pipeline
-        prefetch_stream (torch.cuda.Stream): Stream on which to run sparse data dist.
+        data_dist_stream (torch.cuda.Stream): Stream on which to run sparse data dist.
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
         prefetch_stream (Optional[torch.cuda.Stream]): Stream on which model prefetch runs
             Defaults to `None`. This needs to be passed in to enable prefetch pipelining.
