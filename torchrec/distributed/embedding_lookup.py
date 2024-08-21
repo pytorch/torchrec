@@ -250,26 +250,25 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             )
             for emb_op, features in zip(self._emb_modules, features_by_group):
                 if (
-                    isinstance(emb_op.emb_module, SplitTableBatchedEmbeddingBagsCodegen)
+                    isinstance(
+                        emb_op.emb_module,
+                        (
+                            SplitTableBatchedEmbeddingBagsCodegen,
+                            SSDTableBatchedEmbeddingBags,
+                        ),
+                    )
                     and not emb_op.emb_module.prefetch_pipeline
                 ):
                     logging.error(
-                        "Invalid setting on SplitTableBatchedEmbeddingBagsCodegen modules. prefetch_pipeline must be set to True.\n"
+                        f"Invalid setting on {type(emb_op.emb_module)} modules. prefetch_pipeline must be set to True.\n"
                         "If you don’t turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
                     )
                 if hasattr(emb_op.emb_module, "prefetch"):
-                    if isinstance(emb_op.emb_module, SSDTableBatchedEmbeddingBags):
-                        # only takes indices and offsets
-                        emb_op.emb_module.prefetch(
-                            indices=features.values(),
-                            offsets=features.offsets(),
-                        )
-                    else:
-                        emb_op.emb_module.prefetch(
-                            indices=features.values(),
-                            offsets=features.offsets(),
-                            forward_stream=forward_stream,
-                        )
+                    emb_op.emb_module.prefetch(
+                        indices=features.values(),
+                        offsets=features.offsets(),
+                        forward_stream=forward_stream,
+                    )
 
     def forward(
         self,
@@ -482,19 +481,25 @@ class GroupedPooledEmbeddingsLookup(
                 if not _need_prefetch(emb_op.config):
                     continue
                 if (
-                    isinstance(emb_op.emb_module, SplitTableBatchedEmbeddingBagsCodegen)
+                    isinstance(
+                        emb_op.emb_module,
+                        (
+                            SplitTableBatchedEmbeddingBagsCodegen,
+                            SSDTableBatchedEmbeddingBags,
+                        ),
+                    )
                     and not emb_op.emb_module.prefetch_pipeline
                 ):
                     logging.error(
-                        "Invalid setting on SplitTableBatchedEmbeddingBagsCodegen modules. prefetch_pipeline must be set to True.\n"
+                        f"Invalid setting on {type(emb_op.emb_module)} modules. prefetch_pipeline must be set to True.\n"
                         "If you don't turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
                     )
                 if hasattr(emb_op.emb_module, "prefetch"):
                     if isinstance(emb_op.emb_module, SSDTableBatchedEmbeddingBags):
-                        # only takes indices and offsets
                         emb_op.emb_module.prefetch(
                             indices=features.values(),
                             offsets=features.offsets(),
+                            forward_stream=forward_stream,
                         )
                     else:
                         emb_op.emb_module.prefetch(
