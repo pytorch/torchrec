@@ -825,6 +825,54 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             )
         )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_custom_fwd(
+        self,
+    ) -> None:
+        data = self._generate_data(
+            num_batches=4,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        fused_params_pipelined = {}
+        sharding_type = ShardingType.ROW_WISE.value
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+        sharded_model_pipelined: torch.nn.Module
+
+        model = self._setup_model()
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+
+        def custom_model_fwd(
+            input: Optional[ModelInput],
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
+            loss, pred = sharded_model_pipelined(input)
+            batch_size = pred.size(0)
+            return loss, pred.expand(batch_size * 2, -1)
+
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            custom_model_fwd=custom_model_fwd,
+        )
+
+        for _ in data:
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+            self.assertEqual(pred_pipeline.size(0), 64)
+
 
 class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
     def setUp(self) -> None:

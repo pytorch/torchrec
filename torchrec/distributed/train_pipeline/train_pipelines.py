@@ -309,7 +309,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         context_type: Type[TrainPipelineContext] = TrainPipelineContext,
         pipeline_preproc: bool = False,
         custom_model_fwd: Optional[
-            Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
     ) -> None:
         self._model = model
@@ -362,6 +362,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._dataloader_iter: Optional[Iterator[In]] = None
         self._dataloader_exhausted: bool = False
         self._context_type: Type[TrainPipelineContext] = context_type
+
+        self._model_fwd: Callable[[Optional[In]], Tuple[torch.Tensor, Out]] = (
+            custom_model_fwd if custom_model_fwd else model
+        )
 
         # DEPRECATED FIELDS
         self._batch_i: Optional[In] = None
@@ -480,9 +484,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # forward
         with record_function("## forward ##"):
-            losses, output = cast(
-                Tuple[torch.Tensor, Out], self._model(self.batches[0])
-            )
+            losses, output = self._model_fwd(self.batches[0])
 
         if len(self.batches) >= 2:
             self.wait_sparse_data_dist(self.contexts[1])
@@ -715,7 +717,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         stash_gradients: bool = False,
         pipeline_preproc: bool = False,
         custom_model_fwd: Optional[
-            Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
     ) -> None:
         super().__init__(
@@ -726,6 +728,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             apply_jit=apply_jit,
             context_type=EmbeddingTrainPipelineContext,
             pipeline_preproc=pipeline_preproc,
+            custom_model_fwd=custom_model_fwd,
         )
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
@@ -890,7 +893,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             _wait_for_events(
                 batch, context, torch.get_device_module(self._device).current_stream()
             )
-            return cast(Tuple[torch.Tensor, Out], self._model_fwd(batch))
+            return self._model_fwd(batch)
 
     def embedding_backward(self, context: EmbeddingTrainPipelineContext) -> None:
         default_stream = torch.get_device_module(self._device).current_stream()
@@ -1017,6 +1020,10 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         device: torch.device,
         execute_all_batches: bool = True,
         apply_jit: bool = False,
+        pipeline_preproc: bool = False,
+        custom_model_fwd: Optional[
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
+        ] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -1025,6 +1032,8 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             execute_all_batches=execute_all_batches,
             apply_jit=apply_jit,
             context_type=PrefetchTrainPipelineContext,
+            pipeline_preproc=pipeline_preproc,
+            custom_model_fwd=custom_model_fwd,
         )
         self._context = PrefetchTrainPipelineContext(version=0)
         self._prefetch_stream: Optional[torch.Stream] = (
@@ -1081,7 +1090,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         self._wait_sparse_data_dist()
         # forward
         with record_function("## forward ##"):
-            losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
+            losses, output = self._model_fwd(self._batch_i)
 
         self._prefetch(self._batch_ip1)
 
