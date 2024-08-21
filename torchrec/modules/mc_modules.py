@@ -123,16 +123,22 @@ class ManagedCollisionModule(nn.Module):
         self,
         device: torch.device,
         output_segments: List[int],
+        skip_state_validation: bool = False,
     ) -> None:
-        # slots is the number of rows to map from global id to
-        # for example, if we want to manage 1000 ids to 10 slots
         super().__init__()
         self._device = device
+
+        if skip_state_validation:
+            logger.warning(
+                "Skipping validation on ManagedCollisionModule.  This module may not be Reshard-able as a result"
+            )
+            return
 
         # limited to max of 1024 RW shards
         assert (
             len(output_segments) <= 1025
         ), "ManagedCollisionModule limited to 1024 shards"
+
         self.register_buffer(
             "_output_segments_tensor",
             torch.tensor(

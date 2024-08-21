@@ -1228,7 +1228,7 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
 
 class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
     """
-    StagedTrainPipeline orchestrates the pipelined execution of its constitutent stages
+    StagedTrainPipeline orchestrates the pipelined execution of its constituent stages
     from inputs of `dataloader_iter`. Namely scheduling the execution of stages before
     model forward.
 

@@ -17,6 +17,7 @@ from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.constants import BATCH_SIZE
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.proposers import (
+    DynamicProgrammingProposer,
     EmbeddingOffloadScaleupProposer,
     GreedyProposer,
     GridSearchProposer,
@@ -92,6 +93,7 @@ class TestProposers(unittest.TestCase):
         self.greedy_proposer = GreedyProposer()
         self.uniform_proposer = UniformProposer()
         self.grid_search_proposer = GridSearchProposer()
+        self.dynamic_programming_proposer = DynamicProgrammingProposer()
 
     def test_greedy_two_table(self) -> None:
         tables = [
@@ -349,6 +351,40 @@ class TestProposers(unittest.TestCase):
             num_proposals += 1
 
         self.assertEqual(num_pruned_options ** len(tables), num_proposals)
+
+    def test_dynamic_programming_three_table(self) -> None:
+        tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100 * i,
+                embedding_dim=10 * i,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(1, 4)
+        ]
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        search_space = self.enumerator.enumerate(
+            module=model,
+            sharders=[
+                cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
+            ],
+        )
+
+        self.dynamic_programming_proposer.load(search_space)
+
+        num_proposals = 0
+        proposal = self.dynamic_programming_proposer.propose()
+        GB = 1024 * 1024 * 1024
+        storage_constraint = Topology(
+            world_size=2, compute_device="cuda", hbm_cap=100 * GB, ddr_cap=1000 * GB
+        )
+        while proposal:
+            self.dynamic_programming_proposer.feedback(
+                partitionable=True, storage_constraint=storage_constraint
+            )
+            proposal = self.dynamic_programming_proposer.propose()
+            num_proposals += 1
+        self.assertEqual(2, num_proposals)
 
     def test_allocate_budget(self) -> None:
         model = torch.tensor([[1.0, 0.0], [2.0, 3.0], [4.0, 5.0]])
@@ -809,3 +845,7 @@ class TestProposers(unittest.TestCase):
         expected_list_names = ["p1so1", "p1so2", "p2so1", "p2so2", "p3so1", "p3so2"]
 
         self.assertEqual(proposals_list_names, expected_list_names)
+
+
+if __name__ == "__main__":
+    unittest.main()
