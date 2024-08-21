@@ -78,12 +78,14 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         find_unused_parameters: bool = False,
         allreduce_comm_precision: Optional[str] = None,
         params_to_ignore: Optional[List[str]] = None,
+        ddp_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._bucket_cap_mb: int = bucket_cap_mb
         self._static_graph: bool = static_graph
         self._find_unused_parameters: bool = find_unused_parameters
         self._allreduce_comm_precision = allreduce_comm_precision
         self._additional_params_to_ignore: Set[str] = set(params_to_ignore or [])
+        self._ddp_kwargs: Dict[str, Any] = ddp_kwargs or {}
 
     def _ddp_wrap(
         self,
@@ -114,6 +116,7 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
                 static_graph=self._static_graph,
                 find_unused_parameters=self._find_unused_parameters,
                 bucket_cap_mb=self._bucket_cap_mb,
+                **self._ddp_kwargs,
             ),
         )
         if self._allreduce_comm_precision == "fp16":
