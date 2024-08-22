@@ -676,7 +676,7 @@ class KJTOneToAll(nn.Module):
                 "cpu" if device is None else device.type
             )  # TODO: replace hardcoded cpu with DEFAULT_DEVICE_TYPE in torchrec.distributed.types when torch package issue resolved
         else:
-            # If no device is provided, use "cuda".
+            # BUG: device will default to cuda if cpu specified
             self._device_type: str = (
                 device.type
                 if device is not None and device.type in {"meta", "cuda", "mtia"}
