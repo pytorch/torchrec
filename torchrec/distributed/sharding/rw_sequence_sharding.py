@@ -31,6 +31,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.rw_sharding import (
     BaseRwEmbeddingSharding,
+    get_embedding_shard_metadata,
     InferRwSparseFeaturesDist,
     RwSparseFeaturesDist,
 )
@@ -39,7 +40,6 @@ from torchrec.distributed.sharding.sequence_sharding import (
     SequenceShardingContext,
 )
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
-from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -199,16 +199,9 @@ class InferRwSequenceEmbeddingSharding(
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
 
-        emb_sharding = []
-        for embedding_table_group in self._grouped_embedding_configs_per_rank[0]:
-            for table in embedding_table_group.embedding_tables:
-                shard_split_offsets = [
-                    shard.shard_offsets[0]
-                    for shard in none_throws(table.global_metadata).shards_metadata
-                ]
-                shard_split_offsets.append(none_throws(table.global_metadata).size[0])
-                emb_sharding.extend([shard_split_offsets] * len(table.embedding_names))
-
+        (emb_sharding, is_even_sharding) = get_embedding_shard_metadata(
+            self._grouped_embedding_configs_per_rank
+        )
         return InferRwSparseFeaturesDist(
             world_size=self._world_size,
             num_features=num_features,
@@ -217,7 +210,7 @@ class InferRwSequenceEmbeddingSharding(
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
             need_pos=False,
-            embedding_shard_metadata=emb_sharding,
+            embedding_shard_metadata=emb_sharding if not is_even_sharding else None,
         )
 
     def create_lookup(

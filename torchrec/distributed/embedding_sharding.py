@@ -319,7 +319,7 @@ def bucketize_kjt_inference(
             num_buckets=num_buckets,
             block_sizes=block_sizes_new_type,
             bucketize_pos=bucketize_pos,
-            block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
+            block_bucketize_pos=block_bucketize_row_pos,
         )
     else:
         (
