@@ -19,6 +19,7 @@ import torch
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
 from torch._dynamo.testing import reduce_to_scalar_loss
+from torch._dynamo.utils import counters
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -53,6 +54,7 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     TrainPipelinePT2,
     TrainPipelineSemiSync,
     TrainPipelineSparseDist,
+    TrainPipelineSparseDistCompAutograd,
 )
 from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
@@ -393,7 +395,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_sparse_arch_pipeline.parameters(), lr=0.1
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             sharded_sparse_arch_pipeline,
             optimizer_pipeline,
             self.device,
@@ -441,7 +443,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
             lambda params: optim.SGD(params, lr=0.1),
         )
-        return TrainPipelineSparseDist(
+        return self.pipeline_class(
             model=distributed_model,
             optimizer=optimizer_distributed,
             device=self.device,
@@ -508,7 +510,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -621,7 +623,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -719,7 +721,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -862,7 +864,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1116,7 +1118,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1171,7 +1173,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1217,7 +1219,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1280,7 +1282,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -2100,3 +2102,24 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(len(pipelined_out), len(non_pipelined_outputs))
         for out, ref_out in zip(pipelined_out, non_pipelined_outputs):
             torch.testing.assert_close(out, ref_out)
+
+
+class TrainPipelineSparseDistCompAutogradTest(TrainPipelineSparseDistTest):
+    def setUp(self) -> None:
+        super().setUp()
+        self.pipeline_class = TrainPipelineSparseDistCompAutograd
+        torch._dynamo.reset()
+        counters["compiled_autograd"].clear()
+        # Compiled Autograd don't work with Anomaly Mode
+        torch.autograd.set_detect_anomaly(False)
+
+    def tearDown(self) -> None:
+        # Every single test has two captures, one for forward and one for backward
+        self.assertEqual(counters["compiled_autograd"]["captures"], 2)
+        return super().tearDown()
+
+    @unittest.skip("Dynamo only supports FSDP with use_orig_params=True")
+    # pyre-ignore[56]
+    @given(execute_all_batches=st.booleans())
+    def test_pipelining_fsdp_pre_trace(self, execute_all_batches: bool) -> None:
+        super().test_pipelining_fsdp_pre_trace()
