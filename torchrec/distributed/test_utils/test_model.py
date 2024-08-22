@@ -1671,3 +1671,63 @@ class TestPositionWeightedPreprocModule(torch.nn.Module):
         modified_input = copy.deepcopy(input)
         modified_input.idlist_features = self.fp_proc(modified_input.idlist_features)
         return modified_input
+
+
+class TestSparseNNPreproc(TestSparseNN):
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        preproc_module: nn.Module,
+        num_float_features: int = 10,
+        weighted_tables: Optional[List[EmbeddingBagConfig]] = None,
+        embedding_groups: Optional[Dict[str, List[str]]] = None,
+        dense_device: Optional[torch.device] = None,
+        sparse_device: Optional[torch.device] = None,
+        max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
+        over_arch_clazz: Type[nn.Module] = TestOverArch,
+    ) -> None:
+        super().__init__(
+            tables,
+            num_float_features,
+            weighted_tables,
+            embedding_groups,
+            dense_device,
+            sparse_device,
+            max_feature_lengths_list,
+            feature_processor_modules,
+            over_arch_clazz,
+            preproc_module,
+        )
+        self.preproc_module = preproc_module
+        self.deduped_unweighted_features: Dict[str, int] = {
+            "feature_0": 1,
+            "feature_1": 1,
+            "feature_2": 1,
+            "feature_3": 1,
+        }
+        self.deduped_weighted_features: Dict[str, int] = {
+            "weighted_feature_0": 1,
+            "weighted_feature_1": 1,
+        }
+
+    def sparse_forward(self, input: ModelInput) -> KeyedTensor:
+        features = self.preproc_module(
+            input.idlist_features,
+            self.deduped_unweighted_features,
+        )
+        weighted_features = self.preproc_module(
+            input.idscore_features,
+            self.deduped_weighted_features,
+        )
+        return self.sparse(
+            features=features,
+            weighted_features=weighted_features,
+            batch_size=input.float_features.size(0),
+        )
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        return self.dense_forward(input, self.sparse_forward(input))
