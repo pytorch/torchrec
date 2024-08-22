@@ -242,13 +242,20 @@ def _update_embedding_configs(
 
 
 @torch.fx.wrap
-def _fx_trec_qebc_unwrap_kjt(
+def _fx_trec_unwrap_kjt(
     kjt: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if kjt.device() == "cpu":
-        return kjt.values().long(), kjt.offsets().long()
+    """
+    Forced conversions to support TBE
+    CPU - int32 or int64, offsets dtype must match
+    GPU - int32 only, offsets dtype must match
+    """
+    indices = kjt.values()
+    offsets = kjt.offsets()
+    if kjt.device().type == "cpu":
+        return indices, offsets.type(dtype=indices.dtype)
     else:
-        return kjt.values(), kjt.offsets()
+        return indices.int(), offsets.int()
 
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
@@ -495,7 +502,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             zip(self._emb_modules, self._key_to_tables.keys())
         ):
             f = kjts_per_key[i]
-            indices, offsets = _fx_trec_qebc_unwrap_kjt(f)
+            indices, offsets = _fx_trec_unwrap_kjt(f)
 
             embeddings.append(
                 # Syntax for FX to generate call_module instead of call_function to keep TBE copied unchanged to fx.GraphModule, can be done only for registered module
@@ -894,9 +901,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             zip(self._emb_modules, self._key_to_tables.keys())
         ):
             f = kjts_per_key[i]
-            indices = f.values()
             lengths = _get_feature_length(f)
-            offsets = f.offsets()
+            indices, offsets = _fx_trec_unwrap_kjt(f)
             lookup = (
                 emb_module(indices=indices, offsets=offsets)
                 if self.register_tbes

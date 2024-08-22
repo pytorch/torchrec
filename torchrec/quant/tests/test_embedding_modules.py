@@ -15,6 +15,7 @@ import hypothesis.strategies as st
 import torch
 from hypothesis import given, settings, Verbosity
 from torchrec import inference as trec_infer
+from torchrec.distributed.quant_embedding_kernel import _unwrap_kjt, _unwrap_kjt_for_cpu
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -27,6 +28,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingCollection,
 )
 from torchrec.quant.embedding_modules import (
+    _fx_trec_unwrap_kjt,
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
     quant_prep_enable_quant_state_dict_split_scale_bias,
@@ -782,3 +784,55 @@ class EmbeddingCollectionTest(unittest.TestCase):
         scripted_out = scripted_module(features)
         self._comp_ec_output(original_out, traced_out, atol=0)
         self._comp_ec_output(original_out, scripted_out, atol=0)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]
+    @given(
+        offsets_dtype=st.sampled_from(
+            [
+                torch.int32,
+                torch.int64,
+            ]
+        ),
+        indices_dtype=st.sampled_from(
+            [
+                torch.int32,
+                torch.int64,
+            ]
+        ),
+        device=st.sampled_from(
+            [
+                torch.device("cpu"),
+                torch.device("cuda"),
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_fx_unwrap_unsharded_vs_sharded_in_sync(
+        self,
+        offsets_dtype: torch.dtype,
+        indices_dtype: torch.dtype,
+        device: torch.device,
+    ) -> None:
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3", "f4"],
+            values=torch.tensor(
+                [0, 1, 2, 3, 4, 5, 6, 7], dtype=indices_dtype, device=device
+            ),
+            offsets=torch.tensor([0, 2, 5, 7, 8], dtype=offsets_dtype, device=device),
+        )
+
+        indices, offsets = _fx_trec_unwrap_kjt(features)
+        self.assertEqual(indices.dtype, offsets.dtype)
+        if device.type == "cpu":
+            sharded_indices, sharded_offsets, _ = _unwrap_kjt_for_cpu(features)
+            self.assertEqual(sharded_indices.dtype, indices_dtype)
+        else:  # cuda
+            sharded_indices, sharded_offsets, _ = _unwrap_kjt(features)
+            self.assertEqual(sharded_indices.dtype, torch.int32)  # only option!
+
+        self.assertEqual(indices.dtype, sharded_indices.dtype)
+        self.assertEqual(offsets.dtype, sharded_offsets.dtype)
