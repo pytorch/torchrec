@@ -151,9 +151,11 @@ def _unwrap_kjt(
     features: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
     # Here it should always follow cuda path, runtime device cannot be meta
+    indices = features.values()
+    offsets = features.offsets()
     return (
-        features.values().int(),
-        features.offsets().int(),
+        indices.int(),  # currently only support int32 indices
+        offsets.int(),
         features.weights_or_none(),
     )
 
@@ -161,9 +163,11 @@ def _unwrap_kjt(
 def _unwrap_kjt_for_cpu(
     features: KeyedJaggedTensor,
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    indices = features.values()
+    offsets = features.offsets()
     return (
-        features.values().long(),
-        features.offsets().long(),
+        indices,
+        offsets.type(indices.dtype),
         features.weights_or_none(),
     )
 
@@ -273,6 +277,7 @@ class QuantBatchedEmbeddingBag(
         return {self._emb_module: self._config}
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        # Important: _unwrap_kjt regex for FX tracing TAGing
         if self._runtime_device.type == "cpu":
             indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(features)
         else:
