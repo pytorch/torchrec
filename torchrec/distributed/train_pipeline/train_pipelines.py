@@ -8,13 +8,16 @@
 # pyre-strict
 
 import abc
+import contextlib
 import logging
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
     cast,
+    ContextManager,
     Deque,
     Dict,
     Generic,
@@ -27,6 +30,7 @@ from typing import (
 )
 
 import torch
+import torchrec.distributed.comm_ops
 from torch.autograd.profiler import record_function
 from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
 from torchrec.distributed.model_parallel import ShardedModule
@@ -59,7 +63,6 @@ from torchrec.distributed.types import Awaitable
 from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.pt2.utils import default_pipeline_input_transformer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-from torchrec.streamable import Multistreamable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -309,7 +312,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         context_type: Type[TrainPipelineContext] = TrainPipelineContext,
         pipeline_preproc: bool = False,
         custom_model_fwd: Optional[
-            Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
     ) -> None:
         self._model = model
@@ -362,6 +365,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._dataloader_iter: Optional[Iterator[In]] = None
         self._dataloader_exhausted: bool = False
         self._context_type: Type[TrainPipelineContext] = context_type
+
+        self._model_fwd: Callable[[Optional[In]], Tuple[torch.Tensor, Out]] = (
+            custom_model_fwd if custom_model_fwd else model
+        )
 
         # DEPRECATED FIELDS
         self._batch_i: Optional[In] = None
@@ -480,9 +487,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # forward
         with record_function("## forward ##"):
-            losses, output = cast(
-                Tuple[torch.Tensor, Out], self._model(self.batches[0])
-            )
+            losses, output = self._model_fwd(self.batches[0])
 
         if len(self.batches) >= 2:
             self.wait_sparse_data_dist(self.contexts[1])
@@ -715,7 +720,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         stash_gradients: bool = False,
         pipeline_preproc: bool = False,
         custom_model_fwd: Optional[
-            Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
     ) -> None:
         super().__init__(
@@ -726,6 +731,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             apply_jit=apply_jit,
             context_type=EmbeddingTrainPipelineContext,
             pipeline_preproc=pipeline_preproc,
+            custom_model_fwd=custom_model_fwd,
         )
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
@@ -749,9 +755,6 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._embedding_odd_streams: List[Optional[torch.Stream]] = []
         self._embedding_even_streams: List[Optional[torch.Stream]] = []
         self._gradients: Dict[str, torch.Tensor] = {}
-        self._model_fwd: Union[
-            torch.nn.Module, Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
-        ] = (custom_model_fwd if custom_model_fwd is not None else model)
 
     def _grad_swap(self) -> None:
         for name, param in self._model.named_parameters():
@@ -890,7 +893,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             _wait_for_events(
                 batch, context, torch.get_device_module(self._device).current_stream()
             )
-            return cast(Tuple[torch.Tensor, Out], self._model_fwd(batch))
+            return self._model_fwd(batch)
 
     def embedding_backward(self, context: EmbeddingTrainPipelineContext) -> None:
         default_stream = torch.get_device_module(self._device).current_stream()
@@ -1017,6 +1020,10 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         device: torch.device,
         execute_all_batches: bool = True,
         apply_jit: bool = False,
+        pipeline_preproc: bool = False,
+        custom_model_fwd: Optional[
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
+        ] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -1025,6 +1032,8 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             execute_all_batches=execute_all_batches,
             apply_jit=apply_jit,
             context_type=PrefetchTrainPipelineContext,
+            pipeline_preproc=pipeline_preproc,
+            custom_model_fwd=custom_model_fwd,
         )
         self._context = PrefetchTrainPipelineContext(version=0)
         self._prefetch_stream: Optional[torch.Stream] = (
@@ -1081,7 +1090,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         self._wait_sparse_data_dist()
         # forward
         with record_function("## forward ##"):
-            losses, output = cast(Tuple[torch.Tensor, Out], self._model(self._batch_i))
+            losses, output = self._model_fwd(self._batch_i)
 
         self._prefetch(self._batch_ip1)
 
@@ -1506,3 +1515,88 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
             return self.progress(dataloader_iter)
 
         return out
+
+
+class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
+    """
+    This pipeline clone the TrainPipelineSparseDist, but execute the progress
+    method within compiled autograd context.
+    """
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        execute_all_batches: bool = True,
+        apply_jit: bool = False,
+        context_type: Type[TrainPipelineContext] = TrainPipelineContext,
+        pipeline_preproc: bool = False,
+        custom_model_fwd: Optional[
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
+        ] = None,
+    ) -> None:
+        super().__init__(
+            model,
+            optimizer,
+            device,
+            execute_all_batches,
+            apply_jit,
+            context_type,
+            pipeline_preproc,
+            custom_model_fwd,
+        )
+
+        # it will check this path on model to inject configuration other than
+        # the default one.
+        self.compiled_autograd_options: Dict[str, Union[str, bool]] = getattr(
+            model,
+            "_compiled_autograd_options",
+            {
+                "backend": "inductor",
+                "dynamic": True,
+                "fullgraph": True,
+            },
+        )
+
+        torch._dynamo.config.optimize_ddp = "python_reducer"
+        torch._dynamo.config.inline_inbuilt_nn_modules = True
+        torch._dynamo.config.skip_fsdp_hooks = False
+        torch._functorch.config.recompute_views = True
+        torch._functorch.config.cse = False
+        torch._inductor.config.reorder_for_compute_comm_overlap = True
+        torch._inductor.config.reorder_for_compute_comm_overlap_passes = [
+            "sink_waits",
+            "raise_comms",
+            "reorder_compute_for_overlap",
+        ]
+        self.initialized = False
+
+    def get_compiled_autograd_ctx(
+        self,
+    ) -> ContextManager:
+        # this allows for pipelining
+        # to avoid doing a sum on None
+        # when the pipeline is empty
+        if not self.initialized:
+            self.initialized = True
+            return contextlib.nullcontext()
+
+        return torch._dynamo.compiled_autograd.enable(
+            # pyre-ignore
+            torch.compile(**self.compiled_autograd_options)
+        )
+
+    @contextmanager
+    def sync_collectives_ctx(self) -> Iterator[None]:
+        try:
+            if is_torchdynamo_compiling():
+                torchrec.distributed.comm_ops.set_use_sync_collectives(True)
+            yield
+        finally:
+            torchrec.distributed.comm_ops.set_use_sync_collectives(False)
+
+    def progress(self, dataloader_iter: Iterator[In]) -> Out:
+
+        with self.get_compiled_autograd_ctx(), self.sync_collectives_ctx():
+            return super().progress(dataloader_iter)
