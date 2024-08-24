@@ -410,8 +410,8 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
         self._optimizer: optim.Optimizer = optim_factory(list(params.values()))
         super().__init__(params, self._optimizer.state, self._optimizer.param_groups)
 
-    def zero_grad(self, set_to_none: bool = False) -> None:
-        self._optimizer.zero_grad()
+    def zero_grad(self, set_to_none: bool = True) -> None:
+        self._optimizer.zero_grad(set_to_none=set_to_none)
 
     # pyre-ignore [2]
     def step(self, closure: Any = None) -> None:
