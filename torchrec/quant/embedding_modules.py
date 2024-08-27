@@ -407,7 +407,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 row_alignment=row_alignment,
                 feature_table_map=feature_table_map,
                 # pyre-ignore
-                index_remapping=(
+                index_remappings=(
                     index_remappings if index_remappings_non_none_count > 0 else None
                 ),
             )
