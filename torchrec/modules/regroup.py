@@ -17,6 +17,7 @@ from torchrec.sparse.jagged_tensor import (
     _kt_regroup_arguments,
     KeyedTensor,
 )
+from torchrec.types import CacheMixin
 
 
 @torch.fx.wrap
@@ -114,7 +115,7 @@ class PermuteMultiEmbedding(torch.nn.Module):
         )
 
 
-class KTRegroupAsDict(torch.nn.Module):
+class KTRegroupAsDict(torch.nn.Module, CacheMixin):
     """
     KTRegroupAsDict is a nn.Module that mirrors beahvior of static method KeyedTensor.regroup_as_dict()
 
@@ -208,3 +209,6 @@ class KTRegroupAsDict(torch.nn.Module):
                 keyed_tensors, self._idx_key_pairs, self._dim
             )
         return _build_dict(self._keys, permuted_values, self._splits, self._dim)
+
+    def clear_cache(self) -> None:
+        self._is_inited = False

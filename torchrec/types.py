@@ -14,6 +14,15 @@ import torch
 from torch import nn
 
 
+class CacheMixin:
+    """
+    A mixin to allow modules that cache computation to clear the cache.
+    """
+
+    @abstractmethod
+    def clear_cache(self) -> None: ...
+
+
 class CopyMixIn:
     @abstractmethod
     def copy(self, device: torch.device) -> nn.Module: ...

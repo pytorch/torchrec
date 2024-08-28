@@ -19,6 +19,9 @@ import torch.quantization as quant
 import torchrec as trec
 import torchrec.distributed as trec_dist
 import torchrec.quant as trec_quant
+from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+)
 from torch.fx.passes.split_utils import getattr_recursive
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fused_params import (
@@ -555,3 +558,33 @@ def shard_quant_model(
     )
 
     return model, model_plan
+
+
+def get_table_to_weights_from_tbe(
+    model: torch.nn.Module,
+) -> Dict[str, List[Tuple[torch.Tensor, Optional[torch.Tensor]]]]:
+    table_to_weight = {}
+
+    for module in model.modules():
+        if isinstance(module, IntNBitTableBatchedEmbeddingBagsCodegen):
+            weights = module.split_embedding_weights()
+            for i, spec in enumerate(module.embedding_specs):
+                table_to_weight[spec[0]] = weights[i]
+
+    return table_to_weight
+
+
+def assign_weights_to_tbe(
+    model: torch.nn.Module,
+    table_to_weight: Dict[str, List[Tuple[torch.Tensor, Optional[torch.Tensor]]]],
+) -> None:
+    for module in model.modules():
+        if isinstance(module, IntNBitTableBatchedEmbeddingBagsCodegen):
+            q_weights = []
+            for spec in module.embedding_specs:
+                assert spec[0] in table_to_weight, f"{spec[0]} not in table_to_weight"
+                q_weights.append(table_to_weight[spec[0]])
+
+            module.assign_embedding_weights(q_weights)
+
+    return

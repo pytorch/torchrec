@@ -28,6 +28,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
 )
 from torchrec.distributed.utils import init_parameters
+from torchrec.types import CacheMixin
 
 
 def _join_module_path(path: str, name: str) -> str:
@@ -278,5 +279,9 @@ def _shard_modules(  # noqa: C901
     if init_params and device is not None and device.type != "meta":
         init_parameters(module, device)
         module = module.to(device)
+
+    for submod in module.modules():
+        if isinstance(submod, CacheMixin):
+            submod.clear_cache()
 
     return module
