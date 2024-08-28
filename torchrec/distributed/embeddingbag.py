@@ -572,6 +572,10 @@ class ShardedEmbeddingBagCollection(
             },
         )
         self._env = env
+        # output parameters as DTensor in state dict
+        self._output_dtensor: bool = (
+            fused_params.get("output_dtensor", False) if fused_params else False
+        )
 
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module,
@@ -622,10 +626,6 @@ class ShardedEmbeddingBagCollection(
         self._kt_key_ordering: Optional[torch.Tensor] = None
         # to support the FP16 hook
         self._create_output_dist()
-        # output parameters as DTensor in state dict
-        self._output_dtensor: bool = (
-            fused_params.get("output_dtensor", False) if fused_params else False
-        )
 
         # forward pass flow control
         self._has_uninitialized_input_dist: bool = True
@@ -719,15 +719,17 @@ class ShardedEmbeddingBagCollection(
             elif isinstance(state_dict[key], DTensor):
                 shards_wrapper = state_dict[key].to_local()
                 local_shards = shards_wrapper.local_shards()
-                dim = shards_wrapper.local_sizes()[0][1]
                 if len(local_shards) == 0:
                     state_dict[key] = torch.empty(0)
-                elif len(local_shards) > 1:
-                    state_dict[key] = torch.cat(
-                        [s.view(-1) for s in local_shards], dim=0
-                    ).view(-1, dim)
                 else:
-                    state_dict[key] = local_shards[0].view(-1, dim)
+                    dim = shards_wrapper.local_sizes()[0][1]
+                    # CW multiple shards are merged
+                    if len(local_shards) > 1:
+                        state_dict[key] = torch.cat(
+                            [s.view(-1) for s in local_shards], dim=0
+                        ).view(-1, dim)
+                    else:
+                        state_dict[key] = local_shards[0].view(-1, dim)
             elif isinstance(state_dict[key], torch.Tensor):
                 local_shards = []
                 if model_shards_sharded_tensor:

@@ -175,6 +175,8 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     ),
                     stride=info.param.stride(),
                 )
+            # to not pass onto TBE
+            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(

@@ -52,9 +52,9 @@ class LocalShardsWrapper(torch.Tensor):
         if len(local_shards) == 0:
             r = torch.Tensor._make_wrapper_subclass(  # type: ignore[attr-defined])
                 cls,
-                torch.Size([0]),
+                torch.Size([0, 0]),
             )
-            r._local_shards = []  # this should be zero?
+            r._local_shards = []
             r._storage_meta = TensorStorageMetadata(
                 properties=TensorProperties(),
                 size=torch.Size([0, 0]),
@@ -279,6 +279,13 @@ class LocalShardsWrapper(torch.Tensor):
         """
         return self._storage_meta
 
+    def is_empty_shard(self) -> bool:
+        """
+        Returns a :class:`bool` object indicating if the local tensor on current rank
+        is an empty tensor
+        """
+        return self._storage_meta.size[0] == 0 and self._storage_meta.size[1] == 0
+
     def __create_write_items__(
         self, fqn: str, object: Any  # pyre-ignore[2]
     ) -> List[WriteItem]:
@@ -326,6 +333,12 @@ class LocalShardsWrapper(torch.Tensor):
             for shard, chunk in zip(self._local_shards, self._storage_meta.chunks):
                 if chunk.offsets == index.offset:
                     return shard
+
+        # Empty shard case
+        if len(self._local_shards) == 0 and self._storage_meta.chunks[
+            0
+        ].sizes == torch.Size([0, 0]):
+            return torch.empty(0)
 
         raise ValueError(
             f"Could not find shard at '{index.offset}' for FQN: '{index.fqn}'"
