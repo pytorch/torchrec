@@ -174,6 +174,8 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                     ),
                     stride=info.param.stride(),
                 )
+            # to not pass onto TBE
+            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):
