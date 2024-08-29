@@ -36,6 +36,7 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 from torchrec.modules.feature_processor import PositionWeightedProcessor
+from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
 
@@ -573,6 +574,69 @@ def _concat(
     sparse_embeddings: List[torch.Tensor],
 ) -> torch.Tensor:
     return torch.cat([dense] + sparse_embeddings, dim=1)
+
+
+class TestOverArchRegroupModule(nn.Module):
+    """
+    Basic nn.Module for testing
+
+    Args:
+        device
+
+    Call Args:
+        dense: torch.Tensor,
+        sparse: KeyedTensor,
+
+    Returns:
+        torch.Tensor
+
+    Example::
+
+        TestOverArch()
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        embedding_names: Optional[List[str]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+        self._embedding_names: List[str] = (
+            embedding_names
+            if embedding_names
+            else [feature for table in tables for feature in table.feature_names]
+        )
+        self._weighted_features: List[str] = [
+            feature for table in weighted_tables for feature in table.feature_names
+        ]
+        in_features = (
+            8
+            + sum([table.embedding_dim * len(table.feature_names) for table in tables])
+            + sum(
+                [
+                    table.embedding_dim * len(table.feature_names)
+                    for table in weighted_tables
+                ]
+            )
+        )
+        self.dhn_arch: nn.Module = TestDHNArch(in_features, device)
+        self.regroup_module = KTRegroupAsDict(
+            [self._embedding_names, self._weighted_features],
+            ["unweighted", "weighted"],
+        )
+
+    def forward(
+        self,
+        dense: torch.Tensor,
+        sparse: KeyedTensor,
+    ) -> torch.Tensor:
+        pooled_emb = self.regroup_module([sparse])
+        values = list(pooled_emb.values())
+        return self.dhn_arch(_concat(dense, values))
 
 
 class TestOverArch(nn.Module):

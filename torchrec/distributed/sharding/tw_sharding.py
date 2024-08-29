@@ -11,6 +11,7 @@ from typing import Any, Callable, cast, Dict, List, Optional, TypeVar, Union
 
 import torch
 import torch.distributed as dist
+from torch.distributed._tensor.placement_types import Replicate
 from torchrec.distributed.dist_data import (
     EmbeddingsAllToOne,
     KJTAllToAll,
@@ -33,6 +34,7 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
+    DTensorMetadata,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     InputDistOutputs,
@@ -111,6 +113,20 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
+            dtensor_metadata = None
+            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+                dtensor_metadata = DTensorMetadata(
+                    mesh=self._env.device_mesh,
+                    placements=(Replicate(),),
+                    size=(
+                        info.embedding_config.num_embeddings,
+                        info.embedding_config.embedding_dim,
+                    ),
+                    stride=info.param.stride(),
+                )
+            # to not pass onto TBE
+            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
+
             # pyre-fixme [16]
             tables_per_rank[info.param_sharding.ranks[0]].append(
                 ShardedEmbeddingTable(
@@ -130,6 +146,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     ),
                     local_metadata=shards[0],
                     global_metadata=global_metadata,
+                    dtensor_metadata=dtensor_metadata,
                     weight_init_max=info.embedding_config.weight_init_max,
                     weight_init_min=info.embedding_config.weight_init_min,
                     fused_params=info.fused_params,

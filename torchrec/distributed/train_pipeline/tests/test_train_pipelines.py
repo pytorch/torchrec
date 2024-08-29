@@ -12,7 +12,7 @@ import copy
 import unittest
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, List, Optional, Tuple, Type
+from typing import cast, List, Optional, Tuple, Type, Union
 from unittest.mock import MagicMock
 
 import torch
@@ -1365,6 +1365,54 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             list(next_cached_results.keys()),
             ["_preproc_module", "preproc_nonweighted", "preproc_weighted"],
         )
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_nested_preproc(self) -> None:
+        """
+        If preproc module is nested, we should still be able to pipeline it
+        """
+        extra_input = ModelInput.generate(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            batch_size=self.batch_size,
+            world_size=1,
+            num_float_features=10,
+            randomize_indices=False,
+        )[0].to(self.device)
+
+        preproc_module = TestNegSamplingModule(
+            extra_input=extra_input,
+        )
+        model = self._setup_model(preproc_module=preproc_module)
+
+        class ParentModule(nn.Module):
+            def __init__(
+                self,
+                nested_model: nn.Module,
+            ) -> None:
+                super().__init__()
+                self.nested_model = nested_model
+
+            def forward(
+                self,
+                input: ModelInput,
+            ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+                return self.nested_model(input)
+
+        model = ParentModule(model)
+
+        pipelined_model, pipeline = self._check_output_equal(
+            model,
+            self.sharding_type,
+        )
+
+        # Check that both EC and EBC pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+        self.assertEqual(len(pipeline._pipelined_preprocs), 1)
 
 
 class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):

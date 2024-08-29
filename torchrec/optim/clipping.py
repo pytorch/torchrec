@@ -112,6 +112,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
                     for p in dtensor_params
                     if p.grad is not None
                 ]
+                sharded_grads = [grad for grad in sharded_grads if grad.numel() > 0]
                 if sharded_grads:
                     replicated_grads = [
                         p.grad for p in self._params if p.grad is not None
@@ -136,7 +137,9 @@ def _dist_clip_grad_norm(
     max_norm: float,
     norm_type: float = 2.0,
 ) -> torch.Tensor:
-    assert len(sharded_grads) > 0
+    sharded_grads_bases = _dedup_to_base_tensors(sharded_grads)
+    if len(sharded_grads_bases) > 0:
+        sharded_grads = sharded_grads_bases
     sharded_norms = torch._foreach_norm(sharded_grads, norm_type)
     local_norm = torch.linalg.vector_norm(torch.stack(sharded_norms), norm_type)
     if replicated_grads:
@@ -163,3 +166,20 @@ def _dist_clip_grad_norm(
     clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
     torch._foreach_mul_(sharded_grads + replicated_grads, clip_coef_clamped)
     return total_norm
+
+
+def _dedup_to_base_tensors(tensors: List[torch.Tensor]) -> List[torch.Tensor]:
+    """
+    This is a performance optimization specific to FSDP2. Each gradient tensor
+    of the same FSDP module share the same base tensor, so for the total norm
+    computation, we can directly use the base tensor to reduce the number of
+    tensors to compute norm over.
+    """
+    seen_base_tensors = set()
+    base_tensors = []
+    for tensor in tensors:
+        base_tensor = tensor._base if tensor._base is not None else tensor
+        if base_tensor not in seen_base_tensors:
+            seen_base_tensors.add(base_tensor)
+            base_tensors.append(base_tensor)
+    return base_tensors
