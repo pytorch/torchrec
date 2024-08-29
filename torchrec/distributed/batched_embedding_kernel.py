@@ -1156,6 +1156,10 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
             **ssd_tbe_params,
         ).to(device)
 
+        logger.info(
+            f"tbe_unique_id:{self._emb_module.tbe_unique_id} => table name to count dict:{self.table_name_to_count}"
+        )
+
         self._optim: KeyValueEmbeddingFusedOptimizer = KeyValueEmbeddingFusedOptimizer(
             config,
             self._emb_module,
