@@ -68,19 +68,6 @@ class GradientClippingOptimizer(OptimizerWrapper):
         if len(self._mesh_to_dtensor_params) == 0:
             return
 
-        # check if we have the support for DTensor
-        if len(self._mesh_to_dtensor_params) > 1:
-            raise NotImplementedError(
-                "More than one device mesh is not supported yet: "
-                f"{self._mesh_to_dtensor_params.keys()}"
-            )
-
-        device_mesh = next(iter(self._mesh_to_dtensor_params.keys()))
-        if device_mesh.ndim > 1:
-            raise NotImplementedError(
-                f"{device_mesh.ndim}D device mesh is not supported yet"
-            )
-
         if self._clipping == GradientClipping.VALUE:
             # This path is currently not used in any production.
             raise NotImplementedError(
@@ -104,26 +91,29 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 )
             else:
                 # There are DTensor parameters, so we need to use _dist_clip_grad_norm
-                device_mesh = next(iter(self._mesh_to_dtensor_params.keys()))
-                dtensor_params = self._mesh_to_dtensor_params[device_mesh]
-                process_group = device_mesh.get_group()
-                sharded_grads = [
-                    cast(DTensor, p.grad)._local_tensor
-                    for p in dtensor_params
-                    if p.grad is not None
-                ]
-                sharded_grads = [grad for grad in sharded_grads if grad.numel() > 0]
-                if sharded_grads:
-                    replicated_grads = [
-                        p.grad for p in self._params if p.grad is not None
+                for device_mesh, dtensor_params in self._mesh_to_dtensor_params.items():
+                    if device_mesh.ndim > 1:
+                        # pyre-ignore[16]: `dist.device_mesh.DeviceMesh` has no attribute `_flatten`.
+                        process_group = device_mesh._flatten().get_group()
+                    else:
+                        process_group = device_mesh.get_group()
+                    sharded_grads = [
+                        cast(DTensor, p.grad)._local_tensor
+                        for p in dtensor_params
+                        if p.grad is not None
                     ]
-                    _dist_clip_grad_norm(
-                        sharded_grads,
-                        replicated_grads,
-                        process_group,
-                        self._max_gradient,
-                        float(self._norm_type),
-                    )
+                    sharded_grads = [grad for grad in sharded_grads if grad.numel() > 0]
+                    if sharded_grads:
+                        replicated_grads = [
+                            p.grad for p in self._params if p.grad is not None
+                        ]
+                        _dist_clip_grad_norm(
+                            sharded_grads,
+                            replicated_grads,
+                            process_group,
+                            self._max_gradient,
+                            float(self._norm_type),
+                        )
         elif self._clipping == GradientClipping.VALUE:
             torch.nn.utils.clip_grad_value_(self._params, self._max_gradient)
 
