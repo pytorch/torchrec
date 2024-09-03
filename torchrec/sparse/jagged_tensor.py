@@ -2841,7 +2841,11 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def regroup(
         keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
     ) -> List[torch.Tensor]:
-        return permute_multi_embedding(keyed_tensors, groups)
+        # Fast path, one-to-one correspondence between keyed_tensors and groups
+        if _all_keys_used_once(keyed_tensors, groups) is True:
+            return _fbgemm_permute_pooled_embs(keyed_tensors, groups)
+        else:  # Fallback to slow path otherwise
+            return _regroup_keyed_tensors(keyed_tensors, groups)
 
     @staticmethod
     def regroup_as_dict(
