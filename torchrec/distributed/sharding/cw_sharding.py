@@ -48,6 +48,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -157,7 +158,12 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                 shards_metadata=shards,
                 size=torch.Size(
                     [
-                        info.embedding_config.num_embeddings,
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         info.embedding_config.embedding_dim,
                     ]
                 ),
@@ -169,7 +175,12 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                     mesh=self._env.device_mesh,
                     placements=(Shard(1),),
                     size=(
-                        info.embedding_config.num_embeddings,
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         info.embedding_config.embedding_dim,
                     ),
                     stride=info.param.stride(),
@@ -190,7 +201,14 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                         pooling=info.embedding_config.pooling,
                         is_weighted=info.embedding_config.is_weighted,
                         has_feature_processor=info.embedding_config.has_feature_processor,
-                        local_rows=info.embedding_config.num_embeddings,
+                        local_rows=(
+                            none_throws(
+                                info.embedding_config.num_embeddings_post_pruning
+                            )
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         local_cols=shards[i].shard_sizes[1],
                         compute_kernel=EmbeddingComputeKernel(
                             info.param_sharding.compute_kernel
@@ -201,7 +219,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                         fused_params=info.fused_params,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
-                        pruning_indices_remapping=info.embedding_config.pruning_indices_remapping,
+                        num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
                     )
                 )
 

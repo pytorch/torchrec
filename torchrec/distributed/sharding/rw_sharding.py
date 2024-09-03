@@ -158,7 +158,12 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 shards_metadata=shards,
                 size=torch.Size(
                     [
-                        info.embedding_config.num_embeddings,
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         info.embedding_config.embedding_dim,
                     ]
                 ),
@@ -170,7 +175,12 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     mesh=self._env.device_mesh,
                     placements=(Shard(0),),
                     size=(
-                        info.embedding_config.num_embeddings,
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         info.embedding_config.embedding_dim,
                     ),
                     stride=info.param.stride(),
@@ -201,6 +211,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,
+                        num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
                     )
                 )
         return tables_per_rank
