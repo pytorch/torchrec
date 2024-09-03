@@ -1257,30 +1257,43 @@ class All2All_Pooled_Req(Function):
 
         assert B_global == sum(batch_size_per_rank)
 
-        sharded_input_embeddings = input_embeddings.view(-1)
-
         if a2ai.codecs is not None:
             codecs = none_throws(a2ai.codecs)
             qcomm_ctx = codecs.forward.create_context()
+            padded_D_local_sum, padding_size = codecs.forward.padded_size(
+                input_embeddings, dim_sum_per_rank, my_rank, qcomm_ctx
+            )
+
+            if padding_size == 0:
+                sharded_input_embeddings = input_embeddings.view(-1)
+            else:
+                sharded_input_embeddings = input_embeddings
             sharded_input_embeddings = codecs.forward.encode(
                 sharded_input_embeddings,
                 qcomm_ctx,
+            )
+            padded_dim_sum_per_rank = (
+                qcomm_ctx.padded_dim_sum_per_rank
+                if qcomm_ctx is not None
+                and qcomm_ctx.padded_dim_sum_per_rank is not None
+                else dim_sum_per_rank
             )
             output_split_sizes = [
                 codecs.forward.calc_quantized_size(
                     B_local * D_rank_sum,
                     qcomm_ctx,
                 )
-                for D_rank_sum in dim_sum_per_rank
+                for D_rank_sum in padded_dim_sum_per_rank
             ]
             input_split_sizes = [
                 codecs.forward.calc_quantized_size(
-                    D_local_sum * B_rank,
+                    padded_D_local_sum * B_rank,
                     qcomm_ctx,
                 )
                 for B_rank in batch_size_per_rank
             ]
         else:
+            sharded_input_embeddings = input_embeddings.view(-1)
             output_split_sizes = [
                 B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
             ]
@@ -1372,9 +1385,23 @@ class All2All_Pooled_Wait(Function):
                 myreq.qcomm_ctx,
             )
 
-        outputs_by_rank = sharded_output_embeddings.split(
-            [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+        padded_dim_sum_per_rank = (
+            myreq.qcomm_ctx.padded_dim_sum_per_rank
+            if myreq.qcomm_ctx is not None
+            and myreq.qcomm_ctx.padded_dim_sum_per_rank is not None
+            else dim_sum_per_rank
         )
+        outputs_by_rank = sharded_output_embeddings.split(
+            [B_local * D_rank_sum for D_rank_sum in padded_dim_sum_per_rank]
+        )
+        if (
+            myreq.qcomm_ctx is not None
+            and myreq.qcomm_ctx.padded_dim_sum_per_rank is not None
+        ):
+            outputs_by_rank = [
+                output.view(B_local, -1)[:, :dim_sum]
+                for output, dim_sum in zip(outputs_by_rank, dim_sum_per_rank)
+            ]
         result = torch.cat(
             [output.view(B_local, -1) for output in outputs_by_rank], dim=1
         )
