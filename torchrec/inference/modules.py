@@ -357,7 +357,7 @@ def set_pruning_data(
     module_types: Optional[List[Type[nn.Module]]] = None,
 ) -> torch.nn.Module:
     if module_types is None:
-        module_types = [EmbeddingBagCollection]
+        module_types = [EmbeddingBagCollection, FeatureProcessedEmbeddingBagCollection]
 
     for _, module in model.named_modules():
         if type(module) in module_types:
