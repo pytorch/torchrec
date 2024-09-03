@@ -29,9 +29,11 @@ from torchrec.inference.modules import (
     assign_weights_to_tbe,
     get_table_to_weights_from_tbe,
     quantize_inference_model,
+    set_pruning_data,
     shard_quant_model,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 
 class InferenceTest(unittest.TestCase):
@@ -134,3 +136,42 @@ class InferenceTest(unittest.TestCase):
 
             self.assertTrue(torch.allclose(output, quantized_output, atol=1e-4))
             self.assertTrue(torch.allclose(output, sharded_quant_output, atol=1e-4))
+
+    def test_set_pruning_data(self) -> None:
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            num_float_features=10,
+            dense_device=torch.device("cpu"),
+            sparse_device=torch.device("cpu"),
+            over_arch_clazz=TestOverArchRegroupModule,
+        )
+
+        pruning_dict = {}
+
+        for table in self.tables:
+            pruning_dict[table.name] = table.num_embeddings - 1
+
+        set_pruning_data(model, pruning_dict)
+        quantized_model = quantize_inference_model(model)
+
+        # Check EBC configs and TBE for correct shapes
+        for module in quantized_model.modules():
+            if isinstance(module, EmbeddingBagCollection):
+                for config in module.embedding_bag_configs():
+                    if config.name in pruning_dict:
+                        self.assertEqual(
+                            config.num_embeddings_post_pruning,
+                            pruning_dict[config.name],
+                        )
+            elif module.__class__.__name__ == "IntNBitTableBatchedEmbeddingBagsCodegen":
+                for i, spec in enumerate(module.embedding_specs):
+                    if spec[0] in pruning_dict:
+                        self.assertEqual(
+                            module.split_embedding_weights()[i][0].size(0),
+                            pruning_dict[spec[0]],
+                        )
+                        self.assertEqual(
+                            spec[1],
+                            pruning_dict[spec[0]],
+                        )

@@ -49,6 +49,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -103,11 +104,17 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             # pyre-fixme [16]
             shards = info.param_sharding.sharding_spec.shards
             # construct the global sharded_tensor_metadata
+
             global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
                 size=torch.Size(
                     [
-                        info.embedding_config.num_embeddings,
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         info.embedding_config.embedding_dim,
                     ]
                 ),
@@ -139,7 +146,11 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     pooling=info.embedding_config.pooling,
                     is_weighted=info.embedding_config.is_weighted,
                     has_feature_processor=info.embedding_config.has_feature_processor,
-                    local_rows=info.embedding_config.num_embeddings,
+                    local_rows=(
+                        none_throws(info.embedding_config.num_embeddings_post_pruning)
+                        if info.embedding_config.num_embeddings_post_pruning is not None
+                        else info.embedding_config.num_embeddings
+                    ),
                     local_cols=info.embedding_config.embedding_dim,
                     compute_kernel=EmbeddingComputeKernel(
                         info.param_sharding.compute_kernel
@@ -150,7 +161,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     weight_init_max=info.embedding_config.weight_init_max,
                     weight_init_min=info.embedding_config.weight_init_min,
                     fused_params=info.fused_params,
-                    pruning_indices_remapping=info.embedding_config.pruning_indices_remapping,
+                    num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
                 )
             )
         return tables_per_rank
