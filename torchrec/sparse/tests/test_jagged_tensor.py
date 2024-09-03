@@ -2121,13 +2121,13 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
                     lengths=input.lengths(),
                     offsets=input.offsets(),
                 )
-                return output, output._stride
+                return output, output.stride()
 
         # Case 3: KeyedJaggedTensor is used as both an input and an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsInputAndOutput()
         gm = symbolic_trace(m)
         FileCheck().check("KeyedJaggedTensor").check("keys()").check("values()").check(
-            "._stride"
+            "stride"
         ).run(gm.code)
         input = KeyedJaggedTensor.from_offsets_sync(
             values=torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
@@ -2185,7 +2185,7 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
                 lengths: torch.Tensor,
             ) -> Tuple[KeyedJaggedTensor, int]:
                 output = KeyedJaggedTensor(keys, values, weights, lengths)
-                return output, output._stride
+                return output, output.stride()
 
         # Case 1: KeyedJaggedTensor is only used as an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsOutput()
