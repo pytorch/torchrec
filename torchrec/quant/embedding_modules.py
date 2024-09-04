@@ -872,7 +872,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         """
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
-        kjt_keys = features.keys()
+        kjt_keys = _get_kjt_keys(features)
         kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
         kjt_permute = features.permute(kjt_permute_order)
         kjts_per_key = kjt_permute.split(self._feature_splits)
