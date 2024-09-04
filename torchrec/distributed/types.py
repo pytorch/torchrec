@@ -610,6 +610,7 @@ class KeyValueParams:
     gather_ssd_cache_stats: Optional[bool] = None
     stats_reporter_config: Optional[TBEStatsReporterConfig] = None
     use_passed_in_path: bool = True
+    l2_cache_size: Optional[int] = None
 
     # Parameter Server (PS) Attributes
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -623,13 +624,15 @@ class KeyValueParams:
                 self.ssd_storage_directory,
                 self.ssd_rocksdb_write_buffer_size,
                 self.ssd_rocksdb_shards,
-                self.gather_ssd_cache_stats,
-                self.stats_reporter_config,
                 # Parameter Server (PS) Attributes
                 self.ps_hosts,
                 self.ps_client_thread_num,
                 self.ps_max_key_per_request,
                 self.ps_max_local_index_length,
+                # tbe attributes
+                self.gather_ssd_cache_stats,
+                self.stats_reporter_config,
+                self.l2_cache_size,
             )
         )
 

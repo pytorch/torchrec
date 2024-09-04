@@ -9,6 +9,7 @@
 
 import copy
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Dict, List, Mapping, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -46,6 +47,47 @@ def _append_table_shard(
     d[table_name].append(shard)
 
 
+def post_state_dict_hook(
+    # Union["ShardedQuantEmbeddingBagCollection", "ShardedQuantEmbeddingCollection"]
+    # pyre-ignore [24]
+    module: ShardedEmbeddingModule,
+    destination: Dict[str, torch.Tensor],
+    prefix: str,
+    _local_metadata: Dict[str, Any],
+    tables_weights_prefix: str,  # "embedding_bags" or "embeddings"
+) -> None:
+    for (
+        table_name,
+        sharded_t,
+    ) in module._table_name_to_sharded_tensor.items():
+        destination[f"{prefix}{tables_weights_prefix}.{table_name}.weight"] = sharded_t
+
+    for sfx, dict_sharded_t, dict_t_list in [
+        (
+            "weight_qscale",
+            module._table_name_to_sharded_tensor_qscale,
+            module._table_name_to_tensors_list_qscale,
+        ),
+        (
+            "weight_qbias",
+            module._table_name_to_sharded_tensor_qbias,
+            module._table_name_to_tensors_list_qbias,
+        ),
+    ]:
+        for (
+            table_name,
+            sharded_t,
+        ) in dict_sharded_t.items():
+            destination[f"{prefix}{tables_weights_prefix}.{table_name}.{sfx}"] = (
+                sharded_t
+            )
+        for (
+            table_name,
+            t_list,
+        ) in dict_t_list.items():
+            destination[f"{prefix}{tables_weights_prefix}.{table_name}.{sfx}"] = t_list
+
+
 class ShardedQuantEmbeddingModuleState(
     ShardedEmbeddingModule[CompIn, DistOut, Out, ShrdCtx]
 ):
@@ -81,17 +123,6 @@ class ShardedQuantEmbeddingModuleState(
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
         self._table_name_to_tensors_list_qbias: Dict[str, List[torch.Tensor]] = {}
-
-        # pruning_index_remappings
-        self._table_name_to_local_shards_pruning_index_remappings: Dict[
-            str, List[Shard]
-        ] = {}
-        self._table_name_to_sharded_tensor_pruning_index_remappings: Dict[
-            str, Union[torch.Tensor, ShardedTensorBase]
-        ] = {}
-        self._table_name_to_tensors_list_pruning_index_remappings: Dict[
-            str, List[torch.Tensor]
-        ] = {}
 
         for tbe, config in tbes.items():
             for (tbe_split_w, tbe_split_qscale, tbe_split_qbias), table in zip(
@@ -184,43 +215,6 @@ class ShardedQuantEmbeddingModuleState(
                             Shard(tensor=tbe_split_qparam, metadata=qmetadata),
                         )
                     # end of weight_qscale & weight_qbias section
-            if table.pruning_indices_remapping is not None:
-                for (
-                    qparam,
-                    table_name_to_local_shards,
-                    _,
-                ) in [
-                    (
-                        table.pruning_indices_remapping,
-                        self._table_name_to_local_shards_pruning_index_remappings,
-                        self._table_name_to_tensors_list_pruning_index_remappings,
-                    )
-                ]:
-                    parameter_sharding: ParameterSharding = (
-                        table_name_to_parameter_sharding[table.name]
-                    )
-                    sharding_type: str = parameter_sharding.sharding_type
-
-                    assert sharding_type in [
-                        ShardingType.TABLE_WISE.value,
-                        ShardingType.COLUMN_WISE.value,
-                    ]
-
-                    qmetadata = ShardMetadata(
-                        shard_offsets=[0],
-                        shard_sizes=[
-                            qparam.shape[0],
-                        ],
-                        placement=table.local_metadata.placement,
-                    )
-                    # TODO(ivankobzarev): "meta" sharding support: cleanup when copy to "meta" moves all tensors to "meta"
-                    if qmetadata.placement.device != qparam.device:
-                        qmetadata.placement = _remote_device(qparam.device)
-                    _append_table_shard(
-                        table_name_to_local_shards,
-                        table.name,
-                        Shard(tensor=qparam, metadata=qmetadata),
-                    )
 
         for table_name_to_local_shards, table_name_to_sharded_tensor in [
             (self._table_name_to_local_shards, self._table_name_to_sharded_tensor),
@@ -263,65 +257,9 @@ class ShardedQuantEmbeddingModuleState(
                     )
                 )
 
-        for table_name_to_local_shards, table_name_to_sharded_tensor in [
-            (
-                self._table_name_to_local_shards_pruning_index_remappings,
-                self._table_name_to_sharded_tensor_pruning_index_remappings,
-            ),
-        ]:
-            for table_name, local_shards in table_name_to_local_shards.items():
-                # Single Tensor per table (TW sharding)
-                table_name_to_sharded_tensor[table_name] = local_shards[0].tensor
-                continue
-
-        def post_state_dict_hook(
-            # Union["ShardedQuantEmbeddingBagCollection", "ShardedQuantEmbeddingCollection"]
-            module: ShardedQuantEmbeddingModuleState[CompIn, DistOut, Out, ShrdCtx],
-            destination: Dict[str, torch.Tensor],
-            prefix: str,
-            _local_metadata: Dict[str, Any],
-        ) -> None:
-            for (
-                table_name,
-                sharded_t,
-            ) in module._table_name_to_sharded_tensor.items():
-                destination[f"{prefix}{tables_weights_prefix}.{table_name}.weight"] = (
-                    sharded_t
-                )
-
-            for sfx, dict_sharded_t, dict_t_list in [
-                (
-                    "weight_qscale",
-                    module._table_name_to_sharded_tensor_qscale,
-                    module._table_name_to_tensors_list_qscale,
-                ),
-                (
-                    "weight_qbias",
-                    module._table_name_to_sharded_tensor_qbias,
-                    module._table_name_to_tensors_list_qbias,
-                ),
-                (
-                    "index_remappings_array",
-                    module._table_name_to_sharded_tensor_pruning_index_remappings,
-                    module._table_name_to_tensors_list_pruning_index_remappings,
-                ),
-            ]:
-                for (
-                    table_name,
-                    sharded_t,
-                ) in dict_sharded_t.items():
-                    destination[
-                        f"{prefix}{tables_weights_prefix}.{table_name}.{sfx}"
-                    ] = sharded_t
-                for (
-                    table_name,
-                    t_list,
-                ) in dict_t_list.items():
-                    destination[
-                        f"{prefix}{tables_weights_prefix}.{table_name}.{sfx}"
-                    ] = t_list
-
-        self._register_state_dict_hook(post_state_dict_hook)
+        self._register_state_dict_hook(
+            partial(post_state_dict_hook, tables_weights_prefix=tables_weights_prefix)
+        )
 
     def _load_from_state_dict(
         # Union["ShardedQuantEmbeddingBagCollection", "ShardedQuantEmbeddingCollection"]

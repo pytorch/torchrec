@@ -64,6 +64,7 @@ from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
     FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
+    MODULE_ATTR_EMB_CONFIG_NAME_TO_NUM_ROWS_POST_PRUNING_DICT,
     quant_prep_enable_register_tbes,
 )
 
@@ -348,6 +349,25 @@ def quantize_dense(
     for key, value in reassign.items():
         module._modules[key] = value
     return predict_module
+
+
+def set_pruning_data(
+    model: torch.nn.Module,
+    tables_to_rows_post_pruning: Dict[str, int],
+    module_types: Optional[List[Type[nn.Module]]] = None,
+) -> torch.nn.Module:
+    if module_types is None:
+        module_types = [EmbeddingBagCollection, FeatureProcessedEmbeddingBagCollection]
+
+    for _, module in model.named_modules():
+        if type(module) in module_types:
+            setattr(
+                module,
+                MODULE_ATTR_EMB_CONFIG_NAME_TO_NUM_ROWS_POST_PRUNING_DICT,
+                tables_to_rows_post_pruning,
+            )
+
+    return model
 
 
 def quantize_inference_model(

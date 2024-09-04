@@ -10,8 +10,6 @@
 #!/usr/bin/env python3
 
 import copy
-import re
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
@@ -28,7 +26,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn, quantization as quant, Tensor
-from torch._dynamo import trace_rules
 from torch.distributed._shard.sharding_spec import ShardingSpec
 from torch.utils import _pytree as pytree
 from torchrec import (
@@ -74,6 +71,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
 )
 from torchrec.distributed.utils import CopyableMixin
+from torchrec.inference.modules import set_pruning_data
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
@@ -91,7 +89,6 @@ from torchrec.quant.embedding_modules import (
     quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
     quant_prep_enable_register_tbes,
 )
-from torchrec.sparse.jagged_tensor import is_non_strict_exporting
 
 
 @dataclass
@@ -199,6 +196,7 @@ def prep_inputs(
                 long_indices=long_indices,
             )[1][0],
         )
+
     return inputs
 
 
@@ -626,6 +624,7 @@ def create_test_model(
     num_weighted_features: int = 1,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     weight_dtype: torch.dtype = torch.qint8,
+    pruning_dict: Optional[Dict[str, int]] = None,
 ) -> TestModelInfo:
     topology: Topology = Topology(
         world_size=world_size, compute_device=sparse_device.type
@@ -673,8 +672,14 @@ def create_test_model(
         for i in range(mi.num_weighted_features)
     ]
 
+    if pruning_dict:
+        for config in mi.tables + mi.weighted_tables:
+            if config.name in pruning_dict:
+                config.num_embeddings_post_pruning = pruning_dict[config.name]
+
     mi.model = TorchTypesModelInputWrapper(
         TestSparseNN(
+            # pyre-ignore [6]
             tables=mi.tables,
             weighted_tables=mi.weighted_tables,
             num_float_features=mi.num_float_features,
@@ -683,6 +688,10 @@ def create_test_model(
         )
     )
     mi.model.training = False
+
+    if pruning_dict:
+        set_pruning_data(mi.model, pruning_dict)
+
     mi.quant_model = quantize(
         module=mi.model,
         inplace=False,
@@ -826,15 +835,30 @@ def shard_qebc(
     plan: Optional[ShardingPlan] = None,
     ebc_fqn: str = "_module.sparse.ebc",
     shard_score_ebc: bool = False,
+    feature_processor: bool = False,
 ) -> torch.nn.Module:
-    sharder = TestQuantEBCSharder(
-        sharding_type=sharding_type.value,
-        kernel_type=EmbeddingComputeKernel.QUANT.value,
-        shardable_params=(
-            [table.name for table in mi.tables]
-            + ([table.name for table in mi.weighted_tables] if shard_score_ebc else [])
-        ),
-    )
+    if feature_processor:
+        sharder = TestQuantFPEBCSharder(
+            sharding_type=sharding_type.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=(
+                [table.name for table in mi.tables]
+                + ([table.name for table in mi.weighted_tables])
+            ),
+        )
+    else:
+        sharder = TestQuantEBCSharder(
+            sharding_type=sharding_type.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=(
+                [table.name for table in mi.tables]
+                + (
+                    [table.name for table in mi.weighted_tables]
+                    if shard_score_ebc
+                    else []
+                )
+            ),
+        )
     if not plan:
         # pyre-ignore
         plan = mi.planner.plan(

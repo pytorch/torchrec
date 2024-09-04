@@ -214,11 +214,6 @@ class QuantBatchedEmbeddingBag(
             fused_params
         )
 
-        index_remapping = [
-            table.pruning_indices_remapping for table in config.embedding_tables
-        ]
-        if all(v is None for v in index_remapping):
-            index_remapping = None
         self._runtime_device: torch.device = _get_runtime_device(device, config)
         # 16 for CUDA, 1 for others like CPU and MTIA.
         self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
@@ -244,8 +239,6 @@ class QuantBatchedEmbeddingBag(
                     )
                 ],
                 device=device,
-                # pyre-ignore
-                index_remapping=index_remapping,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
                 row_alignment=self._tbe_row_alignment,

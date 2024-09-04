@@ -109,7 +109,12 @@ class ModelInput(Pipelineable):
         feature_idx = 0
         for idx in range(len(tables)):
             for feature in tables[idx].feature_names:
-                idlist_features_to_num_embeddings[feature] = tables[idx].num_embeddings
+                idlist_features_to_num_embeddings[feature] = (
+                    tables[idx].num_embeddings_post_pruning
+                    if tables[idx].num_embeddings_post_pruning is not None
+                    else tables[idx].num_embeddings
+                )
+
                 idlist_features_to_max_length[feature] = (
                     max_feature_lengths[feature_idx] if max_feature_lengths else None
                 )
@@ -123,7 +128,14 @@ class ModelInput(Pipelineable):
         ]
 
         idlist_ind_ranges = list(idlist_features_to_num_embeddings.values())
-        idscore_ind_ranges = [table.num_embeddings for table in weighted_tables]
+        idscore_ind_ranges = [
+            (
+                table.num_embeddings_post_pruning
+                if table.num_embeddings_post_pruning is not None
+                else table.num_embeddings
+            )
+            for table in weighted_tables
+        ]
 
         idlist_pooling_factor = list(idlist_features_to_pooling_factor.values())
         idscore_pooling_factor = weighted_tables_pooling
@@ -215,6 +227,7 @@ class ModelInput(Pipelineable):
             if randomize_indices:
                 indices = torch.randint(
                     0,
+                    # pyre-ignore [6]
                     ind_range,
                     (num_indices,),
                     dtype=torch.long if long_indices else torch.int32,
@@ -337,7 +350,11 @@ class ModelInput(Pipelineable):
         keys = {}
         for table in tables:
             for feature_name in table.feature_names:
-                keys[feature_name] = table.num_embeddings
+                keys[feature_name] = (
+                    table.num_embeddings_post_pruning
+                    if table.num_embeddings_post_pruning
+                    else table.num_embeddings
+                )
         dedup_factor = 2
         global_float = torch.rand(
             (dedup_factor * average_batch_size * world_size, num_float_features)
