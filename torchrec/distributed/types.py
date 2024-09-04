@@ -224,6 +224,18 @@ class QuantizedCommCodec(Generic[QuantizationContext]):
         """
         ...
 
+    def padded_size(
+        self,
+        input_tensor: torch.Tensor,
+        dim_per_rank: List[int],
+        my_rank: int,
+        qcomm_ctx: QuantizationContext,
+    ) -> Tuple[int, int]:
+        """
+        Return (padded_dim_sum, padding_size) of the input tensor for quantization.
+        """
+        ...
+
 
 class NoOpQuantizedCommCodec(Generic[QuantizationContext]):
     """
@@ -256,6 +268,18 @@ class NoOpQuantizedCommCodec(Generic[QuantizationContext]):
 
     def create_context(self) -> Optional[QuantizationContext]:
         return None
+
+    def padded_size(
+        self,
+        input_tensor: torch.Tensor,
+        dim_per_rank: List[int],
+        my_rank: int,
+        qcomm_ctx: QuantizationContext,
+    ) -> Tuple[int, int]:
+        dim_sum = (
+            input_tensor.shape[0] if input_tensor.dim() == 1 else input_tensor.shape[1]
+        )
+        return dim_sum, 0
 
 
 @dataclass
@@ -343,7 +367,7 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
     Some caveats:
 
     * This works with Pytorch functions, but not any generic method, if
-      you would like to do arbitary python operations, you need to
+      you would like to do arbitrary python operations, you need to
       implement the corresponding magic methods
 
     * In the case that one function have two or more arguments are LazyAwaitable,
