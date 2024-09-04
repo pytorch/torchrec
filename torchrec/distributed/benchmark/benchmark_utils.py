@@ -299,7 +299,6 @@ def get_inputs(
                 average_batch_size=batch_size,
                 world_size=world_size,
                 num_float_features=0,
-                # pyre-ignore
                 tables=tables,
             )
         else:
