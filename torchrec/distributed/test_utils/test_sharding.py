@@ -121,6 +121,7 @@ class VariableBatchModelInputCallable(Protocol):
         world_size: int,
         num_float_features: int,
         tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
+        weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         pooling_avg: int = 10,
         global_constant_batch: bool = False,
     ) -> Tuple["ModelInput", List["ModelInput"]]: ...
@@ -181,6 +182,7 @@ def gen_model_and_input(
                 world_size=world_size,
                 num_float_features=num_float_features,
                 tables=tables,
+                weighted_tables=weighted_tables or [],
                 global_constant_batch=global_constant_batch,
             )
             if generate == ModelInput.generate_variable_batch_input
@@ -273,10 +275,10 @@ def sharding_single_rank_test(
     apply_optimizer_in_backward_config: Optional[
         Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
     ] = None,
-    variable_batch_size: bool = False,
+    variable_batch_size: bool = False,  # variable batch per rank
     batch_size: int = 4,
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
-    variable_batch_per_feature: bool = False,
+    variable_batch_per_feature: bool = False,  # VBE
     global_constant_batch: bool = False,
 ) -> None:
 
