@@ -381,9 +381,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                     (
                         table.name,
                         (
-                            table.num_embeddings
-                            if table.num_embeddings_post_pruning is None
-                            else table.num_embeddings_post_pruning
+                            table.num_embeddings_post_pruning
+                            # TODO: Need to check if attribute exists for BC
+                            if getattr(table, "num_embeddings_post_pruning", None)
+                            is not None
+                            else table.num_embeddings
                         ),
                         table.embedding_dim,
                         data_type_to_sparse_type(data_type),
