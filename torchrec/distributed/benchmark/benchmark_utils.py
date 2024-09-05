@@ -108,6 +108,9 @@ class BenchmarkResult:
     max_mem_allocated: List[int]  # megabytes
     rank: int = -1
 
+    def __str__(self) -> str:
+        return f"{self.short_name: <{35}} | Runtime (P90): {self.runtime_percentile(90):g} ms | Memory (P90): {self.max_mem_percentile(90)/1000:.2g} GB"
+
     def runtime_percentile(
         self, percentile: int = 50, interpolation: str = "nearest"
     ) -> torch.Tensor:
@@ -655,6 +658,7 @@ def benchmark_func(
     benchmark_func_kwargs: Optional[Dict[str, Any]],
     rank: int,
     device_type: str = "cuda",
+    pre_gpu_load: int = 0,
 ) -> BenchmarkResult:
     max_mem_allocated: List[int] = []
     if device_type == "cuda":
@@ -678,6 +682,9 @@ def benchmark_func(
 
     times = []
     if device_type == "cuda":
+        a = torch.rand(16384, 16384, device="cuda")
+        for _ in range(pre_gpu_load):
+            a = a * torch.rand(16384, 16384, device="cuda")
         for i in range(num_benchmarks):
             start[i].record()
             func_to_benchmark(bench_inputs, **benchmark_func_kwargs)
@@ -733,6 +740,9 @@ def benchmark_func(
             prof.export_chrome_trace(trace_file)
 
         if device_type == "cuda":
+            a = torch.rand(16384, 16384, device="cuda")
+            for _ in range(pre_gpu_load):
+                a = a * torch.rand(16384, 16384, device="cuda")
             with torch.profiler.profile(
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
