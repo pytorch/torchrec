@@ -356,7 +356,6 @@ def _test_compile_rank_fn(
                     average_batch_size=batch_size,
                     world_size=world_size,
                     num_float_features=num_float_features,
-                    # pyre-ignore
                     tables=mi.tables,
                 )
             else:

@@ -197,14 +197,14 @@ def get_qcomm_codecs_registry(
         qcomm_config_copy = copy.deepcopy(qcomms_config)
         # TODO: On H100, FP8 types might be natively supported, in which case we should check for that arch type and not fallback.
         if comm_op == CommOp.POOLED_EMBEDDINGS_REDUCE_SCATTER:
-            if qcomm_config_copy.forward_precision == CommType.FP8:
+            if qcomm_config_copy.forward_precision in [CommType.FP8, CommType.MX4]:
                 logger.warning(
-                    "FP8 is not supported for reduce scatter's forward - falling back to FP16"
+                    "FP8/MX4 is not supported for reduce scatter's forward - falling back to FP16"
                 )
                 qcomm_config_copy.forward_precision = CommType.FP16
-            if qcomm_config_copy.backward_precision == CommType.FP8:
+            if qcomm_config_copy.backward_precision in [CommType.FP8, CommType.MX4]:
                 logger.warning(
-                    "FP8 is not supported for reduce scatter's backward - falling back to BF16"
+                    "FP8/MX4 is not supported for reduce scatter's backward - falling back to BF16"
                 )
                 qcomm_config_copy.backward_precision = CommType.BF16
 
