@@ -777,7 +777,8 @@ def _get_node_args_helper(
                     # pyre-ignore[16]
                     ph_key: str = child_node.ph_key
                     # example: ph_key = 'event_id_list_features_seqs[marketplace]'
-                    ph_keys = ph_key.split("[")
+                    ph_key = ph_key.replace("[", ".")
+                    ph_keys = ph_key.split(".")
                     for key in ph_keys:
                         if "]" in key:
                             arg_info.input_attrs.append(key[:-1])
