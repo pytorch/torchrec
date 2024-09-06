@@ -287,7 +287,10 @@ def create_sharding_infos_by_sharding(
                 embedding_names=embedding_names,
                 weight_init_max=config.weight_init_max,
                 weight_init_min=config.weight_init_min,
-                num_embeddings_post_pruning=config.num_embeddings_post_pruning,
+                num_embeddings_post_pruning=(
+                    getattr(config, "num_embeddings_post_pruning", None)
+                    # TODO: Need to check if attribute exists for BC
+                ),
             ),
             param_sharding=parameter_sharding,
             param=param,
@@ -402,7 +405,10 @@ def create_sharding_infos_by_sharding_device_group(
                     embedding_names=embedding_names,
                     weight_init_max=config.weight_init_max,
                     weight_init_min=config.weight_init_min,
-                    num_embeddings_post_pruning=config.num_embeddings_post_pruning,
+                    num_embeddings_post_pruning=(
+                        getattr(config, "num_embeddings_post_pruning", None)
+                        # TODO: Need to check if attribute exists for BC
+                    ),
                 ),
                 param_sharding=parameter_sharding,
                 param=param,

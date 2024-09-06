@@ -397,7 +397,11 @@ def sharding_single_rank_test(
         local_opt = CombinedOptimizer([local_model.fused_optimizer, dense_optim])
 
         # Load model state from the global model.
-        copy_state_dict(local_model.state_dict(), global_model.state_dict())
+        copy_state_dict(
+            local_model.state_dict(),
+            global_model.state_dict(),
+            exclude_predfix="sparse.pooled_embedding_arch.embedding_modules._itp_iter",
+        )
 
         # Run a single training step of the sharded model.
         local_pred = gen_full_pred_after_one_step(local_model, local_opt, local_input)
