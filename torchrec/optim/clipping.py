@@ -93,7 +93,6 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 # There are DTensor parameters, so we need to use _dist_clip_grad_norm
                 for device_mesh, dtensor_params in self._mesh_to_dtensor_params.items():
                     if device_mesh.ndim > 1:
-                        # pyre-ignore[16]: `dist.device_mesh.DeviceMesh` has no attribute `_flatten`.
                         process_group = device_mesh._flatten().get_group()
                     else:
                         process_group = device_mesh.get_group()
