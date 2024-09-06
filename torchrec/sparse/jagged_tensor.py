@@ -1656,6 +1656,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         length_list: List[torch.Tensor] = []
         stride_per_key_per_rank: List[List[int]] = []
         stride: Optional[int] = None
+        inv_idx_keys: List[str] = []
+        inv_idx_tensors: List[torch.Tensor] = []
+
         variable_stride_per_key_list = [
             kjt.variable_stride_per_key() for kjt in kjt_list
         ]
@@ -1664,7 +1667,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         ), "variable stride per key must be consistent for all KJTs"
         variable_stride_per_key = all(variable_stride_per_key_list)
 
-        for kjt in kjt_list:
+        for i, kjt in enumerate(kjt_list):
             curr_is_weighted: bool = kjt.weights_or_none() is not None
             if is_weighted != curr_is_weighted:
                 raise ValueError("Can't merge weighted KJT with unweighted KJT")
@@ -1686,6 +1689,16 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 stride = kjt.stride()
             else:
                 assert stride == kjt.stride(), "strides must be consistent for all KJTs"
+            if kjt.inverse_indices_or_none() is not None:
+                assert (
+                    len(inv_idx_tensors) == i
+                ), "inverse indices must be consistent for all KJTs"
+                inv_idx_keys += kjt.inverse_indices()[0]
+                inv_idx_tensors.append(kjt.inverse_indices()[1])
+            else:
+                assert (
+                    len(inv_idx_tensors) == 0
+                ), "inverse indices must be consistent for all KJTs"
 
         return KeyedJaggedTensor(
             keys=keys,
@@ -1697,6 +1710,11 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 stride_per_key_per_rank if variable_stride_per_key else None
             ),
             length_per_key=length_per_key if has_length_per_key else None,
+            inverse_indices=(
+                (inv_idx_keys, torch.cat(inv_idx_tensors))
+                if len(inv_idx_tensors) == len(kjt_list)
+                else None
+            ),
         )
 
     @staticmethod
