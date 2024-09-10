@@ -959,9 +959,14 @@ def assert_close(expected, actual) -> None:
         assert sorted(expected.keys()) == sorted(actual.keys())
         for feature, jt_e in expected.items():
             jt_got = actual[feature]
-            assert_close(jt_e.lengths(), jt_got.lengths())
-            assert_close(jt_e.values(), jt_got.values())
-            assert_close(jt_e.offsets(), jt_got.offsets())
+            if isinstance(jt_e, torch.Tensor) and isinstance(jt_got, torch.Tensor):
+                if jt_got.device != jt_e.device:
+                    jt_got = actual.to(jt_e.device)
+                assert_close(jt_e, jt_got)
+            else:
+                assert_close(jt_e.lengths(), jt_got.lengths())
+                assert_close(jt_e.values(), jt_got.values())
+                assert_close(jt_e.offsets(), jt_got.offsets())
     else:
         if isinstance(expected, torch.Tensor) and isinstance(actual, torch.Tensor):
             if actual.device != expected.device:

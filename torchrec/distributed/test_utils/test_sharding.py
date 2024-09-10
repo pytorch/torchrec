@@ -146,6 +146,7 @@ def gen_model_and_input(
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     long_indices: bool = True,
     global_constant_batch: bool = False,
+    num_inputs: int = 1,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -175,29 +176,31 @@ def gen_model_and_input(
             sparse_device=sparse_device,
             feature_processor_modules=feature_processor_modules,
         )
-    inputs = [
-        (
-            cast(VariableBatchModelInputCallable, generate)(
-                average_batch_size=batch_size,
-                world_size=world_size,
-                num_float_features=num_float_features,
-                tables=tables,
-                weighted_tables=weighted_tables or [],
-                global_constant_batch=global_constant_batch,
-            )
-            if generate == ModelInput.generate_variable_batch_input
-            else cast(ModelInputCallable, generate)(
-                world_size=world_size,
-                tables=tables,
-                dedup_tables=dedup_tables,
-                weighted_tables=weighted_tables or [],
-                num_float_features=num_float_features,
-                variable_batch_size=variable_batch_size,
-                batch_size=batch_size,
-                long_indices=long_indices,
+    inputs = []
+    for _ in range(num_inputs):
+        inputs.append(
+            (
+                cast(VariableBatchModelInputCallable, generate)(
+                    average_batch_size=batch_size,
+                    world_size=world_size,
+                    num_float_features=num_float_features,
+                    tables=tables,
+                    weighted_tables=weighted_tables or [],
+                    global_constant_batch=global_constant_batch,
+                )
+                if generate == ModelInput.generate_variable_batch_input
+                else cast(ModelInputCallable, generate)(
+                    world_size=world_size,
+                    tables=tables,
+                    dedup_tables=dedup_tables,
+                    weighted_tables=weighted_tables or [],
+                    num_float_features=num_float_features,
+                    variable_batch_size=variable_batch_size,
+                    batch_size=batch_size,
+                    long_indices=long_indices,
+                )
             )
         )
-    ]
     return (model, inputs)
 
 
