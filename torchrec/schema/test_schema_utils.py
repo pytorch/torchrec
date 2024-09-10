@@ -147,6 +147,17 @@ class TestUtils(unittest.TestCase):
         ) -> int:
             return a
 
+        def test_func_keyword_arg_added_in_middle(
+            a: int,
+            b: float,
+            *,
+            c: int,
+            e: float = 1.0,
+            d: float = 1.0,
+            **kwargs: Dict[str, Any],
+        ) -> int:
+            return a
+
         def test_func_keyword_arg_shifted(
             a: int, b: float, *, d: float = 1.0, c: int, **kwargs: Dict[str, Any]
         ) -> int:
