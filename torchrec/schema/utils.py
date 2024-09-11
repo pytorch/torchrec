@@ -34,12 +34,23 @@ def is_signature_compatible(
     expected_args = list(previous_signature.parameters.values())
     current_args = list(current_signature.parameters.values())
 
+    # Store the names of all keyword only arguments
+    # to check if all expected keyword only arguments
+    # are present in current signature
     expected_keyword_only_args = set()
     current_keyword_only_args = set()
 
-    for i in range(len(expected_args)):
-        expected_arg = expected_args[i]
+    expected_args_len = len(expected_args)
+
+    for i in range(len(current_args)):
         current_arg = current_args[i]
+        if current_arg.kind == current_arg.KEYWORD_ONLY:
+            current_keyword_only_args.add(current_arg.name)
+
+        if i >= expected_args_len:
+            continue
+
+        expected_arg = expected_args[i]
 
         # If the kinds of arguments are different, BC is broken
         # unless current arg is a keyword argument
@@ -65,11 +76,7 @@ def is_signature_compatible(
             if expected_arg.default != current_arg.default:
                 return False
         elif expected_arg.kind == expected_arg.KEYWORD_ONLY:
-            # Store the names of all keyword only arguments
-            # to check if all expected keyword only arguments
-            # are present in current signature
             expected_keyword_only_args.add(expected_arg.name)
-            current_keyword_only_args.add(current_arg.name)
 
     # All kwargs in expected signature must be present in current signature
     for kwarg in expected_keyword_only_args:
