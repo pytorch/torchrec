@@ -1,11 +1,11 @@
 torchrec.modules
 ================
 
+.. automodule:: torchrec.modules
+
 ..
   This is a commment and all the indented text is a comment
   It will never show up in the final HTML
-
-  .. automodule:: torchrec.modules
 
   torchrec.modules.activation
   ---------------------------
@@ -42,6 +42,7 @@ torchrec.modules
 torchrec.modules.embedding\_modules
 -----------------------------------
 
+.. automodule:: torchrec.modules.embedding_modules
 .. autofunction:: torchrec.modules.embedding_modules
    :members:
    :undoc-members:
