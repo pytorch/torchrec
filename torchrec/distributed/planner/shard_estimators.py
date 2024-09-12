@@ -1087,6 +1087,7 @@ def calculate_shard_storages(
         sharding_type=sharding_type,
         optimizer_class=optimizer_class,
         is_inference=is_inference,
+        clf=caching_ratio if table_cached else None,
     )
     ddr_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=ddr_storage,
@@ -1395,6 +1396,7 @@ def _calculate_storage_specific_sizes(
     sharding_type: str,
     optimizer_class: Optional[Type[torch.optim.Optimizer]] = None,
     is_inference: bool = False,
+    clf: Optional[float] = None,
 ) -> List[int]:
     tensor_sizes: List[int] = [
         (
@@ -1410,9 +1412,24 @@ def _calculate_storage_specific_sizes(
         math.ceil(tensor_size * optimizer_multipler) for tensor_size in tensor_sizes
     ]
 
+    # If a table has turned on UVM caching (meaning clf is not None), there'll be
+    # 4x of table hash size and 16x of cache slot size HBM storage cost dedicated to
+    # cache aux state (note that this is not the cache content itself)
+    cache_aux_state_sizes: List[int] = (
+        [0] * len(shard_sizes)
+        if clf is None
+        else [math.ceil(size[0] * (4 + clf * 16)) for size in shard_sizes]
+    )
+
     return [
-        tensor_size + optimizer_size if not is_inference else tensor_size
-        for tensor_size, optimizer_size in zip(tensor_sizes, optimizer_sizes)
+        (
+            cache_state_size + tensor_size + optimizer_size
+            if not is_inference
+            else tensor_size
+        )
+        for cache_state_size, tensor_size, optimizer_size in zip(
+            cache_aux_state_sizes, tensor_sizes, optimizer_sizes
+        )
     ]
 
 

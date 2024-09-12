@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import math
 import unittest
 from typing import cast, List
 from unittest.mock import MagicMock, patch
@@ -37,7 +38,6 @@ from torchrec.distributed.test_utils.test_model import (
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
-
 EXPECTED_RW_SHARD_SIZES = [
     [[13, 20], [13, 20], [13, 20], [13, 20], [13, 20], [13, 20], [13, 20], [9, 20]],
     [[14, 40], [14, 40], [14, 40], [14, 40], [14, 40], [14, 40], [14, 40], [12, 40]],
@@ -51,6 +51,12 @@ EXPECTED_RW_SHARD_OFFSETS = [
     [[0, 0], [15, 0], [30, 0], [45, 0], [60, 0], [75, 0], [90, 0], [105, 0]],
     [[0, 0], [17, 0], [34, 0], [51, 0], [68, 0], [85, 0], [102, 0], [119, 0]],
 ]
+
+
+def get_expected_cache_aux_size(rows: int) -> int:
+    # 0.2 is the hardcoded cache load factor assumed in this test
+    return math.ceil(rows * (4 + 0.2 * 16))
+
 
 EXPECTED_RW_SHARD_STORAGE = [
     [
@@ -98,44 +104,44 @@ EXPECTED_RW_SHARD_STORAGE = [
 
 EXPECTED_UVM_CACHING_RW_SHARD_STORAGE = [
     [
-        Storage(hbm=166096, ddr=1040),
-        Storage(hbm=166096, ddr=1040),
-        Storage(hbm=166096, ddr=1040),
-        Storage(hbm=166096, ddr=1040),
-        Storage(hbm=166096, ddr=1040),
-        Storage(hbm=166096, ddr=1040),
-        Storage(hbm=166096, ddr=1040),
-        Storage(hbm=166032, ddr=720),
+        Storage(hbm=166096 + get_expected_cache_aux_size(13), ddr=1040),
+        Storage(hbm=166096 + get_expected_cache_aux_size(13), ddr=1040),
+        Storage(hbm=166096 + get_expected_cache_aux_size(13), ddr=1040),
+        Storage(hbm=166096 + get_expected_cache_aux_size(13), ddr=1040),
+        Storage(hbm=166096 + get_expected_cache_aux_size(13), ddr=1040),
+        Storage(hbm=166096 + get_expected_cache_aux_size(13), ddr=1040),
+        Storage(hbm=166096 + get_expected_cache_aux_size(13), ddr=1040),
+        Storage(hbm=166032 + get_expected_cache_aux_size(9), ddr=720),
     ],
     [
-        Storage(hbm=1001920, ddr=2240),
-        Storage(hbm=1001920, ddr=2240),
-        Storage(hbm=1001920, ddr=2240),
-        Storage(hbm=1001920, ddr=2240),
-        Storage(hbm=1001920, ddr=2240),
-        Storage(hbm=1001920, ddr=2240),
-        Storage(hbm=1001920, ddr=2240),
-        Storage(hbm=1001856, ddr=1920),
+        Storage(hbm=1001920 + get_expected_cache_aux_size(14), ddr=2240),
+        Storage(hbm=1001920 + get_expected_cache_aux_size(14), ddr=2240),
+        Storage(hbm=1001920 + get_expected_cache_aux_size(14), ddr=2240),
+        Storage(hbm=1001920 + get_expected_cache_aux_size(14), ddr=2240),
+        Storage(hbm=1001920 + get_expected_cache_aux_size(14), ddr=2240),
+        Storage(hbm=1001920 + get_expected_cache_aux_size(14), ddr=2240),
+        Storage(hbm=1001920 + get_expected_cache_aux_size(14), ddr=2240),
+        Storage(hbm=1001856 + get_expected_cache_aux_size(12), ddr=1920),
     ],
     [
-        Storage(hbm=1004240, ddr=3600),
-        Storage(hbm=1004240, ddr=3600),
-        Storage(hbm=1004240, ddr=3600),
-        Storage(hbm=1004240, ddr=3600),
-        Storage(hbm=1004240, ddr=3600),
-        Storage(hbm=1004240, ddr=3600),
-        Storage(hbm=1004240, ddr=3600),
-        Storage(hbm=1004240, ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
+        Storage(hbm=1004240 + get_expected_cache_aux_size(15), ddr=3600),
     ],
     [
-        Storage(hbm=2649152, ddr=5440),
-        Storage(hbm=2649152, ddr=5440),
-        Storage(hbm=2649152, ddr=5440),
-        Storage(hbm=2649152, ddr=5440),
-        Storage(hbm=2649152, ddr=5440),
-        Storage(hbm=2649152, ddr=5440),
-        Storage(hbm=2649152, ddr=5440),
-        Storage(hbm=2648768, ddr=3520),
+        Storage(hbm=2649152 + get_expected_cache_aux_size(17), ddr=5440),
+        Storage(hbm=2649152 + get_expected_cache_aux_size(17), ddr=5440),
+        Storage(hbm=2649152 + get_expected_cache_aux_size(17), ddr=5440),
+        Storage(hbm=2649152 + get_expected_cache_aux_size(17), ddr=5440),
+        Storage(hbm=2649152 + get_expected_cache_aux_size(17), ddr=5440),
+        Storage(hbm=2649152 + get_expected_cache_aux_size(17), ddr=5440),
+        Storage(hbm=2649152 + get_expected_cache_aux_size(17), ddr=5440),
+        Storage(hbm=2648768 + get_expected_cache_aux_size(11), ddr=3520),
     ],
 ]
 
