@@ -91,10 +91,14 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 )
             else:
                 # There are DTensor parameters, so we need to use _dist_clip_grad_norm
+                world_size = dist.get_world_size()
                 for device_mesh, dtensor_params in self._mesh_to_dtensor_params.items():
                     if device_mesh.ndim > 1:
                         # pyre-ignore[16]: `dist.device_mesh.DeviceMesh` has no attribute `_flatten`.
                         process_group = device_mesh._flatten().get_group()
+                        # only do global clipping in the nD case
+                        if process_group.size() != world_size:
+                            continue
                     else:
                         process_group = device_mesh.get_group()
                     sharded_grads = [
