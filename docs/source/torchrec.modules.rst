@@ -43,7 +43,6 @@ torchrec.modules.embedding\_modules
 -----------------------------------
 
 .. automodule:: torchrec.modules.embedding_modules
-.. autofunction:: torchrec.modules.embedding_modules
    :members:
    :undoc-members:
    :show-inheritance:
