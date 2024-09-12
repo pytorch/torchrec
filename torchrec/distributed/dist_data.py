@@ -239,7 +239,7 @@ class SplitsAllToAllAwaitable(Awaitable[List[List[int]]]):
             # https://github.com/pytorch/pytorch/issues/122788
             with record_function("## all2all_data:kjt splits ##"):
                 input_tensor = torch.stack(input_tensors, dim=1).flatten()
-                if pg._get_backend_name() == "fake":
+                if pg._get_backend_name() == "custom":
                     self._output_tensor = torch.empty(
                         [self.num_workers * len(input_tensors)],
                         device=input_tensors[0].device,
@@ -367,7 +367,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
                 # TODO(ivankobzarev) Remove this dynamo condition once dynamo functional collectives remapping does not emit copy_
                 # https://github.com/pytorch/pytorch/issues/122788
                 with record_function(f"## all2all_data:kjt {label} ##"):
-                    if self._pg._get_backend_name() == "fake":
+                    if self._pg._get_backend_name() == "custom":
                         output_tensor = torch.empty(
                             sum(output_split),
                             device=self._device,
