@@ -868,6 +868,21 @@ def _extract_comm_data_type_size(
 class EmbeddingStorageEstimator(ShardEstimator):
     """
     Embedding Storage Usage Estimator
+
+    Args:
+      pipeline_type: The type of pipeline, if any. Will determine the input replication
+          factor during memory estimation.
+      run_embedding_at_peak_memory: If the embedding fwd/bwd will be execute when HBM
+          usage is at peak. When set to TRUE, any temporary memory allocation during
+          embedding forward/backward, as long as output sizes before output_dist will
+          be counted towards HBM storage cost. Otherwise they won't since they'll be
+          "hidden" by the real memory peak.
+
+          Only take effect if pipeline_type is set for backward compatibility (not affecting
+          models using old pipeline-agnostic formula)
+
+          Default to FALSE because this is typically FALSE for a RecSys since memory
+          peak happens at the end of dense forwrad / beginning of dense backward instead.
     """
 
     def __init__(
@@ -875,11 +890,13 @@ class EmbeddingStorageEstimator(ShardEstimator):
         topology: Topology,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         pipeline_type: PipelineType = PipelineType.NONE,
+        run_embedding_at_peak_memory: bool = False,
         is_inference: bool = False,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
         self._pipeline_type = pipeline_type
+        self._run_embedding_at_peak_memory = run_embedding_at_peak_memory
         self._is_inference = is_inference
 
     def estimate(
@@ -960,6 +977,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 pipeline_type=self._pipeline_type,
+                count_ephemeral_storage_cost=self._run_embedding_at_peak_memory,
                 is_inference=self._is_inference,
                 multipass_prefetch_max_pass=mpp_conf.num_passes if mpp_conf else None,
             )
@@ -974,6 +992,7 @@ def calculate_pipeline_io_cost(
     prefetch_size: int,
     pipeline_type: PipelineType,
     multipass_prefetch_max_pass: Optional[int],
+    count_ephemeral_storage_cost: bool = False,
     is_inference: bool = False,
 ) -> int:
     # These magical number comes from heuristical analysis of memory snapshot during
@@ -983,17 +1002,27 @@ def calculate_pipeline_io_cost(
     # we need to make this estimation more blackbox-based.
     if is_inference:
         return 0
+
+    # Output size is considered ephemeral storage cost since they are temporarily
+    # only during all2all and won't last long (e.g. from fwd to bwd)
+    output_contribition_to_peak_memory = (
+        output_size if count_ephemeral_storage_cost else 0
+    )
+
     if pipeline_type == PipelineType.TRAIN_SPARSE_DIST:
         pipelining_hbm_input_factor = 2
-        return max(pipelining_hbm_input_factor * input_size, output_size)
+        return (
+            pipelining_hbm_input_factor * input_size
+            + output_contribition_to_peak_memory
+        )
     if pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
         multipass_prefetch_max_pass = multipass_prefetch_max_pass or 1
         pipelining_hbm_input_factor = 3
         prefetch_bursty_hbm_input_factor = 1 + 6 / multipass_prefetch_max_pass
-        return max(
+        return (
             pipelining_hbm_input_factor * input_size
-            + int(prefetch_bursty_hbm_input_factor * prefetch_size),
-            output_size,
+            + int(prefetch_bursty_hbm_input_factor * prefetch_size)
+            + output_contribition_to_peak_memory
         )
 
     # Catch all case, for backward compatibility
@@ -1017,6 +1046,7 @@ def calculate_shard_storages(
     input_data_type_size: float,
     output_data_type_size: float,
     pipeline_type: PipelineType = PipelineType.NONE,
+    count_ephemeral_storage_cost: bool = False,
     is_inference: bool = False,
     multipass_prefetch_max_pass: Optional[int] = None,
 ) -> List[Storage]:
@@ -1107,6 +1137,7 @@ def calculate_shard_storages(
                 prefetch_size=input_size if table_cached else 0,
                 pipeline_type=pipeline_type,
                 multipass_prefetch_max_pass=multipass_prefetch_max_pass,
+                count_ephemeral_storage_cost=count_ephemeral_storage_cost,
                 is_inference=is_inference,
             )
             if compute_device == "cuda"
