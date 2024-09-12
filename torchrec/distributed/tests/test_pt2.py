@@ -37,6 +37,7 @@ from torchrec.pt2.utils import (
     kjt_for_pt2_tracing,
     register_fake_classes,
 )
+from torchrec.sparse.jagged_tensor import _kt_regroup_arguments
 
 try:
     # pyre-ignore
@@ -841,6 +842,33 @@ class TestPt2(unittest.TestCase):
         )
         inp = torch.randn(12, 3)
         _test_compile_fwd_bwd(m, inp, device)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_permute_multi_embedding(self) -> None:
+        device = "cuda"
+        batch_size = 16
+
+        def func(values, permutes, in_shapes, out_shapes, out_lengths):
+            return torch.ops.fbgemm.permute_multi_embedding(
+                values, permutes, in_shapes, out_shapes, out_lengths.tolist()
+            )
+
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [torch.randn(batch_size, sum(L), device=device) for L in lengths]
+        for embs in values:
+            torch._dynamo.mark_dynamic(embs, 0)
+            torch._dynamo.mark_dynamic(embs, 1)
+        permutes, in_shapes, out_shapes, out_lengths = _kt_regroup_arguments(
+            values[0], keys, lengths, groups
+        )
+        out_lengths = torch.tensor(out_lengths, device=device, dtype=torch.int32)
+        inp = (values, permutes, in_shapes, out_shapes, out_lengths)
+        _test_compile_fwd_bwd(func, inp, device, unpack_inp=True)
 
     @unittest.skipIf(
         torch.cuda.device_count() < 1,
