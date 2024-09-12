@@ -583,7 +583,7 @@ def _wait_for_events(
 
 def _start_data_dist(
     pipelined_modules: List[ShardedModule],
-    batch: In,
+    batch: Pipelineable,
     context: TrainPipelineContext,
 ) -> None:
     if context.version == 0:
@@ -620,7 +620,6 @@ def _start_data_dist(
 
 def _start_embedding_lookup(
     module: ShardedModule,
-    batch: In,  # not used in this function
     context: EmbeddingTrainPipelineContext,
     stream: Optional[torch.Stream],
 ) -> None:

@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import math
 import unittest
 from typing import cast, Dict, List, Tuple
 
@@ -623,21 +624,34 @@ def calculate_storage_specific_size_data_provider():
             "sharding_type": ShardingType.TABLE_ROW_WISE,
             "optimizer_class": torch.optim.SGD,
             "expected_storage": [50, 50],
+            "clf": None,
         },
         {
             "sharding_type": ShardingType.COLUMN_WISE,
             "optimizer_class": torch.optim.Adam,
-            "expected_storage": [150, 150],
+            "expected_storage": [
+                150 + math.ceil(5 * (4 + 0.5 * 16)),
+                150 + math.ceil(5 * (4 + 0.5 * 16)),
+            ],
+            "clf": 0.5,
         },
         {
             "sharding_type": ShardingType.TABLE_ROW_WISE,
             "optimizer_class": None,
-            "expected_storage": [50, 50],
+            "expected_storage": [
+                50 + math.ceil(5 * (4 + 0.0 * 16)),
+                50 + math.ceil(5 * (4 + 0.0 * 16)),
+            ],
+            "clf": 0.0,
         },
         {
             "sharding_type": ShardingType.DATA_PARALLEL,
             "optimizer_class": trec_optim.RowWiseAdagrad,
-            "expected_storage": [134, 134],
+            "expected_storage": [
+                134 + math.ceil(5 * (4 + 1.0 * 16)),
+                134 + math.ceil(5 * (4 + 1.0 * 16)),
+            ],
+            "clf": 1.0,
         },
     )
 
@@ -645,13 +659,14 @@ def calculate_storage_specific_size_data_provider():
 class TestEmbeddingStorageEstimator(unittest.TestCase):
     def test_calculate_storage_specific_sizes(self) -> None:
         for inputs in calculate_storage_specific_size_data_provider():
-            sharding_type, optimizer_class, expected_storage = inputs.values()
+            sharding_type, optimizer_class, expected_storage, clf = inputs.values()
             estimates = _calculate_storage_specific_sizes(
                 storage=100,
                 shape=torch.Size((10, 5, 3)),
                 shard_sizes=[[5, 5, 3], [5, 5, 3]],
                 sharding_type=sharding_type.value,
                 optimizer_class=optimizer_class,
+                clf=clf,
             )
 
             self.assertEqual(estimates, expected_storage)

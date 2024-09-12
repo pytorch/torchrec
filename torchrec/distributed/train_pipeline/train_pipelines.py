@@ -63,6 +63,7 @@ from torchrec.distributed.types import Awaitable
 from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.pt2.utils import default_pipeline_input_transformer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.streamable import Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -930,6 +931,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                     context.events.append(event)
                 return batch, context
 
+    def extract_model_input_from_batch(self, batch: In) -> Pipelineable:
+        return batch
+
     def start_sparse_data_dist(
         self,
         batch: Optional[In],
@@ -949,7 +953,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         with record_function(f"## start_sparse_data_dist {context.index} ##"):
             with self._stream_context(self._data_dist_stream):
                 _wait_for_events(batch, context, self._data_dist_stream)
-                _start_data_dist(self._pipelined_modules, batch, context)
+                model_input = self.extract_model_input_from_batch(batch)
+                _start_data_dist(self._pipelined_modules, model_input, context)
                 event = torch.get_device_module(self._device).Event()
                 event.record()
                 context.events.append(event)
@@ -979,7 +984,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                     else self._embedding_odd_streams[i]
                 )
                 with self._stream_context(stream):
-                    _start_embedding_lookup(module, batch, context, stream)
+                    _start_embedding_lookup(module, context, stream)
                     event = torch.get_device_module(self._device).Event()
                     event.record()
                     context.events.append(event)

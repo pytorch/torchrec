@@ -5,6 +5,8 @@ on:
     branches:
       - main
   workflow_dispatch:
+  pull_request:
+
 jobs:
   build_docs_job:
     runs-on: ${{ matrix.os }}
@@ -78,6 +80,11 @@ jobs:
         cd ./docs
         conda run -n build_binary make html
         cd ..
+    - name: Upload Built-Docs
+      uses: actions/upload-artifact@v3
+      with:
+        name: Built-Docs
+        path: docs/build/html/
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
@@ -86,3 +93,28 @@ jobs:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages # The branch the action should deploy to.
           FOLDER: docs/build/html # The folder the action should deploy.
+
+  doc-preview:
+    runs-on: [linux.2xlarge]
+    needs: build_docs_job
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: Built-Docs
+          path: docs
+      - name: Add no-index tag
+        run: |
+          find docs -name "*.html" -print0 | xargs -0 sed -i '/<head>/a \ \ <meta name="robots" content="noindex">';
+      - name: Upload docs preview
+        uses: seemethere/upload-artifact-s3@v5
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          retention-days: 14
+          s3-bucket: doc-previews
+          if-no-files-found: error
+          path: docs
+          s3-prefix: pytorch/torchrec/${{ github.event.pull_request.number }}    
