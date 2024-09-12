@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import cast, List, Optional
+from typing import cast, List, Optional, Type
 from unittest.mock import MagicMock
 
 import torch
@@ -25,6 +25,7 @@ from torchrec.distributed.planner.proposers import (
     UniformProposer,
 )
 from torchrec.distributed.planner.shard_estimators import (
+    _calculate_storage_specific_sizes,
     EmbeddingPerfEstimator,
     EmbeddingStorageEstimator,
 )
@@ -84,6 +85,22 @@ class MockCacheStatistics(CacheStatistics):
     @property
     def cacheability(self) -> float:
         return self._cacheability
+
+
+# Mocking _calculate_storage_specific_sizes to skip cache aux state accounting for
+# simpler testing
+def mock_calculate_storage_specific_sizes(
+    storage: int,
+    shape: torch.Size,
+    shard_sizes: List[List[int]],
+    sharding_type: str,
+    optimizer_class: Optional[Type[torch.optim.Optimizer]] = None,
+    is_inference: bool = False,
+    clf: Optional[float] = None,
+) -> List[int]:
+    return _calculate_storage_specific_sizes(
+        storage, shape, shard_sizes, sharding_type, optimizer_class, is_inference, None
+    )
 
 
 class TestProposers(unittest.TestCase):
@@ -466,7 +483,11 @@ class TestProposers(unittest.TestCase):
         )
         self.assertEqual(increase, budget)
 
-    def test_scaleup(self) -> None:
+    @unittest.mock.patch(
+        "torchrec.distributed.planner.shard_estimators._calculate_storage_specific_sizes",
+        side_effect=mock_calculate_storage_specific_sizes,
+    )
+    def test_scaleup(self, _) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=2_000_000,
@@ -697,7 +718,11 @@ class TestProposers(unittest.TestCase):
             ["fused", "fused", "fused_uvm_caching"],
         )
 
-    def test_budget_shrink(self) -> None:
+    @unittest.mock.patch(
+        "torchrec.distributed.planner.shard_estimators._calculate_storage_specific_sizes",
+        side_effect=mock_calculate_storage_specific_sizes,
+    )
+    def test_budget_shrink(self, _) -> None:
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=2_000_000,
