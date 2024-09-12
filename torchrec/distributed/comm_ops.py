@@ -559,7 +559,7 @@ def variable_batch_all2all_pooled_sync(
         ]
 
     with record_function("## alltoall_fwd_single ##"):
-        if pg._get_backend_name() == "fake":
+        if pg._get_backend_name() == "custom":
             sharded_output_embeddings = torch.empty(
                 sum(output_split_sizes),
                 device=sharded_input_embeddings.device,
