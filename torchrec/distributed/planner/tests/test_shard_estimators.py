@@ -681,119 +681,136 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
     )
     def test_pipelined_storage(self, p1: Mock, p2: Mock) -> None:
         for pipeline_type in list(PipelineType):
-            topology = Topology(world_size=2, compute_device="cuda")
-            estimator = EmbeddingStorageEstimator(
-                topology=topology, pipeline_type=pipeline_type
-            )
-            tables = [
-                EmbeddingBagConfig(
-                    num_embeddings=100,
-                    embedding_dim=10,
-                    name="table_0",
-                    feature_names=["feature_0"],
-                ),
-                EmbeddingBagConfig(
-                    num_embeddings=100,
-                    embedding_dim=10,
-                    name="table_1",
-                    feature_names=["feature_1"],
-                ),
-                EmbeddingBagConfig(
-                    num_embeddings=100,
-                    embedding_dim=10,
-                    name="table_2",
-                    feature_names=["feature_2"],
-                ),
-            ]
-            constraints = {
-                "table_0": ParameterConstraints(
-                    compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
-                    sharding_types=[ShardingType.TABLE_WISE.value],
-                    cache_params=CacheParams(
-                        load_factor=0.1,
+            for run_embedding_at_peak_memory in [False, True]:
+                topology = Topology(world_size=2, compute_device="cuda")
+                estimator = EmbeddingStorageEstimator(
+                    topology=topology,
+                    pipeline_type=pipeline_type,
+                    run_embedding_at_peak_memory=run_embedding_at_peak_memory,
+                )
+                tables = [
+                    EmbeddingBagConfig(
+                        num_embeddings=100,
+                        embedding_dim=10,
+                        name="table_0",
+                        feature_names=["feature_0"],
                     ),
-                ),
-                # simulate promoting a uvm caching table to HBM during scaleup.
-                "table_1": ParameterConstraints(
-                    compute_kernels=[EmbeddingComputeKernel.FUSED.value],
-                    sharding_types=[ShardingType.TABLE_WISE.value],
-                    cache_params=CacheParams(
-                        load_factor=None,
+                    EmbeddingBagConfig(
+                        num_embeddings=100,
+                        embedding_dim=10,
+                        name="table_1",
+                        feature_names=["feature_1"],
                     ),
-                ),
-                "table_2": ParameterConstraints(
-                    compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
-                    sharding_types=[ShardingType.TABLE_WISE.value],
-                    cache_params=CacheParams(
-                        load_factor=0.1,
-                        multipass_prefetch_config=MultiPassPrefetchConfig(
-                            num_passes=10,
-                        ),
+                    EmbeddingBagConfig(
+                        num_embeddings=100,
+                        embedding_dim=10,
+                        name="table_2",
+                        feature_names=["feature_2"],
                     ),
-                ),
-            }
-            enumerator = EmbeddingEnumerator(
-                topology=topology,
-                batch_size=BATCH_SIZE,
-                estimator=estimator,
-                constraints=constraints,
-            )
-
-            model = TestSparseNN(tables=tables, weighted_tables=[])
-            sharding_options = enumerator.enumerate(
-                module=model,
-                sharders=[
-                    cast(
-                        ModuleSharder[torch.nn.Module],
-                        EmbeddingBagCollectionSharder(
-                            fused_params={
-                                "cache_load_factor": 0.2,
-                            }
-                        ),
-                    )
-                ],
-            )
-
-            if pipeline_type == PipelineType.TRAIN_SPARSE_DIST:
-                expected_storage = {
-                    ("table_0", "fused_uvm_caching", "table_wise"): [(100 + 3333, 100)],
-                    ("table_1", "fused", "table_wise"): [(100 + 3333, 100)],
-                    ("table_2", "fused_uvm_caching", "table_wise"): [(100 + 3333, 100)],
-                }
-            elif pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
-                expected_storage = {
-                    ("table_0", "fused_uvm_caching", "table_wise"): [
-                        (100 + 1024 * 10, 100)
-                    ],
-                    # 1024 * 3 < 3333
-                    ("table_1", "fused", "table_wise"): [(100 + 3333, 100)],
-                    ("table_2", "fused_uvm_caching", "table_wise"): [
-                        (100 + 1024 * 3 + int(1024 * 1.6), 100)
-                    ],
-                }
-            else:
-                expected_storage = {
-                    ("table_0", "fused_uvm_caching", "table_wise"): [
-                        (100 + 3333 + 1024, 100)
-                    ],
-                    ("table_1", "fused", "table_wise"): [(100 + 3333 + 1024, 100)],
-                    ("table_2", "fused_uvm_caching", "table_wise"): [
-                        (100 + 3333 + 1024, 100)
-                    ],
-                }
-            actual_storage = {
-                (
-                    sharding_option.name,
-                    sharding_option.compute_kernel,
-                    sharding_option.sharding_type,
-                ): [
-                    (shard.storage.hbm, shard.storage.ddr)
-                    for shard in sharding_option.shards
-                    if shard.storage is not None
                 ]
-                for sharding_option in sharding_options
-            }
-            self.assertEqual(expected_storage, actual_storage)
+                constraints = {
+                    "table_0": ParameterConstraints(
+                        compute_kernels=[
+                            EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+                        ],
+                        sharding_types=[ShardingType.TABLE_WISE.value],
+                        cache_params=CacheParams(
+                            load_factor=0.1,
+                        ),
+                    ),
+                    # simulate promoting a uvm caching table to HBM during scaleup.
+                    "table_1": ParameterConstraints(
+                        compute_kernels=[EmbeddingComputeKernel.FUSED.value],
+                        sharding_types=[ShardingType.TABLE_WISE.value],
+                        cache_params=CacheParams(
+                            load_factor=None,
+                        ),
+                    ),
+                    "table_2": ParameterConstraints(
+                        compute_kernels=[
+                            EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+                        ],
+                        sharding_types=[ShardingType.TABLE_WISE.value],
+                        cache_params=CacheParams(
+                            load_factor=0.1,
+                            multipass_prefetch_config=MultiPassPrefetchConfig(
+                                num_passes=10,
+                            ),
+                        ),
+                    ),
+                }
+                enumerator = EmbeddingEnumerator(
+                    topology=topology,
+                    batch_size=BATCH_SIZE,
+                    estimator=estimator,
+                    constraints=constraints,
+                )
+
+                model = TestSparseNN(tables=tables, weighted_tables=[])
+                sharding_options = enumerator.enumerate(
+                    module=model,
+                    sharders=[
+                        cast(
+                            ModuleSharder[torch.nn.Module],
+                            EmbeddingBagCollectionSharder(
+                                fused_params={
+                                    "cache_load_factor": 0.2,
+                                }
+                            ),
+                        )
+                    ],
+                )
+
+                output_on_pipeline = 3333 if run_embedding_at_peak_memory else 0
+                if pipeline_type == PipelineType.TRAIN_SPARSE_DIST:
+                    expected_storage = {
+                        ("table_0", "fused_uvm_caching", "table_wise"): [
+                            (100 + 2048 + output_on_pipeline, 100)
+                        ],
+                        ("table_1", "fused", "table_wise"): [
+                            (100 + 2048 + output_on_pipeline, 100)
+                        ],
+                        ("table_2", "fused_uvm_caching", "table_wise"): [
+                            (100 + 2048 + output_on_pipeline, 100)
+                        ],
+                    }
+                elif pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
+                    expected_storage = {
+                        ("table_0", "fused_uvm_caching", "table_wise"): [
+                            (100 + 1024 * 10 + output_on_pipeline, 100)
+                        ],
+                        ("table_1", "fused", "table_wise"): [
+                            (100 + 3072 + output_on_pipeline, 100)
+                        ],
+                        ("table_2", "fused_uvm_caching", "table_wise"): [
+                            (100 + 1024 * 3 + int(1024 * 1.6) + output_on_pipeline, 100)
+                        ],
+                    }
+                else:
+                    # Backward compatible path, using old formula when pipeline
+                    # type is None or unrecognized.
+                    expected_storage = {
+                        ("table_0", "fused_uvm_caching", "table_wise"): [
+                            (100 + 3333 + 1024, 100)
+                        ],
+                        ("table_1", "fused", "table_wise"): [(100 + 3333 + 1024, 100)],
+                        ("table_2", "fused_uvm_caching", "table_wise"): [
+                            (100 + 3333 + 1024, 100)
+                        ],
+                    }
+                actual_storage = {
+                    (
+                        sharding_option.name,
+                        sharding_option.compute_kernel,
+                        sharding_option.sharding_type,
+                    ): [
+                        (shard.storage.hbm, shard.storage.ddr)
+                        for shard in sharding_option.shards
+                        if shard.storage is not None
+                    ]
+                    for sharding_option in sharding_options
+                }
+                self.assertEqual(expected_storage, actual_storage)
 
     def test_default_output_sizes(self) -> None:
         topology = Topology(world_size=2, compute_device="cuda")
