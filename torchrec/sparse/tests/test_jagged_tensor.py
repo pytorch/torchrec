@@ -13,6 +13,7 @@ from typing import Callable, Dict, List, Tuple
 
 import torch
 import torch.utils._pytree as pytree
+from torch.fx._pytree import tree_flatten_spec
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
@@ -2691,20 +2692,44 @@ KeyedTensor({
 
     def test_pytree(self) -> None:
         tensor_list = [
-            torch.Tensor([[1.0, 1.0]]),
-            torch.Tensor([[2.0, 2.0], [3.0, 3.0]]),
+            torch.Tensor([[1.0, 1.0]]).T,
+            torch.Tensor([[2.0, 2.0], [3.0, 3.0]]).T,
         ]
         keys = ["dense_0", "dense_1"]
-        kt = KeyedTensor.from_tensor_list(keys, tensor_list, cat_dim=0, key_dim=0)
-
+        kt = KeyedTensor.from_tensor_list(keys, tensor_list, cat_dim=1, key_dim=1)
+        # generate the out_spec in the torch.export run
         flattened, out_spec = pytree.tree_flatten(kt)
 
+        # first element of flattened list should be the kt._values
         self.assertTrue(torch.equal(flattened[0], kt.values()))
+        # re-construct the unflattened kt from the flattened list plus the out_spec
         unflattened = pytree.tree_unflatten(flattened, out_spec)
 
         self.assertTrue(isinstance(unflattened, KeyedTensor))
         self.assertListEqual(unflattened.keys(), keys)
         self.assertListEqual(unflattened._length_per_key, kt._length_per_key)
+
+        # for ir export, key order in KT could change
+        tensor_list = [
+            torch.Tensor([[2.0, 2.0], [3.0, 3.0]]).T,
+            torch.Tensor([[1.0, 1.0]]).T,
+        ]
+        keys = ["dense_1", "dense_0"]
+        kt2 = KeyedTensor.from_tensor_list(keys, tensor_list, cat_dim=1, key_dim=1)
+
+        # flatten the kt2 based on previously generated out_spec
+        # this is to mimic the exported_program module run
+        # the kt2 could have different key order but out_spec is the same
+        flattened2 = tree_flatten_spec(kt2, out_spec)
+
+        # re-construct the unflattened kt from the flattened list plus the out_spec
+        # the rebuilt kt2 should contain the same effective data as kt (ignoring key order)
+        unflattened2 = pytree.tree_unflatten(flattened2, out_spec)
+        self.assertTrue(isinstance(unflattened2, KeyedTensor))
+        self.assertSetEqual(set(unflattened.keys()), set(unflattened2.keys()))
+        for key in kt.keys():
+            torch.testing.assert_close(unflattened[key], unflattened2[key])
+            torch.testing.assert_close(kt[key], unflattened2[key])
 
 
 class TestKeyedTensorRegroupOp(unittest.TestCase):
