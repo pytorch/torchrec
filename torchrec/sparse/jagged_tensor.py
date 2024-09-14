@@ -2943,7 +2943,15 @@ def _kt_unflatten(
 
 
 def _kt_flatten_spec(kt: KeyedTensor, spec: TreeSpec) -> List[torch.Tensor]:
-    return _kt_flatten(kt)[0]
+    _keys, _length_per_key = spec.context
+    #  please read https://fburl.com/workplace/8bei5iju for more context,
+    #  you can also consider use short_circuit_pytree_ebc_regroup with KTRegroupAsDict
+    logger.warning(
+        "KT's key order might change from spec from the torch.export, this could have perf impact. "
+        f"{kt.keys()} vs {_keys}"
+    )
+    res = permute_multi_embedding([kt], [_keys])
+    return [res[0]]
 
 
 # The assumption here in torch.exporting KeyedTensor is that _length_per_key is static
