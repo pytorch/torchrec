@@ -96,7 +96,7 @@ jobs:
           FOLDER: docs/build/html # The folder the action should deploy.
 
   doc-preview:
-    runs-on: [linux.2xlarge]
+    runs-on: [linux.20_04.4x]
     needs: build_docs_job
     if: ${{ github.event_name == 'pull_request' }}
     steps:
@@ -118,4 +118,4 @@ jobs:
           s3-bucket: doc-previews
           if-no-files-found: error
           path: docs
-          s3-prefix: pytorch/torchrec/${{ github.event.pull_request.number }}    
+          s3-prefix: pytorch/torchrec/${{ github.event.pull_request.number }}
