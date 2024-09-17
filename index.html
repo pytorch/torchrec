@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="torchrec.datasets" href="torchrec.datasets.html" />
+    <link rel="next" title="TorchRec Overview" href="overview.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -295,7 +295,11 @@
               
             
             
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">TorchRec Overview</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">All API References</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.html">torchrec.datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a></li>
@@ -408,136 +412,8 @@ DMP wraps a model to enable distributed training.</p>
 <section id="torchrec-api">
 <h2>TorchRec API<a class="headerlink" href="#torchrec-api" title="Permalink to this heading">¶</a></h2>
 <div class="toctree-wrapper compound">
-<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.html">torchrec.datasets</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.datasets.html#torchrec-datasets-criteo">torchrec.datasets.criteo</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.datasets.html#torchrec-datasets-movielens">torchrec.datasets.movielens</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.datasets.html#torchrec-datasets-random">torchrec.datasets.random</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.datasets.html#torchrec-datasets-utils">torchrec.datasets.utils</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.datasets.scripts.html#torchrec-datasets-scripts-contiguous-preproc-criteo">torchrec.datasets.scripts.contiguous_preproc_criteo</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.datasets.scripts.html#torchrec-datasets-scripts-npy-preproc-criteo">torchrec.datasets.scripts.npy_preproc_criteo</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.html">torchrec.distributed</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.collective_utils">torchrec.distributed.collective_utils</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.comm">torchrec.distributed.comm</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.comm_ops">torchrec.distributed.comm_ops</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.dist_data">torchrec.distributed.dist_data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.embedding">torchrec.distributed.embedding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.embedding_lookup">torchrec.distributed.embedding_lookup</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.embedding_sharding">torchrec.distributed.embedding_sharding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.embedding_types">torchrec.distributed.embedding_types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.embeddingbag">torchrec.distributed.embeddingbag</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.grouped_position_weighted">torchrec.distributed.grouped_position_weighted</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.model_parallel">torchrec.distributed.model_parallel</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.quant_embeddingbag">torchrec.distributed.quant_embeddingbag</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.train_pipeline">torchrec.distributed.train_pipeline</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.types">torchrec.distributed.types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#module-torchrec.distributed.utils">torchrec.distributed.utils</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#torchrec-distributed-mc-modules">torchrec.distributed.mc_modules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#torchrec-distributed-mc-embeddingbag">torchrec.distributed.mc_embeddingbag</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.html#torchrec-distributed-mc-embedding">torchrec.distributed.mc_embedding</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.constants">torchrec.distributed.planner.constants</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.enumerators">torchrec.distributed.planner.enumerators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.partitioners">torchrec.distributed.planner.partitioners</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.perf_models">torchrec.distributed.planner.perf_models</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.planners">torchrec.distributed.planner.planners</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.proposers">torchrec.distributed.planner.proposers</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.shard_estimators">torchrec.distributed.planner.shard_estimators</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.stats">torchrec.distributed.planner.stats</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.storage_reservations">torchrec.distributed.planner.storage_reservations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.types">torchrec.distributed.planner.types</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.planner.html#module-torchrec.distributed.planner.utils">torchrec.distributed.planner.utils</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.sharding.html#module-torchrec.distributed.sharding.cw_sharding">torchrec.distributed.sharding.cw_sharding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.sharding.html#module-torchrec.distributed.dist_data">torchrec.distributed.dist_data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.sharding.html#module-torchrec.distributed.sharding.dp_sharding">torchrec.distributed.sharding.dp_sharding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.sharding.html#module-torchrec.distributed.sharding.rw_sharding">torchrec.distributed.sharding.rw_sharding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.sharding.html#module-torchrec.distributed.sharding.tw_sharding">torchrec.distributed.sharding.tw_sharding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.sharding.html#module-torchrec.distributed.sharding.twcw_sharding">torchrec.distributed.sharding.twcw_sharding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.distributed.sharding.html#module-torchrec.distributed.sharding.twrw_sharding">torchrec.distributed.sharding.twrw_sharding</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.fx.html#module-torchrec.fx.tracer">torchrec.fx.tracer</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.fx.html#module-0">Module contents</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.inference.html#torchrec-inference-model-packager">torchrec.inference.model_packager</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.inference.html#torchrec-inference-modules">torchrec.inference.modules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.inference.html#module-0">Module contents</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.models.html#module-torchrec.models.deepfm">torchrec.models.deepfm</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.models.html#torchrec-models-dlrm">torchrec.models.dlrm</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.models.html#module-contents">Module contents</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.activation">torchrec.modules.activation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.crossnet">torchrec.modules.crossnet</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.deepfm">torchrec.modules.deepfm</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.embedding_configs">torchrec.modules.embedding_configs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.embedding_modules">torchrec.modules.embedding_modules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.feature_processor">torchrec.modules.feature_processor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.lazy_extension">torchrec.modules.lazy_extension</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.mlp">torchrec.modules.mlp</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#module-torchrec.modules.utils">torchrec.modules.utils</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#torchrec-modules-mc-modules">torchrec.modules.mc_modules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.modules.html#torchrec-modules-mc-embedding-modules">torchrec.modules.mc_embedding_modules</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.optim.html">torchrec.optim</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.optim.html#module-torchrec.optim.clipping">torchrec.optim.clipping</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.optim.html#module-torchrec.optim.fused">torchrec.optim.fused</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.optim.html#module-torchrec.optim.keyed">torchrec.optim.keyed</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.optim.html#module-torchrec.optim.warmup">torchrec.optim.warmup</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.optim.html#module-0">Module contents</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.quant.html">torchrec.quant</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.quant.html#module-torchrec.quant.embedding_modules">torchrec.quant.embedding_modules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.quant.html#module-0">Module contents</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.sparse.html">torchrec.sparse</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.sparse.html#module-torchrec.sparse.jagged_tensor">torchrec.sparse.jagged_tensor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.sparse.html#module-0">Module contents</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.metrics.html">torchrec.metrics</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.accuracy">torchrec.metrics.accuracy</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.auc">torchrec.metrics.auc</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.auprc">torchrec.metrics.auprc</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.calibration">torchrec.metrics.calibration</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.ctr">torchrec.metrics.ctr</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.mae">torchrec.metrics.mae</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.mse">torchrec.metrics.mse</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#torchrec-metrics-multiclass-recall">torchrec.metrics.multiclass_recall</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.ndcg">torchrec.metrics.ndcg</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.ne">torchrec.metrics.ne</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.recall">torchrec.metrics.recall</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.precision">torchrec.metrics.precision</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.rauc">torchrec.metrics.rauc</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.throughput">torchrec.metrics.throughput</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.weighted_avg">torchrec.metrics.weighted_avg</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.xauc">torchrec.metrics.xauc</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.metric_module">torchrec.metrics.metric_module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="torchrec.metrics.html#module-torchrec.metrics.rec_metric">torchrec.metrics.rec_metric</a></li>
-</ul>
-</li>
-</ul>
+</div>
+<div class="toctree-wrapper compound">
 </div>
 </section>
 </section>
@@ -558,7 +434,7 @@ DMP wraps a model to enable distributed training.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrec.datasets.html" class="btn btn-neutral float-right" title="torchrec.datasets" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="overview.html" class="btn btn-neutral float-right" title="TorchRec Overview" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
     </div>
@@ -593,7 +469,9 @@ DMP wraps a model to enable distributed training.</p>
               <ul>
 <li><a class="reference internal" href="#">Welcome to the TorchRec documentation!</a><ul>
 <li><a class="reference internal" href="#tutorial">Tutorial</a></li>
-<li><a class="reference internal" href="#torchrec-api">TorchRec API</a></li>
+<li><a class="reference internal" href="#torchrec-api">TorchRec API</a><ul>
+</ul>
+</li>
 </ul>
 </li>
 <li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
@@ -630,7 +508,14 @@ DMP wraps a model to enable distributed training.</p>
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script> 
+  </script>
+ 
+
+<script type="text/javascript">
+  var collapsedSections = ['Introduction', 'All API References']
+</script>
+
+
 
   <!-- Begin Footer -->
 
