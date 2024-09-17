@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/Batching.h" // @manual
+#include "torchrec/inference/inference_legacy/Batching.h" // @manual
 
 #include <c10/core/ScalarType.h>
 #include <folly/Range.h>
@@ -16,7 +16,7 @@
 #include "ATen/Functions.h"
 #include "ATen/core/List.h"
 #include "ATen/core/ivalue.h"
-#include "torchrec/inference/Types.h"
+#include "torchrec/inference/inference_legacy/Types.h"
 
 namespace torchrec {
 

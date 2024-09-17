@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/BatchingQueue.h" // @manual
+#include "torchrec/inference/inference_legacy/BatchingQueue.h" // @manual
 
 #include <chrono>
 #include <memory>
@@ -34,10 +34,10 @@
 #include <folly/io/Cursor.h>
 #include <glog/logging.h>
 
-#include "torchrec/inference/ExceptionHandler.h"
-#include "torchrec/inference/Observer.h"
-#include "torchrec/inference/ResourceManager.h"
-#include "torchrec/inference/Types.h"
+#include "torchrec/inference/inference_legacy/ExceptionHandler.h"
+#include "torchrec/inference/inference_legacy/Observer.h"
+#include "torchrec/inference/inference_legacy/ResourceManager.h"
+#include "torchrec/inference/inference_legacy/Types.h"
 
 using namespace std::chrono_literals;
 

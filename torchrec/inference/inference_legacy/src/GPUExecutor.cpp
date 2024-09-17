@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/GPUExecutor.h"
+#include "torchrec/inference/inference_legacy/GPUExecutor.h"
 
 #include <chrono>
 #include <memory>
@@ -25,7 +25,7 @@
 #include <folly/stop_watch.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <torch/csrc/autograd/profiler.h>
+#include <torch/csrc/autograd/profiler.h> // @manual
 
 // remove this after we switch over to multipy externally for torchrec
 #ifdef FBCODE_CAFFE2
@@ -35,10 +35,10 @@
 #endif
 
 #include "ATen/cuda/CUDAEvent.h"
-#include "torchrec/inference/BatchingQueue.h"
-#include "torchrec/inference/ExceptionHandler.h"
-#include "torchrec/inference/Observer.h"
-#include "torchrec/inference/Types.h"
+#include "torchrec/inference/inference_legacy/BatchingQueue.h"
+#include "torchrec/inference/inference_legacy/ExceptionHandler.h"
+#include "torchrec/inference/inference_legacy/Observer.h"
+#include "torchrec/inference/inference_legacy/Types.h"
 
 DEFINE_int32(copy_timeout, 500, "");
 

@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/ResultSplit.h"
+#include "torchrec/inference/inference_legacy/ResultSplit.h"
 
 #include <c10/core/ScalarType.h>
 #include <folly/Range.h>
@@ -14,7 +14,7 @@
 #include <folly/io/Cursor.h>
 
 #include "ATen/Functions.h"
-#include "torchrec/inference/Types.h"
+#include "torchrec/inference/inference_legacy/Types.h"
 
 namespace torchrec {
 

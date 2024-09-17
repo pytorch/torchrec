@@ -6,14 +6,14 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/TestUtils.h"
+#include "torchrec/inference/inference_legacy/TestUtils.h"
 
 #include <initializer_list>
 #include <memory>
 
 #include <folly/io/IOBuf.h>
 
-#include "torchrec/inference/Types.h"
+#include "torchrec/inference/inference_legacy/Types.h"
 
 namespace torchrec {
 

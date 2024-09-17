@@ -6,11 +6,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "torchrec/inference/SingleGPUExecutor.h"
+#include "torchrec/inference/inference_legacy/SingleGPUExecutor.h"
 #include <c10/cuda/CUDAGuard.h>
 #include <folly/String.h>
-#include "torchrec/inference/Assert.h"
-#include "torchrec/inference/Observer.h"
+#include "torchrec/inference/inference_legacy/Assert.h"
+#include "torchrec/inference/inference_legacy/Observer.h"
 
 namespace torchrec {
 

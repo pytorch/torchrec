@@ -16,7 +16,7 @@
 #include <folly/small_vector.h>
 #include <glog/logging.h>
 
-#include "torchrec/inference/ResourceManager.h"
+#include "torchrec/inference/inference_legacy/ResourceManager.h"
 
 namespace torchrec {
 
