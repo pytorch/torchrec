@@ -557,7 +557,7 @@ class TestJsonSerializer(unittest.TestCase):
         ebc2.load_state_dict(ebc1.state_dict())
         regroup = KTRegroupAsDict([["f1", "f3"], ["f2"]], ["odd", "even"])
 
-        class myModel(nn.Module):
+        class mySparse(nn.Module):
             def __init__(self, ebc, regroup):
                 super().__init__()
                 self.ebc = ebc
@@ -568,6 +568,17 @@ class TestJsonSerializer(unittest.TestCase):
                 features: KeyedJaggedTensor,
             ) -> Dict[str, torch.Tensor]:
                 return self.regroup([self.ebc(features)])
+
+        class myModel(nn.Module):
+            def __init__(self, ebc, regroup):
+                super().__init__()
+                self.sparse = mySparse(ebc, regroup)
+
+            def forward(
+                self,
+                features: KeyedJaggedTensor,
+            ) -> Dict[str, torch.Tensor]:
+                return self.sparse(features)
 
         model = myModel(ebc1, regroup)
         eager_out = model(id_list_features)
@@ -582,11 +593,17 @@ class TestJsonSerializer(unittest.TestCase):
             preserve_module_call_signature=(tuple(sparse_fqns)),
         )
         unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        deserialized_model = decapsulate_ir_modules(
+            unflatten_ep,
+            JsonSerializer,
+            short_circuit_pytree_ebc_regroup=True,
+            finalize_interpreter_modules=True,
+        )
+
         #  we export the model with ebc1 and unflatten the model,
         #  and then swap with ebc2 (you can think this as the the sharding process
         #  resulting a shardedEBC), so that we can mimic the key-order change
-        deserialized_model.ebc = ebc2
+        deserialized_model.sparse.ebc = ebc2
 
         deserialized_out = deserialized_model(id_list_features)
         for key in eager_out.keys():
