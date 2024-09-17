@@ -49,7 +49,7 @@ def stable_dmp_forward(
     pass
 
 
-class TestModelParallel(unittest.TestCase):
+class TestModelParallelSchema(unittest.TestCase):
     def test_dmp_init(self) -> None:
         self.assertTrue(
             is_signature_compatible(

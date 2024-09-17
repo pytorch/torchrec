@@ -58,7 +58,7 @@ class StableEmbeddingConfig:
     need_pos: bool = False
 
 
-class TestEmbeddingConfig(unittest.TestCase):
+class TestEmbeddingConfigSchema(unittest.TestCase):
     def test_embedding_bag_config(self) -> None:
         self.assertTrue(
             is_signature_compatible(

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #
@@ -103,7 +102,7 @@ def stable_shard_quant_model(
     return (model, ShardingPlan(plan={}))
 
 
-class TestModelParallel(unittest.TestCase):
+class TestInferenceSchema(unittest.TestCase):
     def test_quantize_inference_model(self) -> None:
         self.assertTrue(
             is_signature_compatible(
