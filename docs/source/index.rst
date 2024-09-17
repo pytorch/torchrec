@@ -36,8 +36,9 @@ TorchRec API
    overview.rst
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: All API References
+   :hidden:
 
    torchrec.datasets.rst
    torchrec.datasets.scripts.rst
