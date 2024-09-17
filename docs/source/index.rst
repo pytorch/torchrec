@@ -29,6 +29,13 @@ TorchRec API
 ------------
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Introduction
+   :hidden:
+
+   overview.rst
+
+.. toctree::
    :maxdepth: 2
    :caption: Contents:
 
