@@ -25,6 +25,7 @@ from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.mae import MAEMetric
 from torchrec.metrics.metrics_config import (
+    BatchSizeStage,
     MetricsConfig,
     RecMetricEnum,
     RecMetricEnumBase,
@@ -447,6 +448,26 @@ def _generate_state_metrics(
     return state_metrics
 
 
+def _validate_batch_size_stages(
+    batch_size_stages: Optional[List[BatchSizeStage]],
+) -> None:
+    if not batch_size_stages:
+        return
+
+    if len(batch_size_stages) == 0:
+        raise ValueError("Batch size stages should not be empty")
+
+    for i in range(len(batch_size_stages) - 1):
+        if batch_size_stages[i].batch_size >= batch_size_stages[i + 1].batch_size:
+            raise ValueError(
+                f"Batch size should be in ascending order. Got {batch_size_stages}"
+            )
+    if batch_size_stages[-1].max_iters is not None:
+        raise ValueError(
+            f"Batch size stages last stage should have max_iters = None, but get {batch_size_stages[-1].max_iters}"
+        )
+
+
 def generate_metric_module(
     metric_class: Type[RecMetricModule],
     metrics_config: MetricsConfig,
@@ -456,16 +477,25 @@ def generate_metric_module(
     state_metrics_mapping: Dict[StateMetricEnum, StateMetric],
     device: torch.device,
     process_group: Optional[dist.ProcessGroup] = None,
+    batch_size_stages: Optional[List[BatchSizeStage]] = None,
 ) -> RecMetricModule:
     rec_metrics = _generate_rec_metrics(
         metrics_config, world_size, my_rank, batch_size, process_group
     )
+    """
+    Batch_size_stages currently only used by ThroughputMetric to ensure total_example correct so 
+    different training jobs have aligned mertics.
+    TODO: update metrics other than ThroughputMetric if it has dependency on batch_size
+    """
+    _validate_batch_size_stages(batch_size_stages)
+
     if metrics_config.throughput_metric:
         throughput_metric = ThroughputMetric(
             batch_size=batch_size,
             world_size=world_size,
             window_seconds=metrics_config.throughput_metric.window_size,
             warmup_steps=metrics_config.throughput_metric.warmup_steps,
+            batch_size_stages=batch_size_stages,
         )
     else:
         throughput_metric = None

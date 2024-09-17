@@ -196,3 +196,20 @@ EmptyMetricsConfig = MetricsConfig(
     throughput_metric=None,
     state_metrics=[],
 )
+
+
+@dataclass
+class BatchSizeStage:
+    """
+    BatchSizeStage class for defining the variable batch size stage.
+    For a List[BatchSizeStage], the max_iter should be in ascending order, and the last one should have max_iter=None
+    Attributes
+    ----------
+        batch_size(int): A multiple of base_batch_size
+        max_iter(int): The maximum number of iterations for the stage.
+                       When previous BatchSizeStage.max_iters < iter <= max_iters, the stage is effective.
+                       Max_iter is the absolute train iteration count, not the relative count within each stage
+    """
+
+    batch_size: int = 0
+    max_iters: Optional[int] = 0

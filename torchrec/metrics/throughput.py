@@ -13,10 +13,12 @@ import logging
 import math
 import time
 from collections import deque
-from typing import Deque, Dict
+from typing import Deque, Dict, List, Optional
 
 import torch
 import torch.nn as nn
+from torchrec.distributed.utils import none_throws
+from torchrec.metrics.metrics_config import BatchSizeStage
 from torchrec.metrics.metrics_namespace import (
     compose_metric_key,
     MetricName,
@@ -61,7 +63,6 @@ class ThroughputMetric(nn.Module):
 
     _namespace: MetricNamespace = MetricNamespace.THROUGHPUT
     _metric_name: MetricName = MetricName.THROUGHPUT
-    _batch_examples: int
     _window_seconds: int
     _warmup_steps: int
     _window_time_lapse_buffer: Deque[float]
@@ -79,6 +80,7 @@ class ThroughputMetric(nn.Module):
         world_size: int,
         window_seconds: int,
         warmup_steps: int = 100,
+        batch_size_stages: Optional[List[BatchSizeStage]] = None,
     ) -> None:
         super().__init__()
         if window_seconds < 1:
@@ -98,12 +100,18 @@ class ThroughputMetric(nn.Module):
             )
             window_seconds = MAX_WINDOW_TS
 
-        self._batch_examples = batch_size * world_size
+        self._batch_size = batch_size
+        self._world_size = world_size
         self._window_seconds = window_seconds
         self._warmup_steps = warmup_steps
+        self._batch_size_stages = batch_size_stages
 
         self.register_buffer("total_examples", torch.tensor(0, dtype=torch.long))
         self.register_buffer("warmup_examples", torch.tensor(0, dtype=torch.long))
+        if batch_size_stages is not None:
+            # only load num_batch when batch_size_stages is set.
+            # So ckpt can be backward compatible -> non-existing key won't be loaded and crash
+            self.register_buffer("num_batch", torch.tensor(0, dtype=torch.long))
         self.register_buffer(
             "time_lapse_after_warmup", torch.tensor(0, dtype=torch.double)
         )
@@ -132,6 +140,31 @@ class ThroughputMetric(nn.Module):
 
         self._steps = 0
 
+    def _get_batch_size(self) -> int:
+        # No batch size stages, use the default batch size
+        if not self._batch_size_stages:
+            return self._batch_size
+
+        # Get batch size from batch_size_stages
+        batch_size_stages = none_throws(self._batch_size_stages)
+        while self._batch_size_stages:
+            stage = self._batch_size_stages[0]
+            # Reach the last stage
+            if stage.max_iters is None:
+                assert len(batch_size_stages) == 1
+                return stage.batch_size
+            # This stage finished
+            if stage.max_iters < self.num_batch:
+                batch_size_stages.pop(0)
+                # Move to the next stage
+                continue
+            # In this stage
+            return stage.batch_size
+        raise AssertionError("Unreachable, batch_size_stages should always has 1 item")
+
+    def _batch_examples(self) -> int:
+        return self._get_batch_size() * self._world_size
+
     def _check_window(self) -> None:
         while self._window_time_lapse > self._window_seconds:
             self._window_time_lapse -= self._window_time_lapse_buffer.popleft()
@@ -139,10 +172,12 @@ class ThroughputMetric(nn.Module):
     def update(self) -> None:
         ts = time.monotonic()
         self._steps += 1
-        self.total_examples += self._batch_examples
+        if self._batch_size_stages is not None:
+            self.num_batch += 1
+        self.total_examples += self._batch_examples()
 
         if self._steps <= self._warmup_steps:
-            self.warmup_examples += self._batch_examples
+            self.warmup_examples += self._batch_examples()
             if self._steps == self._warmup_steps:
                 self._previous_ts = ts
         else:
@@ -164,7 +199,7 @@ class ThroughputMetric(nn.Module):
             if not math.isclose(self._window_time_lapse, 0):
                 window_throughput = (
                     len(self._window_time_lapse_buffer)
-                    * self._batch_examples
+                    * self._batch_examples()
                     / self._window_time_lapse
                 )
             else:
