@@ -10,11 +10,7 @@
 
 #include <chrono>
 #include <memory>
-#include <optional>
-#include <stdexcept>
-#include <string>
 #include <thread>
-#include <unordered_map>
 
 #include <ATen/Functions.h> // @manual
 #include <ATen/core/Dict.h>

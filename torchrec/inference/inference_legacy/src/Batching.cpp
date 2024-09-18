@@ -16,7 +16,6 @@
 #include "ATen/Functions.h"
 #include "ATen/core/List.h"
 #include "ATen/core/ivalue.h"
-#include "torchrec/inference/Types.h"
 
 namespace torchrec {
 
