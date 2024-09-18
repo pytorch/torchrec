@@ -88,7 +88,7 @@ class StableEmbeddingCollectionInterface:
         return []
 
 
-class TestEmbeddingConfig(unittest.TestCase):
+class TestEmbeddingModuleSchema(unittest.TestCase):
     def test_embedding_bag_collection(self) -> None:
         self.assertTrue(
             is_signature_compatible(

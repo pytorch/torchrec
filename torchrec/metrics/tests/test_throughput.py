@@ -12,6 +12,8 @@
 import unittest
 from unittest.mock import Mock, patch
 
+from torchrec.metrics.metrics_config import BatchSizeStage
+
 from torchrec.metrics.throughput import ThroughputMetric
 
 
@@ -140,3 +142,29 @@ class ThroughputMetricTest(unittest.TestCase):
 
             # Mimic trainer crashing and loading a checkpoint
             throughput_metric._steps = 0
+
+    @patch(THROUGHPUT_PATH + ".time.monotonic")
+    def test_batch_size_schedule(self, time_mock: Mock) -> None:
+        batch_size_stages = [BatchSizeStage(256, 1), BatchSizeStage(512, None)]
+        time_mock.return_value = 1
+        throughput_metric = ThroughputMetric(
+            batch_size=self.batch_size,
+            world_size=self.world_size,
+            window_seconds=100,
+            batch_size_stages=batch_size_stages,
+        )
+
+        total_examples = 0
+        throughput_metric.update()
+        total_examples += batch_size_stages[0].batch_size * self.world_size
+        self.assertEqual(
+            throughput_metric.compute(),
+            {"throughput-throughput|total_examples": total_examples},
+        )
+
+        throughput_metric.update()
+        total_examples += batch_size_stages[1].batch_size * self.world_size
+        self.assertEqual(
+            throughput_metric.compute(),
+            {"throughput-throughput|total_examples": total_examples},
+        )

@@ -25,11 +25,13 @@ from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.mae import MAEMetric
 from torchrec.metrics.metrics_config import (
+    BatchSizeStage,
     MetricsConfig,
     RecMetricEnum,
     RecMetricEnumBase,
     RecTaskInfo,
     StateMetricEnum,
+    validate_batch_size_stages,
 )
 from torchrec.metrics.metrics_namespace import (
     compose_customized_metric_key,
@@ -456,16 +458,25 @@ def generate_metric_module(
     state_metrics_mapping: Dict[StateMetricEnum, StateMetric],
     device: torch.device,
     process_group: Optional[dist.ProcessGroup] = None,
+    batch_size_stages: Optional[List[BatchSizeStage]] = None,
 ) -> RecMetricModule:
     rec_metrics = _generate_rec_metrics(
         metrics_config, world_size, my_rank, batch_size, process_group
     )
+    """
+    Batch_size_stages currently only used by ThroughputMetric to ensure total_example correct so 
+    different training jobs have aligned mertics.
+    TODO: update metrics other than ThroughputMetric if it has dependency on batch_size
+    """
+    validate_batch_size_stages(batch_size_stages)
+
     if metrics_config.throughput_metric:
         throughput_metric = ThroughputMetric(
             batch_size=batch_size,
             world_size=world_size,
             window_seconds=metrics_config.throughput_metric.window_size,
             warmup_steps=metrics_config.throughput_metric.warmup_steps,
+            batch_size_stages=batch_size_stages,
         )
     else:
         throughput_metric = None
