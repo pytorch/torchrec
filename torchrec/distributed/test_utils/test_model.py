@@ -36,6 +36,8 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 from torchrec.modules.feature_processor import PositionWeightedProcessor
+from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
@@ -1009,52 +1011,43 @@ class TestSparseArch(nn.Module):
         tables: List[EmbeddingBagConfig],
         weighted_tables: List[EmbeddingBagConfig],
         device: Optional[torch.device] = None,
-        max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
+        max_feature_lengths: Optional[Dict[str, int]] = None,
     ) -> None:
         super().__init__()
         if device is None:
             device = torch.device("cpu")
         self.fps: Optional[nn.ModuleList] = None
-        self.fp_ebc: Optional[EmbeddingBagCollection] = None
-        if max_feature_lengths_list is not None:
-            self.fps = nn.ModuleList(
-                [
-                    PositionWeightedProcessor(
-                        max_feature_lengths=max_feature_lengths,
-                        device=(
-                            device
-                            if device != torch.device("meta")
-                            else torch.device("cpu")
-                        ),
-                    )
-                    for max_feature_lengths in max_feature_lengths_list
-                ]
-            )
-            normal_id_list_tables = []
-            fp_id_list_tables = []
-            for table in tables:
-                # the key set of feature_processor is either subset or none in the feature_names
-                if set(table.feature_names).issubset(
-                    set(max_feature_lengths_list[0].keys())
-                ):
-                    fp_id_list_tables.append(table)
-                else:
-                    normal_id_list_tables.append(table)
+        self.fp_ebc: Optional[FeatureProcessedEmbeddingBagCollection] = None
+
+        if max_feature_lengths is not None:
+            fp_tables_names = set(max_feature_lengths.keys())
+            normal_tables_names = {table.name for table in tables} - fp_tables_names
 
             self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
-                tables=normal_id_list_tables,
+                tables=[table for table in tables if table.name in normal_tables_names],
                 device=device,
             )
-            self.fp_ebc: EmbeddingBagCollection = EmbeddingBagCollection(
-                tables=fp_id_list_tables,
-                device=device,
-                is_weighted=True,
+
+            fp = PositionWeightedModuleCollection(
+                max_feature_lengths=max_feature_lengths,
+                device=(
+                    device if device != torch.device("meta") else torch.device("cpu")
+                ),
+            )
+            self.fp_ebc = FeatureProcessedEmbeddingBagCollection(
+                embedding_bag_collection=EmbeddingBagCollection(
+                    tables=[table for table in tables if table.name in fp_tables_names],
+                    device=device,
+                    is_weighted=True,
+                ),
+                feature_processors=fp,
             )
         else:
             self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
                 tables=tables,
                 device=device,
             )
+
         self.weighted_ebc: Optional[EmbeddingBagCollection] = (
             EmbeddingBagCollection(
                 tables=weighted_tables,
@@ -1109,7 +1102,6 @@ class TestSparseNNBase(nn.Module):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
-        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__()
         if dense_device is None:
@@ -1148,7 +1140,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
-        max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
+        max_feature_lengths: Optional[Dict[str, int]] = None,
         feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
         over_arch_clazz: Type[nn.Module] = TestOverArch,
         preproc_module: Optional[nn.Module] = None,
@@ -1167,7 +1159,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
             tables,
             weighted_tables,
             sparse_device,
-            max_feature_lengths_list if max_feature_lengths_list is not None else None,
+            max_feature_lengths,
         )
 
         embedding_names = (
