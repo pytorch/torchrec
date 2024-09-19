@@ -161,15 +161,14 @@ def _unwrap_kjt(
 
 
 def _unwrap_kjt_for_cpu(
-    features: KeyedJaggedTensor,
+    features: KeyedJaggedTensor, weighted: bool
 ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
     indices = features.values()
-    offsets = features.offsets()
-    return (
-        indices,
-        offsets.type(indices.dtype),
-        features.weights_or_none(),
-    )
+    offsets = features.offsets().type(indices.dtype)
+    if weighted:
+        return indices, offsets, features.weights()
+    else:
+        return indices, offsets, None
 
 
 @torch.fx.wrap
@@ -272,7 +271,9 @@ class QuantBatchedEmbeddingBag(
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         # Important: _unwrap_kjt regex for FX tracing TAGing
         if self._runtime_device.type == "cpu":
-            indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(features)
+            indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(
+                features, self._config.is_weighted
+            )
         else:
             indices, offsets, per_sample_weights = _unwrap_kjt(features)
 
@@ -459,8 +460,10 @@ class QuantBatchedEmbedding(
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         if self._runtime_device.type == "cpu":
-            # To distinguish with QEBC for fx tracing on CPU embedding.
-            values, offsets, _ = _unwrap_kjt_for_cpu(features)
+            # To distinguish fx tracing on CPU embedding.
+            values, offsets, _ = _unwrap_kjt_for_cpu(
+                features, weighted=self._config.is_weighted
+            )
         else:
             values, offsets, _ = _unwrap_kjt(features)
 
