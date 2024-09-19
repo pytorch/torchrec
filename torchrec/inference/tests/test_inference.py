@@ -12,6 +12,7 @@ import unittest
 from argparse import Namespace
 
 import torch
+from fbgemm_gpu.split_embedding_configs import SparseType
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.distributed.global_settings import set_propogate_device
 from torchrec.distributed.test_utils.test_model import (
@@ -175,3 +176,42 @@ class InferenceTest(unittest.TestCase):
                             spec[1],
                             pruning_dict[spec[0]],
                         )
+
+    def test_quantize_per_table_dtype(self) -> None:
+        max_feature_lengths = {}
+
+        # First two tables as FPEBC
+        max_feature_lengths[self.tables[0].name] = 100
+        max_feature_lengths[self.tables[1].name] = 100
+
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            num_float_features=10,
+            dense_device=torch.device("cpu"),
+            sparse_device=torch.device("cpu"),
+            over_arch_clazz=TestOverArchRegroupModule,
+            max_feature_lengths=max_feature_lengths,
+        )
+
+        per_table_dtype = {}
+
+        for table in self.tables + self.weighted_tables:
+            # quint4x2 different than int8, which is default
+            per_table_dtype[table.name] = torch.quint4x2
+
+        quantized_model = quantize_inference_model(
+            model, per_table_weight_dtype=per_table_dtype
+        )
+
+        num_tbes = 0
+        # Check EBC configs and TBE for correct shapes
+        for module in quantized_model.modules():
+            if module.__class__.__name__ == "IntNBitTableBatchedEmbeddingBagsCodegen":
+                num_tbes += 1
+                for i, spec in enumerate(module.embedding_specs):
+                    self.assertEqual(spec[3], SparseType.INT4)
+
+        # 3 TBES (1 FPEBC, 2 EBCs (1 weighted, 1 unweighted))
+
+        self.assertEqual(num_tbes, 3)
