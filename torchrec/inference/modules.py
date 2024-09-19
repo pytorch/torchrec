@@ -420,14 +420,19 @@ def quantize_inference_model(
         fp_module_fqn: str,
         activation_dtype: torch.dtype = torch.float,
         weight_dtype: torch.dtype = DEFAULT_QUANTIZATION_DTYPE,
+        per_fp_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None,
     ) -> None:
         """
         If FeatureProcessedEmbeddingBagCollection is found, quantize via direct module swap.
         """
-        fp_module.qconfig = quant.QConfig(
+
+        quant_prep_enable_register_tbes(model, [FeatureProcessedEmbeddingBagCollection])
+        fp_module.qconfig = QuantConfig(
             activation=quant.PlaceholderObserver.with_args(dtype=activation_dtype),
             weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
+            per_table_weight_dtype=per_fp_table_weight_dtype,
         )
+
         # ie. "root.submodule.feature_processed_mod" -> "root.submodule", "feature_processed_mod"
         fp_ebc_parent_fqn, fp_ebc_name = fp_module_fqn.rsplit(".", 1)
         fp_ebc_parent = getattr_recursive(model, fp_ebc_parent_fqn)
@@ -447,7 +452,15 @@ def quantize_inference_model(
             additional_mapping[type(m)] = quantization_mapping[typename]
         elif typename == FEATURE_PROCESSED_EBC_TYPE:
             # handle the fp ebc separately
-            _quantize_fp_module(model, m, n, weight_dtype=fp_weight_dtype)
+            _quantize_fp_module(
+                model,
+                m,
+                n,
+                weight_dtype=fp_weight_dtype,
+                # Pass in per_fp_table_weight_dtype if it is provided, perhaps
+                # fpebc parameters are also in here
+                per_fp_table_weight_dtype=per_table_weight_dtype,
+            )
 
     quant_prep_enable_register_tbes(model, list(additional_mapping.keys()))
     quantize_embeddings(

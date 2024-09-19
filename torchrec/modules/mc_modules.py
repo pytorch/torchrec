@@ -20,14 +20,6 @@ from torchrec.modules.embedding_configs import BaseEmbeddingConfig
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
 
-try:
-    from torchrec.sparse.jagged_tensor import ComputeJTDictToKJT
-except ImportError:
-    # Dummy implementation, use try catch for torch package compatibility issue
-    torch._C._log_api_usage_once(
-        "ImportError ComputeJTDictToKJT, ignoring, but possible incompatiblity with torch.package"
-    )
-
 logger: Logger = getLogger(__name__)
 
 
@@ -42,6 +34,46 @@ def apply_mc_method_to_jt_dict(
     """
     attr = getattr(mc_module, method)
     return attr(features_dict)
+
+
+@torch.fx.wrap
+def _update(
+    base: Optional[Dict[str, JaggedTensor]], delta: Dict[str, JaggedTensor]
+) -> Dict[str, JaggedTensor]:
+    if base is None:
+        base = delta
+    else:
+        base.update(delta)
+    return base
+
+
+@torch.fx.wrap
+def _cat_jagged_values(jd: Dict[str, JaggedTensor]) -> torch.Tensor:
+    return torch.cat([jt.values() for jt in jd.values()])
+
+
+@torch.fx.wrap
+def _mcc_lazy_init(
+    features: KeyedJaggedTensor,
+    feature_names: List[str],
+    features_order: List[int],
+    created_feature_order: bool,
+) -> Tuple[KeyedJaggedTensor, bool, List[int]]:  # features_order
+    input_feature_names: List[str] = features.keys()
+    if not created_feature_order:
+        for f in feature_names:
+            features_order.append(input_feature_names.index(f))
+
+        if features_order == list(range(len(features_order))):
+            features_order = torch.jit.annotate(List[int], [])
+        created_feature_order = True
+
+    if len(features_order) > 0:
+        features = features.permute(
+            features_order,
+        )
+
+    return (features, created_feature_order, features_order)
 
 
 @torch.no_grad()
@@ -251,28 +283,30 @@ class ManagedCollisionCollection(nn.Module):
     """
 
     _table_to_features: Dict[str, List[str]]
+    _features_order: List[int]
 
     def __init__(
         self,
         managed_collision_modules: Dict[str, ManagedCollisionModule],
         embedding_configs: List[BaseEmbeddingConfig],
+        need_preprocess: bool = True,
     ) -> None:
         super().__init__()
         self._managed_collision_modules = nn.ModuleDict(managed_collision_modules)
         self._embedding_configs = embedding_configs
+        self.need_preprocess = need_preprocess
         self._feature_to_table: Dict[str, str] = {
             feature: config.name
             for config in embedding_configs
             for feature in config.feature_names
         }
-        self._table_to_features = {}
+        self._table_to_features: Dict[str, List[str]] = {
+            config.name: config.feature_names for config in embedding_configs
+        }
 
-        self._compute_jt_dict_to_kjt: torch.nn.Module = ComputeJTDictToKJT()
-        for feature, table in self._feature_to_table.items():
-            if table not in self._table_to_features:
-                self._table_to_features[table] = []
-
-            self._table_to_features[table].append(feature)
+        self._table_feature_splits: List[int] = [
+            len(features) for features in self._table_to_features.values()
+        ]
 
         table_to_config = {config.name: config for config in embedding_configs}
 
@@ -287,6 +321,23 @@ class ManagedCollisionCollection(nn.Module):
                 f"max_output_id in managed collision module for {name} "
                 f"must match {config.num_embeddings}"
             )
+        self._feature_names: List[str] = [
+            feature for config in embedding_configs for feature in config.feature_names
+        ]
+        self._created_feature_order = False
+        self._features_order = []
+
+    def _create_feature_order(
+        self,
+        input_feature_names: List[str],
+        device: torch.device,
+    ) -> None:
+        features_order: List[int] = []
+        for f in self._feature_names:
+            features_order.append(input_feature_names.index(f))
+
+        if features_order != list(range(len(features_order))):
+            self._features_order = features_order
 
     def embedding_configs(self) -> List[BaseEmbeddingConfig]:
         return self._embedding_configs
@@ -295,16 +346,41 @@ class ManagedCollisionCollection(nn.Module):
         self,
         features: KeyedJaggedTensor,
     ) -> KeyedJaggedTensor:
-        features_dict = features.to_dict()
-        output: Dict[str, JaggedTensor] = features_dict.copy()
-        for table, mc_module in self._managed_collision_modules.items():
-            feature_list: List[str] = self._table_to_features[table]
-            mc_input: Dict[str, JaggedTensor] = {}
-            for feature in feature_list:
-                mc_input[feature] = features_dict[feature]
+        (
+            features,
+            self._created_feature_order,
+            self._features_order,
+        ) = _mcc_lazy_init(
+            features,
+            self._feature_names,
+            self._features_order,
+            self._created_feature_order,
+        )
+
+        feature_splits: List[KeyedJaggedTensor] = features.split(
+            self._table_feature_splits
+        )
+
+        output: Optional[Dict[str, JaggedTensor]] = None
+        for i, (table, mc_module) in enumerate(self._managed_collision_modules.items()):
+            kjt: KeyedJaggedTensor = feature_splits[i]
+            mc_input: Dict[str, JaggedTensor] = {
+                table: JaggedTensor(
+                    values=kjt.values(),
+                    lengths=kjt.lengths(),
+                )
+            }
             mc_input = mc_module(mc_input)
-            output.update(mc_input)
-        return self._compute_jt_dict_to_kjt(output)
+            output = _update(output, mc_input)
+
+        assert output is not None
+        values: torch.Tensor = _cat_jagged_values(output)
+        return KeyedJaggedTensor(
+            keys=features.keys(),
+            values=values,
+            lengths=features.lengths(),
+            weights=features.weights_or_none(),
+        )
 
     def evict(self) -> Dict[str, Optional[torch.Tensor]]:
         evictions: Dict[str, Optional[torch.Tensor]] = {}
