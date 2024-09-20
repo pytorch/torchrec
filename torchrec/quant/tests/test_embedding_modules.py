@@ -828,7 +828,9 @@ class EmbeddingCollectionTest(unittest.TestCase):
         indices, offsets = _fx_trec_unwrap_kjt(features)
         self.assertEqual(indices.dtype, offsets.dtype)
         if device.type == "cpu":
-            sharded_indices, sharded_offsets, _ = _unwrap_kjt_for_cpu(features)
+            sharded_indices, sharded_offsets, _ = _unwrap_kjt_for_cpu(
+                features, weighted=False
+            )
             self.assertEqual(sharded_indices.dtype, indices_dtype)
         else:  # cuda
             sharded_indices, sharded_offsets, _ = _unwrap_kjt(features)
