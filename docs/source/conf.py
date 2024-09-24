@@ -19,7 +19,6 @@
 #
 import os
 import sys
-
 import pytorch_sphinx_theme
 import torchrec
 
@@ -31,7 +30,7 @@ print(target_dir)
 # -- Project information -----------------------------------------------------
 
 project = "TorchRec"
-copyright = "2022, Meta"
+copyright = "2024, Meta"
 author = "Meta"
 
 try:
@@ -49,7 +48,16 @@ release = ".".join(version.split(".")[:3])
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.napoleon", "sphinx.ext.autodoc"]
+extensions = [
+    "sphinx.ext.napoleon",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
+    "sphinx.ext.intersphinx",
+    "sphinx_copybutton",
+    "sphinx.ext.mathjax",
+    "sphinx_design"
+    ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -85,3 +93,5 @@ html_theme_options = {
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+
+html_css_files = ["css/custom.css"]
