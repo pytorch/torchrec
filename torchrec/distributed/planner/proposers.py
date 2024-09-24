@@ -545,7 +545,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
 
         if promoted_count > 0:
             logger.info(
-                f"EmbeddingOffloadScaleupProposer - promoted {promoted_count} tables to HBM, saving {saved_hbm // 1024 // 1024}MiB HBM"
+                f"EmbeddingOffloadScaleupProposer - promoted {promoted_count} tables to HBM, because their IO size is larger than the table size itself, saving {saved_hbm // 1024 // 1024}MiB HBM"
             )
 
         # In the end, update the storage cost for new proposal
@@ -684,6 +684,8 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             budget=budget,
             allocation_priority=cooked_cacheability,
         )
+
+        num_promoted = 0
         # apply new_clfs, promoting tables that made it to 1.0
         for sharding_option, clf in zip(cache_tables, new_clfs):
             clf = clf.item()  # tensor scalar -> scalar
@@ -693,6 +695,10 @@ class EmbeddingOffloadScaleupProposer(Proposer):
                 assert sharding_option.cache_params  # appease pyre
                 sharding_option.cache_params.load_factor = None
                 sharding_option.compute_kernel = EmbeddingComputeKernel.FUSED.value
+                num_promoted += 1
+        logger.info(
+            f"EmbeddingOffloadScaleupProposer - Promoted {num_promoted} tables to HBM because cache size is similar to table size."
+        )
         # recalculate cost estimates of modified tables
         enumerator.populate_estimates(cache_tables)
         return proposal
