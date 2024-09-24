@@ -3,30 +3,85 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+.. meta::
+   :description: TorchRec documentation homepage
+   :keywords: recommendation systems, sharding, distributed training
+
 Welcome to the TorchRec documentation!
 ======================================
 
-TorchRec is a PyTorch domain library built to provide common
-sparsity & parallelism primitives needed for large-scale recommender
-systems (RecSys). It allows authors to train models with large
-embedding tables sharded across many GPUs.
+TorchRec is a specialized library within the PyTorch ecosystem,
+tailored for building, scaling, and deploying large-scale
+**recommendation systems**, a niche not directly addressed by standard
+PyTorch. TorchRec offers advanced features such as complex sharding
+techniques for massive embedding tables, and enhanced distributed
+training capabilities.
 
-For installation instructions, visit
+Getting Started
+---------------
 
-https://github.com/pytorch/torchrec#readme
+Topics in this section will help you get started with TorchRec.
 
-Tutorial
---------
-In this tutorial, we introduce the primary torchRec
-API called DistributedModelParallel, or DMP.
-Like pytorch’s DistributedDataParallel,
-DMP wraps a model to enable distributed training.
+.. grid:: 3
 
-* `Tutorial Source <https://github.com/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb>`_
-* Open in `Google Colab <https://colab.research.google.com/github/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb>`_
+     .. grid-item-card:: :octicon:`file-code;1em`
+        TorchRec Overview
+        :img-top: _static/img/card-background.svg
+        :link: overview.html
+        :link-type: url
 
-TorchRec API
-------------
+        A short intro to TorchRec and why you need it.
+
+     .. grid-item-card:: :octicon:`file-code;1em`
+        Set up TorchRec
+        :img-top: _static/img/card-background.svg
+        :link: setup-torchrec.html
+        :link-type: url
+
+        Learn how to install and start using TorchRec
+        in your environment.
+
+     .. grid-item-card:: :octicon:`file-code;1em`
+        Getting Started with TorchRec Tutorial
+        :img-top: _static/img/card-background.svg
+        :link: https://colab.research.google.com/github/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb
+        :link-type: url
+
+        Follow our interactive step-by-step tutorial
+        to learn how to use TorchRec in a real-life
+        example.
+
+
+
+How to Contribute
+-----------------
+
+We welcome contributions and feedback from the PyTorch community!
+If you are interested in helping improve the TorchRec project, here is
+how you can contribute:
+
+1. **Visit Our** `GitHub Repository <https://github.com/pytorch/torchrec>`__:
+   There yoou can find the source code, issues, and ongoing projects.
+
+1. **Submit Feedback or Issues**: If you encounter any bugs or have
+   suggestions for improvements, please submit an issue through the
+   `GitHub issue tracker <https://github.com/pytorch/torchrec/issues>`__.
+
+1. **Propose changes**: Fork the repository and submit pull requests.
+   Whether it's fixing a bug, adding new features, or improving
+   documentation, your contributions are always welcome! Please make sure to
+   review our `CONTRIBUTING.md <https://github.com/pytorch/torchrec/blob/main/CONTRIBUTING.md>`__
+
+|
+|
+
+.. container:: center-content
+
+   .. button-link:: https://github.com/pytorch/torchrec
+      :color: info
+
+      :octicon:`mark-github` Go to TorchRec Repo
+
 
 .. toctree::
    :maxdepth: 1
@@ -53,10 +108,3 @@ TorchRec API
    torchrec.quant.rst
    torchrec.sparse.rst
    torchrec.metrics.rst
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

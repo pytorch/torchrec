@@ -9,7 +9,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Index &mdash; TorchRec 0.9.0 documentation</title>
+  <title>Index &mdash; TorchRec 1.1.0 documentation</title>
   
 
   
@@ -29,6 +29,9 @@
   <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/copybutton.css" type="text/css" />
+  <link rel="stylesheet" href="_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="#" />
     <link rel="search" title="Search" href="search.html" />
   <!-- Google Tag Manager -->
@@ -265,7 +268,7 @@
               
               
                 <div class="version">
-                  0.9.0.dev20240801+cpu
+                  1.1.0.dev20240924+cpu
                 </div>
               
             
@@ -512,6 +515,8 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.apply_mc_method_to_jt_dict">apply_mc_method_to_jt_dict() (in module torchrec.modules.mc_modules)</a>
 </li>
+      <li><a href="torchrec.inference.html#torchrec.inference.modules.assign_weights_to_tbe">assign_weights_to_tbe() (in module torchrec.inference.modules)</a>
+</li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.auc.AUCMetric">AUCMetric (class in torchrec.metrics.auc)</a>
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.auc.AUCMetricComputation">AUCMetricComputation (class in torchrec.metrics.auc)</a>
@@ -598,10 +603,10 @@
         <li><a href="torchrec.modules.html#torchrec.modules.feature_processor.BaseGroupedFeatureProcessor">(class in torchrec.modules.feature_processor)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_embedding_modules.BaseManagedCollisionEmbeddingCollection">BaseManagedCollisionEmbeddingCollection (class in torchrec.modules.mc_embedding_modules)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.BaseQuantEmbeddingSharder">BaseQuantEmbeddingSharder (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.rw_sharding.BaseRwEmbeddingSharding">BaseRwEmbeddingSharding (class in torchrec.distributed.sharding.rw_sharding)</a>
@@ -611,6 +616,8 @@
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.tw_sharding.BaseTwEmbeddingSharding">BaseTwEmbeddingSharding (class in torchrec.distributed.sharding.tw_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.twrw_sharding.BaseTwRwEmbeddingSharding">BaseTwRwEmbeddingSharding (class in torchrec.distributed.sharding.twrw_sharding)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch">Batch (class in torchrec.datasets.utils)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.All2AllDenseInfo.batch_size">batch_size (torchrec.distributed.comm_ops.All2AllDenseInfo attribute)</a>
 
@@ -635,6 +642,8 @@
       <li><a href="torchrec.inference.html#torchrec.inference.modules.BatchingMetadata">BatchingMetadata (class in torchrec.inference.modules)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.LuusJaakolaSearch.best">best() (torchrec.distributed.planner.utils.LuusJaakolaSearch method)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils">BinaryCriteoUtils (class in torchrec.datasets.criteo)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.BinarySearchPredicate">BinarySearchPredicate (class in torchrec.distributed.planner.utils)</a>
 </li>
@@ -721,6 +730,8 @@
       <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.check_memory_usage">check_memory_usage() (torchrec.metrics.metric_module.RecMetricModule method)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.check_module_output_dimension">check_module_output_dimension() (in module torchrec.modules.utils)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.choose">choose() (in module torchrec.models.dlrm)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.LuusJaakolaSearch.clamp">clamp() (torchrec.distributed.planner.utils.LuusJaakolaSearch method)</a>
 </li>
@@ -870,10 +881,10 @@
       </ul></li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.ne.compute_logloss">compute_logloss() (in module torchrec.metrics.ne)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.metrics.html#torchrec.metrics.mae.compute_mae">compute_mae() (in module torchrec.metrics.mae)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.metrics.html#torchrec.metrics.mse.compute_mse">compute_mse() (in module torchrec.metrics.mse)</a>
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.multiclass_recall.compute_multiclass_recall_at_k">compute_multiclass_recall_at_k() (in module torchrec.metrics.multiclass_recall)</a>
@@ -1048,6 +1059,12 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.create_sharding_infos_by_sharding_device_group">(in module torchrec.distributed.embeddingbag)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.criteo_kaggle">criteo_kaggle() (in module torchrec.datasets.criteo)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.criteo_terabyte">criteo_terabyte() (in module torchrec.datasets.criteo)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.CriteoIterDataPipe">CriteoIterDataPipe (class in torchrec.datasets.criteo)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.crossnet.CrossNet">CrossNet (class in torchrec.modules.crossnet)</a>
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.ctr.CTRMetric">CTRMetric (class in torchrec.metrics.ctr)</a>
@@ -1108,8 +1125,14 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.EmbeddingComputeKernel.DENSE">DENSE (torchrec.distributed.embedding_types.EmbeddingComputeKernel attribute)</a>
 </li>
-      <li><a href="torchrec.models.html#torchrec.models.deepfm.DenseArch">DenseArch (class in torchrec.models.deepfm)</a>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.dense_features">dense_features (torchrec.datasets.utils.Batch attribute)</a>
 </li>
+      <li><a href="torchrec.models.html#torchrec.models.deepfm.DenseArch">DenseArch (class in torchrec.models.deepfm)</a>
+
+      <ul>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DenseArch">(class in torchrec.models.dlrm)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption.dependency">dependency (torchrec.distributed.planner.types.ShardingOption attribute)</a>
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.MetricComputationReport.description">description (torchrec.metrics.rec_metric.MetricComputationReport attribute)</a>
@@ -1182,6 +1205,14 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.divisor">divisor (torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext attribute)</a>
 </li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM">DLRM (class in torchrec.models.dlrm)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_DCN">DLRM_DCN (class in torchrec.models.dlrm)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_Projection">DLRM_Projection (class in torchrec.models.dlrm)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMTrain">DLRMTrain (class in torchrec.models.dlrm)</a>
+</li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingDist">DpPooledEmbeddingDist (class in torchrec.distributed.sharding.dp_sharding)</a>
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.dp_sharding.DpPooledEmbeddingSharding">DpPooledEmbeddingSharding (class in torchrec.distributed.sharding.dp_sharding)</a>
@@ -1197,6 +1228,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.dummy_tensor">dummy_tensor() (in module torchrec.distributed.embedding_lookup)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.dynamic_threshold_filter">dynamic_threshold_filter() (in module torchrec.modules.mc_modules)</a>
+</li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.DynamicProgrammingProposer">DynamicProgrammingProposer (class in torchrec.distributed.planner.proposers)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -1530,9 +1563,11 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.FeatureShardingMixIn">FeatureShardingMixIn (class in torchrec.distributed.embedding_types)</a>
 </li>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.feedback">feedback() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer method)</a>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.DynamicProgrammingProposer.feedback">feedback() (torchrec.distributed.planner.proposers.DynamicProgrammingProposer method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.feedback">(torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer method)</a>
+</li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.feedback">(torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 </li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GridSearchProposer.feedback">(torchrec.distributed.planner.proposers.GridSearchProposer method)</a>
@@ -1641,6 +1676,8 @@
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedLookupMixin.forward">(torchrec.distributed.embedding_lookup.InferGroupedLookupMixin method)</a>
 </li>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.InferGroupedPooledEmbeddingsLookup method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.MetaInferGroupedEmbeddingsLookup method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup.forward">(torchrec.distributed.embedding_lookup.MetaInferGroupedPooledEmbeddingsLookup method)</a>
@@ -1702,6 +1739,22 @@
         <li><a href="torchrec.models.html#torchrec.models.deepfm.SimpleDeepFMNN.forward">(torchrec.models.deepfm.SimpleDeepFMNN method)</a>
 </li>
         <li><a href="torchrec.models.html#torchrec.models.deepfm.SparseArch.forward">(torchrec.models.deepfm.SparseArch method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DenseArch.forward">(torchrec.models.dlrm.DenseArch method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM.forward">(torchrec.models.dlrm.DLRM method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMTrain.forward">(torchrec.models.dlrm.DLRMTrain method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionArch.forward">(torchrec.models.dlrm.InteractionArch method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionDCNArch.forward">(torchrec.models.dlrm.InteractionDCNArch method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionProjectionArch.forward">(torchrec.models.dlrm.InteractionProjectionArch method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.OverArch.forward">(torchrec.models.dlrm.OverArch method)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch.forward">(torchrec.models.dlrm.SparseArch method)</a>
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.activation.SwishLayerNorm.forward">(torchrec.modules.activation.SwishLayerNorm method)</a>
 </li>
@@ -1874,6 +1927,8 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.get_expected_lookups">get_expected_lookups() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer static method)</a>
 </li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.get_file_row_ranges_and_remainder">get_file_row_ranges_and_remainder() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.get_gradient_division">get_gradient_division() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm.get_group_rank">get_group_rank() (in module torchrec.distributed.comm)</a>
@@ -1904,10 +1959,10 @@
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.ne.get_ne_states">get_ne_states() (in module torchrec.metrics.ne)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm.get_num_groups">get_num_groups() (in module torchrec.distributed.comm)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.enumerators.get_partition_by_type">get_partition_by_type() (in module torchrec.distributed.planner.enumerators)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.get_plan_for_module">get_plan_for_module() (torchrec.distributed.types.ShardingPlan method)</a>
@@ -1924,6 +1979,10 @@
         <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetricList.get_required_inputs">(torchrec.metrics.rec_metric.RecMetricList method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.get_shape_from_npy">get_shape_from_npy() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
+</li>
+      <li><a href="torchrec.inference.html#torchrec.inference.modules.get_table_to_weights_from_tbe">get_table_to_weights_from_tbe() (in module torchrec.inference.modules)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup.get_tbes_to_register">get_tbes_to_register() (torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup method)</a>
 
       <ul>
@@ -1957,6 +2016,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.GetItemLazyAwaitable">GetItemLazyAwaitable (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ShardedMetaConfig.global_metadata">global_metadata (torchrec.distributed.embedding_types.ShardedMetaConfig attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.mc_modules.ShardedManagedCollisionCollection.global_to_local_index">global_to_local_index() (torchrec.distributed.mc_modules.ShardedManagedCollisionCollection method)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.clipping.GradientClipping">GradientClipping (class in torchrec.optim.clipping)</a>
 </li>
@@ -2012,6 +2073,8 @@
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.idx_split_train_val">idx_split_train_val() (in module torchrec.datasets.utils)</a>
+</li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.index_per_key">index_per_key() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.InferCPUGroupedEmbeddingsLookup">InferCPUGroupedEmbeddingsLookup (class in torchrec.distributed.embedding_lookup)</a>
@@ -2053,6 +2116,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.init_parameters">init_parameters() (in module torchrec.distributed.utils)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.KeyedOptimizer.init_state">init_state() (torchrec.optim.keyed.KeyedOptimizer method)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.InMemoryBinaryCriteoIterDataPipe">InMemoryBinaryCriteoIterDataPipe (class in torchrec.datasets.criteo)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.input_dist">input_dist() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
@@ -2113,6 +2178,12 @@
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology.inter_host_bw">inter_host_bw (torchrec.distributed.planner.types.Topology property)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.utils.ForkedPdb.interaction">interaction() (torchrec.distributed.utils.ForkedPdb method)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionArch">InteractionArch (class in torchrec.models.dlrm)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionDCNArch">InteractionDCNArch (class in torchrec.models.dlrm)</a>
+</li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionProjectionArch">InteractionProjectionArch (class in torchrec.models.dlrm)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm.intra_and_cross_node_pg">intra_and_cross_node_pg() (in module torchrec.distributed.comm)</a>
 </li>
@@ -2242,8 +2313,14 @@
 <h2 id="L">L</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.labels">labels (torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.l2_cache_size">l2_cache_size (torchrec.distributed.types.KeyValueParams attribute)</a>
 </li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.labels">labels (torchrec.datasets.utils.Batch attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.labels">(torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.RecMetric.LABELS">LABELS (torchrec.metrics.rec_metric.RecMetric attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.LAMB">LAMB (torchrec.distributed.embedding_types.OptimType attribute)</a>
@@ -2288,6 +2365,8 @@
       </ul></li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.LFU_EvictionPolicy">LFU_EvictionPolicy (class in torchrec.modules.mc_modules)</a>
 </li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Limit">Limit (class in torchrec.datasets.utils)</a>
+</li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupPolicy.LINEAR">LINEAR (torchrec.optim.warmup.WarmupPolicy attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.LION">LION (torchrec.distributed.embedding_types.OptimType attribute)</a>
@@ -2298,9 +2377,11 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.ListOfKJTListSplitsAwaitable">ListOfKJTListSplitsAwaitable (class in torchrec.distributed.embedding_sharding)</a>
 </li>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.load">load() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer method)</a>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.DynamicProgrammingProposer.load">load() (torchrec.distributed.planner.proposers.DynamicProgrammingProposer method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.load">(torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer method)</a>
+</li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.load">(torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 </li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GridSearchProposer.load">(torchrec.distributed.planner.proposers.GridSearchProposer method)</a>
@@ -2315,6 +2396,8 @@
       <li><a href="torchrec.inference.html#torchrec.inference.model_packager.load_config_text">load_config_text() (in module torchrec.inference.model_packager)</a>
 </li>
       <li><a href="torchrec.distributed.html#id35">load_factor (torchrec.distributed.types.CacheParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.CacheParams.load_factor">[1]</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.load_npy_range">load_npy_range() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
 </li>
       <li><a href="torchrec.inference.html#torchrec.inference.model_packager.load_pickle_config">load_pickle_config() (in module torchrec.inference.model_packager)</a>
 </li>
@@ -2338,6 +2421,8 @@
         <li><a href="torchrec.optim.html#torchrec.optim.keyed.OptimizerWrapper.load_state_dict">(torchrec.optim.keyed.OptimizerWrapper method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.LoadFiles">LoadFiles (class in torchrec.datasets.utils)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ShardedConfig.local_cols">local_cols (torchrec.distributed.embedding_types.ShardedConfig attribute)</a>
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.metric_module.RecMetricModule.local_compute">local_compute() (torchrec.metrics.metric_module.RecMetricModule method)</a>
@@ -2388,6 +2473,12 @@
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.mae.MAEMetricComputation">MAEMetricComputation (class in torchrec.metrics.mae)</a>
 </li>
+      <li><a href="torchrec.datasets.scripts.html#torchrec.datasets.scripts.contiguous_preproc_criteo.main">main() (in module torchrec.datasets.scripts.contiguous_preproc_criteo)</a>
+
+      <ul>
+        <li><a href="torchrec.datasets.scripts.html#torchrec.datasets.scripts.npy_preproc_criteo.main">(in module torchrec.datasets.scripts.npy_preproc_criteo)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionCollection">ManagedCollisionCollection (class in torchrec.modules.mc_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.mc_modules.ManagedCollisionCollectionAwaitable">ManagedCollisionCollectionAwaitable (class in torchrec.distributed.mc_modules)</a>
@@ -2462,6 +2553,22 @@
     module
 
       <ul>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets">torchrec.datasets</a>
+</li>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.criteo">torchrec.datasets.criteo</a>
+</li>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.movielens">torchrec.datasets.movielens</a>
+</li>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.random">torchrec.datasets.random</a>
+</li>
+        <li><a href="torchrec.datasets.scripts.html#module-torchrec.datasets.scripts">torchrec.datasets.scripts</a>
+</li>
+        <li><a href="torchrec.datasets.scripts.html#module-torchrec.datasets.scripts.contiguous_preproc_criteo">torchrec.datasets.scripts.contiguous_preproc_criteo</a>
+</li>
+        <li><a href="torchrec.datasets.scripts.html#module-torchrec.datasets.scripts.npy_preproc_criteo">torchrec.datasets.scripts.npy_preproc_criteo</a>
+</li>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.utils">torchrec.datasets.utils</a>
+</li>
         <li><a href="torchrec.distributed.html#module-torchrec.distributed">torchrec.distributed</a>
 </li>
         <li><a href="torchrec.distributed.html#module-torchrec.distributed.collective_utils">torchrec.distributed.collective_utils</a>
@@ -2586,7 +2693,11 @@
 </li>
         <li><a href="torchrec.metrics.html#module-torchrec.metrics.xauc">torchrec.metrics.xauc</a>
 </li>
+        <li><a href="torchrec.models.html#module-0">torchrec.models</a>, <a href="torchrec.models.html#module-torchrec.models">[1]</a>
+</li>
         <li><a href="torchrec.models.html#module-torchrec.models.deepfm">torchrec.models.deepfm</a>
+</li>
+        <li><a href="torchrec.models.html#module-torchrec.models.dlrm">torchrec.models.dlrm</a>
 </li>
         <li><a href="torchrec.modules.html#module-torchrec.modules">torchrec.modules</a>
 </li>
@@ -2668,6 +2779,10 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.ModuleShardingMixIn">ModuleShardingMixIn (class in torchrec.distributed.embedding_types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ModuleShardingPlan">ModuleShardingPlan (class in torchrec.distributed.types)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.movielens.movielens_20m">movielens_20m() (in module torchrec.datasets.movielens)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.movielens.movielens_25m">movielens_25m() (in module torchrec.datasets.movielens)</a>
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.mse.MSEMetric">MSEMetric (class in torchrec.metrics.mse)</a>
 </li>
@@ -2803,6 +2918,8 @@
         <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingConfig.num_embeddings">(torchrec.modules.embedding_configs.EmbeddingConfig attribute)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.num_embeddings_post_pruning">num_embeddings_post_pruning (torchrec.modules.embedding_configs.BaseEmbeddingConfig attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.GroupedEmbeddingConfig.num_features">num_features() (torchrec.distributed.embedding_types.GroupedEmbeddingConfig method)</a>
 
       <ul>
@@ -2869,10 +2986,10 @@
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.OptimizerWrapper">OptimizerWrapper (class in torchrec.optim.keyed)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType">OptimType (class in torchrec.distributed.embedding_types)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.OrderedDeviceHardware">OrderedDeviceHardware (class in torchrec.distributed.planner.partitioners)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerErrorType.OTHER">OTHER (torchrec.distributed.planner.types.PlannerErrorType attribute)</a>
@@ -2922,7 +3039,11 @@
 </li>
       </ul></li>
       <li><a href="torchrec.models.html#torchrec.models.deepfm.OverArch">OverArch (class in torchrec.models.deepfm)</a>
+
+      <ul>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.OverArch">(class in torchrec.models.dlrm)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -2930,6 +3051,14 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.pad_vbe_kjt_lengths">pad_vbe_kjt_lengths() (in module torchrec.distributed.embedding)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.NoOpQuantizedCommCodec.padded_size">padded_size() (torchrec.distributed.types.NoOpQuantizedCommCodec method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.types.QuantizedCommCodec.padded_size">(torchrec.distributed.types.QuantizedCommCodec method)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.ParallelReadConcat">ParallelReadConcat (class in torchrec.datasets.utils)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingInfo.param">param (torchrec.distributed.embedding_sharding.EmbeddingShardingInfo attribute)</a>
 </li>
@@ -2947,6 +3076,12 @@
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer.params">params (torchrec.optim.keyed.CombinedOptimizer property)</a>
 </li>
+      <li><a href="torchrec.datasets.scripts.html#torchrec.datasets.scripts.contiguous_preproc_criteo.parse_args">parse_args() (in module torchrec.datasets.scripts.contiguous_preproc_criteo)</a>
+
+      <ul>
+        <li><a href="torchrec.datasets.scripts.html#torchrec.datasets.scripts.npy_preproc_criteo.parse_args">(in module torchrec.datasets.scripts.npy_preproc_criteo)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.PARTIAL_ROWWISE_ADAM">PARTIAL_ROWWISE_ADAM (torchrec.distributed.embedding_types.OptimType attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.PARTIAL_ROWWISE_LAMB">PARTIAL_ROWWISE_LAMB (torchrec.distributed.embedding_types.OptimType attribute)</a>
@@ -2999,8 +3134,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.pg_name">pg_name() (in module torchrec.distributed.comm_ops)</a>
 </li>
-      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.pin_memory">pin_memory() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.pin_memory">pin_memory() (torchrec.datasets.utils.Batch method)</a>
+
+      <ul>
+        <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.pin_memory">(torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.BatchingMetadata.pinned">pinned (torchrec.inference.modules.BatchingMetadata attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.PipelineType">PipelineType (class in torchrec.distributed.types)</a>
@@ -3012,7 +3151,7 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel.plan">plan (torchrec.distributed.model_parallel.DistributedModelParallel property)</a>
 
       <ul>
-        <li><a href="torchrec.distributed.html#id45">(torchrec.distributed.types.ShardingPlan attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.plan">[1]</a>
+        <li><a href="torchrec.distributed.html#id48">(torchrec.distributed.types.ShardingPlan attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan.plan">[1]</a>
 </li>
       </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan">plan() (torchrec.distributed.planner.planners.EmbeddingShardingPlanner method)</a>
@@ -3039,12 +3178,12 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">PooledEmbeddingsAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAllToAll">[1]</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">PooledEmbeddingsAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsAwaitable">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter">PooledEmbeddingsReduceScatter (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.PooledEmbeddingsReduceScatter">[1]</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.GroupedEmbeddingConfig.pooling">pooling (torchrec.distributed.embedding_types.GroupedEmbeddingConfig attribute)</a>
 
       <ul>
@@ -3129,13 +3268,19 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.prod">prod() (in module torchrec.distributed.planner.utils)</a>
 </li>
-      <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.profile">profile() (torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
-</li>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.promote_high_prefetch_overheaad_table_to_hbm">promote_high_prefetch_overheaad_table_to_hbm() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer static method)</a>
-</li>
-      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.propose">propose() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer method)</a>
+      <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionModule.profile">profile() (torchrec.modules.mc_modules.ManagedCollisionModule method)</a>
 
       <ul>
+        <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.profile">(torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.promote_high_prefetch_overheaad_table_to_hbm">promote_high_prefetch_overheaad_table_to_hbm() (torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer static method)</a>
+</li>
+      <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.DynamicProgrammingProposer.propose">propose() (torchrec.distributed.planner.proposers.DynamicProgrammingProposer method)</a>
+
+      <ul>
+        <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.propose">(torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer method)</a>
+</li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GreedyProposer.propose">(torchrec.distributed.planner.proposers.GreedyProposer method)</a>
 </li>
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.GridSearchProposer.propose">(torchrec.distributed.planner.proposers.GridSearchProposer method)</a>
@@ -3149,11 +3294,13 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.proposers.proposers_to_proposals_list">proposers_to_proposals_list() (in module torchrec.distributed.planner.proposers)</a>
 </li>
-      <li><a href="torchrec.quant.html#torchrec.quant.embedding_modules.pruned_num_embeddings">pruned_num_embeddings() (in module torchrec.quant.embedding_modules)</a>
+      <li><a href="torchrec.distributed.html#id41">ps_client_thread_num (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ps_client_thread_num">[1]</a>
 </li>
-      <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.BaseEmbeddingConfig.pruning_indices_remapping">pruning_indices_remapping (torchrec.modules.embedding_configs.BaseEmbeddingConfig attribute)</a>
+      <li><a href="torchrec.distributed.html#id42">ps_hosts (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ps_hosts">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#id41">ps_hosts (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ps_hosts">[1]</a>
+      <li><a href="torchrec.distributed.html#id43">ps_max_key_per_request (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ps_max_key_per_request">[1]</a>
+</li>
+      <li><a href="torchrec.distributed.html#id44">ps_max_local_index_length (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ps_max_local_index_length">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup.purge">purge() (torchrec.distributed.embedding_lookup.GroupedEmbeddingsLookup method)</a>
 
@@ -3231,6 +3378,10 @@
 <h2 id="R">R</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.rand_split_train_val">rand_split_train_val() (in module torchrec.datasets.utils)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.random.RandomRecDataset">RandomRecDataset (class in torchrec.datasets.random)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.DeviceHardware.rank">rank (torchrec.distributed.planner.types.DeviceHardware attribute)</a>
 
       <ul>
@@ -3252,6 +3403,8 @@
       <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.RAUCMetric">RAUCMetric (class in torchrec.metrics.rauc)</a>
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.rauc.RAUCMetricComputation">RAUCMetricComputation (class in torchrec.metrics.rauc)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.ReadLinesFromCSV">ReadLinesFromCSV (class in torchrec.datasets.utils)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionModule.rebuild_with_output_id_range">rebuild_with_output_id_range() (torchrec.modules.mc_modules.ManagedCollisionModule method)</a>
 
@@ -3293,9 +3446,11 @@
         <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHEvictionPolicy.record_history_metadata">(torchrec.modules.mc_modules.MCHEvictionPolicy method)</a>
 </li>
       </ul></li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionContext.record_stream">record_stream() (torchrec.distributed.embedding.EmbeddingCollectionContext method)</a>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.record_stream">record_stream() (torchrec.datasets.utils.Batch method)</a>
 
       <ul>
+        <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.EmbeddingCollectionContext.record_stream">(torchrec.distributed.embedding.EmbeddingCollectionContext method)</a>
+</li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.EmbeddingShardingContext.record_stream">(torchrec.distributed.embedding_sharding.EmbeddingShardingContext method)</a>
 </li>
         <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.InputDistOutputs.record_stream">(torchrec.distributed.embedding_types.InputDistOutputs method)</a>
@@ -3343,10 +3498,10 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.reduce_scatter_v_sync">reduce_scatter_v_sync() (in module torchrec.distributed.comm_ops)</a>
 </li>
-      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Req">ReduceScatter_Req (class in torchrec.distributed.comm_ops)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Req">ReduceScatter_Req (class in torchrec.distributed.comm_ops)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatter_Wait">ReduceScatter_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.ReduceScatterBase_Req">ReduceScatterBase_Req (class in torchrec.distributed.comm_ops)</a>
@@ -3375,8 +3530,12 @@
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.utils.SequenceVBEContext.reindexed_values">reindexed_values (torchrec.modules.utils.SequenceVBEContext attribute)</a>
 </li>
-      <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.remap">remap() (torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
+      <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionModule.remap">remap() (torchrec.modules.mc_modules.ManagedCollisionModule method)</a>
+
+      <ul>
+        <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.remap">(torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
 </li>
+      </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.mc_embeddingbag.ManagedCollisionEmbeddingBagCollectionContext.remapped_kjt">remapped_kjt (torchrec.distributed.mc_embeddingbag.ManagedCollisionEmbeddingBagCollectionContext attribute)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.reorder_inverse_indices">reorder_inverse_indices() (in module torchrec.modules.embedding_modules)</a>
@@ -3465,6 +3624,8 @@
 <h2 id="S">S</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.safe_cast">safe_cast() (in module torchrec.datasets.utils)</a>
+</li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer.save_param_groups">save_param_groups() (torchrec.optim.keyed.CombinedOptimizer method)</a>
 
       <ul>
@@ -3509,6 +3670,8 @@
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.keyed.CombinedOptimizer.set_optimizer_step">set_optimizer_step() (torchrec.optim.keyed.CombinedOptimizer method)</a>
 </li>
+      <li><a href="torchrec.inference.html#torchrec.inference.modules.set_pruning_data">set_pruning_data() (in module torchrec.inference.modules)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.set_use_sync_collectives">set_use_sync_collectives() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.SGD">SGD (torchrec.distributed.embedding_types.OptimType attribute)</a>
@@ -3518,6 +3681,8 @@
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.SHAMPOO">SHAMPOO (torchrec.distributed.embedding_types.OptimType attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.SHAMPOO_V2">SHAMPOO_V2 (torchrec.distributed.embedding_types.OptimType attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType.SHAMPOO_V2_MRS">SHAMPOO_V2_MRS (torchrec.distributed.embedding_types.OptimType attribute)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Shard">Shard (class in torchrec.distributed.planner.types)</a>
 </li>
@@ -3633,12 +3798,12 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingEnv">ShardingEnv (class in torchrec.distributed.types)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ShardingOption">ShardingOption (class in torchrec.distributed.planner.types)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.ShardingOptionGroup">ShardingOptionGroup (class in torchrec.distributed.planner.partitioners)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan">ShardingPlan (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlanner">ShardingPlanner (class in torchrec.distributed.types)</a>
@@ -3661,6 +3826,8 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.utils.LuusJaakolaSearch.shrink_right">shrink_right() (torchrec.distributed.planner.utils.LuusJaakolaSearch method)</a>
 </li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.shuffle">shuffle() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
+</li>
       <li><a href="torchrec.models.html#torchrec.models.deepfm.SimpleDeepFMNN">SimpleDeepFMNN (class in torchrec.models.deepfm)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.DTensorMetadata.size">size (torchrec.distributed.embedding_types.DTensorMetadata attribute)</a>
@@ -3671,10 +3838,26 @@
       </ul></li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.SortBy">SortBy (class in torchrec.distributed.planner.partitioners)</a>
 </li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_DCN.sparse_arch">sparse_arch (torchrec.models.dlrm.DLRM_DCN attribute)</a>
+
+      <ul>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_Projection.sparse_arch">(torchrec.models.dlrm.DLRM_Projection attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch.sparse_feature_names">sparse_feature_names (torchrec.models.dlrm.SparseArch property)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.sparse_features">sparse_features (torchrec.datasets.utils.Batch attribute)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.model_parallel.DistributedModelParallel.sparse_grad_parameter_names">sparse_grad_parameter_names() (torchrec.distributed.model_parallel.DistributedModelParallel method)</a>
 </li>
-      <li><a href="torchrec.models.html#torchrec.models.deepfm.SparseArch">SparseArch (class in torchrec.models.deepfm)</a>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.sparse_to_contiguous">sparse_to_contiguous() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
 </li>
+      <li><a href="torchrec.models.html#torchrec.models.deepfm.SparseArch">SparseArch (class in torchrec.models.deepfm)</a>
+
+      <ul>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch">(class in torchrec.models.dlrm)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.split">split() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.splits">splits (torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
@@ -3683,11 +3866,11 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.SplitsAllToAllAwaitable">SplitsAllToAllAwaitable (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.SplitsAllToAllAwaitable">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#id42">ssd_rocksdb_shards (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ssd_rocksdb_shards">[1]</a>
+      <li><a href="torchrec.distributed.html#id45">ssd_rocksdb_shards (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ssd_rocksdb_shards">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#id43">ssd_rocksdb_write_buffer_size (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ssd_rocksdb_write_buffer_size">[1]</a>
+      <li><a href="torchrec.distributed.html#id46">ssd_rocksdb_write_buffer_size (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ssd_rocksdb_write_buffer_size">[1]</a>
 </li>
-      <li><a href="torchrec.distributed.html#id44">ssd_storage_directory (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ssd_storage_directory">[1]</a>
+      <li><a href="torchrec.distributed.html#id47">ssd_storage_directory (torchrec.distributed.types.KeyValueParams attribute)</a>, <a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams.ssd_storage_directory">[1]</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.stagger">stagger (torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
 </li>
@@ -3861,9 +4044,11 @@
 </li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.throughput.ThroughputMetric">ThroughputMetric (class in torchrec.metrics.throughput)</a>
 </li>
-      <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor.to">to() (torchrec.sparse.jagged_tensor.JaggedTensor method)</a>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.Batch.to">to() (torchrec.datasets.utils.Batch method)</a>
 
       <ul>
+        <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor.to">(torchrec.sparse.jagged_tensor.JaggedTensor method)</a>
+</li>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to">(torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 </li>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.to">(torchrec.sparse.jagged_tensor.KeyedTensor method)</a>
@@ -3885,6 +4070,62 @@
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Topology">Topology (class in torchrec.distributed.planner.types)</a>
 </li>
+      <li>
+    torchrec.datasets
+
+      <ul>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.datasets.criteo
+
+      <ul>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.criteo">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.datasets.movielens
+
+      <ul>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.movielens">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.datasets.random
+
+      <ul>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.random">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.datasets.scripts
+
+      <ul>
+        <li><a href="torchrec.datasets.scripts.html#module-torchrec.datasets.scripts">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.datasets.scripts.contiguous_preproc_criteo
+
+      <ul>
+        <li><a href="torchrec.datasets.scripts.html#module-torchrec.datasets.scripts.contiguous_preproc_criteo">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.datasets.scripts.npy_preproc_criteo
+
+      <ul>
+        <li><a href="torchrec.datasets.scripts.html#module-torchrec.datasets.scripts.npy_preproc_criteo">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.datasets.utils
+
+      <ul>
+        <li><a href="torchrec.datasets.html#module-torchrec.datasets.utils">module</a>
+</li>
+      </ul></li>
       <li>
     torchrec.distributed
 
@@ -4312,6 +4553,8 @@
         <li><a href="torchrec.metrics.html#module-torchrec.metrics.weighted_avg">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     torchrec.metrics.xauc
 
@@ -4319,13 +4562,25 @@
         <li><a href="torchrec.metrics.html#module-torchrec.metrics.xauc">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    torchrec.models
+
+      <ul>
+        <li><a href="torchrec.models.html#module-0">module</a>, <a href="torchrec.models.html#module-torchrec.models">[1]</a>
+</li>
+      </ul></li>
       <li>
     torchrec.models.deepfm
 
       <ul>
         <li><a href="torchrec.models.html#module-torchrec.models.deepfm">module</a>
+</li>
+      </ul></li>
+      <li>
+    torchrec.models.dlrm
+
+      <ul>
+        <li><a href="torchrec.models.html#module-torchrec.models.dlrm">module</a>
 </li>
       </ul></li>
       <li>
@@ -4491,6 +4746,8 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.PipelineType.TRAIN_BASE">TRAIN_BASE (torchrec.distributed.types.PipelineType attribute)</a>
 </li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.train_filter">train_filter() (in module torchrec.datasets.utils)</a>
+</li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.PipelineType.TRAIN_PREFETCH_SPARSE_DIST">TRAIN_PREFETCH_SPARSE_DIST (torchrec.distributed.types.PipelineType attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.PipelineType.TRAIN_SPARSE_DIST">TRAIN_SPARSE_DIST (torchrec.distributed.types.PipelineType attribute)</a>
@@ -4614,6 +4871,26 @@
 </li>
         <li><a href="torchrec.models.html#torchrec.models.deepfm.SparseArch.training">(torchrec.models.deepfm.SparseArch attribute)</a>
 </li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DenseArch.training">(torchrec.models.dlrm.DenseArch attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM.training">(torchrec.models.dlrm.DLRM attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_DCN.training">(torchrec.models.dlrm.DLRM_DCN attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRM_Projection.training">(torchrec.models.dlrm.DLRM_Projection attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.DLRMTrain.training">(torchrec.models.dlrm.DLRMTrain attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionArch.training">(torchrec.models.dlrm.InteractionArch attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionDCNArch.training">(torchrec.models.dlrm.InteractionDCNArch attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.InteractionProjectionArch.training">(torchrec.models.dlrm.InteractionProjectionArch attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.OverArch.training">(torchrec.models.dlrm.OverArch attribute)</a>
+</li>
+        <li><a href="torchrec.models.html#torchrec.models.dlrm.SparseArch.training">(torchrec.models.dlrm.SparseArch attribute)</a>
+</li>
         <li><a href="torchrec.modules.html#torchrec.modules.activation.SwishLayerNorm.training">(torchrec.modules.activation.SwishLayerNorm attribute)</a>
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.crossnet.CrossNet.training">(torchrec.modules.crossnet.CrossNet attribute)</a>
@@ -4650,8 +4927,6 @@
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.mc_embedding_modules.ManagedCollisionEmbeddingCollection.training">(torchrec.modules.mc_embedding_modules.ManagedCollisionEmbeddingCollection attribute)</a>
 </li>
-        <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionCollection.training">(torchrec.modules.mc_modules.ManagedCollisionCollection attribute)</a>
-</li>
         <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionModule.training">(torchrec.modules.mc_modules.ManagedCollisionModule attribute)</a>
 </li>
         <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.training">(torchrec.modules.mc_modules.MCHManagedCollisionModule attribute)</a>
@@ -4672,6 +4947,8 @@
 </li>
       </ul></li>
       <li><a href="torchrec.inference.html#torchrec.inference.modules.trim_torch_package_prefix_from_typename">trim_torch_package_prefix_from_typename() (in module torchrec.inference.modules)</a>
+</li>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.criteo.BinaryCriteoUtils.tsv_to_npys">tsv_to_npys() (torchrec.datasets.criteo.BinaryCriteoUtils static method)</a>
 </li>
       <li><a href="torchrec.distributed.sharding.html#torchrec.distributed.sharding.twcw_sharding.TwCwPooledEmbeddingSharding">TwCwPooledEmbeddingSharding (class in torchrec.distributed.sharding.twcw_sharding)</a>
 </li>
@@ -4793,6 +5070,14 @@
 <h2 id="V">V</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="torchrec.datasets.html#torchrec.datasets.utils.val_filter">val_filter() (in module torchrec.datasets.utils)</a>
+</li>
+      <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionModule.validate_state">validate_state() (torchrec.modules.mc_modules.ManagedCollisionModule method)</a>
+
+      <ul>
+        <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHManagedCollisionModule.validate_state">(torchrec.modules.mc_modules.MCHManagedCollisionModule method)</a>
+</li>
+      </ul></li>
       <li><a href="torchrec.metrics.html#torchrec.metrics.rec_metric.MetricComputationReport.value">value (torchrec.metrics.rec_metric.MetricComputationReport attribute)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.clipping.GradientClipping.VALUE">VALUE (torchrec.optim.clipping.GradientClipping attribute)</a>
@@ -4809,12 +5094,12 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.Variable_Batch_All2All_Pooled_Req">Variable_Batch_All2All_Pooled_Req (class in torchrec.distributed.comm_ops)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.variable_batch_all2all_pooled_sync">variable_batch_all2all_pooled_sync() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.Variable_Batch_All2All_Pooled_Wait">Variable_Batch_All2All_Pooled_Wait (class in torchrec.distributed.comm_ops)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.comm_ops.variable_batch_alltoall_pooled">variable_batch_alltoall_pooled() (in module torchrec.distributed.comm_ops)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext.variable_batch_per_feature">variable_batch_per_feature (torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext attribute)</a>
@@ -4938,7 +5223,7 @@
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2022, Meta.
+        &copy; Copyright 2024, Meta.
 
     </p>
   </div>
@@ -4975,6 +5260,9 @@
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/clipboard.min.js"></script>
+         <script src="_static/copybutton.js"></script>
+         <script src="_static/design-tabs.js"></script>
      
 
   

@@ -7,10 +7,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+<meta content="TorchRec documentation homepage" name="description" />
+<meta content="recommendation systems, sharding, distributed training" name="keywords" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Welcome to the TorchRec documentation! &mdash; TorchRec 0.9.0 documentation</title>
+  <title>Welcome to the TorchRec documentation! &mdash; TorchRec 1.1.0 documentation</title>
   
 
   
@@ -30,6 +32,9 @@
   <!-- <link rel="stylesheet" href="_static/pygments.css" type="text/css" /> -->
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/copybutton.css" type="text/css" />
+  <link rel="stylesheet" href="_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="TorchRec Overview" href="overview.html" />
@@ -267,7 +272,7 @@
               
               
                 <div class="version">
-                  0.9.0.dev20240801+cpu
+                  1.1.0.dev20240924+cpu
                 </div>
               
             
@@ -392,38 +397,85 @@
               
   <section id="welcome-to-the-torchrec-documentation">
 <h1>Welcome to the TorchRec documentation!<a class="headerlink" href="#welcome-to-the-torchrec-documentation" title="Permalink to this heading">¶</a></h1>
-<p>TorchRec is a PyTorch domain library built to provide common
-sparsity &amp; parallelism primitives needed for large-scale recommender
-systems (RecSys). It allows authors to train models with large
-embedding tables sharded across many GPUs.</p>
-<p>For installation instructions, visit</p>
-<p><a class="reference external" href="https://github.com/pytorch/torchrec#readme">https://github.com/pytorch/torchrec#readme</a></p>
-<section id="tutorial">
-<h2>Tutorial<a class="headerlink" href="#tutorial" title="Permalink to this heading">¶</a></h2>
-<p>In this tutorial, we introduce the primary torchRec
-API called DistributedModelParallel, or DMP.
-Like pytorch’s DistributedDataParallel,
-DMP wraps a model to enable distributed training.</p>
-<ul class="simple">
-<li><p><a class="reference external" href="https://github.com/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb">Tutorial Source</a></p></li>
-<li><p>Open in <a class="reference external" href="https://colab.research.google.com/github/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb">Google Colab</a></p></li>
-</ul>
+<p>TorchRec is a specialized library within the PyTorch ecosystem,
+tailored for building, scaling, and deploying large-scale
+<strong>recommendation systems</strong>, a niche not directly addressed by standard
+PyTorch. TorchRec offers advanced features such as complex sharding
+techniques for massive embedding tables, and enhanced distributed
+training capabilities.</p>
+<section id="getting-started">
+<h2>Getting Started<a class="headerlink" href="#getting-started" title="Permalink to this heading">¶</a></h2>
+<p>Topics in this section will help you get started with TorchRec.</p>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
+<div class="sd-row sd-row-cols-3 sd-row-cols-xs-3 sd-row-cols-sm-3 sd-row-cols-md-3 sd-row-cols-lg-3 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<img alt="" class="sd-card-img-top" src="_images/card-background.svg" /><div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-file-code" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M4 1.75C4 .784 4.784 0 5.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v8.586A1.75 1.75 0 0114.25 15h-9a.75.75 0 010-1.5h9a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 0110 4.25V1.5H5.75a.25.25 0 00-.25.25v2.5a.75.75 0 01-1.5 0v-2.5zm7.5-.188V4.25c0 .138.112.25.25.25h2.688a.252.252 0 00-.011-.013l-2.914-2.914a.272.272 0 00-.013-.011zM5.72 6.72a.75.75 0 000 1.06l1.47 1.47-1.47 1.47a.75.75 0 101.06 1.06l2-2a.75.75 0 000-1.06l-2-2a.75.75 0 00-1.06 0zM3.28 7.78a.75.75 0 00-1.06-1.06l-2 2a.75.75 0 000 1.06l2 2a.75.75 0 001.06-1.06L1.81 9.25l1.47-1.47z"></path></svg>
+TorchRec Overview</div>
+<p class="sd-card-text">A short intro to TorchRec and why you need it.</p>
+</div>
+<a class="sd-stretched-link reference external" href="overview.html"></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<img alt="" class="sd-card-img-top" src="_images/card-background.svg" /><div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-file-code" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M4 1.75C4 .784 4.784 0 5.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v8.586A1.75 1.75 0 0114.25 15h-9a.75.75 0 010-1.5h9a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 0110 4.25V1.5H5.75a.25.25 0 00-.25.25v2.5a.75.75 0 01-1.5 0v-2.5zm7.5-.188V4.25c0 .138.112.25.25.25h2.688a.252.252 0 00-.011-.013l-2.914-2.914a.272.272 0 00-.013-.011zM5.72 6.72a.75.75 0 000 1.06l1.47 1.47-1.47 1.47a.75.75 0 101.06 1.06l2-2a.75.75 0 000-1.06l-2-2a.75.75 0 00-1.06 0zM3.28 7.78a.75.75 0 00-1.06-1.06l-2 2a.75.75 0 000 1.06l2 2a.75.75 0 001.06-1.06L1.81 9.25l1.47-1.47z"></path></svg>
+Set up TorchRec</div>
+<p class="sd-card-text">Learn how to install and start using TorchRec
+in your environment.</p>
+</div>
+<a class="sd-stretched-link reference external" href="setup-torchrec.html"></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<img alt="" class="sd-card-img-top" src="_images/card-background.svg" /><div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-file-code" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M4 1.75C4 .784 4.784 0 5.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v8.586A1.75 1.75 0 0114.25 15h-9a.75.75 0 010-1.5h9a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 0110 4.25V1.5H5.75a.25.25 0 00-.25.25v2.5a.75.75 0 01-1.5 0v-2.5zm7.5-.188V4.25c0 .138.112.25.25.25h2.688a.252.252 0 00-.011-.013l-2.914-2.914a.272.272 0 00-.013-.011zM5.72 6.72a.75.75 0 000 1.06l1.47 1.47-1.47 1.47a.75.75 0 101.06 1.06l2-2a.75.75 0 000-1.06l-2-2a.75.75 0 00-1.06 0zM3.28 7.78a.75.75 0 00-1.06-1.06l-2 2a.75.75 0 000 1.06l2 2a.75.75 0 001.06-1.06L1.81 9.25l1.47-1.47z"></path></svg>
+Getting Started with TorchRec Tutorial</div>
+<p class="sd-card-text">Follow our interactive step-by-step tutorial
+to learn how to use TorchRec in a real-life
+example.</p>
+</div>
+<a class="sd-stretched-link reference external" href="https://colab.research.google.com/github/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb"></a></div>
+</div>
+</div>
+</div>
 </section>
-<section id="torchrec-api">
-<h2>TorchRec API<a class="headerlink" href="#torchrec-api" title="Permalink to this heading">¶</a></h2>
-<div class="toctree-wrapper compound">
+<section id="how-to-contribute">
+<h2>How to Contribute<a class="headerlink" href="#how-to-contribute" title="Permalink to this heading">¶</a></h2>
+<p>We welcome contributions and feedback from the PyTorch community!
+If you are interested in helping improve the TorchRec project, here is
+how you can contribute:</p>
+<ol class="arabic simple">
+<li><p><strong>Visit Our</strong> <a class="reference external" href="https://github.com/pytorch/torchrec">GitHub Repository</a>:
+There yoou can find the source code, issues, and ongoing projects.</p></li>
+</ol>
+<ol class="arabic simple">
+<li><p><strong>Submit Feedback or Issues</strong>: If you encounter any bugs or have
+suggestions for improvements, please submit an issue through the
+<a class="reference external" href="https://github.com/pytorch/torchrec/issues">GitHub issue tracker</a>.</p></li>
+</ol>
+<ol class="arabic simple">
+<li><p><strong>Propose changes</strong>: Fork the repository and submit pull requests.
+Whether it’s fixing a bug, adding new features, or improving
+documentation, your contributions are always welcome! Please make sure to
+review our <a class="reference external" href="https://github.com/pytorch/torchrec/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a></p></li>
+</ol>
+<div class="line-block">
+<div class="line"><br /></div>
+<div class="line"><br /></div>
+</div>
+<div class="center-content docutils container">
+<p><a class="sd-sphinx-override sd-btn sd-text-wrap sd-btn-info reference external" href="https://github.com/pytorch/torchrec"><span><svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-mark-github" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg> Go to TorchRec Repo</span></a></p>
 </div>
 <div class="toctree-wrapper compound">
 </div>
+<div class="toctree-wrapper compound">
+</div>
 </section>
-</section>
-<section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
-<ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
-</ul>
 </section>
 
 
@@ -448,7 +500,7 @@ DMP wraps a model to enable distributed training.</p>
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2022, Meta.
+        &copy; Copyright 2024, Meta.
 
     </p>
   </div>
@@ -468,13 +520,12 @@ DMP wraps a model to enable distributed training.</p>
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
 <li><a class="reference internal" href="#">Welcome to the TorchRec documentation!</a><ul>
-<li><a class="reference internal" href="#tutorial">Tutorial</a></li>
-<li><a class="reference internal" href="#torchrec-api">TorchRec API</a><ul>
+<li><a class="reference internal" href="#getting-started">Getting Started</a></li>
+<li><a class="reference internal" href="#how-to-contribute">How to Contribute</a><ul>
 </ul>
 </li>
 </ul>
 </li>
-<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
 </ul>
 
             </div>
@@ -495,6 +546,9 @@ DMP wraps a model to enable distributed training.</p>
          <script src="_static/underscore.js"></script>
          <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
          <script src="_static/doctools.js"></script>
+         <script src="_static/clipboard.min.js"></script>
+         <script src="_static/copybutton.js"></script>
+         <script src="_static/design-tabs.js"></script>
      
 
   
