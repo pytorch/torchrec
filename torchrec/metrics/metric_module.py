@@ -53,6 +53,7 @@ from torchrec.metrics.scalar import ScalarMetric
 from torchrec.metrics.segmented_ne import SegmentedNEMetric
 from torchrec.metrics.serving_calibration import ServingCalibrationMetric
 from torchrec.metrics.serving_ne import ServingNEMetric
+from torchrec.metrics.tensor_weighted_avg import TensorWeightedAvgMetric
 from torchrec.metrics.throughput import ThroughputMetric
 from torchrec.metrics.tower_qps import TowerQPSMetric
 from torchrec.metrics.weighted_avg import WeightedAvgMetric
@@ -84,6 +85,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.SERVING_NE: ServingNEMetric,
     RecMetricEnum.SERVING_CALIBRATION: ServingCalibrationMetric,
     RecMetricEnum.OUTPUT: OutputMetric,
+    RecMetricEnum.TENSOR_WEIGHTED_AVG: TensorWeightedAvgMetric,
 }
 
 
