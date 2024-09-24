@@ -121,6 +121,11 @@ class BaseShardedManagedCollisionEmbeddingCollection(
                 env=env,
                 device=device,
                 embedding_shardings=embedding_shardings,
+                use_index_dedup=(
+                    e_sharder._use_index_dedup
+                    if isinstance(e_sharder, EmbeddingCollectionSharder)
+                    else False
+                ),
             )
         )
         self._return_remapped_features: bool = module._return_remapped_features
