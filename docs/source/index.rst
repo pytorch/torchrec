@@ -63,7 +63,7 @@ how you can contribute:
 1. **Visit Our** `GitHub Repository <https://github.com/pytorch/torchrec>`__:
    There yoou can find the source code, issues, and ongoing projects.
 
-1. **Submit Feedback or Issues** If you encounter any bugs or have
+1. **Submit Feedback or Issues**: If you encounter any bugs or have
    suggestions for improvements, please submit an issue through the
    `GitHub issue tracker <https://github.com/pytorch/torchrec/issues>`__.
 
