@@ -15,7 +15,7 @@ tailored for building, scaling, and deploying large-scale
 **recommendation systems**, a niche not directly addressed by standard
 PyTorch. TorchRec offers advanced features such as complex sharding
 techniques for massive embedding tables, and enhanced distributed
-istributed training capabilities.
+training capabilities.
 
 Getting Started
 ---------------
