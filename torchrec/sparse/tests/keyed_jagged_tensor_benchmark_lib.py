@@ -35,6 +35,7 @@ DEFTAULT_BENCHMARK_FUNCS = [
     "permute",
     "to_dict",
     "split",
+    "concat",
     "__getitem__",
     "dist_splits",
     "dist_init",
@@ -296,6 +297,14 @@ class KJTSplit(torch.nn.Module):
         return kjt.split(segments)
 
 
+class KJTConcat(torch.nn.Module):
+    def forward(
+        self,
+        inputs: List[KeyedJaggedTensor],
+    ) -> KeyedJaggedTensor:
+        return KeyedJaggedTensor.concat(inputs)
+
+
 class KJTGetItem(torch.nn.Module):
     def forward(self, kjt: KeyedJaggedTensor, key: str) -> JaggedTensor:
         return kjt[key]
@@ -383,6 +392,7 @@ def bench(
         ("permute", {"kjt": kjt, "indices": permute_indices}, KJTPermute()),
         ("to_dict", {"kjt": kjt}, KJTToDict()),
         ("split", {"kjt": kjt, "segments": splits}, KJTSplit()),
+        ("concat", {"inputs": [kjt, kjt]}, KJTConcat()),
         ("__getitem__", {"kjt": kjt, "key": key}, KJTGetItem()),
         ("dist_splits", {"kjt": kjt, "key_splits": splits}, KJTDistSplits()),
         (

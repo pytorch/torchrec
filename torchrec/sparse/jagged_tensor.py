@@ -481,6 +481,83 @@ def _permute_tensor_by_segments(
     return permuted_tensor, permuted_weights
 
 
+@torch.fx.wrap
+def _kjt_concat(
+    kjt_list: List["KeyedJaggedTensor"],
+) -> "KeyedJaggedTensor":
+    if len(kjt_list) == 0:
+        raise ValueError("Can't concat empty KJT list")
+
+    is_weighted: bool = kjt_list[0].weights_or_none() is not None
+    has_length_per_key: bool = True
+
+    length_per_key: List[int] = []
+    keys: List[str] = []
+    value_list: List[torch.Tensor] = []
+    weight_list: List[torch.Tensor] = []
+    length_list: List[torch.Tensor] = []
+    stride_per_key_per_rank: List[List[int]] = []
+    stride: Optional[int] = None
+    inv_idx_keys: List[str] = []
+    inv_idx_tensors: List[torch.Tensor] = []
+
+    variable_stride_per_key_list = [kjt.variable_stride_per_key() for kjt in kjt_list]
+    assert all(variable_stride_per_key_list) or not any(
+        variable_stride_per_key_list
+    ), "variable stride per key must be consistent for all KJTs"
+    variable_stride_per_key = all(variable_stride_per_key_list)
+
+    for i, kjt in enumerate(kjt_list):
+        curr_is_weighted: bool = kjt.weights_or_none() is not None
+        if is_weighted != curr_is_weighted:
+            raise ValueError("Can't merge weighted KJT with unweighted KJT")
+        _length_per_key: Optional[List[int]] = None
+        if kjt._length_per_key is None:
+            has_length_per_key = False
+        else:
+            _length_per_key = kjt._length_per_key
+        if has_length_per_key and _length_per_key is not None:
+            length_per_key += _length_per_key
+        keys += kjt.keys()
+        value_list.append(kjt.values())
+        if is_weighted:
+            weight_list.append(kjt.weights())
+        length_list.append(kjt.lengths())
+        if variable_stride_per_key:
+            stride_per_key_per_rank += kjt.stride_per_key_per_rank()
+        elif stride is None:
+            stride = kjt.stride()
+        else:
+            assert stride == kjt.stride(), "strides must be consistent for all KJTs"
+        if kjt.inverse_indices_or_none() is not None:
+            assert (
+                len(inv_idx_tensors) == i
+            ), "inverse indices must be consistent for all KJTs"
+            inv_idx_keys += kjt.inverse_indices()[0]
+            inv_idx_tensors.append(kjt.inverse_indices()[1])
+        else:
+            assert (
+                len(inv_idx_tensors) == 0
+            ), "inverse indices must be consistent for all KJTs"
+
+    return KeyedJaggedTensor(
+        keys=keys,
+        values=torch.cat(value_list, dim=0),
+        weights=torch.cat(weight_list, dim=0) if is_weighted else None,
+        lengths=torch.cat(length_list, dim=0),
+        stride=stride,
+        stride_per_key_per_rank=(
+            stride_per_key_per_rank if variable_stride_per_key else None
+        ),
+        length_per_key=length_per_key if has_length_per_key else None,
+        inverse_indices=(
+            (inv_idx_keys, torch.cat(inv_idx_tensors))
+            if len(inv_idx_tensors) == len(kjt_list)
+            else None
+        ),
+    )
+
+
 class JaggedTensorMeta(abc.ABCMeta, torch.fx._symbolic_trace.ProxyableClassMeta):
     pass
 
@@ -1701,79 +1778,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     def concat(
         kjt_list: List["KeyedJaggedTensor"],
     ) -> "KeyedJaggedTensor":
-        if len(kjt_list) == 0:
-            raise ValueError("Can't concat empty KJT list")
-
-        is_weighted: bool = kjt_list[0].weights_or_none() is not None
-        has_length_per_key: bool = True
-
-        length_per_key: List[int] = []
-        keys: List[str] = []
-        value_list: List[torch.Tensor] = []
-        weight_list: List[torch.Tensor] = []
-        length_list: List[torch.Tensor] = []
-        stride_per_key_per_rank: List[List[int]] = []
-        stride: Optional[int] = None
-        inv_idx_keys: List[str] = []
-        inv_idx_tensors: List[torch.Tensor] = []
-
-        variable_stride_per_key_list = [
-            kjt.variable_stride_per_key() for kjt in kjt_list
-        ]
-        assert all(variable_stride_per_key_list) or not any(
-            variable_stride_per_key_list
-        ), "variable stride per key must be consistent for all KJTs"
-        variable_stride_per_key = all(variable_stride_per_key_list)
-
-        for i, kjt in enumerate(kjt_list):
-            curr_is_weighted: bool = kjt.weights_or_none() is not None
-            if is_weighted != curr_is_weighted:
-                raise ValueError("Can't merge weighted KJT with unweighted KJT")
-            _length_per_key: Optional[List[int]] = None
-            if kjt._length_per_key is None:
-                has_length_per_key = False
-            else:
-                _length_per_key = kjt._length_per_key
-            if has_length_per_key and _length_per_key is not None:
-                length_per_key += _length_per_key
-            keys += kjt.keys()
-            value_list.append(kjt.values())
-            if is_weighted:
-                weight_list.append(kjt.weights())
-            length_list.append(kjt.lengths())
-            if variable_stride_per_key:
-                stride_per_key_per_rank += kjt.stride_per_key_per_rank()
-            elif stride is None:
-                stride = kjt.stride()
-            else:
-                assert stride == kjt.stride(), "strides must be consistent for all KJTs"
-            if kjt.inverse_indices_or_none() is not None:
-                assert (
-                    len(inv_idx_tensors) == i
-                ), "inverse indices must be consistent for all KJTs"
-                inv_idx_keys += kjt.inverse_indices()[0]
-                inv_idx_tensors.append(kjt.inverse_indices()[1])
-            else:
-                assert (
-                    len(inv_idx_tensors) == 0
-                ), "inverse indices must be consistent for all KJTs"
-
-        return KeyedJaggedTensor(
-            keys=keys,
-            values=torch.cat(value_list, dim=0),
-            weights=torch.cat(weight_list, dim=0) if is_weighted else None,
-            lengths=torch.cat(length_list, dim=0),
-            stride=stride,
-            stride_per_key_per_rank=(
-                stride_per_key_per_rank if variable_stride_per_key else None
-            ),
-            length_per_key=length_per_key if has_length_per_key else None,
-            inverse_indices=(
-                (inv_idx_keys, torch.cat(inv_idx_tensors))
-                if len(inv_idx_tensors) == len(kjt_list)
-                else None
-            ),
-        )
+        return _kjt_concat(kjt_list)
 
     @staticmethod
     def empty(
