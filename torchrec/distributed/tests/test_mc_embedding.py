@@ -22,7 +22,11 @@ from torchrec.distributed.mc_embedding import (
 from torchrec.distributed.mc_modules import ShardedManagedCollisionCollection
 from torchrec.distributed.shard import _shard_modules
 
-from torchrec.distributed.sharding_plan import construct_module_sharding_plan, row_wise
+from torchrec.distributed.sharding_plan import (
+    construct_module_sharding_plan,
+    EmbeddingCollectionSharder,
+    row_wise,
+)
 
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
@@ -54,6 +58,7 @@ class SparseArch(nn.Module):
         tables: List[EmbeddingConfig],
         device: torch.device,
         return_remapped: bool = False,
+        input_hash_size: int = 4000,
     ) -> None:
         super().__init__()
         self._return_remapped = return_remapped
@@ -61,7 +66,7 @@ class SparseArch(nn.Module):
         mc_modules = {}
         mc_modules["table_0"] = MCHManagedCollisionModule(
             zch_size=(tables[0].num_embeddings),
-            input_hash_size=4000,
+            input_hash_size=input_hash_size,
             device=device,
             eviction_interval=2,
             eviction_policy=DistanceLFU_EvictionPolicy(),
@@ -70,7 +75,7 @@ class SparseArch(nn.Module):
         mc_modules["table_1"] = MCHManagedCollisionModule(
             zch_size=(tables[1].num_embeddings),
             device=device,
-            input_hash_size=4000,
+            input_hash_size=input_hash_size,
             eviction_interval=2,
             eviction_policy=DistanceLFU_EvictionPolicy(),
         )
@@ -93,70 +98,13 @@ class SparseArch(nn.Module):
     def forward(
         self, kjt: KeyedJaggedTensor
     ) -> Tuple[torch.Tensor, Optional[Dict[str, JaggedTensor]]]:
-        if self._return_remapped:
-            ec_out, remapped_ids_out = self._mc_ec(kjt)
-        else:
-            ec_out = self._mc_ec(kjt)
-            remapped_ids_out = None
-
+        ec_out, remapped_ids_out = self._mc_ec(kjt)
         pred = torch.cat(
             [ec_out[key].values() for key in ["feature_0", "feature_1"]],
-            dim=1,
+            dim=0,
         )
         loss = pred.mean()
         return loss, remapped_ids_out
-
-
-def _test_sharding(  # noqa C901
-    tables: List[EmbeddingConfig],
-    rank: int,
-    world_size: int,
-    sharder: ModuleSharder[nn.Module],
-    backend: str,
-    local_size: Optional[int] = None,
-) -> None:
-    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
-        return_remapped: bool = True
-        sparse_arch = SparseArch(
-            tables,
-            torch.device("meta"),
-            return_remapped=return_remapped,
-        )
-
-        apply_optimizer_in_backward(
-            RowWiseAdagrad,
-            [
-                sparse_arch._mc_ec._embedding_collection.embeddings["table_0"].weight,
-                sparse_arch._mc_ec._embedding_collection.embeddings["table_1"].weight,
-            ],
-            {"lr": 0.01},
-        )
-        module_sharding_plan = construct_module_sharding_plan(
-            sparse_arch._mc_ec,
-            per_param_sharding={"table_0": row_wise(), "table_1": row_wise()},
-            local_size=local_size,
-            world_size=world_size,
-            device_type="cuda" if torch.cuda.is_available() else "cpu",
-            sharder=sharder,
-        )
-
-        sharded_sparse_arch = _shard_modules(
-            module=copy.deepcopy(sparse_arch),
-            plan=ShardingPlan({"_mc_ec": module_sharding_plan}),
-            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
-            env=ShardingEnv.from_process_group(ctx.pg),
-            sharders=[sharder],
-            device=ctx.device,
-        )
-
-        assert isinstance(
-            sharded_sparse_arch._mc_ec, ShardedManagedCollisionEmbeddingCollection
-        )
-        assert isinstance(
-            sharded_sparse_arch._mc_ec._managed_collision_collection,
-            ShardedManagedCollisionCollection,
-        )
 
 
 def _test_sharding_and_remapping(  # noqa C901
@@ -170,6 +118,7 @@ def _test_sharding_and_remapping(  # noqa C901
     sharder: ModuleSharder[nn.Module],
     backend: str,
     local_size: Optional[int] = None,
+    input_hash_size: int = 4000,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -182,6 +131,7 @@ def _test_sharding_and_remapping(  # noqa C901
             tables,
             torch.device("meta"),
             return_remapped=return_remapped,
+            input_hash_size=input_hash_size,
         )
 
         apply_optimizer_in_backward(
@@ -232,6 +182,11 @@ def _test_sharding_and_remapping(  # noqa C901
         assert isinstance(
             sharded_sparse_arch._mc_ec._managed_collision_collection,
             ShardedManagedCollisionCollection,
+        )
+
+        assert (
+            sharded_sparse_arch._mc_ec._managed_collision_collection._use_index_dedup
+            == sharded_sparse_arch._mc_ec._embedding_collection._use_index_dedup
         )
 
         initial_state_dict = sharded_sparse_arch.state_dict()
@@ -442,74 +397,106 @@ def _test_sharding_and_resharding(  # noqa C901
                     ), f"feature {key} on {ctx.rank} iteration {i} does not match, got {remapped_ids[i][key].values()}, expect {kjt_out[key].values()}"
 
 
+def _test_sharding_dedup(  # noqa C901
+    tables: List[EmbeddingConfig],
+    rank: int,
+    world_size: int,
+    kjt_input_per_rank: List[KeyedJaggedTensor],
+    sharder: ModuleSharder[nn.Module],
+    dedup_sharder: ModuleSharder[nn.Module],
+    backend: str,
+    local_size: Optional[int] = None,
+    input_hash_size: int = 4000,
+) -> None:
+
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        return_remapped: bool = True
+        kjt_input = kjt_input_per_rank[rank].to(ctx.device)
+        sparse_arch = SparseArch(
+            tables,
+            torch.device("meta"),
+            return_remapped=return_remapped,
+            input_hash_size=input_hash_size,
+        )
+        apply_optimizer_in_backward(
+            RowWiseAdagrad,
+            [
+                sparse_arch._mc_ec._embedding_collection.embeddings["table_0"].weight,
+                sparse_arch._mc_ec._embedding_collection.embeddings["table_1"].weight,
+            ],
+            {"lr": 0.01},
+        )
+        module_sharding_plan = construct_module_sharding_plan(
+            sparse_arch._mc_ec,
+            per_param_sharding={"table_0": row_wise(), "table_1": row_wise()},
+            local_size=local_size,
+            world_size=world_size,
+            device_type="cuda" if torch.cuda.is_available() else "cpu",
+            sharder=sharder,
+        )
+
+        sharded_sparse_arch = _shard_modules(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"_mc_ec": module_sharding_plan}),
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            env=ShardingEnv.from_process_group(ctx.pg),
+            sharders=[sharder],
+            device=ctx.device,
+        )
+        dedup_sharded_sparse_arch = _shard_modules(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"_mc_ec": module_sharding_plan}),
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            env=ShardingEnv.from_process_group(ctx.pg),
+            sharders=[dedup_sharder],
+            device=ctx.device,
+        )
+
+        assert (
+            sharded_sparse_arch._mc_ec._managed_collision_collection._use_index_dedup
+            == sharded_sparse_arch._mc_ec._embedding_collection._use_index_dedup
+        )
+
+        assert (
+            sharded_sparse_arch._mc_ec._managed_collision_collection._use_index_dedup
+            is False
+        )
+
+        assert (
+            dedup_sharded_sparse_arch._mc_ec._managed_collision_collection._use_index_dedup
+            == dedup_sharded_sparse_arch._mc_ec._embedding_collection._use_index_dedup
+        )
+
+        assert (
+            dedup_sharded_sparse_arch._mc_ec._managed_collision_collection._use_index_dedup
+            is True
+        )
+
+        # sync state_dict()
+        state_dict = sharded_sparse_arch.state_dict()
+        dedup_state_dict = dedup_sharded_sparse_arch.state_dict()
+        for key, sharded_tensor in state_dict.items():
+            if isinstance(sharded_tensor, ShardedTensor):
+                dedup_state_dict[key].local_shards()[
+                    0
+                ].tensor = sharded_tensor.local_shards()[0].tensor.clone()
+            dedup_state_dict[key] = sharded_tensor.clone()
+        dedup_sharded_sparse_arch.load_state_dict(dedup_state_dict)
+
+        loss1, remapped_1 = sharded_sparse_arch(kjt_input)
+        loss1.backward()
+        dedup_loss1, dedup_remapped_1 = dedup_sharded_sparse_arch(kjt_input)
+        dedup_loss1.backward()
+
+        assert torch.allclose(loss1, dedup_loss1)
+        assert torch.allclose(remapped_1.values(), dedup_remapped_1.values())
+        assert torch.allclose(remapped_1.lengths(), dedup_remapped_1.lengths())
+
+
 @skip_if_asan_class
 class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
-    )
-    # pyre-ignore
-    @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
-    def test_uneven_sharding(self, backend: str) -> None:
-        WORLD_SIZE = 2
-
-        embedding_config = [
-            EmbeddingConfig(
-                name="table_0",
-                feature_names=["feature_0"],
-                embedding_dim=8,
-                num_embeddings=17,
-            ),
-            EmbeddingConfig(
-                name="table_1",
-                feature_names=["feature_1"],
-                embedding_dim=8,
-                num_embeddings=33,
-            ),
-        ]
-
-        self._run_multi_process_test(
-            callable=_test_sharding,
-            world_size=WORLD_SIZE,
-            tables=embedding_config,
-            sharder=ManagedCollisionEmbeddingCollectionSharder(),
-            backend=backend,
-        )
-
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
-    )
-    # pyre-ignore
-    @given(backend=st.sampled_from(["nccl"]))
-    @settings(deadline=20000)
-    def test_even_sharding(self, backend: str) -> None:
-        WORLD_SIZE = 2
-
-        embedding_config = [
-            EmbeddingConfig(
-                name="table_0",
-                feature_names=["feature_0"],
-                embedding_dim=8,
-                num_embeddings=16,
-            ),
-            EmbeddingConfig(
-                name="table_1",
-                feature_names=["feature_1"],
-                embedding_dim=8,
-                num_embeddings=32,
-            ),
-        ]
-
-        self._run_multi_process_test(
-            callable=_test_sharding,
-            world_size=WORLD_SIZE,
-            tables=embedding_config,
-            sharder=ManagedCollisionEmbeddingCollectionSharder(),
-            backend=backend,
-        )
-
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
@@ -691,7 +678,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
     # pyre-ignore
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
-    def test_sharding_zch_mc_ec(self, backend: str) -> None:
+    def test_sharding_zch_mc_ec_remap(self, backend: str) -> None:
 
         WORLD_SIZE = 2
 
@@ -836,3 +823,153 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
             sharder=ManagedCollisionEmbeddingCollectionSharder(),
             backend=backend,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-ignore
+    @given(backend=st.sampled_from(["nccl"]))
+    @settings(deadline=None)
+    def test_sharding_zch_mc_ec_dedup(self, backend: str) -> None:
+
+        WORLD_SIZE = 2
+
+        embedding_config = [
+            EmbeddingConfig(
+                name="table_0",
+                feature_names=["feature_0", "feature_2"],
+                embedding_dim=8,
+                num_embeddings=16,
+            ),
+            EmbeddingConfig(
+                name="table_1",
+                feature_names=["feature_1"],
+                embedding_dim=8,
+                num_embeddings=32,
+            ),
+        ]
+
+        kjt_input_per_rank = [  # noqa
+            KeyedJaggedTensor.from_lengths_sync(
+                keys=["feature_0", "feature_1", "feature_2"],
+                values=torch.LongTensor(
+                    [1000, 1000, 2000, 1001, 1000, 2001, 2002, 3000, 2000, 1000],
+                ),
+                lengths=torch.LongTensor([2, 1, 1, 1, 1, 1, 2, 0, 1]),
+                weights=None,
+            ),
+            KeyedJaggedTensor.from_lengths_sync(
+                keys=["feature_0", "feature_1", "feature_2"],
+                values=torch.LongTensor(
+                    [
+                        1002,
+                        1002,
+                        1004,
+                        2000,
+                        1002,
+                        2004,
+                        3999,
+                        2000,
+                        2000,
+                    ],
+                ),
+                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 0, 0, 3]),
+                weights=None,
+            ),
+        ]
+
+        self._run_multi_process_test(
+            callable=_test_sharding_dedup,
+            world_size=WORLD_SIZE,
+            tables=embedding_config,
+            kjt_input_per_rank=kjt_input_per_rank,
+            sharder=ManagedCollisionEmbeddingCollectionSharder(
+                ec_sharder=EmbeddingCollectionSharder(
+                    use_index_dedup=False,
+                )
+            ),
+            dedup_sharder=ManagedCollisionEmbeddingCollectionSharder(
+                ec_sharder=EmbeddingCollectionSharder(
+                    use_index_dedup=True,
+                )
+            ),
+            backend=backend,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-ignore
+    @given(backend=st.sampled_from(["nccl"]))
+    @settings(deadline=None)
+    def test_sharding_zch_mc_ec_dedup_input_error(self, backend: str) -> None:
+
+        WORLD_SIZE = 2
+
+        embedding_config = [
+            EmbeddingConfig(
+                name="table_0",
+                feature_names=["feature_0", "feature_2"],
+                embedding_dim=8,
+                num_embeddings=16,
+            ),
+            EmbeddingConfig(
+                name="table_1",
+                feature_names=["feature_1"],
+                embedding_dim=8,
+                num_embeddings=32,
+            ),
+        ]
+
+        kjt_input_per_rank = [  # noqa
+            KeyedJaggedTensor.from_lengths_sync(
+                keys=["feature_0", "feature_1", "feature_2"],
+                values=torch.LongTensor(
+                    [1000, 1000, 2000, 1001, 1000, 2001, 2002, 3000, 2000, 1000],
+                ),
+                lengths=torch.LongTensor([2, 1, 1, 1, 1, 1, 2, 0, 1]),
+                weights=None,
+            ),
+            KeyedJaggedTensor.from_lengths_sync(
+                keys=["feature_0", "feature_1", "feature_2"],
+                values=torch.LongTensor(
+                    [
+                        1002,
+                        1002,
+                        1004,
+                        2000,
+                        1002,
+                        2004,
+                        3999,
+                        2000,
+                        2000,
+                    ],
+                ),
+                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 0, 0, 3]),
+                weights=None,
+            ),
+        ]
+
+        try:
+            self._run_multi_process_test(
+                callable=_test_sharding_dedup,
+                world_size=WORLD_SIZE,
+                tables=embedding_config,
+                kjt_input_per_rank=kjt_input_per_rank,
+                sharder=ManagedCollisionEmbeddingCollectionSharder(
+                    ec_sharder=EmbeddingCollectionSharder(
+                        use_index_dedup=False,
+                    )
+                ),
+                dedup_sharder=ManagedCollisionEmbeddingCollectionSharder(
+                    ec_sharder=EmbeddingCollectionSharder(
+                        use_index_dedup=True,
+                    )
+                ),
+                backend=backend,
+                input_hash_size=(2**62) - 1 + 10,
+            ),
+        except AssertionError as e:
+            self.assertTrue("0 != 1" in str(e))
