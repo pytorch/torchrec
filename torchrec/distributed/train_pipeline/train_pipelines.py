@@ -1193,6 +1193,7 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                 dataloader_iter=dataloader_iter,
                 to_device_non_blocking=True,
                 memcpy_stream_priority=-1,
+                memcpy_stream=self._memcpy_stream,
             )
             self._batch_loader.start()
 

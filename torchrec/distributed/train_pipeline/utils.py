@@ -1235,17 +1235,21 @@ class DataLoadingThread(Thread, Generic[In]):
         dataloader_iter: Iterator[In],
         to_device_non_blocking: bool,
         memcpy_stream_priority: int = 0,
+        memcpy_stream: Optional[torch.Stream] = None,
     ) -> None:
         super().__init__()
         self._stop: bool = False
         self._dataloader_iter = dataloader_iter
         self._buffer_empty_event: Event = Event()
         self._buffer_filled_event: Event = Event()
-        self._memcpy_stream: Optional[torch.Stream] = (
-            torch.get_device_module(device).Stream(priority=memcpy_stream_priority)
-            if device.type in ["cuda", "mtia"]
-            else None
-        )
+        if memcpy_stream is None:
+            self._memcpy_stream: Optional[torch.Stream] = (
+                torch.get_device_module(device).Stream(priority=memcpy_stream_priority)
+                if device.type in ["cuda", "mtia"]
+                else None
+            )
+        else:
+            self._memcpy_stream = memcpy_stream
         self._device = device
         self._to_device_non_blocking = to_device_non_blocking
         self._buffered: Optional[In] = None
