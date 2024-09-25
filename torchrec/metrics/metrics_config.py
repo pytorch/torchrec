@@ -42,6 +42,7 @@ class RecMetricEnum(RecMetricEnumBase):
     SERVING_NE = "serving_ne"
     SERVING_CALIBRATION = "serving_calibration"
     OUTPUT = "output"
+    TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
 
 
 @dataclass(unsafe_hash=True, eq=True)
@@ -65,6 +66,8 @@ class RecTaskInfo:
         None  # used for session level metrics
     )
     is_negative_task: bool = False
+    tensor_name: Optional[str] = None
+    weighted: bool = True
 
 
 class RecComputeMode(Enum):
