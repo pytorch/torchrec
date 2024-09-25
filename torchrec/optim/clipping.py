@@ -6,17 +6,18 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
-
+import logging
 from collections import defaultdict
 from enum import Enum, unique
-from typing import Any, cast, Dict, List, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
-
 from torch.distributed._tensor.api import DTensor
 
 from torchrec.optim.keyed import KeyedOptimizer, OptimizerWrapper
+
+logger: logging.Logger = logging.getLogger()
 
 
 @unique
@@ -35,6 +36,10 @@ class GradientClippingOptimizer(OptimizerWrapper):
         clipping (GradientClipping): how to clip gradients
         max_gradient (float): max value for clipping
         norm_type (float or str): type of the used p-norm. Can be ``'inf'`` for infinity norm.
+        enable_global_grad_clip (bool): whether to enable global gradient clipping.
+        param_to_pgs (Dict[torch.nn.Parameter, List[dist.ProcessGroup]], optional): Mapping of parameters
+            to process groups. Used for global gradient clipping in n-D model parallelism case.
+            Defaults to None, local gradient clipping is used.
     """
 
     def __init__(
@@ -43,119 +48,186 @@ class GradientClippingOptimizer(OptimizerWrapper):
         clipping: GradientClipping = GradientClipping.NONE,
         max_gradient: float = 0.1,
         norm_type: Union[float, str] = 2.0,
+        enable_global_grad_clip: bool = False,
+        param_to_pgs: Optional[
+            Dict[torch.nn.Parameter, List[dist.ProcessGroup]]
+        ] = None,
     ) -> None:
         super().__init__(optimizer)
         self._clipping = clipping
         self._max_gradient = max_gradient
         self._norm_type = norm_type
         self._check_meta: bool = True
+        self._enable_global_grad_clip = enable_global_grad_clip
 
-        self._params: List[torch.Tensor] = []
-        # Only used if there are DTensor parameters, in which case this dict
-        # holds the sharded DTensor parameters and `self._params` holds the
-        # replicated tensor parameters
-        self._mesh_to_dtensor_params: Dict[dist.DeviceMesh, List[DTensor]] = (
+        # Group parameters by model parallelism process group if global clipping is enabled.
+        # Otherwise, all parameters are treated as replicated and will be clipped locally.
+        sharded_param_cnt = 0
+        self._replicate_params: List[torch.Tensor] = []
+        self._sharded_params: Dict[Tuple[dist.ProcessGroup], List[torch.Tensor]] = (
             defaultdict(list)
         )
 
         for param_group in self.param_groups:
             for param in param_group["params"]:
-                if isinstance(param, DTensor):
-                    self._mesh_to_dtensor_params[param.device_mesh].append(param)
+                if not self._enable_global_grad_clip:
+                    self._replicate_params.append(param)
+                    continue
+                if param_to_pgs is None or len(param_to_pgs) == 0:
+                    self._replicate_params.append(param)
+                    continue
+
+                # Group parameters by model parallelism process group.
+                if param in param_to_pgs and len(param_to_pgs[param]) != 0:
+                    self._sharded_params[tuple(param_to_pgs[param])].append(param)
+                    sharded_param_cnt += 1
                 else:
-                    self._params.append(param)
+                    self._replicate_params.append(param)
+        logger.info(
+            f"Optimizer found {sharded_param_cnt} dist params and {len(self._replicate_params)} replicate params."
+        )
 
-        if len(self._mesh_to_dtensor_params) == 0:
-            return
-
+        # Sanity check: this path is currently not used in any production.
         if self._clipping == GradientClipping.VALUE:
-            # This path is currently not used in any production.
-            raise NotImplementedError(
-                "clip_grad_value_ for DTensor parameters is not supported yet"
-            )
+            if sharded_param_cnt > 0:
+                raise NotImplementedError(
+                    "clip_grad_value_ for sharded parameters is not supported yet"
+                )
 
     # pyre-ignore [2]
     def step(self, closure: Any = None) -> None:
         if self._check_meta:
-            if any(t.device.type == "meta" for t in self._params):
-                # skip gradient clipping and early return
+            # skip gradient clipping and early return
+            if any(t.device.type == "meta" for t in self._replicate_params):
+                super().step(closure)
+                return
+            if any(
+                t.device.type == "meta"
+                for params in self._sharded_params.values()
+                for t in params
+            ):
                 super().step(closure)
                 return
             self._check_meta = False
 
         if self._clipping == GradientClipping.NORM:
-            if len(self._mesh_to_dtensor_params) == 0:
-                # No DTensor parameters, so we can use the regular clip_grad_norm_
+            # No sharded parameters, local gradient clipping == global gradient clipping
+            if len(self._sharded_params) == 0:
+                replicate_params = [
+                    p._local_tensor if isinstance(p, DTensor) else p
+                    for p in self._replicate_params
+                ]
                 torch.nn.utils.clip_grad_norm_(
-                    self._params, self._max_gradient, norm_type=self._norm_type
+                    replicate_params,
+                    self._max_gradient,
+                    norm_type=self._norm_type,
                 )
             else:
-                # There are DTensor parameters, so we need to use _dist_clip_grad_norm
-                for device_mesh, dtensor_params in self._mesh_to_dtensor_params.items():
-                    if device_mesh.ndim > 1:
-                        # pyre-ignore[16]: `dist.device_mesh.DeviceMesh` has no attribute `_flatten`.
-                        process_group = device_mesh._flatten().get_group()
-                    else:
-                        process_group = device_mesh.get_group()
-                    sharded_grads = [
-                        cast(DTensor, p.grad)._local_tensor
-                        for p in dtensor_params
-                        if p.grad is not None
-                    ]
-                    sharded_grads = [grad for grad in sharded_grads if grad.numel() > 0]
-                    if sharded_grads:
-                        replicated_grads = [
-                            p.grad for p in self._params if p.grad is not None
-                        ]
-                        _dist_clip_grad_norm(
-                            sharded_grads,
-                            replicated_grads,
-                            process_group,
-                            self._max_gradient,
-                            float(self._norm_type),
-                        )
+                self.clip_grad_norm_()
+
         elif self._clipping == GradientClipping.VALUE:
-            torch.nn.utils.clip_grad_value_(self._params, self._max_gradient)
+            torch.nn.utils.clip_grad_value_(self._replicate_params, self._max_gradient)
 
         super().step(closure)
 
+    @torch.no_grad()
+    def clip_grad_norm_(self) -> None:
+        """Clip the gradient norm of all parameters."""
+        max_norm = self._max_gradient
+        norm_type = float(self._norm_type)
+        all_grads = []
+        total_grad_norm = None
 
-def _dist_clip_grad_norm(
-    sharded_grads: List[torch.Tensor],
-    replicated_grads: List[torch.Tensor],
-    process_group: dist.ProcessGroup,
+        # Process distributed parameters and gradients
+        for pgs, dist_params in self._sharded_params.items():
+            sharded_grads = [
+                p.grad._local_tensor if isinstance(p.grad, DTensor) else p.grad
+                for p in dist_params
+                if p.grad is not None and p.grad.numel() > 0
+            ]
+            if len(sharded_grads) == 0:
+                continue
+            all_grads.extend(sharded_grads)
+
+            sharded_grad_norm = _batch_cal_norm(
+                sharded_grads,
+                max_norm,
+                norm_type,
+                pgs,
+            )
+            total_grad_norm = (
+                sharded_grad_norm
+                if total_grad_norm is None
+                else (
+                    torch.maximum(total_grad_norm, sharded_grad_norm)
+                    if self._norm_type == torch.inf
+                    else total_grad_norm + sharded_grad_norm
+                )
+            )
+
+        # Process replicated parameters and gradients
+        if self._replicate_params:
+            replicated_grads = [
+                p.grad._local_tensor if isinstance(p.grad, DTensor) else p.grad
+                for p in self._replicate_params
+                if p.grad is not None and p.grad.numel() > 0
+            ]
+            all_grads.extend(replicated_grads)
+
+            replicated_grad_norm = _batch_cal_norm(
+                replicated_grads,
+                max_norm,
+                norm_type,
+                None,
+            )
+            total_grad_norm = (
+                replicated_grad_norm
+                if total_grad_norm is None
+                else (
+                    torch.maximum(total_grad_norm, replicated_grad_norm)
+                    if self._norm_type == torch.inf
+                    else total_grad_norm + replicated_grad_norm
+                )
+            )
+
+        # Aggregation
+        if total_grad_norm is None:
+            return
+
+        if self._norm_type != torch.inf:
+            # pyre-ignore [58]: ** is not supported for operand types torch._tensor.Tensor and float.
+            total_grad_norm = total_grad_norm ** (1.0 / norm_type)
+        # pyre-ignore [58]: / is not supported for operand types float and Union[float, torch._tensor.Tensor].
+        clip_coef = cast(torch.Tensor, max_norm / (total_grad_norm + 1e-6))
+        clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
+        torch._foreach_mul_(all_grads, clip_coef_clamped)
+
+
+def _batch_cal_norm(
+    grad_list: List[torch.Tensor],
     max_norm: float,
     norm_type: float = 2.0,
+    process_groups: Optional[Tuple[dist.ProcessGroup]] = None,
 ) -> torch.Tensor:
-    sharded_grads_bases = _dedup_to_base_tensors(sharded_grads)
-    if len(sharded_grads_bases) > 0:
-        sharded_grads = sharded_grads_bases
-    sharded_norms = torch._foreach_norm(sharded_grads, norm_type)
-    local_norm = torch.linalg.vector_norm(torch.stack(sharded_norms), norm_type)
-    if replicated_grads:
-        replicated_norms = torch._foreach_norm(replicated_grads, norm_type)
-        replicated_norm = torch.linalg.vector_norm(
-            torch.stack(replicated_norms), norm_type
-        )
-    else:
-        replicated_norm = None
+    """Helper function that calculates the norm of a list of gradients in batches. If process_groups
+    are passed in, the norm will be aggregated across all ranks in the process group.
+    """
+    grad_norms = torch.linalg.vector_norm(
+        torch.stack(torch._foreach_norm(grad_list, norm_type)),
+        norm_type,
+    )
 
     if norm_type == torch.inf:
-        total_norm = local_norm
-        dist.all_reduce(total_norm, op=dist.ReduceOp.MAX, group=process_group)
-        if replicated_norm is not None:
-            total_norm = torch.maximum(total_norm, replicated_norm)
+        if process_groups is not None:
+            for pg in process_groups:
+                dist.all_reduce(grad_norms, op=dist.ReduceOp.MAX, group=pg)
     else:
-        total_norm = local_norm**norm_type
-        dist.all_reduce(total_norm, group=process_group)
-        if replicated_norm is not None:
-            total_norm += replicated_norm**norm_type
-        total_norm = total_norm ** (1.0 / norm_type)
+        grad_norms = grad_norms**norm_type
+        if process_groups is not None:
+            for pg in process_groups:
+                dist.all_reduce(grad_norms, group=pg)
 
-    clip_coef = cast(torch.Tensor, max_norm / (total_norm + 1e-6))
-    clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
-    torch._foreach_mul_(sharded_grads + replicated_grads, clip_coef_clamped)
-    return total_norm
+    return grad_norms
 
 
 def _dedup_to_base_tensors(tensors: List[torch.Tensor]) -> List[torch.Tensor]:
