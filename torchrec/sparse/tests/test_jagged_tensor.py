@@ -1537,6 +1537,39 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         # pyre-ignore[6]
         self.assertListEqual(kjt_expected._length_per_key, kjt_actual._length_per_key)
 
+    def test_concat_fxable(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(self, inputs: List[KeyedJaggedTensor]) -> KeyedJaggedTensor:
+                return KeyedJaggedTensor.concat(inputs)
+
+        m = MyModule()
+
+        # input
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+        keys = ["index_0", "index_1", "index_2"]
+        lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0, 0, 1, 0])
+        kjt_1 = KeyedJaggedTensor.from_lengths_sync(
+            values=values[:4],
+            keys=keys[:1],
+            lengths=lengths[:4],
+        )
+        kjt_2 = KeyedJaggedTensor.from_lengths_sync(
+            values=values[4:],
+            keys=keys[1:],
+            lengths=lengths[4:],
+        )
+        inputs = [kjt_1, kjt_2]
+
+        # ensure that symbolic tracing works
+        gm = torch.fx.symbolic_trace(m)
+        kjt_expected = m(inputs)
+        kjt_actual = gm(inputs)
+
+        self.assertTrue(torch.equal(kjt_expected.lengths(), kjt_actual.lengths()))
+        self.assertTrue(torch.equal(kjt_expected.offsets(), kjt_actual.offsets()))
+        self.assertTrue(torch.equal(kjt_expected.values(), kjt_actual.values()))
+        self.assertListEqual(kjt_expected._length_per_key, kjt_actual._length_per_key)
+
     def test_length_vs_offset(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
