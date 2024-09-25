@@ -603,7 +603,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 weights=weights,
             )
 
-            # j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]
+            # j1 = [[1.0], [], [7.0, 8.0], [10.0, 11.0, 12.0]]
         """
 
         values_tensor = torch.cat(values, dim=0)
