@@ -99,6 +99,11 @@ def _get_kjt_keys(feature: KeyedJaggedTensor) -> List[str]:
     return feature.keys()
 
 
+@torch.fx.wrap
+def _cat_embeddings(embeddings: List[Tensor]) -> Tensor:
+    return embeddings[0] if len(embeddings) == 1 else torch.cat(embeddings, dim=1)
+
+
 def for_each_module_of_type_do(
     module: nn.Module,
     module_types: List[Type[torch.nn.Module]],
@@ -511,7 +516,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
 
         return KeyedTensor(
             keys=self._embedding_names,
-            values=torch.cat(embeddings, dim=1),
+            values=_cat_embeddings(embeddings),
             length_per_key=self._length_per_key,
         )
 
