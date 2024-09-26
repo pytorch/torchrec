@@ -271,7 +271,7 @@
               
               
                 <div class="version">
-                  1.1.0.dev20240925+cpu
+                  1.1.0.dev20240926+cpu
                 </div>
               
             
@@ -890,8 +890,26 @@ can prepare the embeddings list to be the list of:</p>
 <span id="torchrec-modules-embedding-configs"></span><h2>torchrec.modules.embedding_configs<a class="headerlink" href="#module-torchrec.modules.embedding_configs" title="Permalink to this heading">¶</a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">BaseEmbeddingConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">num_embeddings:</span> <span class="pre">int,</span> <span class="pre">embedding_dim:</span> <span class="pre">int,</span> <span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">data_type:</span> <span class="pre">torchrec.types.DataType</span> <span class="pre">=</span> <span class="pre">&lt;DataType.FP32:</span> <span class="pre">'FP32'&gt;,</span> <span class="pre">feature_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">weight_init_max:</span> <span class="pre">Union[float,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">weight_init_min:</span> <span class="pre">Union[float,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_embeddings_post_pruning:</span> <span class="pre">Union[int,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">init_fn:</span> <span class="pre">Union[Callable[[torch.Tensor],</span> <span class="pre">Union[torch.Tensor,</span> <span class="pre">NoneType]],</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">need_pos:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">BaseEmbeddingConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">num_embeddings:</span> <span class="pre">int,</span> <span class="pre">embedding_dim:</span> <span class="pre">int,</span> <span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">data_type:</span> <span class="pre">~torchrec.types.DataType</span> <span class="pre">=</span> <span class="pre">DataType.FP32,</span> <span class="pre">feature_names:</span> <span class="pre">~typing.List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">weight_init_max:</span> <span class="pre">~typing.Optional[float]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">weight_init_min:</span> <span class="pre">~typing.Optional[float]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_embeddings_post_pruning:</span> <span class="pre">~typing.Optional[int]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">init_fn:</span> <span class="pre">~typing.Optional[~typing.Callable[[~torch.Tensor],</span> <span class="pre">~typing.Optional[~torch.Tensor]]]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">need_pos:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for embedding configs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_embeddings</strong> (<em>int</em>) – number of embeddings.</p></li>
+<li><p><strong>embedding_dim</strong> (<em>int</em>) – embedding dimension.</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – name of the embedding table.</p></li>
+<li><p><strong>data_type</strong> (<em>DataType</em>) – data type of the embedding table.</p></li>
+<li><p><strong>feature_names</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – list of feature names.</p></li>
+<li><p><strong>weight_init_max</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – max value for weight initialization.</p></li>
+<li><p><strong>weight_init_min</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – min value for weight initialization.</p></li>
+<li><p><strong>num_embeddings_post_pruning</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – number of embeddings after pruning for inference.
+If None, no pruning is applied.</p></li>
+<li><p><strong>init_fn</strong> (<em>Optional</em><em>[</em><em>Callable</em><em>[</em><em>[</em><em>torch.Tensor</em><em>]</em><em>, </em><em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em><em>]</em><em>]</em>) – init function for embedding weights.</p></li>
+<li><p><strong>need_pos</strong> (<em>bool</em>) – whether table is position weighted.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.BaseEmbeddingConfig.data_type">
 <span class="sig-name descname"><span class="pre">data_type</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">DataType</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FP32'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig.data_type" title="Permalink to this definition">¶</a></dt>
@@ -961,8 +979,15 @@ can prepare the embeddings list to be the list of:</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingBagConfig">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">num_embeddings:</span> <span class="pre">int,</span> <span class="pre">embedding_dim:</span> <span class="pre">int,</span> <span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">data_type:</span> <span class="pre">torchrec.types.DataType</span> <span class="pre">=</span> <span class="pre">&lt;DataType.FP32:</span> <span class="pre">'FP32'&gt;,</span> <span class="pre">feature_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">weight_init_max:</span> <span class="pre">Union[float,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">weight_init_min:</span> <span class="pre">Union[float,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_embeddings_post_pruning:</span> <span class="pre">Union[int,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">init_fn:</span> <span class="pre">Union[Callable[[torch.Tensor],</span> <span class="pre">Union[torch.Tensor,</span> <span class="pre">NoneType]],</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">need_pos:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">pooling:</span> <span class="pre">torchrec.modules.embedding_configs.PoolingType</span> <span class="pre">=</span> <span class="pre">&lt;PoolingType.SUM:</span> <span class="pre">'SUM'&gt;</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">EmbeddingBagConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">num_embeddings:</span> <span class="pre">int,</span> <span class="pre">embedding_dim:</span> <span class="pre">int,</span> <span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">data_type:</span> <span class="pre">~torchrec.types.DataType</span> <span class="pre">=</span> <span class="pre">DataType.FP32,</span> <span class="pre">feature_names:</span> <span class="pre">~typing.List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">weight_init_max:</span> <span class="pre">~typing.Optional[float]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">weight_init_min:</span> <span class="pre">~typing.Optional[float]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_embeddings_post_pruning:</span> <span class="pre">~typing.Optional[int]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">init_fn:</span> <span class="pre">~typing.Optional[~typing.Callable[[~torch.Tensor],</span> <span class="pre">~typing.Optional[~torch.Tensor]]]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">need_pos:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False,</span> <span class="pre">pooling:</span> <span class="pre">~torchrec.modules.embedding_configs.PoolingType</span> <span class="pre">=</span> <span class="pre">PoolingType.SUM</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="torchrec.modules.embedding_configs.BaseEmbeddingConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEmbeddingConfig</span></code></a></p>
+<p>EmbeddingBagConfig is a dataclass that represents a single embedding table,
+where outputs are meant to be pooled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>pooling</strong> (<a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType" title="torchrec.modules.embedding_configs.PoolingType"><em>PoolingType</em></a>) – pooling type.</p>
+</dd>
+</dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingBagConfig.pooling">
 <span class="sig-name descname"><span class="pre">pooling</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.modules.embedding_configs.PoolingType" title="torchrec.modules.embedding_configs.PoolingType"><span class="pre">PoolingType</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'SUM'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig.pooling" title="Permalink to this definition">¶</a></dt>
@@ -972,8 +997,9 @@ can prepare the embeddings list to be the list of:</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingConfig">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">EmbeddingConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">num_embeddings:</span> <span class="pre">int,</span> <span class="pre">embedding_dim:</span> <span class="pre">int,</span> <span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">data_type:</span> <span class="pre">torchrec.types.DataType</span> <span class="pre">=</span> <span class="pre">&lt;DataType.FP32:</span> <span class="pre">'FP32'&gt;,</span> <span class="pre">feature_names:</span> <span class="pre">List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">weight_init_max:</span> <span class="pre">Union[float,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">weight_init_min:</span> <span class="pre">Union[float,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_embeddings_post_pruning:</span> <span class="pre">Union[int,</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">init_fn:</span> <span class="pre">Union[Callable[[torch.Tensor],</span> <span class="pre">Union[torch.Tensor,</span> <span class="pre">NoneType]],</span> <span class="pre">NoneType]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">need_pos:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingConfig" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">EmbeddingConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="pre">num_embeddings:</span> <span class="pre">int,</span> <span class="pre">embedding_dim:</span> <span class="pre">int,</span> <span class="pre">name:</span> <span class="pre">str</span> <span class="pre">=</span> <span class="pre">'',</span> <span class="pre">data_type:</span> <span class="pre">~torchrec.types.DataType</span> <span class="pre">=</span> <span class="pre">DataType.FP32,</span> <span class="pre">feature_names:</span> <span class="pre">~typing.List[str]</span> <span class="pre">=</span> <span class="pre">&lt;factory&gt;,</span> <span class="pre">weight_init_max:</span> <span class="pre">~typing.Optional[float]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">weight_init_min:</span> <span class="pre">~typing.Optional[float]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">num_embeddings_post_pruning:</span> <span class="pre">~typing.Optional[int]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">init_fn:</span> <span class="pre">~typing.Optional[~typing.Callable[[~torch.Tensor],</span> <span class="pre">~typing.Optional[~torch.Tensor]]]</span> <span class="pre">=</span> <span class="pre">None,</span> <span class="pre">need_pos:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingConfig" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.modules.embedding_configs.BaseEmbeddingConfig" title="torchrec.modules.embedding_configs.BaseEmbeddingConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseEmbeddingConfig</span></code></a></p>
+<p>EmbeddingConfig is a dataclass that represents a single embedding table.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.EmbeddingConfig.embedding_dim">
 <span class="sig-name descname"><span class="pre">embedding_dim</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.EmbeddingConfig.embedding_dim" title="Permalink to this definition">¶</a></dt>
@@ -1021,7 +1047,16 @@ can prepare the embeddings list to be the list of:</p>
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.PoolingType">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.modules.embedding_configs.</span></span><span class="sig-name descname"><span class="pre">PoolingType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.modules.embedding_configs.PoolingType" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></p>
-<p>An enumeration.</p>
+<p>Pooling type for embedding table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>SUM</strong> (<em>str</em>) – sum pooling.</p></li>
+<li><p><strong>MEAN</strong> (<em>str</em>) – mean pooling.</p></li>
+<li><p><strong>NONE</strong> (<em>str</em>) – no pooling.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_configs.PoolingType.MEAN">
 <span class="sig-name descname"><span class="pre">MEAN</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'MEAN'</span></em><a class="headerlink" href="#torchrec.modules.embedding_configs.PoolingType.MEAN" title="Permalink to this definition">¶</a></dt>
@@ -1197,19 +1232,31 @@ For performance-sensitive scenarios, consider using the sharded version ShardedE
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.device">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">device</span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.device" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns:
+torch.device: The compute device.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.embedding_bag_configs">
 <span class="sig-name descname"><span class="pre">embedding_bag_configs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig"><span class="pre">EmbeddingBagConfig</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.embedding_bag_configs" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The embedding bag configs.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[<a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingBagConfig" title="torchrec.modules.embedding_configs.EmbeddingBagConfig">EmbeddingBagConfig</a>]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.forward" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="field-list simple">
+<dd><p>Run the EmbeddingBagCollection forward pass. This method takes in a <cite>KeyedJaggedTensor</cite>
+and returns a <cite>KeyedTensor</cite>, which is the result of pooling the embeddings for each feature.</p>
+<dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – KJT of form [F X B X L].</p>
+<dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – Input KJT</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>KeyedTensor</p>
@@ -1220,12 +1267,22 @@ For performance-sensitive scenarios, consider using the sharded version ShardedE
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.is_weighted">
 <span class="sig-name descname"><span class="pre">is_weighted</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.is_weighted" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether the EmbeddingBagCollection is weighted.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.reset_parameters">
 <span class="sig-name descname"><span class="pre">reset_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingBagCollection.reset_parameters" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Reset the parameters of the EmbeddingBagCollection. Parameter values
+are intiialized based on the <cite>init_fn</cite> of each EmbeddingBagConfig if it exists.</p>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingBagCollection.training">
@@ -1337,27 +1394,55 @@ where:</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.device">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">device</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">device</span></em><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.device" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns:
+torch.device: The compute device.</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.embedding_configs">
 <span class="sig-name descname"><span class="pre">embedding_configs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig"><span class="pre">EmbeddingConfig</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.embedding_configs" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The embedding configs.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[<a class="reference internal" href="#torchrec.modules.embedding_configs.EmbeddingConfig" title="torchrec.modules.embedding_configs.EmbeddingConfig">EmbeddingConfig</a>]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.embedding_dim">
 <span class="sig-name descname"><span class="pre">embedding_dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.embedding_dim" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The embedding dimension.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.embedding_names_by_table">
 <span class="sig-name descname"><span class="pre">embedding_names_by_table</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.embedding_names_by_table" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The embedding names by table.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[List[str]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.forward" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="field-list simple">
+<dd><p>Run the EmbeddingBagCollection forward pass. This method takes in a <cite>KeyedJaggedTensor</cite>
+and returns a <cite>Dict[str, JaggedTensor]</cite>, which is the result of the individual embeddings for each feature.</p>
+<dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>features</strong> (<a class="reference internal" href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – KJT of form [F X B X L].</p>
 </dd>
@@ -1370,12 +1455,22 @@ where:</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.need_indices">
 <span class="sig-name descname"><span class="pre">need_indices</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.need_indices" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether the EmbeddingCollection needs indices.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.reset_parameters">
 <span class="sig-name descname"><span class="pre">reset_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.modules.embedding_modules.EmbeddingCollection.reset_parameters" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Reset the parameters of the EmbeddingCollection. Parameter values
+are intiialized based on the <cite>init_fn</cite> of each EmbeddingConfig if it exists.</p>
+</dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="torchrec.modules.embedding_modules.EmbeddingCollection.training">

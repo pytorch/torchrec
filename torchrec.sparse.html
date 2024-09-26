@@ -271,7 +271,7 @@
               
               
                 <div class="version">
-                  1.1.0.dev20240925+cpu
+                  1.1.0.dev20240926+cpu
                 </div>
               
             
@@ -527,18 +527,46 @@ offsets.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.device">
 <span class="sig-name descname"><span class="pre">device</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">device</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.device" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor device.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the device of the values tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.device</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.empty">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dtype</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int32</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.empty" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Constructs an empty JaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>is_weighted</strong> (<em>bool</em>) – whether the JaggedTensor has weights.</p></li>
+<li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device for JaggedTensor.</p></li>
+<li><p><strong>values_dtype</strong> (<em>Optional</em><em>[</em><em>torch.dtype</em><em>]</em>) – dtype for values.</p></li>
+<li><p><strong>weights_dtype</strong> (<em>Optional</em><em>[</em><em>torch.dtype</em><em>]</em>) – dtype for weights.</p></li>
+<li><p><strong>lengths_dtype</strong> (<em>torch.dtype</em>) – dtype for lengths.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>empty JaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor">JaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.from_dense">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dense</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructs <cite>JaggedTensor</cite> from dense values/weights of shape (B, N,).</p>
-<p>Note that <cite>lengths</cite> and <cite>offsets</cite> are still of shape (B,).</p>
+<dd><p>Constructs <cite>JaggedTensor</cite> from list of tensors as values, with optional weights.
+<cite>lengths</cite> will be computed, of shape (B,), where B is <cite>len(values)</cite> which
+represents the batch size.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -572,7 +600,7 @@ the same shape as values.</p></li>
     <span class="n">weights</span><span class="o">=</span><span class="n">weights</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># j1 = [[1.0], [], [7.0], [8.0], [10.0, 11.0, 12.0]]</span>
+<span class="c1"># j1 = [[1.0], [], [7.0, 8.0], [10.0, 11.0, 12.0]]</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -580,29 +608,81 @@ the same shape as values.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.from_dense_lengths">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dense_lengths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.from_dense_lengths" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructs <cite>JaggedTensor</cite> from dense values/weights of shape (B, N,).</p>
-<p>Note that <cite>lengths</cite> is still of shape (B,).</p>
+<dd><p>Constructs <cite>JaggedTensor</cite> from values and lengths tensors, with optional weights.
+Note that <cite>lengths</cite> is still of shape (B,), where B is the batch size.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>values</strong> (<em>torch.Tensor</em>) – dense representation of values.</p></li>
+<li><p><strong>lengths</strong> (<em>torch.Tensor</em>) – jagged slices, represented as lengths.</p></li>
+<li><p><strong>weights</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – if values have weights, tensor with
+the same shape as values.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>JaggedTensor created from 2D dense tensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor">JaggedTensor</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.lengths">
 <span class="sig-name descname"><span class="pre">lengths</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.lengths" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor lengths. If not computed, compute it from offsets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the lengths tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.lengths_or_none">
 <span class="sig-name descname"><span class="pre">lengths_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.lengths_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor lengths. If not computed, return None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the lengths tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[torch.Tensor]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.offsets">
 <span class="sig-name descname"><span class="pre">offsets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.offsets" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor offsets. If not computed, compute it from lengths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the offsets tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.offsets_or_none">
 <span class="sig-name descname"><span class="pre">offsets_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.offsets_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor offsets. If not computed, return None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the offsets tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[torch.Tensor]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.record_stream">
@@ -613,9 +693,21 @@ the same shape as values.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to">
 <span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to" title="Permalink to this definition">¶</a></dt>
-<dd><p>Please be aware that according to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.to.html">https://pytorch.org/docs/stable/generated/torch.Tensor.to.html</a>,
-<cite>to</cite> might return self or a copy of self.  So please remember to use <cite>to</cite> with the assignment operator,
-for example, <cite>in = in.to(new_device)</cite>.</p>
+<dd><p>Move the JaggedTensor to the specified device.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>device</strong> (<em>torch.device</em>) – the device to move to.</p></li>
+<li><p><strong>non_blocking</strong> (<em>bool</em>) – whether to perform the copy asynchronously.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the moved JaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor">JaggedTensor</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -685,8 +777,8 @@ for example, <cite>in = in.to(new_device)</cite>.</p>
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense">
 <span class="sig-name descname"><span class="pre">to_padded_dense</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">desired_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructs a 2D dense tensor from the JT’s values of shape (B, N,).</p>
-<p>Note that <cite>B</cite> is the length of self.lengths() and <cite>N</cite> is the longest feature
-length or <cite>desired_length</cite>.</p>
+<p>Note that <cite>B</cite> is the length of self.lengths() and
+<cite>N</cite> is the longest feature length or <cite>desired_length</cite>.</p>
 <p>If <cite>desired_length</cite> &gt; <cite>length</cite> we will pad with <cite>padding_value</cite>, otherwise we
 will select the last value at <cite>desired_length</cite>.</p>
 <dl class="field-list simple">
@@ -729,10 +821,11 @@ will select the last value at <cite>desired_length</cite>.</p>
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense_weights">
 <span class="sig-name descname"><span class="pre">to_padded_dense_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">desired_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.to_padded_dense_weights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructs a 2D dense tensor from the JT’s weights of shape (B, N,).</p>
-<p>Note that <cite>B</cite> is the length of self.lengths() and <cite>N</cite> is the longest feature
-length or <cite>desired_length</cite>.</p>
+<p>Note that <cite>B</cite> (batch size) is the length of self.lengths() and
+<cite>N</cite> is the longest feature length or <cite>desired_length</cite>.</p>
 <p>If <cite>desired_length</cite> &gt; <cite>length</cite> we will pad with <cite>padding_value</cite>, otherwise we
 will select the last value at <cite>desired_length</cite>.</p>
+<p>Like <cite>to_padded_dense</cite> but for the JT’s weights instead of values.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -773,17 +866,44 @@ will select the last value at <cite>desired_length</cite>.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.values">
 <span class="sig-name descname"><span class="pre">values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.values" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the values tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.weights">
 <span class="sig-name descname"><span class="pre">weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.weights" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor weights. If None, throw an error.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the weights tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.JaggedTensor.weights_or_none">
 <span class="sig-name descname"><span class="pre">weights_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.JaggedTensor.weights_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get JaggedTensor weights. If None, return None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>the weights tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[torch.Tensor]</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -822,7 +942,8 @@ from the rank of its index in a distributed context.</p></li>
 <li><p><strong>offset_per_key</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – start offset for each key and final
 offset.</p></li>
 <li><p><strong>index_per_key</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>int</em><em>]</em><em>]</em>) – index for each key.</p></li>
-<li><p><strong>jt_dict</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><em>JaggedTensor</em></a><em>]</em><em>]</em>) – </p></li>
+<li><p><strong>jt_dict</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><em>JaggedTensor</em></a><em>]</em><em>]</em>) – dictionary of keys to JaggedTensors.
+Allow ability to make to_dict() lazy/cacheable.</p></li>
 <li><p><strong>inverse_indices</strong> (<em>Optional</em><em>[</em><em>Tuple</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>, </em><em>torch.Tensor</em><em>]</em><em>]</em>) – inverse indices to
 expand deduplicated embedding output for variable stride per key.</p></li>
 </ul>
@@ -853,12 +974,33 @@ offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final off
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">concat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kjt_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.concat" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Concatenates a list of KeyedJaggedTensors into a single KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>kjt_list</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a><em>]</em>) – list of KeyedJaggedTensors to be concatenated.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>concatenated KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device">
 <span class="sig-name descname"><span class="pre">device</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">device</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.device" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the device of the KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>device of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.device</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.dist_init">
@@ -883,12 +1025,42 @@ offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final off
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">empty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">is_weighted</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">device</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dtype</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int32</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Constructs an empty KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>is_weighted</strong> (<em>bool</em>) – whether the KeyedJaggedTensor is weighted or not.</p></li>
+<li><p><strong>device</strong> (<em>Optional</em><em>[</em><em>torch.device</em><em>]</em>) – device on which the KeyedJaggedTensor will be placed.</p></li>
+<li><p><strong>values_dtype</strong> (<em>Optional</em><em>[</em><em>torch.dtype</em><em>]</em>) – dtype of the values tensor.</p></li>
+<li><p><strong>weights_dtype</strong> (<em>Optional</em><em>[</em><em>torch.dtype</em><em>]</em>) – dtype of the weights tensor.</p></li>
+<li><p><strong>lengths_dtype</strong> (<em>torch.dtype</em>) – dtype of the lengths tensor.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>empty KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty_like">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">empty_like</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kjt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.empty_like" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Constructs an empty KeyedJaggedTensor with the same device and dtypes as the input KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>kjt</strong> (<a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><em>KeyedJaggedTensor</em></a>) – input KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>empty KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.flatten_lengths">
@@ -898,12 +1070,16 @@ offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final off
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_jt_dict">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_jt_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">jt_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_jt_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Constructs a KeyedJaggedTensor from a Dict[str, JaggedTensor],
-but this function will ONLY work if the JaggedTensors all
+<dd><p>Constructs a KeyedJaggedTensor from a dictionary of JaggedTensors.
+Automatically calls <cite>kjt.sync()</cite> on newly created KJT.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This function will ONLY work if the JaggedTensors all
 have the same “implicit” batch_size dimension.</p>
+</div>
 <p>Basically, we can visualize JaggedTensors as 2-D tensors
 of the format of [batch_size x variable_feature_dim].
-In case, we have some batch without a feature value,
+In the case, we have some batch without a feature value,
 the input JaggedTensor could just not include any values.</p>
 <p>But KeyedJaggedTensor (by default) typically pad “None”
 so that all the JaggedTensors stored in the KeyedJaggedTensor
@@ -917,14 +1093,6 @@ for the empty batches, this function would error / not work.</p>
 #   ^
 #  dim_0</p>
 <dl class="simple">
-<dt>Notice that the inputs for this KeyedJaggedTensor would have looked like:</dt><dd><p>values: torch.Tensor = [V0, V1, V2, V3, V4, V5, V6, V7]  # V == any tensor datatype
-weights: torch.Tensor = [W0, W1, W2, W3, W4, W5, W6, W7]  # W == any tensor datatype
-lengths: torch.Tensor = [2, 0, 1, 1, 1, 3]  # representing the jagged slice
-offsets: torch.Tensor = [0, 2, 2, 3, 4, 5, 8]  # offsets from 0 for each jagged slice
-keys: List[str] = [“Feature0”, “Feature1”]  # correspond to each value of dim_0
-index_per_key: Dict[str, int] = {“Feature0”: 0, “Feature1”: 1}  # index for each key
-offset_per_key: List[int] = [0, 3, 8]  # start offset for each key and final offset</p>
-</dd>
 <dt>Now if the input jt_dict = {</dt><dd><p># “Feature0”   [V0,V1] [V2]
 # “Feature1”   [V3]    [V4]    [V5,V6,V7]</p>
 </dd>
@@ -937,87 +1105,285 @@ the correct batch / place to pad within the JaggedTensor.</p>
 would be [2, 1, 1, 1, 3] indicating variable batch_size
 dim_1 violates the existing assumption / precondition
 that KeyedJaggedTensor’s should have fixed batch_size dimension.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>jt_dict</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><em>JaggedTensor</em></a><em>]</em>) – dictionary of JaggedTensors.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>constructed KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_lengths_sync">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_lengths_sync</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stride</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stride_per_key_per_rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inverse_indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_lengths_sync" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Constructs a KeyedJaggedTensor from a list of keys, lengths, and offsets.
+Same as <cite>from_offsets_sync</cite> except lengths are used instead of offsets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – list of keys.</p></li>
+<li><p><strong>values</strong> (<em>torch.Tensor</em>) – values tensor in dense representation.</p></li>
+<li><p><strong>lengths</strong> (<em>torch.Tensor</em>) – jagged slices, represented as lengths.</p></li>
+<li><p><strong>weights</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – if the values have weights. Tensor with the
+same shape as values.</p></li>
+<li><p><strong>stride</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – number of examples per batch.</p></li>
+<li><p><strong>stride_per_key_per_rank</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em><em>]</em>) – batch size
+(number of examples) per key per rank, with the outer list representing the
+keys and the inner list representing the values.</p></li>
+<li><p><strong>inverse_indices</strong> (<em>Optional</em><em>[</em><em>Tuple</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>, </em><em>torch.Tensor</em><em>]</em><em>]</em>) – inverse indices to
+expand deduplicated embedding output for variable stride per key.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>constructed KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_offsets_sync">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_offsets_sync</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stride</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stride_per_key_per_rank</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inverse_indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.from_offsets_sync" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Constructs a KeyedJaggedTensor from a list of keys, values, and offsets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – list of keys.</p></li>
+<li><p><strong>values</strong> (<em>torch.Tensor</em>) – values tensor in dense representation.</p></li>
+<li><p><strong>offsets</strong> (<em>torch.Tensor</em>) – jagged slices, represented as cumulative offsets.</p></li>
+<li><p><strong>weights</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – if the values have weights. Tensor with the
+same shape as values.</p></li>
+<li><p><strong>stride</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – number of examples per batch.</p></li>
+<li><p><strong>stride_per_key_per_rank</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em><em>]</em>) – batch size
+(number of examples) per key per rank, with the outer list representing the
+keys and the inner list representing the values.</p></li>
+<li><p><strong>inverse_indices</strong> (<em>Optional</em><em>[</em><em>Tuple</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>, </em><em>torch.Tensor</em><em>]</em><em>]</em>) – inverse indices to
+expand deduplicated embedding output for variable stride per key.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>constructed KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.index_per_key">
 <span class="sig-name descname"><span class="pre">index_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.index_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the index per key of the KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>index per key of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict[str, int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.inverse_indices">
 <span class="sig-name descname"><span class="pre">inverse_indices</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.inverse_indices" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the inverse indices of the KeyedJaggedTensor.
+If inverse indices are None, this will throw an error.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>inverse indices of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tuple[List[str], torch.Tensor]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.inverse_indices_or_none">
 <span class="sig-name descname"><span class="pre">inverse_indices_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.inverse_indices_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the inverse indices of the KeyedJaggedTensor or None if they don’t exist.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>inverse indices of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[Tuple[List[str], torch.Tensor]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.keys">
 <span class="sig-name descname"><span class="pre">keys</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.keys" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the keys of the KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>keys of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[str]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key">
 <span class="sig-name descname"><span class="pre">length_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the length per key of the KeyedJaggedTensor.
+If length per key is None, this will compute it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>length per key of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key_or_none">
 <span class="sig-name descname"><span class="pre">length_per_key_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.length_per_key_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the length per key of the KeyedJaggedTensor or None if it hasn’t been computed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>length per key of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths">
 <span class="sig-name descname"><span class="pre">lengths</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the lengths of the KeyedJaggedTensor.
+If the lengths are not computed yet, it will compute them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>lengths of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths_offset_per_key">
 <span class="sig-name descname"><span class="pre">lengths_offset_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths_offset_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the lengths offset per key of the KeyedJaggedTensor.
+If lengths offset per key is None, this will compute it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>lengths offset per key of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths_or_none">
 <span class="sig-name descname"><span class="pre">lengths_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.lengths_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the lengths of the KeyedJaggedTensor or None if they are not computed yet.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>lengths of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key">
 <span class="sig-name descname"><span class="pre">offset_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the offset per key of the KeyedJaggedTensor.
+If offset per key is None, this will compute it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>offset per key of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key_or_none">
 <span class="sig-name descname"><span class="pre">offset_per_key_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offset_per_key_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the offset per key of the KeyedJaggedTensor or None if it hasn’t been computed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>offset per key of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets">
 <span class="sig-name descname"><span class="pre">offsets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the offsets of the KeyedJaggedTensor.
+If the offsets are not computed yet, it will compute them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>offsets of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets_or_none">
 <span class="sig-name descname"><span class="pre">offsets_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.offsets_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the offsets of the KeyedJaggedTensor or None if they are not computed yet.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>offsets of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.permute">
 <span class="sig-name descname"><span class="pre">permute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices_tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.permute" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Permutes the KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – list of indices.</p></li>
+<li><p><strong>indices_tensor</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – tensor of indices.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>permuted KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.pin_memory">
@@ -1033,65 +1399,184 @@ that KeyedJaggedTensor’s should have fixed batch_size dimension.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.split">
 <span class="sig-name descname"><span class="pre">split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segments</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.split" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Splits the KeyedJaggedTensor into a list of KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>segments</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – list of segments.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>list of KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[<a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a>]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride">
 <span class="sig-name descname"><span class="pre">stride</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the stride of the KeyedJaggedTensor.
+If stride is None, this will compute it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>stride of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride_per_key">
 <span class="sig-name descname"><span class="pre">stride_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the stride per key of the KeyedJaggedTensor.
+If stride per key is None, this will compute it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>stride per key of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride_per_key_per_rank">
 <span class="sig-name descname"><span class="pre">stride_per_key_per_rank</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.stride_per_key_per_rank" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the stride per key per rank of the KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>stride per key per rank of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[List[int]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.sync">
 <span class="sig-name descname"><span class="pre">sync</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.sync" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Synchronizes the KeyedJaggedTensor by computing the offset_per_key and length_per_key.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>synced KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to">
 <span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to" title="Permalink to this definition">¶</a></dt>
-<dd><p>Please be aware that according to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.to.html">https://pytorch.org/docs/stable/generated/torch.Tensor.to.html</a>,
-<cite>to</cite> might return self or a copy of self.  So please remember to use <cite>to</cite> with the assignment operator,
-for example, <cite>in = in.to(new_device)</cite>.</p>
+<dd><p>Returns a copy of KeyedJaggedTensor in the specified device and dtype.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>device</strong> (<em>torch.device</em>) – the desired device of the copy.</p></li>
+<li><p><strong>non_blocking</strong> (<em>bool</em>) – whether to copy the tensors in a non-blocking fashion.</p></li>
+<li><p><strong>dtype</strong> (<em>Optional</em><em>[</em><em>torch.dtype</em><em>]</em>) – the desired data type of the copy.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the copied KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor"><span class="pre">JaggedTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.to_dict" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns a dictionary of JaggedTensor for each key.
+Will cache result in self._jt_dict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dictionary of JaggedTensor for each key.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict[str, <a class="reference internal" href="#torchrec.sparse.jagged_tensor.JaggedTensor" title="torchrec.sparse.jagged_tensor.JaggedTensor">JaggedTensor</a>]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.unsync">
 <span class="sig-name descname"><span class="pre">unsync</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor"><span class="pre">KeyedJaggedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.unsync" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Unsyncs the KeyedJaggedTensor by clearing the offset_per_key and length_per_key.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>unsynced KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor" title="torchrec.sparse.jagged_tensor.KeyedJaggedTensor">KeyedJaggedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.values">
 <span class="sig-name descname"><span class="pre">values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.values" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the values of the KeyedJaggedTensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>values of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.variable_stride_per_key">
 <span class="sig-name descname"><span class="pre">variable_stride_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.variable_stride_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns whether the KeyedJaggedTensor has variable stride per key.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>whether the KeyedJaggedTensor has variable stride per key.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights">
 <span class="sig-name descname"><span class="pre">weights</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the weights of the KeyedJaggedTensor.
+If weights is None, this will throw an error.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>weights of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights_or_none">
 <span class="sig-name descname"><span class="pre">weights_or_none</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.weights_or_none" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Returns the weights of the KeyedJaggedTensor or None if they don’t exist.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>weights of the KeyedJaggedTensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -1134,47 +1619,108 @@ Common use cases uses include storage of pooled embeddings of different dimensio
 <span class="n">kt</span> <span class="o">=</span> <span class="n">KeyedTensor</span><span class="o">.</span><span class="n">from_tensor_list</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">tensor_list</span><span class="p">)</span>
 
 <span class="n">kt</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-    <span class="c1"># tensor(</span>
-    <span class="c1">#     [</span>
-    <span class="c1">#         [1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
-    <span class="c1">#         [1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
-    <span class="c1">#         [1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
-    <span class="c1">#     ]</span>
-    <span class="c1"># )</span>
+<span class="c1"># torch.Tensor(</span>
+<span class="c1">#     [</span>
+<span class="c1">#         [1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
+<span class="c1">#         [1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
+<span class="c1">#         [1, 1, 2, 1, 2, 3, 1, 2, 3],</span>
+<span class="c1">#     ]</span>
+<span class="c1"># )</span>
 
 <span class="n">kt</span><span class="p">[</span><span class="s2">&quot;Embedding B&quot;</span><span class="p">]</span>
-    <span class="c1"># tensor([[2, 1, 2], [2, 1, 2], [2, 1, 2]])</span>
+<span class="c1"># torch.Tensor([[2, 1, 2], [2, 1, 2], [2, 1, 2]])</span>
 </pre></div>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.device">
 <span class="sig-name descname"><span class="pre">device</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">device</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.device" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>device of the values tensor.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.device</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.from_tensor_list">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensor_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cat_dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.from_tensor_list" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Create a KeyedTensor from a list of tensors. The tensors are concatenated
+along the cat_dim. The keys are used to index the tensors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – list of keys.</p></li>
+<li><p><strong>tensors</strong> (<em>List</em><em>[</em><em>torch.Tensor</em><em>]</em>) – list of tensors.</p></li>
+<li><p><strong>key_dim</strong> (<em>int</em>) – key dimension, zero indexed - defaults to 1
+(typically B is 0-dimension).</p></li>
+<li><p><strong>cat_dim</strong> (<em>int</em>) – dimension along which to concatenate the tensors - defaults</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>keyed tensor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor">KeyedTensor</a></p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.key_dim">
 <span class="sig-name descname"><span class="pre">key_dim</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.key_dim" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>key dimension, zero indexed - typically B is 0-dimension.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.keys">
 <span class="sig-name descname"><span class="pre">keys</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.keys" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list of keys.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[str]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.length_per_key">
 <span class="sig-name descname"><span class="pre">length_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.length_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>length of each key along key dimension.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.offset_per_key">
 <span class="sig-name descname"><span class="pre">offset_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.offset_per_key" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get the offset of each key along key dimension.
+Compute and cache if not already computed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>offset of each key along key dimension.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>List[int]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.record_stream">
@@ -1185,30 +1731,91 @@ Common use cases uses include storage of pooled embeddings of different dimensio
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.regroup">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">regroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keyed_tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">KeyedTensor</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.regroup" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Regroup a list of KeyedTensors into a list of tensors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keyed_tensors</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><em>KeyedTensor</em></a><em>]</em>) – list of KeyedTensors.</p></li>
+<li><p><strong>groups</strong> (<em>List</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em>) – list of groups of keys.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>list of tensors.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List[torch.Tensor]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.regroup_as_dict">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">regroup_as_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">keyed_tensors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">KeyedTensor</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keys</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.regroup_as_dict" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Regroup a list of KeyedTensors into a dictionary of tensors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>keyed_tensors</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><em>KeyedTensor</em></a><em>]</em>) – list of KeyedTensors.</p></li>
+<li><p><strong>groups</strong> (<em>List</em><em>[</em><em>List</em><em>[</em><em>str</em><em>]</em><em>]</em>) – list of groups of keys.</p></li>
+<li><p><strong>keys</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – list of keys.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>dictionary of tensors.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict[str, torch.Tensor]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.to">
 <span class="sig-name descname"><span class="pre">to</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">device</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor"><span class="pre">KeyedTensor</span></a></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.to" title="Permalink to this definition">¶</a></dt>
-<dd><p>Please be aware that according to <a class="reference external" href="https://pytorch.org/docs/stable/generated/torch.Tensor.to.html">https://pytorch.org/docs/stable/generated/torch.Tensor.to.html</a>,
-<cite>to</cite> might return self or a copy of self.  So please remember to use <cite>to</cite> with the assignment operator,
-for example, <cite>in = in.to(new_device)</cite>.</p>
+<dd><p>Moves the values tensor to the specified device.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>device</strong> (<em>torch.device</em>) – device to move the values tensor to.</p></li>
+<li><p><strong>non_blocking</strong> (<em>bool</em>) – whether to perform the operation asynchronously
+(default: False).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>keyed tensor with values tensor moved to the specified device.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#torchrec.sparse.jagged_tensor.KeyedTensor" title="torchrec.sparse.jagged_tensor.KeyedTensor">KeyedTensor</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.to_dict" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dictionary of tensors keyed by the keys.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict[str, torch.Tensor]</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedTensor.values">
 <span class="sig-name descname"><span class="pre">values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedTensor.values" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Get the values tensor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dense tensor, concatenated typically along key dimension.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
