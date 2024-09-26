@@ -331,7 +331,7 @@ def sharding_single_rank_test(
                 optimizer_kwargs,
             ) in apply_optimizer_in_backward_config.items():
                 for name, param in global_model_named_params_as_dict.items():
-                    if name not in apply_optim_name:
+                    if apply_optim_name not in name:
                         continue
                     assert name in local_model_named_params_as_dict
                     local_param = local_model_named_params_as_dict[name]
