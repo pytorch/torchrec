@@ -21,6 +21,15 @@ from torchrec.types import DataType
 
 @unique
 class PoolingType(Enum):
+    """
+    Pooling type for embedding table.
+
+    Args:
+        SUM (str): sum pooling.
+        MEAN (str): mean pooling.
+        NONE (str): no pooling.
+    """
+
     SUM = "SUM"
     MEAN = "MEAN"
     NONE = "NONE"
@@ -153,6 +162,23 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
 
 @dataclass
 class BaseEmbeddingConfig:
+    """
+    Base class for embedding configs.
+
+    Args:
+        num_embeddings (int): number of embeddings.
+        embedding_dim (int): embedding dimension.
+        name (str): name of the embedding table.
+        data_type (DataType): data type of the embedding table.
+        feature_names (List[str]): list of feature names.
+        weight_init_max (Optional[float]): max value for weight initialization.
+        weight_init_min (Optional[float]): min value for weight initialization.
+        num_embeddings_post_pruning (Optional[int]): number of embeddings after pruning for inference.
+            If None, no pruning is applied.
+        init_fn (Optional[Callable[[torch.Tensor], Optional[torch.Tensor]]]): init function for embedding weights.
+        need_pos (bool): whether table is position weighted.
+    """
+
     num_embeddings: int
     embedding_dim: int
     name: str = ""
@@ -204,11 +230,24 @@ class EmbeddingTableConfig(BaseEmbeddingConfig):
 
 @dataclass
 class EmbeddingBagConfig(BaseEmbeddingConfig):
+    """
+    EmbeddingBagConfig is a dataclass that represents a single embedding table,
+    where outputs are meant to be pooled.
+
+    Args:
+        pooling (PoolingType): pooling type.
+    """
+
     pooling: PoolingType = PoolingType.SUM
 
 
 @dataclass
 class EmbeddingConfig(BaseEmbeddingConfig):
+    """
+    EmbeddingConfig is a dataclass that represents a single embedding table.
+
+    """
+
     pass
 
 
