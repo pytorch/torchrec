@@ -206,9 +206,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
-        Args:
-            features (KeyedJaggedTensor): KJT of form [F X B X L].
+        Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
+        and returns a `KeyedTensor`, which is the result of pooling the embeddings for each feature.
 
+        Args:
+            features (KeyedJaggedTensor): Input KJT
         Returns:
             KeyedTensor
         """
@@ -240,16 +242,32 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         )
 
     def is_weighted(self) -> bool:
+        """
+        Returns:
+            bool: Whether the EmbeddingBagCollection is weighted.
+        """
         return self._is_weighted
 
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        """
+        Returns:
+            List[EmbeddingBagConfig]: The embedding bag configs.
+        """
         return self._embedding_bag_configs
 
     @property
     def device(self) -> torch.device:
+        """
+        Returns:
+            torch.device: The compute device.
+        """
         return self._device
 
     def reset_parameters(self) -> None:
+        """
+        Reset the parameters of the EmbeddingBagCollection. Parameter values
+        are intiialized based on the `init_fn` of each EmbeddingBagConfig if it exists.
+        """
         if (isinstance(self.device, torch.device) and self.device.type == "meta") or (
             isinstance(self.device, str) and self.device == "meta"
         ):
@@ -407,6 +425,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         features: KeyedJaggedTensor,
     ) -> Dict[str, JaggedTensor]:
         """
+        Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
+        and returns a `Dict[str, JaggedTensor]`, which is the result of the individual embeddings for each feature.
+
         Args:
             features (KeyedJaggedTensor): KJT of form [F X B X L].
 
@@ -433,22 +454,47 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         return feature_embeddings
 
     def need_indices(self) -> bool:
+        """
+        Returns:
+            bool: Whether the EmbeddingCollection needs indices.
+        """
         return self._need_indices
 
     def embedding_dim(self) -> int:
+        """
+        Returns:
+            int: The embedding dimension.
+        """
         return self._embedding_dim
 
     def embedding_configs(self) -> List[EmbeddingConfig]:
+        """
+        Returns:
+            List[EmbeddingConfig]: The embedding configs.
+        """
         return self._embedding_configs
 
     def embedding_names_by_table(self) -> List[List[str]]:
+        """
+        Returns:
+            List[List[str]]: The embedding names by table.
+        """
         return self._embedding_names_by_table
 
     @property
     def device(self) -> torch.device:
+        """
+        Returns:
+            torch.device: The compute device.
+        """
         return self._device
 
     def reset_parameters(self) -> None:
+        """
+        Reset the parameters of the EmbeddingCollection. Parameter values
+        are intiialized based on the `init_fn` of each EmbeddingConfig if it exists.
+        """
+
         if (isinstance(self.device, torch.device) and self.device.type == "meta") or (
             isinstance(self.device, str) and self.device == "meta"
         ):
