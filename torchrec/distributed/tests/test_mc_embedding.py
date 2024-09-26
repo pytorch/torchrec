@@ -108,6 +108,7 @@ class SparseArch(nn.Module):
 
 
 def _test_sharding_and_remapping(  # noqa C901
+    output_keys: List[str],
     tables: List[EmbeddingConfig],
     rank: int,
     world_size: int,
@@ -217,7 +218,7 @@ def _test_sharding_and_remapping(  # noqa C901
                 ), f"initial state {key} on {ctx.rank} does not match, got {tensor}, expect {final_state_per_rank[rank][postfix]}"
 
         remapped_ids = [remapped_ids1, remapped_ids2]
-        for key in kjt_input.keys():
+        for key in output_keys:
             for i, kjt_out in enumerate(kjt_out_per_iter):
                 assert torch.equal(
                     remapped_ids[i][key].values(),
@@ -699,15 +700,15 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
 
         kjt_input_per_rank = [  # noqa
             KeyedJaggedTensor.from_lengths_sync(
-                keys=["feature_0", "feature_1"],
+                keys=["feature_0", "feature_1", "feature_2"],
                 values=torch.LongTensor(
-                    [1000, 2000, 1001, 2000, 2001, 2002],
+                    [1000, 2000, 1001, 2000, 2001, 2002, 1, 1, 1],
                 ),
-                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
+                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 1, 1, 1]),
                 weights=None,
             ),
             KeyedJaggedTensor.from_lengths_sync(
-                keys=["feature_0", "feature_1"],
+                keys=["feature_0", "feature_1", "feature_2"],
                 values=torch.LongTensor(
                     [
                         1000,
@@ -716,9 +717,12 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
                         2000,
                         2002,
                         2004,
+                        2,
+                        2,
+                        2,
                     ],
                 ),
-                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
+                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 1, 1, 1]),
                 weights=None,
             ),
         ]
@@ -814,6 +818,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
 
         self._run_multi_process_test(
             callable=_test_sharding_and_remapping,
+            output_keys=["feature_0", "feature_1"],
             world_size=WORLD_SIZE,
             tables=embedding_config,
             kjt_input_per_rank=kjt_input_per_rank,

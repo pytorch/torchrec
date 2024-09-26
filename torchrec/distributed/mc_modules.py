@@ -415,7 +415,7 @@ class ShardedManagedCollisionCollection(
             self._features_order.append(input_feature_names.index(f))
         self._features_order = (
             []
-            if self._features_order == list(range(len(self._features_order)))
+            if self._features_order == list(range(len(input_feature_names)))
             else self._features_order
         )
         self.register_buffer(

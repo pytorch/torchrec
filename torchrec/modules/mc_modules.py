@@ -64,7 +64,7 @@ def _mcc_lazy_init(
         for f in feature_names:
             features_order.append(input_feature_names.index(f))
 
-        if features_order == list(range(len(features_order))):
+        if features_order == list(range(len(input_feature_names))):
             features_order = torch.jit.annotate(List[int], [])
         created_feature_order = True
 
