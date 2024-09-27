@@ -84,7 +84,7 @@ class TorchCompileConfig:
     Configs for torch.compile
 
     fullgraph: bool = False, whether to compile the whole graph or not
-    dynamic: bool = False, whether to use dynamic shapes or not
+    dynamic: Optional[bool] = None, whether to use dynamic shapes or not, if None, automatic_dynamic_shapes will apply
     backend: str = "inductor", which compiler to use (either inductor or aot)
     compile_on_iter: int = 3, compile the model on which iteration
         this is useful when we want to profile the first few iterations of training
@@ -92,7 +92,7 @@ class TorchCompileConfig:
     """
 
     fullgraph: bool = False
-    dynamic: bool = False
+    dynamic: Optional[bool] = None
     backend: str = "inductor"
     compile_on_iter: int = 3
 
