@@ -136,14 +136,25 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
         Returns:
             KeyedTensor
         """
+        values = []
+        lengths = []
+        weights = []
 
         if isinstance(self._feature_processors, FeatureProcessorsCollection):
             fp_features = self._feature_processors(features)
         else:
-            # TODO: This path isn't currently scriptable. May be hard to support Dict[nn.Module]. Workaround is to always use FP-Collections
-            fp_features = apply_feature_processors_to_kjt(
-                features,
-                self._feature_processors,
+            features_dict = features.to_dict()
+            for key in self._feature_names:
+                jt = self._feature_processors[key](features_dict[key])
+                values.append(jt.values())
+                lengths.append(jt.lengths())
+                weights.append(jt.weights())
+
+            fp_features = KeyedJaggedTensor(
+                keys=self._feature_names,
+                values=torch.cat(values),
+                lengths=torch.cat(lengths),
+                weights=torch.cat(weights),
             )
 
         return self._embedding_bag_collection(fp_features)
