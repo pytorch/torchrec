@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
   <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <link rel="stylesheet" href="_static/copybutton.css" type="text/css" />
-  <link rel="stylesheet" href="_static/design-style.1e8bd061cd6da7fc9cf755528e8ffc24.min.css" type="text/css" />
+  <link rel="stylesheet" href="_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
   <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -271,7 +271,7 @@
               
               
                 <div class="version">
-                  1.1.0.dev20240926+cpu
+                  1.1.0.dev20240927+cpu
                 </div>
               
             
@@ -409,16 +409,38 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules">
-<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_extern_modules</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_extern_modules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PackageExporter</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_extern_modules" title="Permalink to this definition">¶</a></dt>
 <dd><p>A decorator indicating abstract classmethods.</p>
-<p>Deprecated, use ‘classmethod’ with ‘abstractmethod’ instead.</p>
+<p>Deprecated, use ‘classmethod’ with ‘abstractmethod’ instead:</p>
+<blockquote>
+<div><dl>
+<dt>class C(ABC):</dt><dd><p>&#64;classmethod
+&#64;abstractmethod
+def my_abstract_classmethod(cls, …):</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</div></blockquote>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.inference.model_packager.PredictFactoryPackager.set_mocked_modules">
-<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_mocked_modules</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_mocked_modules" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_mocked_modules</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pe</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PackageExporter</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.inference.model_packager.PredictFactoryPackager.set_mocked_modules" title="Permalink to this definition">¶</a></dt>
 <dd><p>A decorator indicating abstract classmethods.</p>
-<p>Deprecated, use ‘classmethod’ with ‘abstractmethod’ instead.</p>
+<p>Deprecated, use ‘classmethod’ with ‘abstractmethod’ instead:</p>
+<blockquote>
+<div><dl>
+<dt>class C(ABC):</dt><dd><p>&#64;classmethod
+&#64;abstractmethod
+def my_abstract_classmethod(cls, …):</p>
+<blockquote>
+<div><p>…</p>
+</div></blockquote>
+</dd>
+</dl>
+</div></blockquote>
 </dd></dl>
 
 </dd></dl>
