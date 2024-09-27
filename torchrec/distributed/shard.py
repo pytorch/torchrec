@@ -28,6 +28,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
 )
 from torchrec.distributed.utils import init_parameters
+from torchrec.modules.utils import reset_module_states_post_sharding
 from torchrec.types import CacheMixin
 
 
@@ -280,8 +281,6 @@ def _shard_modules(  # noqa: C901
         init_parameters(module, device)
         module = module.to(device)
 
-    for submod in module.modules():
-        if isinstance(submod, CacheMixin):
-            submod.clear_cache()
+    reset_module_states_post_sharding(module)
 
     return module

@@ -16,6 +16,7 @@ import torch
 from torch.profiler import record_function
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
+from torchrec.types import CacheMixin
 
 
 @dataclass
@@ -373,3 +374,20 @@ def deterministic_dedup(ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     )
 
     return sorted_unique_ids.view(-1), last_existence_index.flatten()
+
+
+def reset_module_states_post_sharding(
+    module: torch.nn.Module,
+) -> None:
+    """
+    Reset the module states post sharding.
+    Involves clearing cached tensors if they exist
+    from unsharded version.
+    """
+
+    # Clear Cache for TorchRec modules that have cache. Normally would happen in sharding
+    # but cached modules might not be part of the TorchRec modules being sharded.
+    # For example, necessary for KTRegroupAsDict correctness,
+    for submod in module.modules():
+        if isinstance(submod, CacheMixin):
+            submod.clear_cache()
