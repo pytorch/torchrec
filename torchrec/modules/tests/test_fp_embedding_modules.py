@@ -21,7 +21,7 @@ from torchrec.modules.feature_processor_ import (
     PositionWeightedModuleCollection,
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class PositionWeightedModuleEmbeddingBagCollectionTest(unittest.TestCase):
@@ -63,18 +63,17 @@ class PositionWeightedModuleEmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings.values().size(), (3, 16))
         self.assertEqual(pooled_embeddings.offset_per_key(), [0, 8, 16])
 
-        # Currently non-collections currently are not trace-able
-        # fp_ebc_gm_script = torch.jit.script(symbolic_trace(fp_ebc))
-        # pooled_embeddings_gm_script = fp_ebc_gm_script(features)
+        fp_ebc_gm_script = torch.jit.script(symbolic_trace(fp_ebc))
+        pooled_embeddings_gm_script = fp_ebc_gm_script(features)
 
-        # torch.testing.assert_close(
-        #     pooled_embeddings_gm_script.values(), pooled_embeddings.values()
-        # )
+        torch.testing.assert_close(
+            pooled_embeddings_gm_script.values(), pooled_embeddings.values()
+        )
 
-        # torch.testing.assert_close(
-        #     pooled_embeddings_gm_script.offset_per_key(),
-        #     pooled_embeddings.offset_per_key(),
-        # )
+        torch.testing.assert_close(
+            pooled_embeddings_gm_script.offset_per_key(),
+            pooled_embeddings.offset_per_key(),
+        )
 
     def test_position_weighted_module_ebc_with_excessive_features(self) -> None:
         #     0       1        2  <-- batch
