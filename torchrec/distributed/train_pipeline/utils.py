@@ -32,6 +32,8 @@ from typing import (
 )
 
 from torch import distributed as dist
+
+from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.fx.immutable_collections import (
     immutable_dict as fx_immutable_dict,
@@ -525,6 +527,7 @@ class Tracer(torch.fx.Tracer):
             isinstance(m, ShardedModule)
             or module_qualified_name in self._leaf_modules
             or isinstance(m, FSDP)
+            or isinstance(m, FSDP2)
         ):
             return True
         return super().is_leaf_module(m, module_qualified_name)
@@ -926,7 +929,7 @@ def _get_node_args_helper(
                         f"""Module {preproc_module} is a valid preproc module (no
                         trainable params and inputs can be derived from train batch input
                          via a series of either valid preproc modules or non-modifying
-                         transformations) and will be applied during sparse data dist 
+                         transformations) and will be applied during sparse data dist
                          stage"""
                     )
 
