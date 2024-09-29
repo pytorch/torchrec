@@ -738,7 +738,11 @@ class ShardedManagedCollisionCollection(
         for name, module in self._managed_collision_modules.items():
             module_prefix = append_prefix(prefix, name)
             for name, _ in module.named_buffers():
-                if name in ["_output_segments_tensor", "_current_iter_tensor"]:
+                if name in [
+                    "_output_segments_tensor",
+                    "_current_iter_tensor",
+                    "_scalar_logger._scalar_logger_steps",
+                ]:
                     continue
                 if name in module._non_persistent_buffers_set:
                     continue
