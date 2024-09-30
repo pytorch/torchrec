@@ -29,6 +29,7 @@ Embedding Tables
 ----------------
 
 For TorchRec to figure out what to recommend, we need to be able to represent entities and their relationships, this is what embeddings are used for. Embeddings are vectors of real numbers in a high dimensional space used to represent meaning in complex data like words, images, or users. An embedding table is an aggregation of multiple embeddings into one matrix. Most commonly, embedding tables are represented as a 2D matrix with dimensions (B, N). 
+
 * *B* is the number of embeddings stored by the table 
 * *N* is number of dimensions per embedding.
 
@@ -40,7 +41,7 @@ PyTorch represents embeddings through ``nn.Embedding`` and ``nn.EmbeddingBag``. 
 
 Here is a end to end flow of how embeddings are used in the training process for recommendation models:
 
-.. figure:: _static/img/torchrec_forward.png
+.. figure:: _static/img/full_training_loop.png
    :alt: Demonstrating the full training loop from embedding lookup to optimizer update in backward
    :align: center
 
