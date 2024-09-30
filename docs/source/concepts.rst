@@ -21,10 +21,11 @@ In effect, TorchRec provides parallelism primitives allowing hybrid data paralle
 Planner
 -------
 The TorchRec planner helps determine the best sharding configuration for a model. What it does it evaluates multiple possibilities of how embedding tables can be sharded and then optimizes for performance. The planner,
-+ Assesses the memory constraints of hardware
-+ Estimates compute based on memory fetches as embedding lookups,
-+ Addresses data specific factors
-+ Considers other hardware specifics like bandwidth to generate an optimal sharding plan
+
+* Assesses the memory constraints of hardware
+* Estimates compute based on memory fetches as embedding lookups,
+* Addresses data specific factors
+* Considers other hardware specifics like bandwidth to generate an optimal sharding plan
 
 To help with accurate consideration of these factors, the Planner can take in data about the embedding tables, constraints, hardware information, and topology to help in generating an optimal plan.
 
@@ -39,7 +40,7 @@ TorchRec sharder provides multiple sharding strategies for various use cases, we
 
 Each sharding strategy determines how to do the table split, whether the table should be cut up and how, whether to keep one or a few copies of some tables, and so on. Each piece of the table from the outcome of sharding, whether it is one embedding table or part of it, is referred to as a shard.
 
-.. figure:: img/model_parallel.png
+.. figure:: _static/img/model_parallel.png
    :alt: Visualizing the difference of sharding types offered in TorchRec
    :align: center
 
@@ -55,17 +56,17 @@ With sharding, there is an added communication cost: each GPU needs to ask the o
 
 As described above, sharding requires us to communicate the input data and embedding lookups. TorchRec handles this in three main stages, we’ll refer to this as the sharded embedding module forward that is used in training and inference of a TorchRec model,
 
-+ Feature All to All/Input distribution (input_dist)
-  + Communicate input data (in the form of a KeyedJaggedTensor) to the appropriate device containing relevant embedding table shard
-+ Embedding Lookup
-  + Lookup embeddings with new input data formed after feature all to all exchange
-+ Embedding All to All/Output Distribution (output_dist)
-  + Communicate embedding lookup data back to the appropriate device that asked for it (in accordance with the input data the device received)
-+ The backward pass does the same but in reverse order.
+* Feature All to All/Input distribution (input_dist)
+  * Communicate input data (in the form of a KeyedJaggedTensor) to the appropriate device containing relevant embedding table shard
+* Embedding Lookup
+  * Lookup embeddings with new input data formed after feature all to all exchange
+* Embedding All to All/Output Distribution (output_dist)
+  * Communicate embedding lookup data back to the appropriate device that asked for it (in accordance with the input data the device received)
+* The backward pass does the same but in reverse order.
 
 We show this below in the diagram,
 
-.. figure:: img/torchrec_forward.png
+.. figure:: _static/img/torchrec_forward.png
    :alt: Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module
    :align: center
 
@@ -83,7 +84,7 @@ Optimizer
 ---------
 TorchRec modules provide a seamless API to fuse the backwards pass and optimize step in training, providing a significant optimization in performance and decreasing the memory used, alongside granularity in assigning distinct optimizers to distinct model parameters.
 
-.. figure:: img/fused_backward_optimizer.png
+.. figure:: _static/img/fused_backward_optimizer.png
    :alt: Visualizing fusing of optimizer in backward to update sparse embedding table
    :align: center
 
@@ -93,13 +94,14 @@ Inference
 ---------
 
 Inference environments are different from training, they are very sensitive to performance and size of the model. There are two key differences TorchRec inference optimizes for,
-+ Quantization: inference models are quantized for lower latency and reduced model size, this lets us use as few devices as possible for inference to minimize latency.
-+ C++ environment: to minimize latency even further, the model is ran in a C++ environment
+
+* Quantization: inference models are quantized for lower latency and reduced model size, this lets us use as few devices as possible for inference to minimize latency.
+* C++ environment: to minimize latency even further, the model is ran in a C++ environment
 
 TorchRec provides the following to convert a TorchRec model into being inference ready.
-+ APIs for quantizing the model, including optimizations automatically with FBGEMM TBE
-+ Sharding embeddings for distributed inference
-+ Compiling the model to TorchScript (compatible in C++)
+* APIs for quantizing the model, including optimizations automatically with FBGEMM TBE
+* Sharding embeddings for distributed inference
+* Compiling the model to TorchScript (compatible in C++)
 
 
 See Also
