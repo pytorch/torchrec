@@ -57,7 +57,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             [
                 None,
                 {
-                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
                 },
             ]
@@ -150,7 +150,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             [
                 None,
                 {
-                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
                 },
             ]
@@ -203,7 +203,7 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             [
                 None,
                 {
-                    "embeddingbags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
                     "embeddings": (torch.optim.SGD, {"lr": 0.2}),
                 },
             ]
