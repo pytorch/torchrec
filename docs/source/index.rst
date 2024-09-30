@@ -92,6 +92,13 @@ how you can contribute:
 
 .. toctree::
    :maxdepth: 1
+   :caption: Getting Started
+   :hidden:
+
+   setup-torchrec.rst
+
+.. toctree::
+   :maxdepth: 1
    :caption: All API References
    :hidden:
 
