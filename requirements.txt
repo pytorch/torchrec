@@ -1,0 +1,17 @@
+black
+cmake
+fbgemm-gpu
+hypothesis==6.70.1
+iopath
+numpy
+pandas
+pyre-extensions
+scikit-build
+torchmetrics==1.0.3
+torchx
+tqdm
+usort
+
+# for tests
+# https://github.com/pytorch/pytorch/blob/b96b1e8cff029bb0a73283e6e7f6cc240313f1dc/requirements.txt#L3
+expecttest
