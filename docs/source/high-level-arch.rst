@@ -32,7 +32,7 @@ generate sharding plans, pipelined training, and more.
 Model parallelism focusses on dividing the model into pieces and placing
 them on to different GPUs. We can divide the model into pieces and place
 a few consecutive layers on each GPU and calculate their activations and
-gradients.The diagram below displays the difference between the data
+gradients. The diagram below displays the difference between the data
 parallelism and model parallelism approaches:
 
 .. figure:: _static/img/model_parallel.png
