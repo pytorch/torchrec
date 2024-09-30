@@ -1,0 +1,50 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
+ *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+syntax = "proto3";
+
+package predictor;
+
+message SparseFeatures {
+  int32 num_features = 1;
+  // int32: T x B
+  bytes lengths = 2;
+  // T x B x L (jagged)
+  bytes values = 3;
+  bytes weights = 4;
+}
+
+message FloatFeatures {
+  int32 num_features = 1;
+  // shape: {B}
+  bytes values = 2;
+}
+
+message PredictionRequest {
+  int32 batch_size = 1;
+  FloatFeatures float_features = 2;
+  SparseFeatures id_list_features = 3;
+  SparseFeatures id_score_list_features = 4;
+  FloatFeatures embedding_features = 5;
+  SparseFeatures unary_features = 6;
+}
+
+message FloatVec {
+  repeated float data = 1;
+}
+
+// TODO: See whether FloatVec can be replaced with folly::iobuf
+message PredictionResponse {
+  // Task name to prediction Tensor
+  map<string, FloatVec> predictions = 1;
+}
+
+// The predictor service definition. Synchronous for now.
+service Predictor {
+  rpc Predict(PredictionRequest) returns (PredictionResponse) {}
+}

@@ -1,0 +1,3 @@
+--pre torchrec -f https://download.pytorch.org/whl/torchrec/index.html
+torchx-nightly
+torch --extra-index-url https://download.pytorch.org/whl/cu113
