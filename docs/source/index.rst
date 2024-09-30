@@ -89,7 +89,7 @@ how you can contribute:
    :hidden:
 
    overview.rst
-   high_level_arch.rst
+   high-level-arch.rst
 
 .. toctree::
    :maxdepth: 1
