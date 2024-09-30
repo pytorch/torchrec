@@ -1,0 +1,33 @@
+[[linter]]
+code = 'BLACK'
+include_patterns = ['**/*.py']
+command = [
+    'python3',
+    'tools/lint/black_linter.py',
+    '--',
+    '@{{PATHSFILE}}'
+]
+init_command = [
+    'python3',
+    'tools/lint/pip_init.py',
+    '--dry-run={{DRYRUN}}',
+    'black==24.2.0',
+]
+is_formatter = true
+
+[[linter]]
+code = 'USORT'
+include_patterns = ['**/*.py']
+command = [
+    'python3',
+    'tools/lint/usort_linter.py',
+    '--',
+    '@{{PATHSFILE}}'
+]
+init_command = [
+    'python3',
+    'tools/lint/pip_init.py',
+    '--dry-run={{DRYRUN}}',
+    'usort==1.0.8',
+]
+is_formatter = true

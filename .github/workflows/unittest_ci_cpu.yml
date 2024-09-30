@@ -1,0 +1,86 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: CPU Unit Test CI
+
+on:
+  push:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
+
+jobs:
+  build_test:
+    strategy:
+        fail-fast: false
+        matrix:
+          include:
+            - os: linux.2xlarge
+              python-version: 3.9
+              python-tag: "py39"
+            - os: linux.2xlarge
+              python-version: '3.10'
+              python-tag: "py310"
+            - os: linux.2xlarge
+              python-version: '3.11'
+              python-tag: "py311"
+            - os: linux.2xlarge
+              python-version: '3.12'
+              python-tag: "py312"
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: ${{ matrix.os }}
+      timeout: 15
+      script: |
+        ldd --version
+        conda create -y --name build_binary python=${{ matrix.python-version }}
+        conda info
+        python --version
+        conda run -n build_binary python --version
+        conda install -n build_binary \
+          --yes \
+          pytorch cpuonly -c pytorch-nightly
+        conda run -n build_binary \
+          python -c "import torch.distributed"
+        conda run -n build_binary \
+          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        echo "fbgemm_gpu succeeded"
+        conda run -n build_binary \
+          pip install -r requirements.txt
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --python-tag=${{ matrix.python-tag }}
+        conda run -n build_binary \
+          python -c "import torchrec"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary \
+          python -c "import numpy"
+        echo "numpy succeeded"
+        conda install -n build_binary -y pytest
+        conda run -n build_binary \
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
+          --ignore-glob=**/test_utils/
+        echo "Starting C++ Tests"
+        conda install -n build_binary -y gxx_linux-64
+        conda run -n build_binary \
+          x86_64-conda-linux-gnu-g++ --version
+        conda install -n build_binary -c anaconda redis -y
+        conda run -n build_binary redis-server --daemonize yes
+        mkdir cpp-build
+        cd cpp-build
+        conda run -n build_binary cmake \
+            -DBUILD_TEST=ON \
+            -DBUILD_REDIS_IO=ON \
+            -DCMAKE_PREFIX_PATH=/opt/conda/envs/build_binary/lib/python${{ matrix.python-version }}/site-packages/torch/share/cmake ..
+        conda run -n build_binary make -j
+        conda run -n build_binary ctest -V .
