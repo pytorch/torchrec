@@ -1,0 +1,64 @@
+name: Build Linux Wheels
+
+on:
+  pull_request:
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+    tags:
+      # Release candidate tags look like: v1.11.0-rc1
+      - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  generate-matrix:
+    uses: pytorch/test-infra/.github/workflows/generate_binary_build_matrix.yml@main
+    with:
+      package-type: wheel
+      os: linux
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: main
+      with-rocm: false
+  filter-matrix:
+    needs: generate-matrix
+    runs-on: linux.20_04.4x
+    outputs:
+      matrix: ${{ steps.filter.outputs.matrix }}
+    steps:
+    - uses: actions/setup-python@v4
+    - name: Checkout torchrec repository
+      uses: actions/checkout@v3
+      with:
+        repository: pytorch/torchrec
+    - name: Filter Generated Built Matrix
+      id: filter
+      env:
+        MAT: ${{ needs.generate-matrix.outputs.matrix }}
+      run: |
+        set -ex
+        pwd
+        ls
+        MATRIX_BLOB="$(python .github/scripts/filter.py)"
+        echo "${MATRIX_BLOB}"
+        echo "matrix=${MATRIX_BLOB}" >> "${GITHUB_OUTPUT}"
+  build:
+    needs: filter-matrix
+    name: pytorch/torchrec
+    uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
+    with:
+      repository: pytorch/torchrec
+      ref: ""
+      test-infra-repository: pytorch/test-infra
+      test-infra-ref: main
+      build-matrix: ${{ needs.filter-matrix.outputs.matrix }}
+      pre-script: ""
+      post-script: .github/scripts/install_fbgemm.sh
+      package-name: torchrec
+      smoke-test-script: ""
+      trigger-event: ${{ github.event_name }}

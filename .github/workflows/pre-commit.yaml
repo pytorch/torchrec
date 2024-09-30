@@ -1,0 +1,24 @@
+name: pre-commit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+          architecture: x64
+          packages: |
+            ufmt==2.5.1
+            black==24.2.0
+            usort==1.0.8
+      - name: Checkout Torchrec
+        uses: actions/checkout@v2
+      - name: Run pre-commit
+        uses: pre-commit/action@v2.0.3
