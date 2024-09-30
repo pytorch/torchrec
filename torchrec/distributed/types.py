@@ -135,6 +135,8 @@ class ShardingType(Enum):
     TABLE_ROW_WISE = "table_row_wise"
     # Column-wise on the same node and table-wise across nodes
     TABLE_COLUMN_WISE = "table_column_wise"
+    # Grid sharding, where each rank gets a subset of columns and rows in a CW and TWRW style
+    GRID_SHARD = "grid_shard"
 
 
 class PipelineType(Enum):

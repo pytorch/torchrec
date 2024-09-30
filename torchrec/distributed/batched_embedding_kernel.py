@@ -43,7 +43,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
 )
 from fbgemm_gpu.tbe.ssd import ASSOC, SSDTableBatchedEmbeddingBags
 from torch import nn
-from torchrec.distributed.comm import get_local_rank
+from torchrec.distributed.comm import get_local_rank, get_local_size
 from torchrec.distributed.composable.table_batched_embedding_slice import (
     TableBatchedEmbeddingSlice,
 )
@@ -215,29 +215,33 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             table_global_metadata: ShardedTensorMetadata,
             optimizer_state: torch.Tensor,
             sharding_dim: int,
+            is_grid_sharded: bool = False,
         ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
-
             table_global_shards_metadata: List[ShardMetadata] = (
                 table_global_metadata.shards_metadata
             )
 
-            # column-wise sharding
-            # sort the metadata based on column offset and
-            # we construct the momentum tensor in row-wise sharded way
             if sharding_dim == 1:
+                # column-wise sharding
+                # sort the metadata based on column offset and
+                # we construct the momentum tensor in row-wise sharded way
                 table_global_shards_metadata = sorted(
                     table_global_shards_metadata,
                     key=lambda shard: shard.shard_offsets[1],
                 )
 
             table_shard_metadata_to_optimizer_shard_metadata = {}
-
+            rolling_offset = 0
             for idx, table_shard_metadata in enumerate(table_global_shards_metadata):
                 offset = table_shard_metadata.shard_offsets[0]
-                # for column-wise sharding, we still create row-wise sharded metadata for optimizer
-                # manually create a row-wise offset
 
-                if sharding_dim == 1:
+                if is_grid_sharded:
+                    # we use a rolling offset to calculate the current offset for shard to account for uneven row wise case for our shards
+                    offset = rolling_offset
+                    rolling_offset += table_shard_metadata.shard_sizes[0]
+                elif sharding_dim == 1:
+                    # for column-wise sharding, we still create row-wise sharded metadata for optimizer
+                    # manually create a row-wise offset
                     offset = idx * table_shard_metadata.shard_sizes[0]
 
                 table_shard_metadata_to_optimizer_shard_metadata[
@@ -255,14 +259,22 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             )
             len_rw_shards = (
                 len(table_shard_metadata_to_optimizer_shard_metadata)
-                if sharding_dim == 1
+                if sharding_dim == 1 and not is_grid_sharded
+                else 1
+            )
+            # for grid sharding, the row dimension is replicated CW shard times
+            grid_shard_nodes = (
+                len(table_global_shards_metadata) // get_local_size()
+                if is_grid_sharded
                 else 1
             )
             rowwise_optimizer_st_metadata = ShardedTensorMetadata(
                 shards_metadata=list(
                     table_shard_metadata_to_optimizer_shard_metadata.values()
                 ),
-                size=torch.Size([table_global_metadata.size[0] * len_rw_shards]),
+                size=torch.Size(
+                    [table_global_metadata.size[0] * len_rw_shards * grid_shard_nodes]
+                ),
                 tensor_properties=tensor_properties,
             )
 
@@ -324,7 +336,6 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
 
         all_optimizer_states = emb_module.get_optimizer_state()
         optimizer_states_keys_by_table: Dict[str, List[torch.Tensor]] = {}
-
         for (
             table_config,
             optimizer_states,
@@ -408,6 +419,13 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 1 if table_config.local_cols != table_config.embedding_dim else 0
             )
 
+            is_grid_sharded: bool = (
+                True
+                if table_config.local_cols != table_config.embedding_dim
+                and table_config.local_rows != table_config.num_embeddings
+                else False
+            )
+
             if all(
                 opt_state is not None for opt_state in shard_params.optimizer_states
             ):
@@ -431,6 +449,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                             table_config.global_metadata,
                             shard_params.optimizer_states[0][momentum_idx - 1],
                             sharding_dim,
+                            is_grid_sharded,
                         )
                     else:
                         (

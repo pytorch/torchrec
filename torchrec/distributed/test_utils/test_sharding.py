@@ -369,6 +369,7 @@ def sharding_single_rank_test(
                     in {
                         ShardingType.TABLE_ROW_WISE.value,
                         ShardingType.TABLE_COLUMN_WISE.value,
+                        ShardingType.GRID_SHARD.value,
                     }
                     and ctx.device.type != "cpu"
                 ):
