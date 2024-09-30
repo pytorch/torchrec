@@ -662,3 +662,153 @@ class ModelParallelBase(ModelParallelTestShared):
             variable_batch_per_feature=True,
             has_weighted_tables=False,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ],
+        ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
+        pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_sharding_grid(
+        self,
+        sharder_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        pooling: PoolingType,
+    ) -> None:
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type,
+                    ShardingType.GRID_SHARD.value,
+                    kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=self.device,
+                ),
+            ],
+            world_size=4,
+            local_size=2,
+            backend=self.backend,
+            qcomms_config=qcomms_config,
+            constraints={
+                "table_0": ParameterConstraints(min_partition=8),
+                "table_1": ParameterConstraints(min_partition=12),
+                "table_2": ParameterConstraints(min_partition=16),
+                "table_3": ParameterConstraints(min_partition=20),
+                "table_4": ParameterConstraints(min_partition=8),
+                "table_5": ParameterConstraints(min_partition=12),
+                "weighted_table_0": ParameterConstraints(min_partition=8),
+                "weighted_table_1": ParameterConstraints(min_partition=12),
+            },
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            pooling=pooling,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 7,
+        "Not enough GPUs, this test requires at least eight GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ],
+        ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
+        pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_sharding_grid_8gpu(
+        self,
+        sharder_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        pooling: PoolingType,
+    ) -> None:
+        self._test_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type,
+                    ShardingType.GRID_SHARD.value,
+                    kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=self.device,
+                ),
+            ],
+            world_size=8,
+            local_size=2,
+            backend=self.backend,
+            qcomms_config=qcomms_config,
+            constraints={
+                "table_0": ParameterConstraints(min_partition=8),
+                "table_1": ParameterConstraints(min_partition=12),
+                "table_2": ParameterConstraints(min_partition=8),
+                "table_3": ParameterConstraints(min_partition=10),
+                "table_4": ParameterConstraints(min_partition=4),
+                "table_5": ParameterConstraints(min_partition=6),
+                "weighted_table_0": ParameterConstraints(min_partition=2),
+                "weighted_table_1": ParameterConstraints(min_partition=3),
+            },
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            pooling=pooling,
+        )

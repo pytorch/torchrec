@@ -47,6 +47,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
+from torchrec.distributed.sharding.grid_sharding import GridPooledEmbeddingSharding
 from torchrec.distributed.sharding.rw_sharding import RwPooledEmbeddingSharding
 from torchrec.distributed.sharding.tw_sharding import TwPooledEmbeddingSharding
 from torchrec.distributed.sharding.twcw_sharding import TwCwPooledEmbeddingSharding
@@ -191,6 +192,13 @@ def create_embedding_bag_sharding(
             env,
             device,
             permute_embeddings=permute_embeddings,
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
+    elif sharding_type == ShardingType.GRID_SHARD.value:
+        return GridPooledEmbeddingSharding(
+            sharding_infos,
+            env,
+            device,
             qcomm_codecs_registry=qcomm_codecs_registry,
         )
     else:

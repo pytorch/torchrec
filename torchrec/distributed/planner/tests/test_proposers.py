@@ -351,7 +351,8 @@ class TestProposers(unittest.TestCase):
         So the total number of pruned options will be:
             (num_sharding_types - 1) * 3 + 1 = 16
         """
-        num_pruned_options = (len(ShardingType) - 1) * 3 + 1
+        # NOTE - remove -2 from sharding type length once grid sharding in planner is added
+        num_pruned_options = (len(ShardingType) - 2) * 3 + 1
         self.grid_search_proposer.load(search_space)
         for (
             sharding_options
