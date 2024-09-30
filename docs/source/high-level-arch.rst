@@ -28,12 +28,11 @@ Model parallelism focusses on dividing the model into pieces and placing them on
 Embedding Tables
 ----------------
 
-For TorchRec to figure out what to recommend, we need to be able to represent entities and their relationships, this is what embeddings are used for. Embeddings are vectors of real numbers in a high dimensional space used to represent meaning in complex data like words, images, or users. An embedding table is an aggregation of multiple embeddings into one matrix. Most commonly, embedding tables are represented as a 2D matrix with dimensions (B, N).
+For TorchRec to figure out what to recommend, we need to be able to represent entities and their relationships, this is what embeddings are used for. Embeddings are vectors of real numbers in a high dimensional space used to represent meaning in complex data like words, images, or users. An embedding table is an aggregation of multiple embeddings into one matrix. Most commonly, embedding tables are represented as a 2D matrix with dimensions (B, N). 
+* *B* is the number of embeddings stored by the table 
+* *N* is number of dimensions per embedding.
 
-- B is the number of embeddings stored by the table
-- N is number of dimensions per embedding
-
-Each of B can also be referred to as an ID (representing information such as movie title, user, ad, and so on), when accessing an ID we are returned the corresponding embedding vector which has size of embedding dimension N.
+Each of *B* can also be referred to as an ID (representing information such as movie title, user, ad, and so on), when accessing an ID we are returned the corresponding embedding vector which has size of embedding dimension *N*.
 
 There is also the choice of pooling embeddings, often, we’re looking up multiple rows for a given feature which gives rise to the question of what we do with looking up multiple embedding vectors. Pooling is a common technique where we combine the embedding vectors, usually through sum or mean of the rows, to produce one embedding vector. This is the main difference between the PyTorch nn.Embedding and nn.EmbeddingBag.
 
