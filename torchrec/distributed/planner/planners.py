@@ -141,6 +141,28 @@ class EmbeddingShardingPlanner(ShardingPlanner):
     """
     Provides an optimized sharding plan for a given module with shardable parameters
     according to the provided sharders, topology, and constraints.
+
+    Args:
+        topology (Optional[Topology]): the topology of the current process group.
+        batch_size (Optional[int]): the batch size of the model.
+        enumerator (Optional[Enumerator]): the enumerator to use
+        storage_reservation (Optional[StorageReservation]): the storage reservation to use
+        proposer (Optional[Union[Proposer, List[Proposer]]]): the proposer(s) to use
+        partitioner (Optional[Partitioner]): the partitioner to use
+        performance_model (Optional[PerfModel]): the performance model to use
+        stats (Optional[Union[Stats, List[Stats]]]): the stats to use
+        constraints (Optional[Dict[str, ParameterConstraints]]): per table constraints
+            for sharding.
+        debug (bool): whether to print debug information.
+
+    Example::
+        ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device("meta"))
+        planner = EmbeddingShardingPlanner()
+        plan = planner.plan(
+            module=ebc,
+            sharders=[EmbeddingBagCollectionSharder()],
+        )
+
     """
 
     def __init__(
@@ -215,6 +237,14 @@ class EmbeddingShardingPlanner(ShardingPlanner):
     ) -> ShardingPlan:
         """
         Call self.plan(...) on rank 0 and broadcast
+
+        Args:
+            module (nn.Module): the module to shard.
+            sharders (Optional[List[ModuleSharder[nn.Module]]]): the sharders to use for sharding
+            pg (Optional[dist.ProcessGroup]): the process group to use for collective operations
+
+        Returns:
+            ShardingPlan: the sharding plan for the module.
         """
         if pg is None:
             assert dist.is_initialized(), (
@@ -239,6 +269,17 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         module: nn.Module,
         sharders: List[ModuleSharder[nn.Module]],
     ) -> ShardingPlan:
+        """
+        Provides an optimized sharding plan for a given module with shardable parameters
+        according to the provided sharders, topology, and constraints.
+
+        Args:
+            module (nn.Module): the module to shard.
+            sharders (List[ModuleSharder[nn.Module]]): the sharders to use for sharding.
+
+        Returns:
+            ShardingPlan: the sharding plan for the module.
+        """
         self._num_proposals = 0
         self._num_plans = 0
         start_time = perf_counter()
