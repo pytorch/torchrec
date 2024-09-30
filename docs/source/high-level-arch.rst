@@ -17,7 +17,7 @@ TorchRec's Parallelism Strategy: Model Parallelism
 
 Model parallelism focusses on dividing the model into pieces and placing them on to different GPUs. We can divide the model into pieces and place a few consecutive layers on each GPU and calculate their activations and gradients.The diagram below displays the difference between the data parallelism and model parallelism approaches:
 
-.. figure:: img/model_parallel.png
+.. figure:: _static/img/model_parallel.png
    :alt: Visualizing the difference of sharding a model in model parallel or data parallel approach
    :align: center
 
@@ -40,7 +40,7 @@ PyTorch represents embeddings through nn.Embedding and nn.EmbeddingBag. Building
 
 Here is a end to end flow of how embeddings are used in the training process for recommendation models:
 
-.. figure:: img/torchrec_forward.png
+.. figure:: _static/img/torchrec_forward.png
    :alt: Demonstrating the full training loop from embedding lookup to optimizer update in backward
    :align: center
 
