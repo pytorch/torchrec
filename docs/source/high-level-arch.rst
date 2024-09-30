@@ -49,7 +49,9 @@ Here is a end to end flow of how embeddings are used in the training process for
 
    In the diagram above, we show the general TorchRec end to end embedding lookup process. In the forward we do the embedding lookup and pooling, in the backward we compute the gradients of the output embedding lookups and apply them to the appropriate embedding table gradients and pass it into the optimizer. Note here, these gradients are grayed out since we don’t fully materialize these into memory and instead fuse them with the optimizer update. This results in a significant memory reduction which we detail later in the optimizer section.
 
-We recommend going through the TorchRec Concepts page as well to get a understanding of the fundamentals of how everything ties together end-to-end. It contains lots of useful information to get the most out of TorchRec.
+We recommend going through the `TorchRec Concepts`_ page as well to get a understanding of the fundamentals of how everything ties together end-to-end. It contains lots of useful information to get the most out of TorchRec.
+
+.. _TorchRec Concepts: concepts.html#concepts-section
 
 See also
 ------------------
