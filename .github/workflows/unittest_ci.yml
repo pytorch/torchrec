@@ -1,0 +1,62 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Unit Test CI
+
+on:
+  push:
+    branches:
+      - nightly
+  workflow_dispatch:
+
+jobs:
+  build_test:
+    strategy:
+      matrix:
+        os: [linux.g5.12xlarge.nvidia.gpu]
+        python-version: ['3.11']
+        python-tag: ["py311"]
+        cuda-tag: ["cu118"]
+    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    with:
+      runner: ${{ matrix.os }}
+      timeout: 30
+      script: |
+        ldd --version
+        conda create -y --name build_binary python=${{ matrix.python-version }}
+        conda info
+        python --version
+        conda run -n build_binary python --version
+        conda install -n build_binary \
+          --yes \
+          pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
+        conda run -n build_binary \
+          python -c "import torch.distributed"
+        conda run -n build_binary \
+          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu118
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        echo "fbgemm_gpu succeeded"
+        conda run -n build_binary \
+          pip install -r requirements.txt
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --python-tag=${{ matrix.python-tag }}
+        conda run -n build_binary \
+          python -c "import torchrec"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary \
+          python -c "import numpy"
+        echo "numpy succeeded"
+        conda install -n build_binary -y pytest
+        conda run -n build_binary \
+          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
+          --ignore=torchrec/distributed/tests/test_comm.py --ignore=torchrec/distributed/tests/test_infer_shardings.py \
+          --ignore=torchrec/distributed/tests/test_keyed_jagged_tensor_pool.py --ignore=torchrec/distributed/tests/test_pt2_multiprocess.py \
+          --ignore=torchrec/distributed/tests/test_pt2.py --ignore=torchrec/distributed/tests/test_quant_model_parallel.py \
+          --ignore=torchrec/distributed/tests/test_quant_pruning.py --ignore=torchrec/distributed/tests/test_quant_sequence_model_parallel.py \
+          --ignore-glob='torchrec/metrics/*' --ignore-glob='torchrec/distributed/tests/test_model_parallel_gloo*' \
+          --ignore-glob='torchrec/inference/inference_legacy/tests*' --ignore-glob='*test_model_parallel_nccl*' \
+          --ignore=torchrec/distributed/tests/test_cache_prefetch.py --ignore=torchrec/distributed/tests/test_fp_embeddingbag_single_rank.py \
+          --ignore=torchrec/distributed/tests/test_infer_utils.py --ignore=torchrec/distributed/tests/test_fx_jit.py --ignore-glob=**/test_utils/ \
+          --ignore-glob='*test_train_pipeline*'
