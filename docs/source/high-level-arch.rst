@@ -2,8 +2,6 @@
    :description: TorchRec High Level Architecture
    :keywords: recommendation systems, sharding, distributed training, torchrec, architecture
 
-.. _high-level-arch-section:
-
 ==================
 TorchRec High Level Architecture
 ==================
