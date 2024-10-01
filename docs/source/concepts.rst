@@ -6,7 +6,7 @@
  TorchRec Concepts
 ###################
 
-In it's end to end training loop, TorchRec comprises of the following
+In the end to end training loop, TorchRec comprises of the following
 main components,
 
 -  **Planner:** Take in configuration of embedding tables, environment
@@ -19,24 +19,61 @@ main components,
 -  **DistributedModelParallel:** Combines sharder, optimizer, and
    provides entry point into training the model in a distributed manner.
 
-In this section, you will learn about the high-level architecture of
-TorchRec, designed to optimize large-scale recommendation systems using
-PyTorch. You will learn how TorchRec employs model parallelism to
-distribute complex models across multiple GPUs, enhancing memory
-management and GPU utilization, as well as get introduced to TorchRec's
-base components and sharding strategies.
+In addition, TorchRec has specific input/output data types of its modules to efficiently represent sparse features,
 
-Modern deep learning models include an ever increasing number of
-parameters as well as the size of the dataset growing substantially.
-These models have gotten to a point where distributed deep learning is
-required to successfully train these models in sufficient time. In this
-paradigm, two main approaches have been developed: data parallelism and
-model parallelism. TorchRec focuses on the latter for sharding of
-embedding tables.
+-  JaggedTensor: a wrapper around the lengths/offsets and values ``torch.Tensor`` for a singular sparse feature
+-  KeyedJaggedTensor: efficiently represent multiple sparse features, can think of it as multiple ``JaggedTensor``s
+-  KeyedTensor: a wrapper around ``torch.Tensor`` that allows access to tensor values through keys
 
-In effect, TorchRec provides parallelism primitives allowing hybrid data
-parallelism/model parallelism, embedding table sharding, planner to
-generate sharding plans, pipelined training, and more.
+************
+JaggedTensor
+************
+
+A ``JaggedTensor`` represents a sparse feature through lengths, values, and offsets. It’s denoted as jagged as it helps efficiently represent data with variable-length sequences. A canonical ``torch.Tensor`` each sequence has the same length but in real world data each sequence can have varying lengths. A ``JaggedTensor`` allows representation of this data without padding making it highly efficient.
+
+Key Components:
+Lengths: A list of integers representing the number of elements for each entity.
+Offsets: A list of integers representing the starting index of each sequence in the flattened values tensor. These provide an alternative to lengths.
+Values: A 1D tensor containing the actual values for each entity, stored contiguously.
+
+The use of offsets provides the same information as lengths but in a slightly different form. While lengths tell you how many interactions each user had, offsets tell you where each user’s interactions begin.
+
+Here is a simple example demonstrating how each of the components would look like
+
+.. code-block:: python
+   # User interactions: 
+   # - User 1 interacted with 2 items 
+   # - User 2 interacted with 3 items 
+   # - User 3 interacted with 1 item 
+   lengths = [2, 3, 1] 
+   offsets = [0, 2, 5] # Starting index of each user's interactions
+   values = torch.Tensor([101, 102, 201, 202, 203, 301]) # Item IDs interactedwith 
+   jt = JaggedTensor(lengths=lengths, values=values) 
+   # OR
+   jt = JaggedTensor(offsets=offsets, values=values) 
+
+*****************
+KeyedJaggedTensor
+*****************
+
+A ``KeyedJaggedTensor`` extends the functionality of ``JaggedTensor`` by introducing keys (which are typically feature names) to label different groups of features (e.g., user features and item features). This is the data type used in ``forward`` of ``EmbeddingBagCollection`` and ``EmbeddingCollection`` as they are used to represent multiple features in a table. 
+
+A ``KeyedJaggedTensor`` has an implied batch size which is the number of features divided by length of ``lengths`` tensor. The example below has a batch size of 2. Just like a ``JaggedTensor`` the ``offsets`` and ``lengths`` work the same way. You can also access the ``lengths``, ``offsets``, and ``values`` of a feature by accessing the key from the ``KeyedJaggedTensor``.
+
+.. code-block:: python
+   keys = ["user_features", "item_features"]
+   # Lengths of interactions: 
+   # - User features: 2 users, with 2 and 3 interactions respectively 
+   # - Item features: 2 items, with 1 and 2 interactions respectively 
+   lengths = [2, 3, 1, 2] 
+   values = torch.Tensor([11, 12, 21, 22, 23, 101, 102, 201]) 
+   # Create a KeyedJaggedTensor 
+   kjt = KeyedJaggedTensor(keys=keys, lengths=lengths, values=values) 
+   # Access the features by key 
+   print(kjt["user_features"]) 
+   # Outputs user features 
+   print(kjt["item_features"]) 
+
 
 *********
  Planner
@@ -56,12 +93,6 @@ planner,
 To help with accurate consideration of these factors, the Planner can
 take in data about the embedding tables, constraints, hardware
 information, and topology to help in generating an optimal plan.
-
-*******************
- KeyedJaggedTensor
-*******************
-
-[ADD INFO HERE] - VISUALIZATIONS AS WELL
 
 *****************************
  Sharding of EmbeddingTables
@@ -115,15 +146,15 @@ and embedding lookups. TorchRec handles this in three main stages, we’ll
 refer to this as the sharded embedding module forward that is used in
 training and inference of a TorchRec model,
 
--  Feature All to All/Input distribution (input_dist) * Communicate
-   input data (in the form of a KeyedJaggedTensor) to the appropriate
+-  Feature All to All/Input distribution (input_dist) 
+   - Communicate input data (in the form of a KeyedJaggedTensor) to the appropriate
    device containing relevant embedding table shard
 
 -  Embedding Lookup * Lookup embeddings with new input data formed after
    feature all to all exchange
 
--  Embedding All to All/Output Distribution (output_dist) * Communicate
-   embedding lookup data back to the appropriate device that asked for
+-  Embedding All to All/Output Distribution (output_dist) 
+   - Communicate embedding lookup data back to the appropriate device that asked for
    it (in accordance with the input data the device received)
 
 -  The backward pass does the same but in reverse order.
@@ -134,20 +165,23 @@ We show this below in the diagram,
    :alt: Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module
    :align: center
 
+   *Figure 2: Visualizing the forward pass including the ``input_dist``, ``lookup``, and ``output_dist`` of a sharded TorchRec module*
+
 **************************
  DistributedModelParallel
 **************************
 
 All of the above culminates into the main entrypoint that TorchRec uses
 to shard and integrate the plan. At a high level,
-DistributedModelParallel does, + Initialize environment by setting up
-process groups and assigning device type + Uses default shaders if no
-shaders are provided, default includes EmbeddingBagCollectionSharder +
-Takes in provided sharding plan, if none provided it generates one +
+``DistributedModelParallel`` does, * Initialize environment by setting
+up process groups and assigning device type * Uses default shaders if no
+shaders are provided, default includes ``EmbeddingBagCollectionSharder``
+* Takes in provided sharding plan, if none provided it generates one *
 Creates sharded version of modules and replaces the original modules
-with them, such as EmbeddingCollection to ShardedEmbeddingCollection +
-By default, wraps the DistributedModelParallel with
-DistributedDataParallel to make the module both model and data parallel
+with them, such as ``EmbeddingCollection`` to
+``ShardedEmbeddingCollection`` * By default, wraps the
+``DistributedModelParallel`` with ``DistributedDataParallel`` to make
+the module both model and data parallel
 
 ***********
  Optimizer
@@ -162,7 +196,7 @@ assigning distinct optimizers to distinct model parameters.
    :alt: Visualizing fusing of optimizer in backward to update sparse embedding table
    :align: center
 
-   Figure 3: Fusing embedding backward with sparse optimizer
+   *Figure 3: Fusing embedding backward with sparse optimizer*
 
 ***********
  Inference
@@ -189,5 +223,5 @@ in C++)
  See Also
 **********
 
--  `PyTorch docs on DistributedDataParallel
-   <https://pytorch.org/tutorials/beginner/ddp_series_theory.html>`_
+-  `TorchRec Interactive Notebook using the concepts
+   <https://github.com/pytorch/torchrec/blob/main/TorchRec_Interactive_Tutorial_Notebook_OSS_version.ipynb>`_
