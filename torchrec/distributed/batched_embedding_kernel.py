@@ -154,6 +154,7 @@ class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
         config: GroupedEmbeddingConfig,
         emb_module: SSDTableBatchedEmbeddingBags,
         pg: Optional[dist.ProcessGroup] = None,
+        optimizer_key: Optional[str] = None,
     ) -> None:
         """
         Fused optimizer for SSD TBE. Right now it only supports tuning learning
@@ -161,6 +162,7 @@ class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
         """
         self._emb_module: SSDTableBatchedEmbeddingBags = emb_module
         self._pg = pg
+        self._optimizer_key: str = optimizer_key if optimizer_key else ""
 
         # TODO: support optimizer states checkpointing once FBGEMM support
         # split_optimizer_states API
@@ -185,6 +187,10 @@ class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
         # pyre-ignore [16]
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
+    @property
+    def key(self) -> str:
+        return self._optimizer_key
+
 
 class EmbeddingFusedOptimizer(FusedOptimizer):
     def __init__(  # noqa C901
@@ -194,6 +200,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         pg: Optional[dist.ProcessGroup] = None,
         create_for_table: Optional[str] = None,
         param_weight_for_table: Optional[nn.Parameter] = None,
+        optimizer_key: Optional[str] = None,
     ) -> None:
         """
         Implementation of a FusedOptimizer. Designed as a base class Embedding kernels
@@ -204,6 +211,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         """
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = emb_module
         self._pg = pg
+        self._optimizer_key: str = optimizer_key if optimizer_key else ""
 
         @dataclass
         class ShardParams:
@@ -515,6 +523,10 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
 
     def set_optimizer_step(self, step: int) -> None:
         self._emb_module.set_optimizer_step(step)
+
+    @property
+    def key(self) -> str:
+        return self._optimizer_key
 
 
 def _gen_named_parameters_by_table_ssd(
@@ -876,6 +888,11 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
+        optimizer_key = (
+            fused_params.pop("_batch_key", None)
+            if "_batch_key" in fused_params
+            else None
+        )
 
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
@@ -894,6 +911,7 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
             config,
             self._emb_module,
             pg,
+            optimizer_key=optimizer_key,
         )
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
             _gen_named_parameters_by_table_fused(
@@ -1312,6 +1330,11 @@ class BatchedFusedEmbeddingBag(
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
+        optimizer_key = (
+            fused_params.pop("_batch_key", None)
+            if "_batch_key" in fused_params
+            else None
+        )
 
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
@@ -1327,9 +1350,12 @@ class BatchedFusedEmbeddingBag(
             )
         )
         self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
-            config,
-            self._emb_module,
-            pg,
+            config=config,
+            emb_module=self._emb_module,
+            pg=pg,
+            create_for_table=None,
+            param_weight_for_table=None,
+            optimizer_key=optimizer_key,
         )
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
             _gen_named_parameters_by_table_fused(

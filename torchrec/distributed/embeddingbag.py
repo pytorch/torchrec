@@ -684,7 +684,10 @@ class ShardedEmbeddingBagCollection(
                         # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`
                         params["embedding_bags." + param_key] = weight
                     tbe_module.fused_optimizer.params = params
-                    optims.append(("", tbe_module.fused_optimizer))
+                    optims.append(
+                        # pyre-fixme[16]: `KeyedOptimizer` has no attribute `key`.
+                        (tbe_module.fused_optimizer.key, tbe_module.fused_optimizer)
+                    )
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
 
         for i, (sharding, lookup) in enumerate(

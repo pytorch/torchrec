@@ -564,7 +564,10 @@ class ShardedEmbeddingCollection(
                     for param_key, weight in m.fused_optimizer.params.items():
                         params["embeddings." + param_key] = weight
                     m.fused_optimizer.params = params
-                    optims.append(("", m.fused_optimizer))
+                    optims.append(
+                        # pyre-fixme[16]: `KeyedOptimizer` has no attribute `key`.
+                        (m.fused_optimizer.key, m.fused_optimizer)
+                    )
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
         self._embedding_dim: int = module.embedding_dim()
         self._embedding_names_per_sharding: List[List[str]] = []

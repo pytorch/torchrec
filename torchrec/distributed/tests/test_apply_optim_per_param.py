@@ -15,6 +15,10 @@ import hypothesis.strategies as st
 import torch
 import torch.nn as nn
 from hypothesis import given, settings, Verbosity
+
+from torch.distributed.optim import (
+    _apply_optimizer_in_backward as apply_optimizer_in_backward,
+)
 from torchrec import distributed as trec_dist, EmbeddingConfig
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
@@ -43,7 +47,7 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
 )
-from torchrec.optim.apply_optimizer_in_backward import apply_optimizer_in_backward
+from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
@@ -79,13 +83,13 @@ def _test_sharding(
         )
 
         apply_optimizer_in_backward(
-            torch.optim.SGD,
+            RowWiseAdagrad,
             model.embedding_bags["table_0"].parameters(),
             {"lr": 1.0},
         )
 
         apply_optimizer_in_backward(
-            torch.optim.SGD,
+            RowWiseAdagrad,
             model.embedding_bags["table_1"].parameters(),
             {"lr": 4.0},
         )
@@ -102,6 +106,8 @@ def _test_sharding(
             sharders=[sharder],
             device=ctx.device,
         )
+
+        assert sharded_model.module.fused_optimizer.optimizers[0][1].key == ""
 
         unsharded_model.load_state_dict(copy.deepcopy(initial_state_dict))
         copy_state_dict(sharded_model.state_dict(), copy.deepcopy(initial_state_dict))
@@ -309,13 +315,13 @@ def _test_sharding_ec(
         )
 
         apply_optimizer_in_backward(
-            torch.optim.SGD,
+            RowWiseAdagrad,
             model.embeddings["table_0"].parameters(),
             {"lr": 1.0},
         )
 
         apply_optimizer_in_backward(
-            torch.optim.SGD,
+            RowWiseAdagrad,
             model.embeddings["table_1"].parameters(),
             {"lr": 4.0},
         )
@@ -332,6 +338,8 @@ def _test_sharding_ec(
             sharders=[sharder],
             device=ctx.device,
         )
+
+        assert sharded_model.module.fused_optimizer.optimizers[0][1].key == ""
 
         unsharded_model.load_state_dict(copy.deepcopy(initial_state_dict))
         copy_state_dict(sharded_model.state_dict(), copy.deepcopy(initial_state_dict))
