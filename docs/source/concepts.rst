@@ -303,8 +303,9 @@ inference ready:
 -  Sharding embeddings for distributed inference
 -  Compiling the model to TorchScript (compatible in C++)
 
+*********
 See Also
-========
+*********
 
 -  `TorchRec Interactive Notebook using the concepts
    <https://github.com/pytorch/torchrec/blob/main/TorchRec_Interactive_Tutorial_Notebook_OSS_version.ipynb>`_
