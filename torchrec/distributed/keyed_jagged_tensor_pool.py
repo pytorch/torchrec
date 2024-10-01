@@ -683,6 +683,7 @@ class KeyedJaggedTensorPoolSharder(ModuleSharder[KeyedJaggedTensorPool]):
         plan: ObjectPoolShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> Union[ShardedKeyedJaggedTensorPool, ShardedInferenceKeyedJaggedTensorPool]:
         if plan.inference:
             return ShardedInferenceKeyedJaggedTensorPool(

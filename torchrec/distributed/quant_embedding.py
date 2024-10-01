@@ -876,6 +876,7 @@ class QuantEmbeddingCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: Union[ShardingEnv, Dict[str, ShardingEnv]],
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantEmbeddingCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(

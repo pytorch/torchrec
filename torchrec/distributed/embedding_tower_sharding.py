@@ -839,6 +839,7 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingTower:
         kjt_features, wkjt_features = self.embedding_feature_names(module)
 
@@ -939,6 +940,7 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingTowerCollection:
 
         return ShardedEmbeddingTowerCollection(

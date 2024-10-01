@@ -480,6 +480,7 @@ class TensorPoolSharder(ModuleSharder[TensorPool]):
         plan: ObjectPoolShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> Union[ShardedTensorPool, ShardedInferenceTensorPool]:
         if plan.inference:
             return ShardedInferenceTensorPool(
