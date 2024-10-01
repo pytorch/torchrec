@@ -185,18 +185,23 @@ and embedding lookups. TorchRec handles this in three main stages, we’ll
 refer to this as the sharded embedding module forward that is used in
 training and inference of a TorchRec model,
 
--  Feature All to All/Input distribution (input_dist) - Communicate
-   input data (in the form of a ``KeyedJaggedTensor``) to the
-   appropriate device containing relevant embedding table shard
+-  Feature All to All/Input distribution (input_dist)
 
--  Embedding Lookup - Lookup embeddings with new input data formed after
-   feature all to all exchange
+   -  Communicate input data (in the form of a ``KeyedJaggedTensor``) to
+      the appropriate device containing relevant embedding table shard
 
--  Embedding All to All/Output Distribution (output_dist) - Communicate
-   embedding lookup data back to the appropriate device that asked for
-   it (in accordance with the input data the device received)
+-  Embedding Lookup
 
--  The backward pass does the same but in reverse order.
+   -  Lookup embeddings with new input data formed after feature all to
+      all exchange
+
+-  Embedding All to All/Output Distribution (output_dist)
+
+   -  Communicate embedding lookup data back to the appropriate device
+      that asked for it (in accordance with the input data the device
+      received)
+
+-  The backward pass does the same operations but in reverse order.
 
 We show this below in the diagram,
 
@@ -212,15 +217,23 @@ We show this below in the diagram,
 
 All of the above culminates into the main entrypoint that TorchRec uses
 to shard and integrate the plan. At a high level,
-``DistributedModelParallel`` does, * Initialize environment by setting
-up process groups and assigning device type * Uses default shaders if no
-shaders are provided, default includes ``EmbeddingBagCollectionSharder``
-* Takes in provided sharding plan, if none provided it generates one *
-Creates sharded version of modules and replaces the original modules
-with them, such as ``EmbeddingCollection`` to
-``ShardedEmbeddingCollection`` * By default, wraps the
-``DistributedModelParallel`` with ``DistributedDataParallel`` to make
-the module both model and data parallel
+``DistributedModelParallel`` does,
+
+-  Initialize environment by setting up process groups and assigning
+   device type
+
+-  Uses default shaders if no shaders are provided, default includes
+   ``EmbeddingBagCollectionSharder``
+
+-  Takes in provided sharding plan, if none provided it generates one
+
+-  Creates sharded version of modules and replaces the original modules
+   with them, such as ``EmbeddingCollection`` to
+   ``ShardedEmbeddingCollection``
+
+-  By default, wraps the ``DistributedModelParallel`` with
+   ``DistributedDataParallel`` to make the module both model and data
+   parallel
 
 ***********
  Optimizer
