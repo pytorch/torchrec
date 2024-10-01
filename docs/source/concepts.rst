@@ -21,14 +21,13 @@ efficiently represent sparse features,
 -  **KeyedTensor:** a wrapper around ``torch.Tensor`` that allows access
    to tensor values through keys
 
-With the goal of high performance and efficiency, canonical
+With the goal of high performance and efficiency, the canonical
 ``torch.Tensor`` is highly inefficient for representing sparse data.
 TorchRec introduces these new data types because they provide efficient
-storage and representation of sparse input data. They are particularly
-effective in recommender systems as they heavily deal with sparse data.
-As you will see later on, the ``KeyedJaggedTensor`` makes communication
-of input data in a distributed environment very efficient leading to one
-of the key performance advantages that TorchRec provides.
+storage and representation of sparse input data. As you will see later
+on, the ``KeyedJaggedTensor`` makes communication of input data in a
+distributed environment very efficient leading to one of the key
+performance advantages that TorchRec provides.
 
 In the end to end training loop, TorchRec comprises of the following
 main components,
@@ -54,18 +53,20 @@ sequence has the same length but in real world data each sequence can
 have varying lengths. A ``JaggedTensor`` allows representation of this
 data without padding making it highly efficient.
 
-Key Components: Lengths: A list of integers representing the number of
-elements for each entity. Offsets: A list of integers representing the
-starting index of each sequence in the flattened values tensor. These
-provide an alternative to lengths. Values: A 1D tensor containing the
-actual values for each entity, stored contiguously.
+Key Components:
 
-The use of offsets provides the same information as lengths but in a
-slightly different form. While lengths tell you how many interactions
-each user had, offsets tell you where each user’s interactions begin.
+-  ``Lengths``: A list of integers representing the number of elements
+   for each entity.
+
+-  ``Offsets``: A list of integers representing the starting index of
+   each sequence in the flattened values tensor. These provide an
+   alternative to lengths.
+
+-  ``Values``: A 1D tensor containing the actual values for each entity,
+   stored contiguously.
 
 Here is a simple example demonstrating how each of the components would
-look like
+look like,
 
 .. code:: python
 
@@ -75,7 +76,7 @@ look like
    # - User 3 interacted with 1 item
    lengths = [2, 3, 1]
    offsets = [0, 2, 5]  # Starting index of each user's interactions
-   values = torch.Tensor([101, 102, 201, 202, 203, 301])  # Item IDs interactedwith
+   values = torch.Tensor([101, 102, 201, 202, 203, 301])  # Item IDs interacted with
    jt = JaggedTensor(lengths=lengths, values=values)
    # OR
    jt = JaggedTensor(offsets=offsets, values=values)
@@ -154,22 +155,38 @@ to as a shard.
 
    *Figure 1: Visualizing the placement of table shards under different sharding schemes offered in TorchRec*
 
-There is also a combination of these strategies such as table-wise
-row-wise and table-wise column-wise. Where we place a table on a node
-and then column wise or row wise shard it within the node.
+Here are all the sharding types available in TorchRec today:
+
+-  Table-wise (TW): as the name suggests, embedding table is kept as a
+   whole piece and placed on one rank
+-  Column-wise (CW): the table is split along the ``emb_dim`` dimension
+   (e.g ``emb_dim=256`` is split into 4 shards: ``[64, 64, 64, 64]``)
+-  Row-wise (RW): the table is split along the ``hash_size`` dimension,
+   usually split evenly among all the ranks
+-  Table-wise-row-wise (TWRW): table is placed on one host, split
+   row-wise among the ranks on that host
+-  Grid-shard (GS): a table is CW sharded and each CW shard is placed
+   TWRW on a node
+-  Data parallel (DP): each rank keeps a copy of the table
 
 Once sharded, the modules are converted to sharded versions of
-themselves, known as ``ShardedEmbeddingBag`` and
+themselves, known as ``ShardedEmbeddingCollection`` and
 ``ShardedEmbeddingBagCollection`` in TorchRec. These modules handle the
 communication of input data, embedding lookups, and gradients.
 
-There is a cost associated with sharding, which largely determines which
-sharding strategy is best for a model.
+****************************************************
+ Distributed Training with TorchRec Sharded Modules
+****************************************************
 
-Without sharding, where each GPU keeps a copy of the embedding table,
-the main cost is computation in which each GPU looks up the embedding
-vectors in its memory in the forward pass and updates the gradients in
-the backward.
+With many sharding strategies available, how do we determine which one
+to use? There is a cost associated with each sharding scheme, which in
+conjunction with model size and number of GPUs determines which sharding
+strategy is best for a model.
+
+Without sharding, where each GPU keeps a copy of the embedding table
+(DP), the main cost is computation in which each GPU looks up the
+embedding vectors in its memory in the forward pass and updates the
+gradients in the backward.
 
 With sharding, there is an added communication cost: each GPU needs to
 ask the other GPUs for embedding vector lookup and communicate the
@@ -182,9 +199,9 @@ back to the target GPU and the shards are updated accordingly with the
 optimizer.
 
 As described above, sharding requires us to communicate the input data
-and embedding lookups. TorchRec handles this in three main stages, we’ll
-refer to this as the sharded embedding module forward that is used in
-training and inference of a TorchRec model,
+and embedding lookups. TorchRec handles this in three main stages, we
+will refer to this as the sharded embedding module forward that is used
+in training and inference of a TorchRec model,
 
 -  Feature All to All/Input distribution (``input_dist``)
 
@@ -210,7 +227,7 @@ We show this below in the diagram,
    :alt: Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module
    :align: center
 
-   *Figure 2: Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module*
+   *Figure 2: Forward pass of a table wise sharded table including the input_dist, lookup, and output_dist of a sharded TorchRec module*
 
 **************************
  DistributedModelParallel
