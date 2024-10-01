@@ -19,11 +19,11 @@
     --sd-color-card-text: inherit;
     --sd-color-card-header: transparent;
     --sd-color-card-footer: transparent;
-    --sd-color-tabs-label-active: hsla(231, 99%, 66%, 1);
-    --sd-color-tabs-label-hover: hsla(231, 99%, 66%, 1);
-    --sd-color-tabs-label-inactive: hsl(0, 0%, 66%);
-    --sd-color-tabs-underline-active: hsla(231, 99%, 66%, 1);
-    --sd-color-tabs-underline-hover: rgba(178, 206, 245, 0.62);
+    --sd-color-tabs-label-active: #ee4c2c;
+    --sd-color-tabs-label-hover: #ee4c2c;
+    --sd-color-tabs-label-inactive: #6c6c6d;
+    --sd-color-tabs-underline-active: #ee4c2c;
+    --sd-color-tabs-underline-hover: #fabdbd;
     --sd-color-tabs-underline-inactive: transparent;
     --sd-color-tabs-overline: rgb(222, 222, 222);
     --sd-color-tabs-underline: rgb(222, 222, 222);
