@@ -6,10 +6,13 @@
 <!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  
+  <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+<meta content="TorchRec High Level Architecture" name="description" />
+<meta content="recommendation systems, sharding, distributed training, torchrec, architecture" name="keywords" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; TorchRec 1.1.0 documentation</title>
+  <title>TorchRec High Level Architecture &mdash; TorchRec 1.1.0 documentation</title>
   
 
   
@@ -33,7 +36,9 @@
   <link rel="stylesheet" href="_static/sphinx-design.5ea377869091fd0449014c60fc090103.min.css" type="text/css" />
   <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="#" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Setting up TorchRec" href="setup-torchrec.html" />
+    <link rel="prev" title="TorchRec Overview" href="overview.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -280,7 +285,7 @@
 
 
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search Docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -297,9 +302,9 @@
             
             
               <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="overview.html">TorchRec Overview</a></li>
-<li class="toctree-l1"><a class="reference internal" href="high-level-arch.html">TorchRec High Level Architecture</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">TorchRec High Level Architecture</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul>
@@ -360,12 +365,14 @@
       </li>
 
         
-      <li>Search</li>
+      <li>TorchRec High Level Architecture</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
+            <a href="_sources/high-level-arch.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+          
         
       </li>
     
@@ -394,24 +401,138 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <section id="torchrec-high-level-architecture">
+<h1>TorchRec High Level Architecture<a class="headerlink" href="#torchrec-high-level-architecture" title="Permalink to this heading">¶</a></h1>
+<p>In this section, you will learn about the high-level architecture of
+TorchRec, designed to optimize large-scale recommendation systems using
+PyTorch. You will learn how TorchRec employs model parallelism to
+distribute complex models across multiple GPUs, enhancing memory
+management and GPU utilization, as well as get introduced to TorchRec’s
+base components and sharding strategies.</p>
+<p>In effect, TorchRec provides parallelism primitives allowing hybrid data
+parallelism/model parallelism, embedding table sharding, planner to
+generate sharding plans, pipelined training, and more.</p>
+<section id="torchrec-s-parallelism-strategy-model-parallelism">
+<h2>TorchRec’s Parallelism Strategy: Model Parallelism<a class="headerlink" href="#torchrec-s-parallelism-strategy-model-parallelism" title="Permalink to this heading">¶</a></h2>
+<p>As modern deep learning models have scaled, distributed deep learning
+has become required to successfully train models in sufficient time. In
+this paradigm, two main approaches have been developed: data parallelism
+and model parallelism. TorchRec focuses on the latter for the sharding
+of embedding tables.</p>
+<figure class="align-center" id="id1">
+<img alt="Visualizing the difference of sharding a model in model parallel or data parallel approach" src="_images/model_parallel.png" />
+<figcaption>
+<p><span class="caption-text"><em>Figure 1. Comparison between model parallelism and data parallelism approach</em></span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>As you can see in the diagram above, model parallelism and data
+parallelism are two approaches to distribute workloads across multiple
+GPUs,</p>
+<ul class="simple">
+<li><p><strong>Model Parallelism</strong></p>
+<ul>
+<li><p>Divide the model into segments and distribute them across GPUs</p></li>
+<li><p>Each segment processes data independently</p></li>
+<li><p>Suitable for large models that don’t fit on a single GPU</p></li>
+</ul>
+</li>
+<li><p><strong>Data Parallel</strong></p>
+<ul>
+<li><p>Distribute the copies of entire model on each GPU</p></li>
+<li><p>Each GPU processes a subset of the data and contributes to the
+overall computation</p></li>
+<li><p>Effecive for models that fit on single GPU but need to handle
+large datasets</p></li>
+</ul>
+</li>
+<li><p><strong>Benefits of Model Parallelism</strong></p>
+<ul>
+<li><p>Optimizes memory usage and computational efficiency for large
+models</p></li>
+<li><p>Particularly beneficial for recommendation systems with large
+embedding tables</p></li>
+<li><p>Enables parallel computation of embeddings in DLRM-type
+architectures</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="embedding-tables">
+<h2>Embedding Tables<a class="headerlink" href="#embedding-tables" title="Permalink to this heading">¶</a></h2>
+<p>For TorchRec to figure out what to recommend, we need to be able to
+represent entities and their relationships, this is what embeddings are
+used for. Embeddings are vectors of real numbers in a high dimensional
+space used to represent meaning in complex data like words, images, or
+users. An embedding table is an aggregation of multiple embeddings into
+one matrix. Most commonly, embedding tables are represented as a 2D
+matrix with dimensions (B, N).</p>
+<ul class="simple">
+<li><p><em>B</em> is the number of embeddings stored by the table</p></li>
+<li><p><em>N</em> is number of dimensions per embedding.</p></li>
+</ul>
+<p>Each of <em>B</em> can also be referred to as an ID (representing information
+such as movie title, user, ad, and so on), when accessing an ID we are
+returned the corresponding embedding vector which has size of embedding
+dimension <em>N</em>.</p>
+<p>There is also the choice of pooling embeddings, often, we’re looking up
+multiple rows for a given feature which gives rise to the question of
+what we do with looking up multiple embedding vectors. Pooling is a
+common technique where we combine the embedding vectors, usually through
+sum or mean of the rows, to produce one embedding vector. This is the
+main difference between the PyTorch <code class="docutils literal notranslate"><span class="pre">nn.Embedding</span></code> and
+<code class="docutils literal notranslate"><span class="pre">nn.EmbeddingBag</span></code>.</p>
+<p>PyTorch represents embeddings through <code class="docutils literal notranslate"><span class="pre">nn.Embedding</span></code> and
+<code class="docutils literal notranslate"><span class="pre">nn.EmbeddingBag</span></code>. Building on these modules, TorchRec introduces
+<code class="docutils literal notranslate"><span class="pre">EmbeddingCollection</span></code> and <code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code>, which are
+collections of the corresponding PyTorch modules. This extension enables
+TorchRec to batch tables and perform lookups on multiple embeddings in a
+single kernel call, improving efficiency.</p>
+<p>Here is the end-to-end flow diagram that describes how embeddings are
+used in the training process for recommendation models:</p>
+<figure class="align-center" id="id2">
+<img alt="Demonstrating the full training loop from embedding lookup to optimizer update in backward" src="_images/full_training_loop.png" />
+<figcaption>
+<p><span class="caption-text"><em>Figure 2. TorchRec End-to-end Embedding Flow</em></span><a class="headerlink" href="#id2" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>In the diagram above, we show the general TorchRec end to end embedding
+lookup process,</p>
+<ul class="simple">
+<li><p>In the forward pass we do the embedding lookup and pooling</p></li>
+<li><p>In the backward pass we compute the gradients of the output lookups
+and pass them into the optimizer to update the embedding tables</p></li>
+</ul>
+<p><strong>Note here, the embeddings gradients are grayed out since we do not
+fully materialize these into memory and instead fuse them with the
+optimizer update. This results in a significant memory reduction which
+we detail later in the optimizer concepts section.</strong></p>
+<p>We recommend going through the TorchRec Concepts page to get a
+understanding of the fundamentals of how everything ties together
+end-to-end. It contains lots of useful information to get the most out
+of TorchRec.</p>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Permalink to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://pytorch.org/tutorials/beginner/ddp_series_theory.html">What is Distributed Data Parallel (DDP) Tutorial</a></p></li>
+</ul>
+</section>
+</section>
 
-  
-  <div id="search-results">
-  
-  </div>
 
              </article>
              
             </div>
             <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="setup-torchrec.html" class="btn btn-neutral float-right" title="Setting up TorchRec" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="overview.html" class="btn btn-neutral" title="TorchRec Overview" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
   
 
   
@@ -440,7 +561,15 @@
         <div class="pytorch-content-right" id="pytorch-content-right">
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
-              
+              <ul>
+<li><a class="reference internal" href="#">TorchRec High Level Architecture</a><ul>
+<li><a class="reference internal" href="#torchrec-s-parallelism-strategy-model-parallelism">TorchRec’s Parallelism Strategy: Model Parallelism</a></li>
+<li><a class="reference internal" href="#embedding-tables">Embedding Tables</a></li>
+<li><a class="reference internal" href="#see-also">See also</a></li>
+</ul>
+</li>
+</ul>
+
             </div>
           </div>
         </div>
@@ -462,8 +591,6 @@
          <script src="_static/clipboard.min.js"></script>
          <script src="_static/copybutton.js"></script>
          <script src="_static/design-tabs.js"></script>
-         <script src="_static/searchtools.js"></script>
-         <script src="_static/language_data.js"></script>
      
 
   
@@ -478,14 +605,11 @@
           SphinxRtdTheme.Navigation.enable(true);
       });
   </script>
-  <script type="text/javascript" src="searchindex.js" defer></script>
-  
  
 
 <script type="text/javascript">
   var collapsedSections = ['Introduction', 'Getting Started', 'All API References']
 </script>
-
 
 
 
