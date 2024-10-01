@@ -41,7 +41,7 @@ GPUs,
 
    -  Divide the model into segments and distribute them across GPUs
    -  Each segment processes data independently
-   -  Suitable for lage models that don't fit on a single GPU
+   -  Suitable for large models that don't fit on a single GPU
 
 -  **Data Parallel**
 
