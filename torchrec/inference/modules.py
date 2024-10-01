@@ -526,11 +526,14 @@ def shard_quant_model(
 
     if constraints is None:
         table_fqns = []
-
+        sharders = sharders if sharders else DEFAULT_SHARDERS
+        module_types = [sharder.module_type for sharder in sharders]
         for module in model.modules():
-            if isinstance(module, QuantEmbeddingBagCollection):
-                for table in module.embedding_bags:
-                    table_fqns.append(table)
+            if type(module) in module_types:
+                # TODO: handle other cases/reduce hardcoding
+                if hasattr(module, "embedding_bags"):
+                    for table in module.embedding_bags:
+                        table_fqns.append(table)
 
         # Default table wise constraints
         constraints = {}
