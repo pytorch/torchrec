@@ -13,14 +13,6 @@ distribute complex models across multiple GPUs, enhancing memory
 management and GPU utilization, as well as get introduced to TorchRec's
 base components and sharding strategies.
 
-Modern deep learning models include an ever increasing number of
-parameters as well as the size of the dataset growing substantially.
-These models have gotten to a point where distributed deep learning is
-required to successfully train these models in sufficient time. In this
-paradigm, two main approaches have been developed: data parallelism and
-model parallelism. TorchRec focuses on the latter for sharding of
-embedding tables.
-
 In effect, TorchRec provides parallelism primitives allowing hybrid data
 parallelism/model parallelism, embedding table sharding, planner to
 generate sharding plans, pipelined training, and more.
@@ -29,11 +21,11 @@ generate sharding plans, pipelined training, and more.
  TorchRec's Parallelism Strategy: Model Parallelism
 ****************************************************
 
-Model parallelism focusses on dividing the model into pieces and placing
-them on to different GPUs. We can divide the model into pieces and place
-a few consecutive layers on each GPU and calculate their activations and
-gradients. The diagram below displays the difference between the data
-parallelism and model parallelism approaches:
+As modern deep learning models have scaled, distributed deep learning
+has become required to successfully train models in sufficient time. In
+this paradigm, two main approaches have been developed: data parallelism
+and model parallelism. TorchRec focuses on the latter for the sharding
+of embedding tables.
 
 .. figure:: _static/img/model_parallel.png
    :alt: Visualizing the difference of sharding a model in model parallel or data parallel approach
@@ -41,20 +33,32 @@ parallelism and model parallelism approaches:
 
    *Figure 1. Comparison between model parallelism and data parallelism approach*
 
-As you can see in the diagram above, in model parallelism, we divide the
-model into different segments and distribute these across multiple GPUs.
-This allows each segment to process data independently, which is
-particularly useful for large models that do not fit on a single GPU. In
-contrast, data parallelism involves distributing the entire model across
-several GPUs, where each GPU processes a subset of the data and
-contributes to the overall computation. This method is effective for
-models that can fit within a single GPU but need to handle large
-datasets efficiently. Model parallelism is especially beneficial for
-recommendation systems with large embedding tables, as it allows for the
-distribution of these tables across more GPUs, optimizing memory usage
-and computational efficiency. Moreover, in a DLRM type architecture, we
-can compute the embeddings in parallel, unlike a multilayer neural
-network where each layer depends on the output of the previous layer.
+As you can see in the diagram above, model parallelism and data
+parallelism are two approaches to distribute workloads across multiple
+GPUs,
+
+-  **Model Parallelism**
+
+   -  Divide the model into segments and distribute them across GPUs
+   -  Each segment processes data independently
+   -  Suitable for lage models that don't fit on a single GPU
+
+-  **Data Parallel**
+
+   -  Distribute the copies of entire model on each GPU
+   -  Each GPU processes a subset of the data and contributes to the
+      overall computation
+   -  Effecive for models that fit on single GPU but need to handle
+      large datasets
+
+-  **Benefits of Model Parallelism**
+
+   -  Optimizes memory usage and computational efficiency for large
+      models
+   -  Particularly beneficial for recommendation systems with large
+      embedding tables
+   -  Enables parallel computation of embeddings in DLRM-type
+      architectures
 
 ******************
  Embedding Tables
@@ -101,15 +105,18 @@ used in the training process for recommendation models:
    *Figure 2. TorchRec End-to-end Embedding Flow*
 
 In the diagram above, we show the general TorchRec end to end embedding
-lookup process. In the forward we do the embedding lookup and pooling,
-in the backward we compute the gradients of the output embedding lookups
-and apply them to the appropriate embedding table gradients and pass it
-into the optimizer. Note here, these gradients are grayed out since we
-don’t fully materialize these into memory and instead fuse them with the
-optimizer update. This results in a significant memory reduction which
-we detail later in the optimizer section.
+lookup process,
 
-We recommend going through the TorchRec Concepts page as well to get a
+-  In the forward pass we do the embedding lookup and pooling
+-  In the backward pass we compute the gradients of the output lookups
+   and pass them into the optimizer to update the embedding tables
+
+Note here, these gradients are grayed out since we do not fully
+materialize these into memory and instead fuse them with the optimizer
+update. This results in a significant memory reduction which we detail
+later in the optimizer concepts section.
+
+We recommend going through the TorchRec Concepts page to get a
 understanding of the fundamentals of how everything ties together
 end-to-end. It contains lots of useful information to get the most out
 of TorchRec.
