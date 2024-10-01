@@ -111,10 +111,10 @@ lookup process,
 -  In the backward pass we compute the gradients of the output lookups
    and pass them into the optimizer to update the embedding tables
 
-Note here, these gradients are grayed out since we do not fully
+**Note here, the embeddings gradients are grayed out since we do not fully
 materialize these into memory and instead fuse them with the optimizer
 update. This results in a significant memory reduction which we detail
-later in the optimizer concepts section.
+later in the optimizer concepts section.**
 
 We recommend going through the TorchRec Concepts page to get a
 understanding of the fundamentals of how everything ties together
