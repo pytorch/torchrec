@@ -271,7 +271,7 @@
               
               
                 <div class="version">
-                  1.1.0.dev20240930+cpu
+                  1.1.0.dev20241001+cpu
                 </div>
               
             
@@ -302,6 +302,10 @@
               <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="overview.html">TorchRec Overview</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="setup-torchrec.html">Setting up TorchRec</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">All API References</span></p>
 <ul class="current">
@@ -511,7 +515,7 @@ to provided ParameterConstraints.</p></li>
 <dt class="sig sig-object py" id="torchrec.distributed.planner.partitioners.GreedyPerfPartitioner">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.partitioners.</span></span><span class="sig-name descname"><span class="pre">GreedyPerfPartitioner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sort_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.partitioners.SortBy" title="torchrec.distributed.planner.partitioners.SortBy"><span class="pre">SortBy</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">SortBy.STORAGE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">balance_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.partitioners.GreedyPerfPartitioner" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.planner.types.Partitioner" title="torchrec.distributed.planner.types.Partitioner"><code class="xref py py-class docutils literal notranslate"><span class="pre">Partitioner</span></code></a></p>
-<p>Greedy Partitioner</p>
+<p>Greedy Partitioner.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -721,25 +725,69 @@ means we estimate the performance of a model without actually running it.</p>
 <dd><p>Bases: <a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlanner" title="torchrec.distributed.types.ShardingPlanner"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShardingPlanner</span></code></a></p>
 <p>Provides an optimized sharding plan for a given module with shardable parameters
 according to the provided sharders, topology, and constraints.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>topology</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a><em>]</em>) – the topology of the current process group.</p></li>
+<li><p><strong>batch_size</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – the batch size of the model.</p></li>
+<li><p><strong>enumerator</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><em>Enumerator</em></a><em>]</em>) – the enumerator to use</p></li>
+<li><p><strong>storage_reservation</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.StorageReservation" title="torchrec.distributed.planner.types.StorageReservation"><em>StorageReservation</em></a><em>]</em>) – the storage reservation to use</p></li>
+<li><p><strong>proposer</strong> (<em>Optional</em><em>[</em><em>Union</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer" title="torchrec.distributed.planner.types.Proposer"><em>Proposer</em></a><em>, </em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Proposer" title="torchrec.distributed.planner.types.Proposer"><em>Proposer</em></a><em>]</em><em>]</em><em>]</em>) – the proposer(s) to use</p></li>
+<li><p><strong>partitioner</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Partitioner" title="torchrec.distributed.planner.types.Partitioner"><em>Partitioner</em></a><em>]</em>) – the partitioner to use</p></li>
+<li><p><strong>performance_model</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.PerfModel" title="torchrec.distributed.planner.types.PerfModel"><em>PerfModel</em></a><em>]</em>) – the performance model to use</p></li>
+<li><p><strong>stats</strong> (<em>Optional</em><em>[</em><em>Union</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Stats" title="torchrec.distributed.planner.types.Stats"><em>Stats</em></a><em>, </em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Stats" title="torchrec.distributed.planner.types.Stats"><em>Stats</em></a><em>]</em><em>]</em><em>]</em>) – the stats to use</p></li>
+<li><p><strong>constraints</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints" title="torchrec.distributed.planner.types.ParameterConstraints"><em>ParameterConstraints</em></a><em>]</em><em>]</em>) – per table constraints
+for sharding.</p></li>
+<li><p><strong>debug</strong> (<em>bool</em>) – whether to print debug information.</p></li>
+</ul>
+</dd>
+</dl>
+<dl>
+<dt>Example::</dt><dd><p>ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device(“meta”))
+planner = EmbeddingShardingPlanner()
+plan = planner.plan(</p>
+<blockquote>
+<div><p>module=ebc,
+sharders=[EmbeddingBagCollectionSharder()],</p>
+</div></blockquote>
+<p>)</p>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.planners.EmbeddingShardingPlanner.collective_plan">
 <span class="sig-name descname"><span class="pre">collective_plan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharders</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><span class="pre">ModuleSharder</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ProcessGroup</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan"><span class="pre">ShardingPlan</span></a></span></span><a class="headerlink" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.collective_plan" title="Permalink to this definition">¶</a></dt>
 <dd><p>Call self.plan(…) on rank 0 and broadcast</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>module</strong> (<em>nn.Module</em>) – the module to shard.</p></li>
+<li><p><strong>sharders</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><em>ModuleSharder</em></a><em>[</em><em>nn.Module</em><em>]</em><em>]</em><em>]</em>) – the sharders to use for sharding</p></li>
+<li><p><strong>pg</strong> (<em>Optional</em><em>[</em><em>dist.ProcessGroup</em><em>]</em>) – the process group to use for collective operations</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the sharding plan for the module.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan">ShardingPlan</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan">
 <span class="sig-name descname"><span class="pre">plan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharders</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><span class="pre">ModuleSharder</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan"><span class="pre">ShardingPlan</span></a></span></span><a class="headerlink" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan" title="Permalink to this definition">¶</a></dt>
-<dd><p>Plans sharding for provided module and given sharders.</p>
+<dd><p>Provides an optimized sharding plan for a given module with shardable parameters
+according to the provided sharders, topology, and constraints.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>module</strong> (<em>nn.Module</em>) – module that sharding is planned for.</p></li>
-<li><p><strong>sharders</strong> (<em>List</em><em>[</em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><em>ModuleSharder</em></a><em>[</em><em>nn.Module</em><em>]</em><em>]</em>) – provided sharders for module.</p></li>
+<li><p><strong>module</strong> (<em>nn.Module</em>) – the module to shard.</p></li>
+<li><p><strong>sharders</strong> (<em>List</em><em>[</em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><em>ModuleSharder</em></a><em>[</em><em>nn.Module</em><em>]</em><em>]</em>) – the sharders to use for sharding.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>the computed sharding plan.</p>
+<dd class="field-even"><p>the sharding plan for the module.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan">ShardingPlan</a></p>
@@ -867,7 +915,18 @@ HBM constraints.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.feedback">
 <span class="sig-name descname"><span class="pre">feedback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partitionable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf_rating</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_constraint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.feedback" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Provide feedback to proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>partitionable</strong> (<em>bool</em>) – whether the plan is partitionable.</p></li>
+<li><p><strong>plan</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em><em>]</em>) – plan to provide feedback on.</p></li>
+<li><p><strong>perf_rating</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – performance rating of the plan.</p></li>
+<li><p><strong>storage_constraint</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a><em>]</em>) – storage constraint of the plan.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.get_budget">
@@ -888,7 +947,16 @@ HBM constraints.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.load">
 <span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">search_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enumerator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><span class="pre">Enumerator</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.load" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Load search space into proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>search_space</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em>) – search space to load.</p></li>
+<li><p><strong>enumerator</strong> (<a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><em>Enumerator</em></a>) – enumerator used to generate search space.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.next_plan">
@@ -907,7 +975,16 @@ memory efficiency.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.propose">
 <span class="sig-name descname"><span class="pre">propose</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.EmbeddingOffloadScaleupProposer.propose" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Propose a sharding plan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>proposed plan.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[List[<a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption">ShardingOption</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -934,17 +1011,46 @@ than best_perf_rating.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.GreedyProposer.feedback">
 <span class="sig-name descname"><span class="pre">feedback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partitionable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf_rating</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_constraint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.GreedyProposer.feedback" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Provide feedback to proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>partitionable</strong> (<em>bool</em>) – whether the plan is partitionable.</p></li>
+<li><p><strong>plan</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em><em>]</em>) – plan to provide feedback on.</p></li>
+<li><p><strong>perf_rating</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – performance rating of the plan.</p></li>
+<li><p><strong>storage_constraint</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a><em>]</em>) – storage constraint of the plan.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.GreedyProposer.load">
 <span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">search_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enumerator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><span class="pre">Enumerator</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.GreedyProposer.load" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Load search space into proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>search_space</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em>) – search space to load.</p></li>
+<li><p><strong>enumerator</strong> (<a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><em>Enumerator</em></a>) – enumerator used to generate search space.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.GreedyProposer.propose">
 <span class="sig-name descname"><span class="pre">propose</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.GreedyProposer.propose" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Propose a sharding plan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>proposed plan.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[List[<a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption">ShardingOption</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -955,17 +1061,46 @@ than best_perf_rating.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.GridSearchProposer.feedback">
 <span class="sig-name descname"><span class="pre">feedback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partitionable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf_rating</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_constraint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.GridSearchProposer.feedback" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Provide feedback to proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>partitionable</strong> (<em>bool</em>) – whether the plan is partitionable.</p></li>
+<li><p><strong>plan</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em><em>]</em>) – plan to provide feedback on.</p></li>
+<li><p><strong>perf_rating</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – performance rating of the plan.</p></li>
+<li><p><strong>storage_constraint</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a><em>]</em>) – storage constraint of the plan.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.GridSearchProposer.load">
 <span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">search_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enumerator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><span class="pre">Enumerator</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.GridSearchProposer.load" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Load search space into proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>search_space</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em>) – search space to load.</p></li>
+<li><p><strong>enumerator</strong> (<a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><em>Enumerator</em></a>) – enumerator used to generate search space.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.GridSearchProposer.propose">
 <span class="sig-name descname"><span class="pre">propose</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.GridSearchProposer.propose" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Propose a sharding plan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>proposed plan.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[List[<a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption">ShardingOption</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -978,17 +1113,46 @@ sharding options.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.UniformProposer.feedback">
 <span class="sig-name descname"><span class="pre">feedback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partitionable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf_rating</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_constraint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.UniformProposer.feedback" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Provide feedback to proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>partitionable</strong> (<em>bool</em>) – whether the plan is partitionable.</p></li>
+<li><p><strong>plan</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em><em>]</em>) – plan to provide feedback on.</p></li>
+<li><p><strong>perf_rating</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – performance rating of the plan.</p></li>
+<li><p><strong>storage_constraint</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a><em>]</em>) – storage constraint of the plan.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.UniformProposer.load">
 <span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">search_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enumerator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><span class="pre">Enumerator</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.UniformProposer.load" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Load search space into proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>search_space</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em>) – search space to load.</p></li>
+<li><p><strong>enumerator</strong> (<a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><em>Enumerator</em></a>) – enumerator used to generate search space.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.proposers.UniformProposer.propose">
 <span class="sig-name descname"><span class="pre">propose</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.proposers.UniformProposer.propose" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Propose a sharding plan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>proposed plan.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[List[<a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption">ShardingOption</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -1058,11 +1222,30 @@ properties of the training data set.</p>
 <dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.distributed.planner.shard_estimators.</span></span><span class="sig-name descname"><span class="pre">EmbeddingPerfEstimator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topology</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints" title="torchrec.distributed.planner.types.ParameterConstraints"><span class="pre">ParameterConstraints</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_inference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#torchrec.distributed.planner.types.ShardEstimator" title="torchrec.distributed.planner.types.ShardEstimator"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShardEstimator</span></code></a></p>
-<p>Embedding Wall Time Perf Estimator</p>
+<p>Embedding Wall Time Perf Estimator. This estimator estimates the wall time
+of a given sharding option.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>topology</strong> (<a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a>) – device topology.</p></li>
+<li><p><strong>constraints</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints" title="torchrec.distributed.planner.types.ParameterConstraints"><em>ParameterConstraints</em></a><em>]</em><em>]</em>) – parameter constraints.</p></li>
+<li><p><strong>is_inference</strong> (<em>bool</em>) – whether or not the estimator is used for inference.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator.estimate">
 <span class="sig-name descname"><span class="pre">estimate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharder_map</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><span class="pre">ModuleSharder</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator.estimate" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Estimates the wall time of a given sharding option.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sharding_options</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em>) – list of sharding options.</p></li>
+<li><p><strong>sharder_map</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><em>ModuleSharder</em></a><em>[</em><em>nn.Module</em><em>]</em><em>]</em><em>]</em>) – sharder map.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingPerfEstimator.perf_func_emb_wall_time">
@@ -1103,6 +1286,7 @@ signifying an id score list feature.</p></li>
 of device.</p></li>
 <li><p><strong>prefetch_pipeline</strong> (<em>bool = False</em>) – whether prefetch pipeline is enabled.</p></li>
 <li><p><strong>expected_cache_fetches</strong> (<em>float</em>) – number of expected cache fetches across global batch</p></li>
+<li><p><strong>uneven_sharding_perf_multiplier</strong> (<em>float = 1.0</em>) – multiplier to account for uneven sharding perf</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -1124,25 +1308,38 @@ of device.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>pipeline_type</strong> – The type of pipeline, if any. Will determine the input replication
-factor during memory estimation.</p></li>
-<li><p><strong>run_embedding_at_peak_memory</strong> – <p>If the embedding fwd/bwd will be execute when HBM
+<li><p><strong>topology</strong> (<a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a>) – device topology.</p></li>
+<li><p><strong>constraints</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="#torchrec.distributed.planner.types.ParameterConstraints" title="torchrec.distributed.planner.types.ParameterConstraints"><em>ParameterConstraints</em></a><em>]</em><em>]</em>) – parameter constraints.</p></li>
+<li><p><strong>pipeline_type</strong> (<a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.PipelineType" title="torchrec.distributed.types.PipelineType"><em>PipelineType</em></a>) – The type of pipeline, if any. Will determine the
+input replication factor during memory estimation.</p></li>
+<li><p><strong>run_embedding_at_peak_memory</strong> (<em>bool</em>) – <p>If the embedding fwd/bwd will be execute when HBM
 usage is at peak. When set to TRUE, any temporary memory allocation during
 embedding forward/backward, as long as output sizes before output_dist will
 be counted towards HBM storage cost. Otherwise they won’t since they’ll be
 “hidden” by the real memory peak.</p>
 <p>Only take effect if pipeline_type is set for backward compatibility (not affecting
 models using old pipeline-agnostic formula)</p>
-<p>Default to FALSE because this is typically FALSE for a RecSys since memory
+<p>Default to false because this is typically false for RecSys since memory
 peak happens at the end of dense forwrad / beginning of dense backward instead.</p>
 </p></li>
+<li><p><strong>is_inference</strong> (<em>bool</em>) – If the model is inference model. Default to False.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.shard_estimators.EmbeddingStorageEstimator.estimate">
 <span class="sig-name descname"><span class="pre">estimate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharding_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharder_map</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><span class="pre">ModuleSharder</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.shard_estimators.EmbeddingStorageEstimator.estimate" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Estimate the storage cost of each sharding option.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sharding_options</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em>) – list of sharding options.</p></li>
+<li><p><strong>sharder_map</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="torchrec.distributed.html#torchrec.distributed.types.ModuleSharder" title="torchrec.distributed.types.ModuleSharder"><em>ModuleSharder</em></a><em>[</em><em>nn.Module</em><em>]</em><em>]</em><em>]</em>) – map from module
+type to sharder.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -1776,17 +1973,46 @@ plan.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.Proposer.feedback">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">feedback</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partitionable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perf_rating</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">storage_constraint</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><span class="pre">Topology</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.types.Proposer.feedback" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Provide feedback to proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>partitionable</strong> (<em>bool</em>) – whether the plan is partitionable.</p></li>
+<li><p><strong>plan</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em><em>]</em>) – plan to provide feedback on.</p></li>
+<li><p><strong>perf_rating</strong> (<em>Optional</em><em>[</em><em>float</em><em>]</em>) – performance rating of the plan.</p></li>
+<li><p><strong>storage_constraint</strong> (<em>Optional</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.Topology" title="torchrec.distributed.planner.types.Topology"><em>Topology</em></a><em>]</em>) – storage constraint of the plan.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.Proposer.load">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">search_space</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">enumerator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><span class="pre">Enumerator</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.types.Proposer.load" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Load search space into proposer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>search_space</strong> (<em>List</em><em>[</em><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><em>ShardingOption</em></a><em>]</em>) – search space to load.</p></li>
+<li><p><strong>enumerator</strong> (<a class="reference internal" href="#torchrec.distributed.planner.types.Enumerator" title="torchrec.distributed.planner.types.Enumerator"><em>Enumerator</em></a>) – enumerator used to generate search space.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.types.Proposer.propose">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">propose</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption"><span class="pre">ShardingOption</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.planner.types.Proposer.propose" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Propose a sharding plan.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>proposed plan.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Optional[List[<a class="reference internal" href="#torchrec.distributed.planner.types.ShardingOption" title="torchrec.distributed.planner.types.ShardingOption">ShardingOption</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -2418,7 +2644,7 @@ result of evaluating the function being minimized, i.e. f(y).</p>
  
 
 <script type="text/javascript">
-  var collapsedSections = ['Introduction', 'All API References']
+  var collapsedSections = ['Introduction', 'Getting Started', 'All API References']
 </script>
 
 

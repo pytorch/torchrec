@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrec.datasets.scripts &mdash; TorchRec 1.1.0 documentation</title>
+  <title>Setting up TorchRec &mdash; TorchRec 1.1.0 documentation</title>
   
 
   
@@ -35,8 +35,8 @@
   <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="torchrec.distributed" href="torchrec.distributed.html" />
-    <link rel="prev" title="torchrec.datasets" href="torchrec.datasets.html" />
+    <link rel="next" title="torchrec.datasets" href="torchrec.datasets.html" />
+    <link rel="prev" title="TorchRec Overview" href="overview.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -304,13 +304,13 @@
 <li class="toctree-l1"><a class="reference internal" href="overview.html">TorchRec Overview</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="setup-torchrec.html">Setting up TorchRec</a></li>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Setting up TorchRec</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">All API References</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.html">torchrec.datasets</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">torchrec.datasets.scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.html">torchrec.distributed</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
@@ -362,13 +362,13 @@
       </li>
 
         
-      <li>torchrec.datasets.scripts</li>
+      <li>Setting up TorchRec</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="_sources/torchrec.datasets.scripts.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+            <a href="_sources/setup-torchrec.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -398,53 +398,143 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.datasets.scripts">
-<span id="torchrec-datasets-scripts"></span><h1>torchrec.datasets.scripts<a class="headerlink" href="#module-torchrec.datasets.scripts" title="Permalink to this heading">¶</a></h1>
-<section id="module-torchrec.datasets.scripts.contiguous_preproc_criteo">
-<span id="torchrec-datasets-scripts-contiguous-preproc-criteo"></span><h2>torchrec.datasets.scripts.contiguous_preproc_criteo<a class="headerlink" href="#module-torchrec.datasets.scripts.contiguous_preproc_criteo" title="Permalink to this heading">¶</a></h2>
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.contiguous_preproc_criteo.main">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.contiguous_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.contiguous_preproc_criteo.main" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function processes the sparse features (.npy) to be contiguous
-and saves the result in a separate (.npy) file.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>argv</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – Command line args.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>None.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.contiguous_preproc_criteo.parse_args">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.contiguous_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">parse_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Namespace</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.contiguous_preproc_criteo.parse_args" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
+  <section id="setting-up-torchrec">
+<h1>Setting up TorchRec<a class="headerlink" href="#setting-up-torchrec" title="Permalink to this heading">¶</a></h1>
+<p>In this section, we will:</p>
+<ul class="simple">
+<li><p>Understand requirements for using TorchRec</p></li>
+<li><p>Set up an environment to integrate TorchRec</p></li>
+<li><p>Run basic TorchRec code</p></li>
+</ul>
+<section id="system-requirements">
+<h2>System Requirements<a class="headerlink" href="#system-requirements" title="Permalink to this heading">¶</a></h2>
+<p>TorchRec is routinely tested on AWS Linux only and should work in similar environments.
+Below demonstrates the compatability matrix that is currently tested:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 75%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p>Python Version</p></td>
+<td><p>3.9, 3.10, 3.11, 3.12</p></td>
+</tr>
+<tr class="row-even"><td><p>Compute Platform</p></td>
+<td><p>CPU, CUDA 11.8, CUDA 12.1</p></td>
+</tr>
+</tbody>
+</table>
+<p>Aside from those requirements, TorchRec’s core dependencies are PyTorch and FBGEMM.
+If your system is compatible with both libraries generally, then it should be sufficient for TorchRec.</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://pytorch.org/get-started/locally/">PyTorch requirements</a></p></li>
+<li><p><a class="reference external" href="https://pytorch.org/FBGEMM/fbgemm-development/BuildInstructions.html">FBGEMM requirements</a></p></li>
+</ul>
 </section>
-<section id="module-torchrec.datasets.scripts.npy_preproc_criteo">
-<span id="torchrec-datasets-scripts-npy-preproc-criteo"></span><h2>torchrec.datasets.scripts.npy_preproc_criteo<a class="headerlink" href="#module-torchrec.datasets.scripts.npy_preproc_criteo" title="Permalink to this heading">¶</a></h2>
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.npy_preproc_criteo.main">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.npy_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.npy_preproc_criteo.main" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function preprocesses the raw Criteo tsvs into the format (npy binary)
-expected by InMemoryBinaryCriteoIterDataPipe.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>argv</strong> (<em>List</em><em>[</em><em>str</em><em>]</em>) – Command line args.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>None.</p>
-</dd>
-</dl>
-</dd></dl>
+<section id="version-compatability">
+<h2>Version Compatability<a class="headerlink" href="#version-compatability" title="Permalink to this heading">¶</a></h2>
+<p>TorchRec and FBGEMM have matching version numbers that are tested together upon release:</p>
+<ul class="simple">
+<li><p>TorchRec 1.0 is compatible with FBGEMM 1.0</p></li>
+<li><p>TorchRec 0.8 is compatible with FBGEMM 0.8</p></li>
+<li><p>TorchRec 0.8 may not be compatible with FBGEMM 0.7</p></li>
+</ul>
+<p>Furthermore, TorchRec and FBGEMM are released only when a new PyTorch release happens.
+Therefore, specific versions of TorchRec and FBGEMM should correspond to a specific PyTorch version:</p>
+<ul class="simple">
+<li><p>TorchRec 1.0 is compatible with PyTorch 2.5</p></li>
+<li><p>TorchRec 0.8 is compatible with PyTorch 2.4</p></li>
+<li><p>TorchRec 0.8 may not be compatible with PyTorch 2.3</p></li>
+</ul>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">¶</a></h2>
+<p>Below we show installations for CUDA 12.1 as an example. For CPU or CUDA 11.8, swap <code class="docutils literal notranslate"><span class="pre">cu121</span></code> for <code class="docutils literal notranslate"><span class="pre">cpu</span></code> or <code class="docutils literal notranslate"><span class="pre">cu118</span></code>.</p>
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-0" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-0">
+<strong>Stable via pytorch.org</strong></label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu121
+pip<span class="w"> </span>install<span class="w"> </span>fbgemm-gpu<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu121
+pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torchmetrics</span><span class="o">==</span><span class="m">1</span>.0.3
+pip<span class="w"> </span>install<span class="w"> </span>torchrec<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu121
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-1" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-1">
+<strong>Stable via PyPI (Only for CUDA 12.1)</strong></label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>torch
+pip<span class="w"> </span>install<span class="w"> </span>fbgemm-gpu
+pip<span class="w"> </span>install<span class="w"> </span>torchrec
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-2" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-2">
+<strong>Nightly</strong></label><div class="sd-tab-content docutils">
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/nightly/cu121
+pip<span class="w"> </span>install<span class="w"> </span>fbgemm-gpu<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/nightly/cu121
+pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torchmetrics</span><span class="o">==</span><span class="m">1</span>.0.3
+pip<span class="w"> </span>install<span class="w"> </span>torchrec<span class="w"> </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/nightly/cu121
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-3" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" for="sd-tab-item-3">
+<strong>Building From Source</strong></label><div class="sd-tab-content docutils">
+<p>You also have the ability to build TorchRec from source to develop with the latest
+changes in TorchRec. To build from source, check out this <a class="reference external" href="https://github.com/pytorch/torchrec?tab=readme-ov-file#from-source">reference</a>.</p>
+</div>
+</div>
+</section>
+<section id="run-a-simple-torchrec-example">
+<h2>Run a Simple TorchRec Example<a class="headerlink" href="#run-a-simple-torchrec-example" title="Permalink to this heading">¶</a></h2>
+<p>Now that we have TorchRec properly set up, let’s run some TorchRec code!
+Below, we’ll run a simple forward pass with TorchRec data types: <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code> and <code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
 
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.datasets.scripts.npy_preproc_criteo.parse_args">
-<span class="sig-prename descclassname"><span class="pre">torchrec.datasets.scripts.npy_preproc_criteo.</span></span><span class="sig-name descname"><span class="pre">parse_args</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Namespace</span></span></span><a class="headerlink" href="#torchrec.datasets.scripts.npy_preproc_criteo.parse_args" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<span class="kn">import</span> <span class="nn">torchrec</span>
+<span class="kn">from</span> <span class="nn">torchrec.sparse.jagged_tensor</span> <span class="kn">import</span> <span class="n">JaggedTensor</span><span class="p">,</span> <span class="n">KeyedJaggedTensor</span>
 
+<span class="n">ebc</span> <span class="o">=</span> <span class="n">torchrec</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">(</span>
+    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+    <span class="n">tables</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">torchrec</span><span class="o">.</span><span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;product_table&quot;</span><span class="p">,</span>
+            <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+            <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+            <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;product&quot;</span><span class="p">],</span>
+            <span class="n">pooling</span><span class="o">=</span><span class="n">torchrec</span><span class="o">.</span><span class="n">PoolingType</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">torchrec</span><span class="o">.</span><span class="n">EmbeddingBagConfig</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;user_table&quot;</span><span class="p">,</span>
+            <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+            <span class="n">num_embeddings</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+            <span class="n">feature_names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">],</span>
+            <span class="n">pooling</span><span class="o">=</span><span class="n">torchrec</span><span class="o">.</span><span class="n">PoolingType</span><span class="o">.</span><span class="n">SUM</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">product_jt</span> <span class="o">=</span> <span class="n">JaggedTensor</span><span class="p">(</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span> <span class="n">lengths</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="p">)</span>
+<span class="n">user_jt</span> <span class="o">=</span> <span class="n">JaggedTensor</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">lengths</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]))</span>
+
+<span class="c1"># Q1: How many batches are there, and which values are in the first batch for product_jt and user_jt?</span>
+<span class="n">kjt</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_jt_dict</span><span class="p">({</span><span class="s2">&quot;product&quot;</span><span class="p">:</span> <span class="n">product_jt</span><span class="p">,</span> <span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="n">user_jt</span><span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Call EmbeddingBagCollection Forward: &quot;</span><span class="p">,</span> <span class="n">ebc</span><span class="p">(</span><span class="n">kjt</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Save the above code to a file named <code class="docutils literal notranslate"><span class="pre">torchrec_example.py</span></code>. Then, you should be able to
+execute it from your terminal with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>torchrec_example.py
+</pre></div>
+</div>
+<p>You should see the output <code class="docutils literal notranslate"><span class="pre">KeyedTensor</span></code> with the resulting embeddings.
+Congrats! You have correctly installed and ran your first TorchRec program!</p>
 </section>
 </section>
 
@@ -456,10 +546,10 @@ expected by InMemoryBinaryCriteoIterDataPipe.</p>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrec.distributed.html" class="btn btn-neutral float-right" title="torchrec.distributed" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="torchrec.datasets.html" class="btn btn-neutral float-right" title="torchrec.datasets" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrec.datasets.html" class="btn btn-neutral" title="torchrec.datasets" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="overview.html" class="btn btn-neutral" title="TorchRec Overview" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -491,9 +581,11 @@ expected by InMemoryBinaryCriteoIterDataPipe.</p>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">torchrec.datasets.scripts</a><ul>
-<li><a class="reference internal" href="#module-torchrec.datasets.scripts.contiguous_preproc_criteo">torchrec.datasets.scripts.contiguous_preproc_criteo</a></li>
-<li><a class="reference internal" href="#module-torchrec.datasets.scripts.npy_preproc_criteo">torchrec.datasets.scripts.npy_preproc_criteo</a></li>
+<li><a class="reference internal" href="#">Setting up TorchRec</a><ul>
+<li><a class="reference internal" href="#system-requirements">System Requirements</a></li>
+<li><a class="reference internal" href="#version-compatability">Version Compatability</a></li>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#run-a-simple-torchrec-example">Run a Simple TorchRec Example</a></li>
 </ul>
 </li>
 </ul>
