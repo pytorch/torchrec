@@ -862,7 +862,7 @@ class FusedEmbeddingCollectionTest(unittest.TestCase):
         ).to(device)
 
         sequential_embeddings = ec(features)
-        self.assertEquals(
+        self.assertEqual(
             set(sequential_embeddings.keys()),
             {"f1", "f1_1", "f_shared@t1", "f2", "f_shared@t2", "f3"},
         )

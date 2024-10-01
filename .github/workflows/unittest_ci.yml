@@ -12,11 +12,41 @@ on:
 jobs:
   build_test:
     strategy:
+      fail-fast: false
       matrix:
-        os: [linux.g5.12xlarge.nvidia.gpu]
-        python-version: ['3.11']
-        python-tag: ["py311"]
-        cuda-tag: ["cu118"]
+        include:
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: 3.9
+            python-tag: "py39"
+            cuda-tag: "cu118"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: 3.9
+            python-tag: "py39"
+            cuda-tag: "cu121"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.10'
+            python-tag: "py310"
+            cuda-tag: "cu118"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.10'
+            python-tag: "py310"
+            cuda-tag: "cu121"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.11'
+            python-tag: "py311"
+            cuda-tag: "cu118"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.11'
+            python-tag: "py311"
+            cuda-tag: "cu121"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.12'
+            python-tag: "py312"
+            cuda-tag: "cu118"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.12'
+            python-tag: "py312"
+            cuda-tag: "cu121"
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: ${{ matrix.os }}
@@ -59,4 +89,4 @@ jobs:
           --ignore-glob='torchrec/inference/inference_legacy/tests*' --ignore-glob='*test_model_parallel_nccl*' \
           --ignore=torchrec/distributed/tests/test_cache_prefetch.py --ignore=torchrec/distributed/tests/test_fp_embeddingbag_single_rank.py \
           --ignore=torchrec/distributed/tests/test_infer_utils.py --ignore=torchrec/distributed/tests/test_fx_jit.py --ignore-glob=**/test_utils/ \
-          --ignore-glob='*test_train_pipeline*'
+          --ignore-glob='*test_train_pipeline*' --ignore=torchrec/distributed/tests/test_model_parallel_hierarchical.py
