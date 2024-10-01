@@ -24,11 +24,11 @@ efficiently represent sparse features,
 With the goal of high performance and efficiency, canonical
 ``torch.Tensor`` is highly inefficient for representing sparse data.
 TorchRec introduces these new data types because they provide efficient
-storage and representation of sparse input data. These data types are
-particularly effective in recommender systems as they heavily deal with
-sparse data. As you will see later on, the ``KeyedJaggedTensor`` makes
-communication of input data in a distributed environment very efficient
-leading to one of the key performance advantages that TorchRec provides.
+storage and representation of sparse input data. They are particularly
+effective in recommender systems as they heavily deal with sparse data.
+As you will see later on, the ``KeyedJaggedTensor`` makes communication
+of input data in a distributed environment very efficient leading to one
+of the key performance advantages that TorchRec provides.
 
 In the end to end training loop, TorchRec comprises of the following
 main components,
@@ -267,10 +267,12 @@ differences TorchRec inference optimizes for,
    in a C++ environment
 
 TorchRec provides the following to convert a TorchRec model into being
-inference ready. * APIs for quantizing the model, including
-optimizations automatically with FBGEMM TBE * Sharding embeddings for
-distributed inference * Compiling the model to TorchScript (compatible
-in C++)
+inference ready.
+
+-  APIs for quantizing the model, including optimizations automatically
+   with FBGEMM TBE
+-  Sharding embeddings for distributed inference
+-  Compiling the model to TorchScript (compatible in C++)
 
 **********
  See Also
