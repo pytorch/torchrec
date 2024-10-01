@@ -15,11 +15,11 @@ TorchRec has specific input/output data types of its modules to
 efficiently represent sparse features, including:
 
 -  **JaggedTensor:** a wrapper around the lengths/offsets and values
-   tensors for a singular sparse feature
+   tensors for a singular sparse feature.
 -  **KeyedJaggedTensor:** efficiently represent multiple sparse
-   features, can think of it as multiple ``JaggedTensor``\s
+   features, can think of it as multiple ``JaggedTensor``\s.
 -  **KeyedTensor:** a wrapper around ``torch.Tensor`` that allows access
-   to tensor values through keys
+   to tensor values through keys.
 
 With the goal of high performance and efficiency, the canonical
 ``torch.Tensor`` is highly inefficient for representing sparse data.
