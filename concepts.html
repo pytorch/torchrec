@@ -7,10 +7,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+<meta content="TorchRec Concepts" name="description" />
+<meta content="recommendation systems, sharding, distributed training, torchrec, embedding bags, embeddings, keyedjaggedtensor, row wise, table wise, column wise, table row wise, planner, sharder" name="keywords" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrec.fx &mdash; TorchRec 1.1.0 documentation</title>
+  <title>TorchRec Concepts &mdash; TorchRec 1.1.0 documentation</title>
   
 
   
@@ -35,8 +37,8 @@
   <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="torchrec.inference" href="torchrec.inference.html" />
-    <link rel="prev" title="torchrec.distributed.sharding" href="torchrec.distributed.sharding.html" />
+    <link rel="next" title="Setting up TorchRec" href="setup-torchrec.html" />
+    <link rel="prev" title="TorchRec High Level Architecture" href="high-level-arch.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -300,23 +302,23 @@
             
             
               <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="overview.html">TorchRec Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="high-level-arch.html">TorchRec High Level Architecture</a></li>
-<li class="toctree-l1"><a class="reference internal" href="concepts.html">TorchRec Concepts</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">TorchRec Concepts</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="setup-torchrec.html">Setting up TorchRec</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">All API References</span></p>
-<ul class="current">
+<ul>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.html">torchrec.datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.html">torchrec.distributed</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">torchrec.fx</a></li>
+<li class="toctree-l1"><a class="reference internal" href="torchrec.fx.html">torchrec.fx</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
@@ -364,13 +366,13 @@
       </li>
 
         
-      <li>torchrec.fx</li>
+      <li>TorchRec Concepts</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="_sources/torchrec.fx.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+            <a href="_sources/concepts.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -400,100 +402,274 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.fx">
-<span id="torchrec-fx"></span><h1>torchrec.fx<a class="headerlink" href="#module-torchrec.fx" title="Permalink to this heading">¶</a></h1>
-<p>Torchrec Tracer</p>
-<p>Custom FX tracer for torchrec</p>
-<p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
-<section id="module-torchrec.fx.tracer">
-<span id="torchrec-fx-tracer"></span><h2>torchrec.fx.tracer<a class="headerlink" href="#module-torchrec.fx.tracer" title="Permalink to this heading">¶</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">Tracer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaf_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.fx.tracer.Tracer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Tracer</span></code></p>
-<p>Custom FX tracer for torchrec</p>
-<p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
-<p>We create a custom FX tracer to trace torchrec based models. The custom tracer
-handles python generic types (i.e. NoWait[T], Awaitable[T]) and lower it to
-TorchScript if needed</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.create_arg">
-<span class="sig-name descname"><span class="pre">create_arg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">slice</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">range</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Node</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">complex</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">device</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">memory_format</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">layout</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">OpOverload</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SymInt</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SymBool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SymFloat</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.create_arg" title="Permalink to this definition">¶</a></dt>
-<dd><p>A method to specify the behavior of tracing when preparing values to
-be used as arguments to nodes in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
-<p>Adds support for the NoWait type in addition to the default tracer</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>a</strong> (<em>Any</em>) – The value to be emitted as an <code class="docutils literal notranslate"><span class="pre">Argument</span></code> in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The value <code class="docutils literal notranslate"><span class="pre">a</span></code> converted into the appropriate <code class="docutils literal notranslate"><span class="pre">Argument</span></code></p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Argument</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.is_leaf_module">
-<span class="sig-name descname"><span class="pre">is_leaf_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module_qualified_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.is_leaf_module" title="Permalink to this definition">¶</a></dt>
-<dd><p>Override FX definition to include quantized embedding bags</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.path_of_module">
-<span class="sig-name descname"><span class="pre">path_of_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mod</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.path_of_module" title="Permalink to this definition">¶</a></dt>
-<dd><p>Allows trace-ability of non registered modules. This is typically used for Table Batched Embeddings
-made to look like nn.EmbeddingBags</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.trace">
-<span class="sig-name descname"><span class="pre">trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Graph</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.trace" title="Permalink to this definition">¶</a></dt>
-<dd><div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Backwards-compatibility for this API is guaranteed.</p>
-</div>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.is_fx_tracing">
-<span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">is_fx_tracing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.is_fx_tracing" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.symbolic_trace">
-<span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">symbolic_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaf_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GraphModule</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.symbolic_trace" title="Permalink to this definition">¶</a></dt>
-<dd><p>Symbolic tracing API</p>
-<p>Given an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or function instance <code class="docutils literal notranslate"><span class="pre">root</span></code>, this function will return a <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code>
-constructed by recording operations seen while tracing through <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">concrete_args</span></code> allows you to partially specialize your function, whether it’s to remove control flow or data structures.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>root</strong> (<em>Union</em><em>[</em><em>torch.nn.Module</em><em>, </em><em>Callable</em><em>]</em>) – Module or function to be traced and converted
-into a Graph representation.</p></li>
-<li><p><strong>concrete_args</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>any</em><em>]</em><em>]</em>) – Inputs to be partially specialized</p></li>
+  <section id="torchrec-concepts">
+<h1>TorchRec Concepts<a class="headerlink" href="#torchrec-concepts" title="Permalink to this heading">¶</a></h1>
+<p>In this section, we will learn about the key concepts of TorchRec,
+designed to optimize large-scale recommendation systems using PyTorch.
+We will learn how each concept works in detail and review how it is used
+with the rest of TorchRec.</p>
+<p>TorchRec has specific input/output data types of its modules to
+efficiently represent sparse features, including:</p>
+<ul class="simple">
+<li><p><strong>JaggedTensor:</strong> a wrapper around the lengths/offsets and values
+tensors for a singular sparse feature.</p></li>
+<li><p><strong>KeyedJaggedTensor:</strong> efficiently represent multiple sparse
+features, can think of it as multiple <code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code>s.</p></li>
+<li><p><strong>KeyedTensor:</strong> a wrapper around <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> that allows access
+to tensor values through keys.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a Module created from the recorded operations from <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>GraphModule</p>
-</dd>
-</dl>
-</dd></dl>
-
+<p>With the goal of high performance and efficiency, the canonical
+<code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> is highly inefficient for representing sparse data.
+TorchRec introduces these new data types because they provide efficient
+storage and representation of sparse input data. As you will see later
+on, the <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code> makes communication of input data in a
+distributed environment very efficient leading to one of the key
+performance advantages that TorchRec provides.</p>
+<p>In the end-to-end training loop, TorchRec comprises of the following
+main components:</p>
+<ul class="simple">
+<li><p><strong>Planner:</strong> Takes in the configuration of embedding tables,
+environment setup, and generates an optimized sharding plan for the
+model.</p></li>
+<li><p><strong>Sharder:</strong> Shards model according to sharding plan with different
+sharding strategies including data-parallel, table-wise, row-wise,
+table-wise-row-wise, column-wise, and table-wise-column-wise
+sharding.</p></li>
+<li><p><strong>DistributedModelParallel:</strong> Combines sharder, optimizer, and
+provides an entry point into the training the model in a distributed
+manner.</p></li>
+</ul>
+<section id="jaggedtensor">
+<h2>JaggedTensor<a class="headerlink" href="#jaggedtensor" title="Permalink to this heading">¶</a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code> represents a sparse feature through lengths, values,
+and offsets. It is called “jagged” because it efficiently represents
+data with variable-length sequences. In contrast, a canonical
+<code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> assumes that each sequence has the same length, which
+is often not the case with real world data. A <code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code>
+facilitates the representation of such data without padding making it
+highly efficient.</p>
+<p>Key Components:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Lengths</span></code>: A list of integers representing the number of elements
+for each entity.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Offsets</span></code>: A list of integers representing the starting index of
+each sequence in the flattened values tensor. These provide an
+alternative to lengths.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Values</span></code>: A 1D tensor containing the actual values for each entity,
+stored contiguously.</p></li>
+</ul>
+<p>Here is a simple example demonstrating how each of the components would
+look like:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># User interactions:</span>
+<span class="c1"># - User 1 interacted with 2 items</span>
+<span class="c1"># - User 2 interacted with 3 items</span>
+<span class="c1"># - User 3 interacted with 1 item</span>
+<span class="n">lengths</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="n">offsets</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>  <span class="c1"># Starting index of each user&#39;s interactions</span>
+<span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mi">101</span><span class="p">,</span> <span class="mi">102</span><span class="p">,</span> <span class="mi">201</span><span class="p">,</span> <span class="mi">202</span><span class="p">,</span> <span class="mi">203</span><span class="p">,</span> <span class="mi">301</span><span class="p">])</span>  <span class="c1"># Item IDs interacted with</span>
+<span class="n">jt</span> <span class="o">=</span> <span class="n">JaggedTensor</span><span class="p">(</span><span class="n">lengths</span><span class="o">=</span><span class="n">lengths</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">)</span>
+<span class="c1"># OR</span>
+<span class="n">jt</span> <span class="o">=</span> <span class="n">JaggedTensor</span><span class="p">(</span><span class="n">offsets</span><span class="o">=</span><span class="n">offsets</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">)</span>
+</pre></div>
+</div>
 </section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
-<p>Torchrec Tracer</p>
-<p>Custom FX tracer for torchrec</p>
-<p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
+<section id="keyedjaggedtensor">
+<h2>KeyedJaggedTensor<a class="headerlink" href="#keyedjaggedtensor" title="Permalink to this heading">¶</a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code> extends the functionality of <code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code> by
+introducing keys (which are typically feature names) to label different
+groups of features, for example, user features and item features. This
+is the data type used in <code class="docutils literal notranslate"><span class="pre">forward</span></code> of <code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code> and
+<code class="docutils literal notranslate"><span class="pre">EmbeddingCollection</span></code> as they are used to represent multiple features
+in a table.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code> has an implied batch size, which is the number
+of features divided by the length of <code class="docutils literal notranslate"><span class="pre">lengths</span></code> tensor. The example
+below has a batch size of 2. Similar to a <code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">offsets</span></code> and <code class="docutils literal notranslate"><span class="pre">lengths</span></code> function in the same manner. You can also
+access the <code class="docutils literal notranslate"><span class="pre">lengths</span></code>, <code class="docutils literal notranslate"><span class="pre">offsets</span></code>, and <code class="docutils literal notranslate"><span class="pre">values</span></code> of a feature by
+accessing the key from the <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;user_features&quot;</span><span class="p">,</span> <span class="s2">&quot;item_features&quot;</span><span class="p">]</span>
+<span class="c1"># Lengths of interactions:</span>
+<span class="c1"># - User features: 2 users, with 2 and 3 interactions respectively</span>
+<span class="c1"># - Item features: 2 items, with 1 and 2 interactions respectively</span>
+<span class="n">lengths</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+<span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">([</span><span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">22</span><span class="p">,</span> <span class="mi">23</span><span class="p">,</span> <span class="mi">101</span><span class="p">,</span> <span class="mi">102</span><span class="p">,</span> <span class="mi">201</span><span class="p">])</span>
+<span class="c1"># Create a KeyedJaggedTensor</span>
+<span class="n">kjt</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="p">(</span><span class="n">keys</span><span class="o">=</span><span class="n">keys</span><span class="p">,</span> <span class="n">lengths</span><span class="o">=</span><span class="n">lengths</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="n">values</span><span class="p">)</span>
+<span class="c1"># Access the features by key</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">kjt</span><span class="p">[</span><span class="s2">&quot;user_features&quot;</span><span class="p">])</span>
+<span class="c1"># Outputs user features</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">kjt</span><span class="p">[</span><span class="s2">&quot;item_features&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="planner">
+<h2>Planner<a class="headerlink" href="#planner" title="Permalink to this heading">¶</a></h2>
+<p>The TorchRec planner helps determine the best sharding configuration for
+a model. It evaluates multiple possibilities for sharding embedding
+tables and optimizes for performance. The planner performs the
+following:</p>
+<ul class="simple">
+<li><p>Assesses the memory constraints of the hardware.</p></li>
+<li><p>Estimates compute requirements based on memory fetches, such as
+embedding lookups.</p></li>
+<li><p>Addresses data-specific factors.</p></li>
+<li><p>Considers other hardware specifics, such as bandwidth, to generate an
+optimal sharding plan.</p></li>
+</ul>
+<p>To ensure accurate consideration of these factors, the Planner can
+incorporate data about the embedding tables, constraints, hardware
+information, and topology to help in generating an optimal plan.</p>
+</section>
+<section id="sharding-of-embeddingtables">
+<h2>Sharding of EmbeddingTables<a class="headerlink" href="#sharding-of-embeddingtables" title="Permalink to this heading">¶</a></h2>
+<p>TorchRec sharder provides multiple sharding strategies for various use
+cases, we outline some of the sharding strategies and how they work as
+well as their benefits and limitations. Generally, we recommend using
+the TorchRec planner to generate a sharding plan for you as it will find
+the optimal sharding strategy for each embedding table in your model.</p>
+<p>Each sharding strategy determines how to do the table split, whether the
+table should be cut up and how, whether to keep one or a few copies of
+some tables, and so on. Each piece of the table from the outcome of
+sharding, whether it is one embedding table or part of it, is referred
+to as a shard.</p>
+<figure class="align-center" id="id1">
+<img alt="Visualizing the difference of sharding types offered in TorchRec" src="_images/sharding.png" />
+<figcaption>
+<p><span class="caption-text"><em>Figure 1: Visualizing the placement of table shards under different sharding schemes offered in TorchRec</em></span><a class="headerlink" href="#id1" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Here is the list of all sharding types available in TorchRec:</p>
+<ul class="simple">
+<li><p>Table-wise (TW): as the name suggests, embedding table is kept as a
+whole piece and placed on one rank.</p></li>
+<li><p>Column-wise (CW): the table is split along the <code class="docutils literal notranslate"><span class="pre">emb_dim</span></code> dimension,
+for example, <code class="docutils literal notranslate"><span class="pre">emb_dim=256</span></code> is split into 4 shards: <code class="docutils literal notranslate"><span class="pre">[64,</span> <span class="pre">64,</span> <span class="pre">64,</span>
+<span class="pre">64]</span></code>.</p></li>
+<li><p>Row-wise (RW): the table is split along the <code class="docutils literal notranslate"><span class="pre">hash_size</span></code> dimension,
+usually split evenly among all the ranks.</p></li>
+<li><p>Table-wise-row-wise (TWRW): table is placed on one host, split
+row-wise among the ranks on that host.</p></li>
+<li><p>Grid-shard (GS): a table is CW sharded and each CW shard is placed
+TWRW on a host.</p></li>
+<li><p>Data parallel (DP): each rank keeps a copy of the table.</p></li>
+</ul>
+<p>Once sharded, the modules are converted to sharded versions of
+themselves, known as <code class="docutils literal notranslate"><span class="pre">ShardedEmbeddingCollection</span></code> and
+<code class="docutils literal notranslate"><span class="pre">ShardedEmbeddingBagCollection</span></code> in TorchRec. These modules handle the
+communication of input data, embedding lookups, and gradients.</p>
+</section>
+<section id="distributed-training-with-torchrec-sharded-modules">
+<h2>Distributed Training with TorchRec Sharded Modules<a class="headerlink" href="#distributed-training-with-torchrec-sharded-modules" title="Permalink to this heading">¶</a></h2>
+<p>With many sharding strategies available, how do we determine which one
+to use? There is a cost associated with each sharding scheme, which in
+conjunction with model size and number of GPUs determines which sharding
+strategy is best for a model.</p>
+<p>Without sharding, where each GPU keeps a copy of the embedding table
+(DP), the main cost is computation in which each GPU looks up the
+embedding vectors in its memory in the forward pass and updates the
+gradients in the backward pass.</p>
+<p>With sharding, there is an added communication cost: each GPU needs to
+ask the other GPUs for embedding vector lookup and communicate the
+gradients computed as well. This is typically referred to as <code class="docutils literal notranslate"><span class="pre">all2all</span></code>
+communication. In TorchRec, for input data on a given GPU, we determine
+where the embedding shard for each part of the data is located and send
+it to the target GPU. That target GPU then returns the embedding vectors
+back to the original GPU. In the backward pass, the gradients are sent
+back to the target GPU and the shards are updated accordingly with the
+optimizer.</p>
+<p>As described above, sharding requires us to communicate the input data
+and embedding lookups. TorchRec handles this in three main stages, we
+will refer to this as the sharded embedding module forward that is used
+in training and inference of a TorchRec model:</p>
+<ul class="simple">
+<li><p>Feature All to All/Input distribution (<code class="docutils literal notranslate"><span class="pre">input_dist</span></code>)</p>
+<ul>
+<li><p>Communicate input data (in the form of a <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code>) to
+the appropriate device containing relevant embedding table shard</p></li>
+</ul>
+</li>
+<li><p>Embedding Lookup</p>
+<ul>
+<li><p>Lookup embeddings with new input data formed after feature all to
+all exchange</p></li>
+</ul>
+</li>
+<li><p>Embedding All to All/Output Distribution (<code class="docutils literal notranslate"><span class="pre">output_dist</span></code>)</p>
+<ul>
+<li><p>Communicate embedding lookup data back to the appropriate device
+that asked for it (in accordance with the input data the device
+received)</p></li>
+</ul>
+</li>
+<li><p>The backward pass does the same operations but in reverse order.</p></li>
+</ul>
+<p>The diagram below demonstrates how it works:</p>
+<figure class="align-center" id="id2">
+<img alt="Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module" src="_images/torchrec_forward.png" />
+<figcaption>
+<p><span class="caption-text"><em>Figure 2: Forward pass of a table wise sharded table including the input_dist, lookup, and output_dist of a sharded TorchRec module</em></span><a class="headerlink" href="#id2" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="distributedmodelparallel">
+<h2>DistributedModelParallel<a class="headerlink" href="#distributedmodelparallel" title="Permalink to this heading">¶</a></h2>
+<p>All of the above culminates into the main entrypoint that TorchRec uses
+to shard and integrate the plan. At a high level,
+<code class="docutils literal notranslate"><span class="pre">DistributedModelParallel</span></code> does the following:</p>
+<ul class="simple">
+<li><p>Initializes the environment by setting up process groups and
+assigning device type.</p></li>
+<li><p>Uses default shaders if no shaders are provided, the default includes
+<code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollectionSharder</span></code>.</p></li>
+<li><p>Takes in the provided sharding plan, if none is provided, it
+generates one.</p></li>
+<li><p>Creates a sharded version of modules and replaces the original
+modules with them, for example, converts <code class="docutils literal notranslate"><span class="pre">EmbeddingCollection</span></code> to
+<code class="docutils literal notranslate"><span class="pre">ShardedEmbeddingCollection</span></code>.</p></li>
+<li><p>By default, wraps the <code class="docutils literal notranslate"><span class="pre">DistributedModelParallel</span></code> with
+<code class="docutils literal notranslate"><span class="pre">DistributedDataParallel</span></code> to make the module both model and data
+parallel.</p></li>
+</ul>
+</section>
+<section id="optimizer">
+<h2>Optimizer<a class="headerlink" href="#optimizer" title="Permalink to this heading">¶</a></h2>
+<p>TorchRec modules provide a seamless API to fuse the backwards pass and
+optimizer step in training, providing a significant optimization in
+performance and decreasing the memory used, alongside granularity in
+assigning distinct optimizers to distinct model parameters.</p>
+<figure class="align-center" id="id3">
+<img alt="Visualizing fusing of optimizer in backward to update sparse embedding table" src="_images/fused_backward_optimizer.png" />
+<figcaption>
+<p><span class="caption-text"><em>Figure 3: Fusing embedding backward with sparse optimizer</em></span><a class="headerlink" href="#id3" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+</section>
+<section id="inference">
+<h2>Inference<a class="headerlink" href="#inference" title="Permalink to this heading">¶</a></h2>
+<p>Inference environments are different from training, they are very
+sensitive to performance and the size of the model. There are two key
+differences TorchRec inference optimizes for:</p>
+<ul class="simple">
+<li><p><strong>Quantization:</strong> inference models are quantized for lower latency
+and reduced model size. This optimization lets us use as few devices
+as possible for inference to minimize latency.</p></li>
+<li><p><strong>C++ environment:</strong> to minimize latency even further, the model is
+ran in a C++ environment.</p></li>
+</ul>
+<p>TorchRec provides the following to convert a TorchRec model into being
+inference ready:</p>
+<ul class="simple">
+<li><p>APIs for quantizing the model, including optimizations automatically
+with FBGEMM TBE</p></li>
+<li><p>Sharding embeddings for distributed inference</p></li>
+<li><p>Compiling the model to TorchScript (compatible in C++)</p></li>
+</ul>
+</section>
+<section id="see-also">
+<h2>See Also<a class="headerlink" href="#see-also" title="Permalink to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/pytorch/torchrec/blob/main/TorchRec_Interactive_Tutorial_Notebook_OSS_version.ipynb">TorchRec Interactive Notebook using the concepts</a></p></li>
+</ul>
 </section>
 </section>
 
@@ -505,10 +681,10 @@ into a Graph representation.</p></li>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrec.inference.html" class="btn btn-neutral float-right" title="torchrec.inference" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
+        <a href="setup-torchrec.html" class="btn btn-neutral float-right" title="Setting up TorchRec" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
       
-        <a href="torchrec.distributed.sharding.html" class="btn btn-neutral" title="torchrec.distributed.sharding" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="high-level-arch.html" class="btn btn-neutral" title="TorchRec High Level Architecture" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -540,9 +716,16 @@ into a Graph representation.</p></li>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">torchrec.fx</a><ul>
-<li><a class="reference internal" href="#module-torchrec.fx.tracer">torchrec.fx.tracer</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
+<li><a class="reference internal" href="#">TorchRec Concepts</a><ul>
+<li><a class="reference internal" href="#jaggedtensor">JaggedTensor</a></li>
+<li><a class="reference internal" href="#keyedjaggedtensor">KeyedJaggedTensor</a></li>
+<li><a class="reference internal" href="#planner">Planner</a></li>
+<li><a class="reference internal" href="#sharding-of-embeddingtables">Sharding of EmbeddingTables</a></li>
+<li><a class="reference internal" href="#distributed-training-with-torchrec-sharded-modules">Distributed Training with TorchRec Sharded Modules</a></li>
+<li><a class="reference internal" href="#distributedmodelparallel">DistributedModelParallel</a></li>
+<li><a class="reference internal" href="#optimizer">Optimizer</a></li>
+<li><a class="reference internal" href="#inference">Inference</a></li>
+<li><a class="reference internal" href="#see-also">See Also</a></li>
 </ul>
 </li>
 </ul>
