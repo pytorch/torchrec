@@ -525,9 +525,7 @@ def group_tables(
             grouped_tables = groups[grouping_key]
             # remove non-native fused params
             per_tbe_fused_params = {
-                k: v
-                for k, v in fused_params_tuple
-                if k not in ["_batch_key", USE_ONE_TBE_PER_TABLE]
+                k: v for k, v in fused_params_tuple if k not in [USE_ONE_TBE_PER_TABLE]
             }
             cache_load_factor = _get_weighted_avg_cache_load_factor(grouped_tables)
             if cache_load_factor is not None:
