@@ -6,6 +6,31 @@
  TorchRec Concepts
 ###################
 
+In this section, you will learn about the key concepts of TorchRec,
+designed to optimize large-scale recommendation systems using PyTorch.
+You will learn how each concept works in detail and is used with the
+rest of TorchRec.
+
+TorchRec has specific input/output data types of its modules to
+efficiently represent sparse features,
+
+-  **JaggedTensor:** a wrapper around the lengths/offsets and values
+   tensors for a singular sparse feature
+-  **KeyedJaggedTensor:** efficiently represent multiple sparse
+   features, can think of it as multiple ``JaggedTensor``\s
+-  **KeyedTensor:** a wrapper around ``torch.Tensor`` that allows access
+   to tensor values through keys
+
+With the goal of high performance and efficiency, canonical
+``torch.Tensor`` is highly inefficient for representing sparse data.
+TorchRec introduces these data types beyond the canonical
+`torch.Tensor`` because they provide efficient storage and
+representation of sparse input data. These data types are particularly
+effective in recommender systems as they heavily deal with sparse data.
+As you will see later on, the ``KeyedJaggedTensor`` makes communication
+of input data in a distributed environment very efficient - leading to
+one of the key performance advantages that TorchRec provides.
+
 In the end to end training loop, TorchRec comprises of the following
 main components,
 
@@ -19,61 +44,75 @@ main components,
 -  **DistributedModelParallel:** Combines sharder, optimizer, and
    provides entry point into training the model in a distributed manner.
 
-In addition, TorchRec has specific input/output data types of its modules to efficiently represent sparse features,
+**************
+ JaggedTensor
+**************
 
--  JaggedTensor: a wrapper around the lengths/offsets and values ``torch.Tensor`` for a singular sparse feature
--  KeyedJaggedTensor: efficiently represent multiple sparse features, can think of it as multiple ``JaggedTensor``s
--  KeyedTensor: a wrapper around ``torch.Tensor`` that allows access to tensor values through keys
+A ``JaggedTensor`` represents a sparse feature through lengths, values,
+and offsets. It’s denoted as jagged as it helps efficiently represent
+data with variable-length sequences. A canonical ``torch.Tensor`` each
+sequence has the same length but in real world data each sequence can
+have varying lengths. A ``JaggedTensor`` allows representation of this
+data without padding making it highly efficient.
 
-************
-JaggedTensor
-************
+Key Components: Lengths: A list of integers representing the number of
+elements for each entity. Offsets: A list of integers representing the
+starting index of each sequence in the flattened values tensor. These
+provide an alternative to lengths. Values: A 1D tensor containing the
+actual values for each entity, stored contiguously.
 
-A ``JaggedTensor`` represents a sparse feature through lengths, values, and offsets. It’s denoted as jagged as it helps efficiently represent data with variable-length sequences. A canonical ``torch.Tensor`` each sequence has the same length but in real world data each sequence can have varying lengths. A ``JaggedTensor`` allows representation of this data without padding making it highly efficient.
+The use of offsets provides the same information as lengths but in a
+slightly different form. While lengths tell you how many interactions
+each user had, offsets tell you where each user’s interactions begin.
 
-Key Components:
-Lengths: A list of integers representing the number of elements for each entity.
-Offsets: A list of integers representing the starting index of each sequence in the flattened values tensor. These provide an alternative to lengths.
-Values: A 1D tensor containing the actual values for each entity, stored contiguously.
+Here is a simple example demonstrating how each of the components would
+look like
 
-The use of offsets provides the same information as lengths but in a slightly different form. While lengths tell you how many interactions each user had, offsets tell you where each user’s interactions begin.
+.. code:: python
 
-Here is a simple example demonstrating how each of the components would look like
-
-.. code-block:: python
-   # User interactions: 
-   # - User 1 interacted with 2 items 
-   # - User 2 interacted with 3 items 
-   # - User 3 interacted with 1 item 
-   lengths = [2, 3, 1] 
-   offsets = [0, 2, 5] # Starting index of each user's interactions
-   values = torch.Tensor([101, 102, 201, 202, 203, 301]) # Item IDs interactedwith 
-   jt = JaggedTensor(lengths=lengths, values=values) 
+   # User interactions:
+   # - User 1 interacted with 2 items
+   # - User 2 interacted with 3 items
+   # - User 3 interacted with 1 item
+   lengths = [2, 3, 1]
+   offsets = [0, 2, 5]  # Starting index of each user's interactions
+   values = torch.Tensor([101, 102, 201, 202, 203, 301])  # Item IDs interactedwith
+   jt = JaggedTensor(lengths=lengths, values=values)
    # OR
-   jt = JaggedTensor(offsets=offsets, values=values) 
+   jt = JaggedTensor(offsets=offsets, values=values)
 
-*****************
-KeyedJaggedTensor
-*****************
+*******************
+ KeyedJaggedTensor
+*******************
 
-A ``KeyedJaggedTensor`` extends the functionality of ``JaggedTensor`` by introducing keys (which are typically feature names) to label different groups of features (e.g., user features and item features). This is the data type used in ``forward`` of ``EmbeddingBagCollection`` and ``EmbeddingCollection`` as they are used to represent multiple features in a table. 
+A ``KeyedJaggedTensor`` extends the functionality of ``JaggedTensor`` by
+introducing keys (which are typically feature names) to label different
+groups of features (e.g., user features and item features). This is the
+data type used in ``forward`` of ``EmbeddingBagCollection`` and
+``EmbeddingCollection`` as they are used to represent multiple features
+in a table.
 
-A ``KeyedJaggedTensor`` has an implied batch size which is the number of features divided by length of ``lengths`` tensor. The example below has a batch size of 2. Just like a ``JaggedTensor`` the ``offsets`` and ``lengths`` work the same way. You can also access the ``lengths``, ``offsets``, and ``values`` of a feature by accessing the key from the ``KeyedJaggedTensor``.
+A ``KeyedJaggedTensor`` has an implied batch size which is the number of
+features divided by length of ``lengths`` tensor. The example below has
+a batch size of 2. Just like a ``JaggedTensor`` the ``offsets`` and
+``lengths`` work the same way. You can also access the ``lengths``,
+``offsets``, and ``values`` of a feature by accessing the key from the
+``KeyedJaggedTensor``.
 
-.. code-block:: python
+.. code:: python
+
    keys = ["user_features", "item_features"]
-   # Lengths of interactions: 
-   # - User features: 2 users, with 2 and 3 interactions respectively 
-   # - Item features: 2 items, with 1 and 2 interactions respectively 
-   lengths = [2, 3, 1, 2] 
-   values = torch.Tensor([11, 12, 21, 22, 23, 101, 102, 201]) 
-   # Create a KeyedJaggedTensor 
-   kjt = KeyedJaggedTensor(keys=keys, lengths=lengths, values=values) 
-   # Access the features by key 
-   print(kjt["user_features"]) 
-   # Outputs user features 
-   print(kjt["item_features"]) 
-
+   # Lengths of interactions:
+   # - User features: 2 users, with 2 and 3 interactions respectively
+   # - Item features: 2 items, with 1 and 2 interactions respectively
+   lengths = [2, 3, 1, 2]
+   values = torch.Tensor([11, 12, 21, 22, 23, 101, 102, 201])
+   # Create a KeyedJaggedTensor
+   kjt = KeyedJaggedTensor(keys=keys, lengths=lengths, values=values)
+   # Access the features by key
+   print(kjt["user_features"])
+   # Outputs user features
+   print(kjt["item_features"])
 
 *********
  Planner
@@ -119,8 +158,8 @@ row-wise and table-wise column-wise. Where we place a table on a node
 and then column wise or row wise shard it within the node.
 
 Once sharded, the modules are converted to sharded versions of
-themselves, known as ShardedEmbeddingBag and
-ShardedEmbeddingBagCollection in TorchRec. These modules handle the
+themselves, known as ``ShardedEmbeddingBag`` and
+``ShardedEmbeddingBagCollection`` in TorchRec. These modules handle the
 communication of input data, embedding lookups, and gradients.
 
 There is a cost associated with sharding, which largely determines which
@@ -146,15 +185,15 @@ and embedding lookups. TorchRec handles this in three main stages, we’ll
 refer to this as the sharded embedding module forward that is used in
 training and inference of a TorchRec model,
 
--  Feature All to All/Input distribution (input_dist) 
-   - Communicate input data (in the form of a KeyedJaggedTensor) to the appropriate
-   device containing relevant embedding table shard
+-  Feature All to All/Input distribution (input_dist) - Communicate
+   input data (in the form of a ``KeyedJaggedTensor``) to the
+   appropriate device containing relevant embedding table shard
 
--  Embedding Lookup * Lookup embeddings with new input data formed after
+-  Embedding Lookup - Lookup embeddings with new input data formed after
    feature all to all exchange
 
--  Embedding All to All/Output Distribution (output_dist) 
-   - Communicate embedding lookup data back to the appropriate device that asked for
+-  Embedding All to All/Output Distribution (output_dist) - Communicate
+   embedding lookup data back to the appropriate device that asked for
    it (in accordance with the input data the device received)
 
 -  The backward pass does the same but in reverse order.
@@ -165,7 +204,7 @@ We show this below in the diagram,
    :alt: Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module
    :align: center
 
-   *Figure 2: Visualizing the forward pass including the ``input_dist``, ``lookup``, and ``output_dist`` of a sharded TorchRec module*
+   *Figure 2: Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module*
 
 **************************
  DistributedModelParallel
