@@ -720,7 +720,15 @@ class Proposer(abc.ABC):
         self,
         search_space: List[ShardingOption],
         enumerator: Optional[Enumerator] = None,
-    ) -> None: ...
+    ) -> None:
+        """
+        Load search space into proposer.
+
+        Args:
+            search_space (List[ShardingOption]): search space to load.
+            enumerator (Enumerator): enumerator used to generate search space.
+        """
+        ...
 
     @abc.abstractmethod
     def feedback(
@@ -729,10 +737,27 @@ class Proposer(abc.ABC):
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
         storage_constraint: Optional[Topology] = None,
-    ) -> None: ...
+    ) -> None:
+        """
+        Provide feedback to proposer.
+
+        Args:
+            partitionable (bool): whether the plan is partitionable.
+            plan (Optional[List[ShardingOption]]): plan to provide feedback on.
+            perf_rating (Optional[float]): performance rating of the plan.
+            storage_constraint (Optional[Topology]): storage constraint of the plan.
+        """
+        ...
 
     @abc.abstractmethod
-    def propose(self) -> Optional[List[ShardingOption]]: ...
+    def propose(self) -> Optional[List[ShardingOption]]:
+        """
+        Propose a sharding plan.
+
+        Returns:
+            Optional[List[ShardingOption]]: proposed plan.
+        """
+        ...
 
 
 class Partitioner(abc.ABC):

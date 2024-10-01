@@ -70,7 +70,13 @@ def _is_prefetch_pipelined(
 
 class EmbeddingPerfEstimator(ShardEstimator):
     """
-    Embedding Wall Time Perf Estimator
+    Embedding Wall Time Perf Estimator. This estimator estimates the wall time
+    of a given sharding option.
+
+    Args:
+        topology (Topology): device topology.
+        constraints (Optional[Dict[str, ParameterConstraints]]): parameter constraints.
+        is_inference (bool): whether or not the estimator is used for inference.
     """
 
     def __init__(
@@ -88,6 +94,13 @@ class EmbeddingPerfEstimator(ShardEstimator):
         sharding_options: List[ShardingOption],
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
+        """
+        Estimates the wall time of a given sharding option.
+
+        Args:
+            sharding_options (List[ShardingOption]): list of sharding options.
+            sharder_map (Optional[Dict[str, ModuleSharder[nn.Module]]]): sharder map.
+        """
         if not sharder_map:
             assert not sharding_options, "sharder_map not provided for sharding_options"
             return
@@ -298,6 +311,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 of device.
             prefetch_pipeline (bool = False): whether prefetch pipeline is enabled.
             expected_cache_fetches (float): number of expected cache fetches across global batch
+            uneven_sharding_perf_multiplier (float = 1.0): multiplier to account for uneven sharding perf
 
         Returns:
             List[float]: the list of perf for each shard.
@@ -870,19 +884,22 @@ class EmbeddingStorageEstimator(ShardEstimator):
     Embedding Storage Usage Estimator
 
     Args:
-      pipeline_type: The type of pipeline, if any. Will determine the input replication
-          factor during memory estimation.
-      run_embedding_at_peak_memory: If the embedding fwd/bwd will be execute when HBM
-          usage is at peak. When set to TRUE, any temporary memory allocation during
-          embedding forward/backward, as long as output sizes before output_dist will
-          be counted towards HBM storage cost. Otherwise they won't since they'll be
-          "hidden" by the real memory peak.
+        topology (Topology): device topology.
+        constraints (Optional[Dict[str, ParameterConstraints]]): parameter constraints.
+        pipeline_type (PipelineType): The type of pipeline, if any. Will determine the
+            input replication factor during memory estimation.
+        run_embedding_at_peak_memory (bool): If the embedding fwd/bwd will be execute when HBM
+            usage is at peak. When set to TRUE, any temporary memory allocation during
+            embedding forward/backward, as long as output sizes before output_dist will
+            be counted towards HBM storage cost. Otherwise they won't since they'll be
+            "hidden" by the real memory peak.
 
-          Only take effect if pipeline_type is set for backward compatibility (not affecting
-          models using old pipeline-agnostic formula)
+            Only take effect if pipeline_type is set for backward compatibility (not affecting
+            models using old pipeline-agnostic formula)
 
-          Default to FALSE because this is typically FALSE for a RecSys since memory
-          peak happens at the end of dense forwrad / beginning of dense backward instead.
+            Default to false because this is typically false for RecSys since memory
+            peak happens at the end of dense forwrad / beginning of dense backward instead.
+        is_inference (bool): If the model is inference model. Default to False.
     """
 
     def __init__(
@@ -904,6 +921,14 @@ class EmbeddingStorageEstimator(ShardEstimator):
         sharding_options: List[ShardingOption],
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
+        """
+        Estimate the storage cost of each sharding option.
+
+        Args:
+            sharding_options (List[ShardingOption]): list of sharding options.
+            sharder_map (Optional[Dict[str, ModuleSharder[nn.Module]]]): map from module
+                type to sharder.
+        """
         if not sharder_map:
             assert not sharding_options, "sharder_map not provided for sharding_options"
             return

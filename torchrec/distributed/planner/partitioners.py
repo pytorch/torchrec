@@ -150,7 +150,7 @@ class OrderedDeviceHardware:
 
 
 class GreedyPerfPartitioner(Partitioner):
-    """Greedy Partitioner
+    """Greedy Partitioner.
 
     Args:
         sort_by (SortBy): Sort sharding options by storage or perf in
