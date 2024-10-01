@@ -3,16 +3,16 @@
    :keywords: recommendation systems, sharding, distributed training, torchrec, embedding bags, embeddings, keyedjaggedtensor, row wise, table wise, column wise, table row wise, planner, sharder
 
 ###################
- TorchRec Concepts
+TorchRec Concepts
 ###################
 
-In this section, you will learn about the key concepts of TorchRec,
+In this section, we will learn about the key concepts of TorchRec,
 designed to optimize large-scale recommendation systems using PyTorch.
-You will learn how each concept works in detail and is used with the
-rest of TorchRec.
+We will learn how each concept works in detail and review how it is used
+with the rest of TorchRec.
 
 TorchRec has specific input/output data types of its modules to
-efficiently represent sparse features,
+efficiently represent sparse features, including:
 
 -  **JaggedTensor:** a wrapper around the lengths/offsets and values
    tensors for a singular sparse feature
@@ -29,29 +29,33 @@ on, the ``KeyedJaggedTensor`` makes communication of input data in a
 distributed environment very efficient leading to one of the key
 performance advantages that TorchRec provides.
 
-In the end to end training loop, TorchRec comprises of the following
-main components,
+In the end-to-end training loop, TorchRec comprises of the following
+main components:
 
--  **Planner:** Take in configuration of embedding tables, environment
-   setup, and generate optimized sharding plan for model
+-  **Planner:** Takes in the configuration of embedding tables,
+   environment setup, and generates an optimized sharding plan for the
+   model.
 
--  **Sharder:** Shard model according to sharding plan with different
+-  **Sharder:** Shards model according to sharding plan with different
    sharding strategies including data-parallel, table-wise, row-wise,
-   table-wise-row-wise, column-wise, table-wise-column-wise sharding.
+   table-wise-row-wise, column-wise, and table-wise-column-wise
+   sharding.
 
 -  **DistributedModelParallel:** Combines sharder, optimizer, and
-   provides entry point into training the model in a distributed manner.
+   provides an entry point into the training the model in a distributed
+   manner.
 
 **************
- JaggedTensor
+JaggedTensor
 **************
 
 A ``JaggedTensor`` represents a sparse feature through lengths, values,
-and offsets. It’s denoted as jagged as it helps efficiently represent
-data with variable-length sequences. A canonical ``torch.Tensor`` each
-sequence has the same length but in real world data each sequence can
-have varying lengths. A ``JaggedTensor`` allows representation of this
-data without padding making it highly efficient.
+and offsets. It is called "jagged" because it efficiently represents
+data with variable-length sequences. In contrast, a canonical
+``torch.Tensor`` assumes that each sequence has the same length, which
+is often not the case with real world data. A ``JaggedTensor``
+facilitates the representation of such data without padding making it
+highly efficient.
 
 Key Components:
 
@@ -66,7 +70,7 @@ Key Components:
    stored contiguously.
 
 Here is a simple example demonstrating how each of the components would
-look like,
+look like:
 
 .. code:: python
 
@@ -82,22 +86,22 @@ look like,
    jt = JaggedTensor(offsets=offsets, values=values)
 
 *******************
- KeyedJaggedTensor
+KeyedJaggedTensor
 *******************
 
 A ``KeyedJaggedTensor`` extends the functionality of ``JaggedTensor`` by
 introducing keys (which are typically feature names) to label different
-groups of features (e.g., user features and item features). This is the
-data type used in ``forward`` of ``EmbeddingBagCollection`` and
+groups of features, for example, user features and item features. This
+is the data type used in ``forward`` of ``EmbeddingBagCollection`` and
 ``EmbeddingCollection`` as they are used to represent multiple features
 in a table.
 
-A ``KeyedJaggedTensor`` has an implied batch size which is the number of
-features divided by length of ``lengths`` tensor. The example below has
-a batch size of 2. Just like a ``JaggedTensor`` the ``offsets`` and
-``lengths`` work the same way. You can also access the ``lengths``,
-``offsets``, and ``values`` of a feature by accessing the key from the
-``KeyedJaggedTensor``.
+A ``KeyedJaggedTensor`` has an implied batch size, which is the number
+of features divided by the length of ``lengths`` tensor. The example
+below has a batch size of 2. Similar to a ``JaggedTensor``, the
+``offsets`` and ``lengths`` function in the same manner. You can also
+access the ``lengths``, ``offsets``, and ``values`` of a feature by
+accessing the key from the ``KeyedJaggedTensor``.
 
 .. code:: python
 
@@ -115,26 +119,27 @@ a batch size of 2. Just like a ``JaggedTensor`` the ``offsets`` and
    print(kjt["item_features"])
 
 *********
- Planner
+Planner
 *********
 
 The TorchRec planner helps determine the best sharding configuration for
-a model. What it does it evaluates multiple possibilities of how
-embedding tables can be sharded and then optimizes for performance. The
-planner,
+a model. It evaluates multiple possibilities for sharding embedding
+tables and optimizes for performance. The planner performs the
+following:
 
--  Assesses the memory constraints of hardware
--  Estimates compute based on memory fetches as embedding lookups,
--  Addresses data specific factors
--  Considers other hardware specifics like bandwidth to generate an
-   optimal sharding plan
+-  Assesses the memory constraints of the hardware.
+-  Estimates compute requirements based on memory fetches, such as
+   embedding lookups.
+-  Addresses data-specific factors.
+-  Considers other hardware specifics, such as bandwidth, to generate an
+   optimal sharding plan.
 
-To help with accurate consideration of these factors, the Planner can
-take in data about the embedding tables, constraints, hardware
+To ensure accurate consideration of these factors, the Planner can
+incorporate data about the embedding tables, constraints, hardware
 information, and topology to help in generating an optimal plan.
 
 *****************************
- Sharding of EmbeddingTables
+Sharding of EmbeddingTables
 *****************************
 
 TorchRec sharder provides multiple sharding strategies for various use
@@ -155,19 +160,25 @@ to as a shard.
 
    *Figure 1: Visualizing the placement of table shards under different sharding schemes offered in TorchRec*
 
-Here are all the sharding types available in TorchRec today:
+Here is the list of all sharding types available in TorchRec:
 
 -  Table-wise (TW): as the name suggests, embedding table is kept as a
-   whole piece and placed on one rank
--  Column-wise (CW): the table is split along the ``emb_dim`` dimension
-   (e.g ``emb_dim=256`` is split into 4 shards: ``[64, 64, 64, 64]``)
+   whole piece and placed on one rank.
+
+-  Column-wise (CW): the table is split along the ``emb_dim`` dimension,
+   for example, ``emb_dim=256`` is split into 4 shards: ``[64, 64, 64,
+   64]``.
+
 -  Row-wise (RW): the table is split along the ``hash_size`` dimension,
-   usually split evenly among all the ranks
+   usually split evenly among all the ranks.
+
 -  Table-wise-row-wise (TWRW): table is placed on one host, split
-   row-wise among the ranks on that host
+   row-wise among the ranks on that host.
+
 -  Grid-shard (GS): a table is CW sharded and each CW shard is placed
-   TWRW on a node
--  Data parallel (DP): each rank keeps a copy of the table
+   TWRW on a host.
+
+-  Data parallel (DP): each rank keeps a copy of the table.
 
 Once sharded, the modules are converted to sharded versions of
 themselves, known as ``ShardedEmbeddingCollection`` and
@@ -175,7 +186,7 @@ themselves, known as ``ShardedEmbeddingCollection`` and
 communication of input data, embedding lookups, and gradients.
 
 ****************************************************
- Distributed Training with TorchRec Sharded Modules
+Distributed Training with TorchRec Sharded Modules
 ****************************************************
 
 With many sharding strategies available, how do we determine which one
@@ -186,11 +197,11 @@ strategy is best for a model.
 Without sharding, where each GPU keeps a copy of the embedding table
 (DP), the main cost is computation in which each GPU looks up the
 embedding vectors in its memory in the forward pass and updates the
-gradients in the backward.
+gradients in the backward pass.
 
 With sharding, there is an added communication cost: each GPU needs to
 ask the other GPUs for embedding vector lookup and communicate the
-gradients computed as well. This is usually referred to as all2all
+gradients computed as well. This is typically referred to as ``all2all``
 communication. In TorchRec, for input data on a given GPU, we determine
 where the embedding shard for each part of the data is located and send
 it to the target GPU. That target GPU then returns the embedding vectors
@@ -201,7 +212,7 @@ optimizer.
 As described above, sharding requires us to communicate the input data
 and embedding lookups. TorchRec handles this in three main stages, we
 will refer to this as the sharded embedding module forward that is used
-in training and inference of a TorchRec model,
+in training and inference of a TorchRec model:
 
 -  Feature All to All/Input distribution (``input_dist``)
 
@@ -221,7 +232,7 @@ in training and inference of a TorchRec model,
 
 -  The backward pass does the same operations but in reverse order.
 
-We show this below in the diagram,
+The diagram below demonstrates how it works:
 
 .. figure:: _static/img/torchrec_forward.png
    :alt: Visualizing the forward pass including the input_dist, lookup, and output_dist of a sharded TorchRec module
@@ -230,35 +241,36 @@ We show this below in the diagram,
    *Figure 2: Forward pass of a table wise sharded table including the input_dist, lookup, and output_dist of a sharded TorchRec module*
 
 **************************
- DistributedModelParallel
+DistributedModelParallel
 **************************
 
 All of the above culminates into the main entrypoint that TorchRec uses
 to shard and integrate the plan. At a high level,
-``DistributedModelParallel`` does,
+``DistributedModelParallel`` does the following:
 
--  Initialize environment by setting up process groups and assigning
-   device type
+-  Initializes the environment by setting up process groups and
+   assigning device type.
 
--  Uses default shaders if no shaders are provided, default includes
-   ``EmbeddingBagCollectionSharder``
+-  Uses default shaders if no shaders are provided, the default includes
+   ``EmbeddingBagCollectionSharder``.
 
--  Takes in provided sharding plan, if none provided it generates one
+-  Takes in the provided sharding plan, if none is provided, it
+   generates one.
 
--  Creates sharded version of modules and replaces the original modules
-   with them, such as ``EmbeddingCollection`` to
-   ``ShardedEmbeddingCollection``
+-  Creates a sharded version of modules and replaces the original
+   modules with them, for example, converts ``EmbeddingCollection`` to
+   ``ShardedEmbeddingCollection``.
 
 -  By default, wraps the ``DistributedModelParallel`` with
    ``DistributedDataParallel`` to make the module both model and data
-   parallel
+   parallel.
 
 ***********
- Optimizer
+Optimizer
 ***********
 
 TorchRec modules provide a seamless API to fuse the backwards pass and
-optimize step in training, providing a significant optimization in
+optimizer step in training, providing a significant optimization in
 performance and decreasing the memory used, alongside granularity in
 assigning distinct optimizers to distinct model parameters.
 
@@ -269,31 +281,30 @@ assigning distinct optimizers to distinct model parameters.
    *Figure 3: Fusing embedding backward with sparse optimizer*
 
 ***********
- Inference
+Inference
 ***********
 
 Inference environments are different from training, they are very
-sensitive to performance and size of the model. There are two key
-differences TorchRec inference optimizes for,
+sensitive to performance and the size of the model. There are two key
+differences TorchRec inference optimizes for:
 
--  Quantization: inference models are quantized for lower latency and
-   reduced model size, this lets us use as few devices as possible for
-   inference to minimize latency.
+-  **Quantization:** inference models are quantized for lower latency
+   and reduced model size. This optimization lets us use as few devices
+   as possible for inference to minimize latency.
 
--  C++ environment: to minimize latency even further, the model is ran
-   in a C++ environment
+-  **C++ environment:** to minimize latency even further, the model is
+   ran in a C++ environment.
 
 TorchRec provides the following to convert a TorchRec model into being
-inference ready.
+inference ready:
 
 -  APIs for quantizing the model, including optimizations automatically
    with FBGEMM TBE
 -  Sharding embeddings for distributed inference
 -  Compiling the model to TorchScript (compatible in C++)
 
-**********
- See Also
-**********
+See Also
+========
 
 -  `TorchRec Interactive Notebook using the concepts
    <https://github.com/pytorch/torchrec/blob/main/TorchRec_Interactive_Tutorial_Notebook_OSS_version.ipynb>`_
