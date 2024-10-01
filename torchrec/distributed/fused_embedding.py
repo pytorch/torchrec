@@ -96,6 +96,7 @@ class FusedEmbeddingCollectionSharder(BaseEmbeddingSharder[FusedEmbeddingCollect
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedFusedEmbeddingCollection:
 
         return ShardedFusedEmbeddingCollection(module, params, env, device)

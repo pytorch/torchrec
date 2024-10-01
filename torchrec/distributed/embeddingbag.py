@@ -55,6 +55,7 @@ from torchrec.distributed.sharding.twrw_sharding import TwRwPooledEmbeddingShard
 from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 from torchrec.distributed.types import (
     Awaitable,
+    EmbeddingEvent,
     EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
     LazyAwaitable,
@@ -71,6 +72,7 @@ from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
     append_prefix,
     convert_to_fbgemm_types,
+    maybe_annotate_embedding_event,
     merge_fused_params,
     none_throws,
     optimizer_type_to_emb_opt_type,
@@ -457,6 +459,8 @@ class VariableBatchEmbeddingBagCollectionAwaitable(
         embedding_names: List[str],
         embedding_dims: List[int],
         permute_op: PermutePooledEmbeddings,
+        module_fqn: Optional[str] = None,
+        sharding_types: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
         self._awaitables = awaitables
@@ -467,9 +471,18 @@ class VariableBatchEmbeddingBagCollectionAwaitable(
         self._embedding_names = embedding_names
         self._embedding_dims = embedding_dims
         self._permute_op = permute_op
+        self._module_fqn = module_fqn
+        self._sharding_types = sharding_types
 
     def _wait_impl(self) -> KeyedTensor:
-        embeddings = [w.wait() for w in self._awaitables]
+        embeddings = []
+        for i, w in enumerate(self._awaitables):
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.OUTPUT_DIST_WAIT,
+                self._module_fqn,
+                self._sharding_types[i] if self._sharding_types else None,
+            ):
+                embeddings.append(w.wait())
         batch_size = self._inverse_indices[1].numel() // len(self._inverse_indices[0])
         permute_indices = self._inverse_indices_permute_indices
         if permute_indices is not None:
@@ -499,15 +512,28 @@ class EmbeddingBagCollectionAwaitable(
         awaitables: List[Awaitable[torch.Tensor]],
         embedding_dims: List[int],
         embedding_names: List[str],
+        module_fqn: Optional[str] = None,
+        sharding_types: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
         self._awaitables = awaitables
         self._embedding_dims = embedding_dims
         self._embedding_names = embedding_names
+        self._module_fqn = module_fqn
+        self._sharding_types = sharding_types
 
     def _wait_impl(self) -> KeyedTensor:
+        embeddings = []
+        for i, w in enumerate(self._awaitables):
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.OUTPUT_DIST_WAIT,
+                self._module_fqn,
+                self._sharding_types[i] if self._sharding_types else None,
+            ):
+                embeddings.append(w.wait())
+
         return construct_output_kt(
-            embeddings=[w.wait() for w in self._awaitables],
+            embeddings=embeddings,
             embedding_names=self._embedding_names,
             embedding_dims=self._embedding_dims,
         )
@@ -555,8 +581,10 @@ class ShardedEmbeddingBagCollection(
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        module_fqn: Optional[str] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
+        self._module_fqn = module_fqn
         self._embedding_bag_configs: List[EmbeddingBagConfig] = (
             module.embedding_bag_configs()
         )
@@ -597,6 +625,7 @@ class ShardedEmbeddingBagCollection(
             "embedding_bags.",
             fused_params,
         )
+        self._sharding_types: List[str] = list(sharding_type_to_sharding_infos.keys())
         self._embedding_shardings: List[
             EmbeddingSharding[
                 EmbeddingShardingContext,
@@ -1119,17 +1148,27 @@ class ShardedEmbeddingBagCollection(
                 self._feature_splits,
             )
             awaitables = []
-            for input_dist, features_by_shard in zip(
-                self._input_dists, features_by_shards
+            for input_dist, features_by_shard, sharding_type in zip(
+                self._input_dists,
+                features_by_shards,
+                self._sharding_types,
             ):
-                awaitables.append(input_dist(features_by_shard))
+                with maybe_annotate_embedding_event(
+                    EmbeddingEvent.KJT_SPLITS_DIST,
+                    self._module_fqn,
+                    sharding_type,
+                ):
+                    awaitables.append(input_dist(features_by_shard))
+
                 ctx.sharding_contexts.append(
                     EmbeddingShardingContext(
                         batch_size_per_feature_pre_a2a=features_by_shard.stride_per_key(),
                         variable_batch_per_feature=features_by_shard.variable_stride_per_key(),
                     )
                 )
-            return KJTListSplitsAwaitable(awaitables, ctx)
+            return KJTListSplitsAwaitable(
+                awaitables, ctx, self._module_fqn, self._sharding_types
+            )
 
     def compute(
         self,
@@ -1197,7 +1236,22 @@ class ShardedEmbeddingBagCollection(
             dist = self._output_dists[i]
             sharding_context = ctx.sharding_contexts[i]
             features = input[i]
-            awaitables.append(dist(lookup(features), sharding_context))
+            sharding_type = self._sharding_types[i]
+
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.LOOKUP,
+                self._module_fqn,
+                sharding_type,
+            ):
+                embs = lookup(features)
+
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.OUTPUT_DIST,
+                self._module_fqn,
+                sharding_type,
+            ):
+                awaitables.append(dist(embs, sharding_context))
+
             if sharding_context:
                 batch_size_per_feature_pre_a2a.extend(
                     sharding_context.batch_size_per_feature_pre_a2a
@@ -1216,12 +1270,16 @@ class ShardedEmbeddingBagCollection(
                 embedding_names=self._embedding_names,
                 embedding_dims=self._embedding_dims,
                 permute_op=self._permute_op,
+                module_fqn=self._module_fqn,
+                sharding_types=self._sharding_types,
             )
         else:
             awaitable = EmbeddingBagCollectionAwaitable(
                 awaitables=awaitables,
                 embedding_dims=self._embedding_dims,
                 embedding_names=self._embedding_names,
+                module_fqn=self._module_fqn,
+                sharding_types=self._sharding_types,
             )
 
         # register callback if there are features that need mean pooling
@@ -1251,6 +1309,7 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingBagCollection:
         return ShardedEmbeddingBagCollection(
             module=module,
@@ -1259,6 +1318,7 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]
             fused_params=self.fused_params,
             device=device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
+            module_fqn=module_fqn,
         )
 
     def shardable_parameters(
@@ -1492,6 +1552,7 @@ class EmbeddingBagSharder(BaseEmbeddingSharder[nn.EmbeddingBag]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingBag:
         return ShardedEmbeddingBag(module, params, env, self.fused_params, device)
 

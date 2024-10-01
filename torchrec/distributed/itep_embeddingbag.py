@@ -168,6 +168,7 @@ class ITEPEmbeddingBagCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedITEPEmbeddingBagCollection:
 
         # Enforce GPU for ITEPEmbeddingBagCollection
