@@ -90,6 +90,7 @@ how you can contribute:
 
    overview.rst
    high-level-arch.rst
+   concepts.rst
 
 .. toctree::
    :maxdepth: 1
