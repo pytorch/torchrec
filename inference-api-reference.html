@@ -10,7 +10,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>torchrec.fx &mdash; TorchRec 1.1.0 documentation</title>
+  <title>Inference &mdash; TorchRec 1.1.0 documentation</title>
   
 
   
@@ -35,8 +35,7 @@
   <link rel="stylesheet" href="_static/css/custom.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="torchrec.inference" href="torchrec.inference.html" />
-    <link rel="prev" title="torchrec.distributed.sharding" href="torchrec.distributed.sharding.html" />
+    <link rel="prev" title="Model Parallel" href="model-parallel-api-reference.html" />
   <!-- Google Tag Manager -->
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
     new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -309,21 +308,13 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="setup-torchrec.html">Setting up TorchRec</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">All API References</span></p>
+<p class="caption" role="heading"><span class="caption-text">API References</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.html">torchrec.datasets</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.datasets.scripts.html">torchrec.datasets.scripts</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.html">torchrec.distributed</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.planner.html">torchrec.distributed.planner</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.distributed.sharding.html">torchrec.distributed.sharding</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">torchrec.fx</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.inference.html">torchrec.inference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.models.html">torchrec.models</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.modules.html">torchrec.modules</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.optim.html">torchrec.optim</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.quant.html">torchrec.quant</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.sparse.html">torchrec.sparse</a></li>
-<li class="toctree-l1"><a class="reference internal" href="torchrec.metrics.html">torchrec.metrics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datatypes-api-reference.html">Data Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules-api-reference.html">Modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="planner-api-reference.html">Planner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="model-parallel-api-reference.html">Model Parallel</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Inference</a></li>
 </ul>
 
             
@@ -364,13 +355,13 @@
       </li>
 
         
-      <li>torchrec.fx</li>
+      <li>Inference</li>
     
     
       <li class="pytorch-breadcrumbs-aside">
         
             
-            <a href="_sources/torchrec.fx.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
+            <a href="_sources/inference-api-reference.rst.txt" rel="nofollow"><img src="_static/images/view-page-source-icon.svg"></a>
           
         
       </li>
@@ -400,101 +391,102 @@
             <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
              <article itemprop="articleBody" id="pytorch-article" class="pytorch-article">
               
-  <section id="module-torchrec.fx">
-<span id="torchrec-fx"></span><h1>torchrec.fx<a class="headerlink" href="#module-torchrec.fx" title="Permalink to this heading">¶</a></h1>
-<p>Torchrec Tracer</p>
-<p>Custom FX tracer for torchrec</p>
-<p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
-<section id="module-torchrec.fx.tracer">
-<span id="torchrec-fx-tracer"></span><h2>torchrec.fx.tracer<a class="headerlink" href="#module-torchrec.fx.tracer" title="Permalink to this heading">¶</a></h2>
-<dl class="py class">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">Tracer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">leaf_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrec.fx.tracer.Tracer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Tracer</span></code></p>
-<p>Custom FX tracer for torchrec</p>
-<p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
-<p>We create a custom FX tracer to trace torchrec based models. The custom tracer
-handles python generic types (i.e. NoWait[T], Awaitable[T]) and lower it to
-TorchScript if needed</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.create_arg">
-<span class="sig-name descname"><span class="pre">create_arg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">slice</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">range</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Node</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">complex</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">device</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">memory_format</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">layout</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">OpOverload</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SymInt</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SymBool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">SymFloat</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.create_arg" title="Permalink to this definition">¶</a></dt>
-<dd><p>A method to specify the behavior of tracing when preparing values to
-be used as arguments to nodes in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
-<p>Adds support for the NoWait type in addition to the default tracer</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>a</strong> (<em>Any</em>) – The value to be emitted as an <code class="docutils literal notranslate"><span class="pre">Argument</span></code> in the <code class="docutils literal notranslate"><span class="pre">Graph</span></code>.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The value <code class="docutils literal notranslate"><span class="pre">a</span></code> converted into the appropriate <code class="docutils literal notranslate"><span class="pre">Argument</span></code></p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Argument</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.is_leaf_module">
-<span class="sig-name descname"><span class="pre">is_leaf_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module_qualified_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.is_leaf_module" title="Permalink to this definition">¶</a></dt>
-<dd><p>Override FX definition to include quantized embedding bags</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.path_of_module">
-<span class="sig-name descname"><span class="pre">path_of_module</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mod</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.path_of_module" title="Permalink to this definition">¶</a></dt>
-<dd><p>Allows trace-ability of non registered modules. This is typically used for Table Batched Embeddings
-made to look like nn.EmbeddingBags</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.Tracer.trace">
-<span class="sig-name descname"><span class="pre">trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Graph</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.Tracer.trace" title="Permalink to this definition">¶</a></dt>
-<dd><div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Backwards-compatibility for this API is guaranteed.</p>
-</div>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.is_fx_tracing">
-<span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">is_fx_tracing</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.is_fx_tracing" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="torchrec.fx.tracer.symbolic_trace">
-<span class="sig-prename descclassname"><span class="pre">torchrec.fx.tracer.</span></span><span class="sig-name descname"><span class="pre">symbolic_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">root</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concrete_args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leaf_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">GraphModule</span></span></span><a class="headerlink" href="#torchrec.fx.tracer.symbolic_trace" title="Permalink to this definition">¶</a></dt>
-<dd><p>Symbolic tracing API</p>
-<p>Given an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or function instance <code class="docutils literal notranslate"><span class="pre">root</span></code>, this function will return a <code class="docutils literal notranslate"><span class="pre">GraphModule</span></code>
-constructed by recording operations seen while tracing through <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">concrete_args</span></code> allows you to partially specialize your function, whether it’s to remove control flow or data structures.</p>
+  <section id="inference">
+<h1>Inference<a class="headerlink" href="#inference" title="Permalink to this heading">¶</a></h1>
+<p>TorchRec provides easy-to-use APIs for transforming an authored TorchRec model
+into an optimized inference model for distributed inference, via eager module swaps.</p>
+<p>This transforms TorchRec modules like <code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code> in the model to
+a quantized, sharded version that can be compiled using torch.fx and TorchScript
+for inference in a C++ environment.</p>
+<p>The intended use is calling <code class="docutils literal notranslate"><span class="pre">quantize_inference_model</span></code> on the model followed by
+<code class="docutils literal notranslate"><span class="pre">shard_quant_model</span></code>.</p>
+<span class="target" id="module-torchrec.inference.modules"></span><dl class="py function">
+<dt class="sig sig-object py" id="torchrec.inference.modules.quantize_inference_model">
+<span class="sig-prename descclassname"><span class="pre">torchrec.inference.modules.</span></span><span class="sig-name descname"><span class="pre">quantize_inference_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quantization_mapping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_table_weight_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fp_weight_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dtype</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quantization_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dtype</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dtype</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.float32</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="headerlink" href="#torchrec.inference.modules.quantize_inference_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Quantize the model, module swapping TorchRec train modules with its
+quantized counterpart, (e.g. EmbeddingBagCollection -&gt; QuantEmbeddingBagCollection).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>root</strong> (<em>Union</em><em>[</em><em>torch.nn.Module</em><em>, </em><em>Callable</em><em>]</em>) – Module or function to be traced and converted
-into a Graph representation.</p></li>
-<li><p><strong>concrete_args</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>any</em><em>]</em><em>]</em>) – Inputs to be partially specialized</p></li>
+<li><p><strong>model</strong> (<em>torch.nn.Module</em>) – the model to be quantized</p></li>
+<li><p><strong>quantization_mapping</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>Type</em><em>[</em><em>torch.nn.Module</em><em>]</em><em>]</em><em>]</em>) – a mapping from
+the original module type to the quantized module type. If not provided, the default mapping will be used:
+(EmbeddingBagCollection -&gt; QuantEmbeddingBagCollection, EmbeddingCollection -&gt; QuantEmbeddingCollection).</p></li>
+<li><p><strong>per_table_weight_dtype</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>torch.dtype</em><em>]</em><em>]</em>) – a mapping from table name to weight dtype.
+If not provided, the default quantization dtype will be used (int8).</p></li>
+<li><p><strong>fp_weight_dtype</strong> (<em>torch.dtype</em>) – the desired quantized dtype for feature processor weights in
+FeatureProcessedEmbeddingBagCollection if used. Default is int8.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>a Module created from the recorded operations from <code class="docutils literal notranslate"><span class="pre">root</span></code>.</p>
+<dd class="field-even"><p>the quantized model</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>GraphModule</p>
+<dd class="field-odd"><p>torch.nn.Module</p>
+</dd>
+</dl>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ebc</span> <span class="o">=</span> <span class="n">EmbeddingBagCollection</span><span class="p">(</span><span class="n">tables</span><span class="o">=</span><span class="n">eb_configs</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">))</span>
+
+<span class="n">module</span> <span class="o">=</span> <span class="n">DLRMPredictModule</span><span class="p">(</span>
+    <span class="n">embedding_bag_collection</span><span class="o">=</span><span class="n">ebc</span><span class="p">,</span>
+    <span class="n">dense_in_features</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">dense_in_features</span><span class="p">,</span>
+    <span class="n">dense_arch_layer_sizes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">dense_arch_layer_sizes</span><span class="p">,</span>
+    <span class="n">over_arch_layer_sizes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">over_arch_layer_sizes</span><span class="p">,</span>
+    <span class="n">id_list_features_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_config</span><span class="o">.</span><span class="n">id_list_features_keys</span><span class="p">,</span>
+    <span class="n">dense_device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">quant_model</span> <span class="o">=</span> <span class="n">quantize_inference_model</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="torchrec.inference.modules.shard_quant_model">
+<span class="sig-prename descclassname"><span class="pre">torchrec.inference.modules.</span></span><span class="sig-name descname"><span class="pre">shard_quant_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">world_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cuda'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharding_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'meta'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharders</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">ModuleSharder</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device_memory_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ParameterConstraints</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="planner-api-reference.html#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan"><span class="pre">ShardingPlan</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.inference.modules.shard_quant_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Shard a quantized TorchRec model, used for generating the most optimal model for inference and
+necessary for distributed inference.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>torch.nn.Module</em>) – the quantized model to be sharded</p></li>
+<li><p><strong>world_size</strong> (<em>int</em>) – the number of devices to shard the model, default to 1</p></li>
+<li><p><strong>compute_device</strong> (<em>str</em>) – the device to run the model, default to “cuda”</p></li>
+<li><p><strong>sharding_device</strong> (<em>str</em>) – the device to run the sharding, default to “meta”</p></li>
+<li><p><strong>sharders</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>ModuleSharder</em><em>[</em><em>torch.nn.Module</em><em>]</em><em>]</em><em>]</em>) – sharders to use for sharding
+quantized model, default to QuantEmbeddingBagCollectionSharder, QuantEmbeddingCollectionSharder,
+QuantFeatureProcessedEmbeddingBagCollectionSharder.</p></li>
+<li><p><strong>device_memory_size</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – the memory limit for cuda devices, default to None</p></li>
+<li><p><strong>constraints</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>ParameterConstraints</em><em>]</em><em>]</em>) – constraints to use for sharding, default to None
+which will then implement default constraints with QuantEmbeddingBagCollection being sharded TableWise</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>the sharded model and the sharding plan</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple[torch.nn.Module, <a class="reference internal" href="planner-api-reference.html#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan">ShardingPlan</a>]</p>
+</dd>
+</dl>
+<dl>
+<dt>Example::</dt><dd><p>ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device(“meta”))</p>
+<dl class="simple">
+<dt>module = DLRMPredictModule(</dt><dd><p>embedding_bag_collection=ebc,
+dense_in_features=self.model_config.dense_in_features,
+dense_arch_layer_sizes=self.model_config.dense_arch_layer_sizes,
+over_arch_layer_sizes=self.model_config.over_arch_layer_sizes,
+id_list_features_keys=self.model_config.id_list_features_keys,
+dense_device=device,</p>
+</dd>
+</dl>
+<p>)</p>
+<p>quant_model = quantize_inference_model(module)
+sharded_model, _ = shard_quant_model(quant_model)</p>
 </dd>
 </dl>
 </dd></dl>
 
-</section>
-<section id="module-0">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-0" title="Permalink to this heading">¶</a></h2>
-<p>Torchrec Tracer</p>
-<p>Custom FX tracer for torchrec</p>
-<p>See <a class="reference external" href="https://pytorch.org/docs/stable/fx.html">Torch.FX documentation</a></p>
-</section>
 </section>
 
 
@@ -505,10 +497,8 @@ into a Graph representation.</p></li>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="torchrec.inference.html" class="btn btn-neutral float-right" title="torchrec.inference" accesskey="n" rel="next">Next <img src="_static/images/chevron-right-orange.svg" class="next-page"></a>
       
-      
-        <a href="torchrec.distributed.sharding.html" class="btn btn-neutral" title="torchrec.distributed.sharding" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+        <a href="model-parallel-api-reference.html" class="btn btn-neutral" title="Model Parallel" accesskey="p" rel="prev"><img src="_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
       
     </div>
   
@@ -540,11 +530,7 @@ into a Graph representation.</p></li>
           <div class="pytorch-right-menu" id="pytorch-right-menu">
             <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
               <ul>
-<li><a class="reference internal" href="#">torchrec.fx</a><ul>
-<li><a class="reference internal" href="#module-torchrec.fx.tracer">torchrec.fx.tracer</a></li>
-<li><a class="reference internal" href="#module-0">Module contents</a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#">Inference</a></li>
 </ul>
 
             </div>
@@ -585,7 +571,7 @@ into a Graph representation.</p></li>
  
 
 <script type="text/javascript">
-  var collapsedSections = ['Introduction', 'Getting Started', 'All API References']
+  var collapsedSections = ['Introduction', 'Getting Started', 'API References']
 </script>
 
 
