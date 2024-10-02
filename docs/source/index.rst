@@ -100,20 +100,12 @@ how you can contribute:
    setup-torchrec.rst
 
 .. toctree::
-   :maxdepth: 1
-   :caption: All API References
+   :maxdepth: 2
+   :caption: API References
    :hidden:
 
-   torchrec.datasets.rst
-   torchrec.datasets.scripts.rst
-   torchrec.distributed.rst
-   torchrec.distributed.planner.rst
-   torchrec.distributed.sharding.rst
-   torchrec.fx.rst
-   torchrec.inference.rst
-   torchrec.models.rst
-   torchrec.modules.rst
-   torchrec.optim.rst
-   torchrec.quant.rst
-   torchrec.sparse.rst
-   torchrec.metrics.rst
+   datatypes-api-reference.rst
+   modules-api-reference.rst
+   planner-api-reference.rst
+   model-parallel-api-reference.rst
+   inference-api-reference.rst
