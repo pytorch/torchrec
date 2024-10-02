@@ -268,7 +268,7 @@
               
               
                 <div class="version">
-                  1.1.0.dev20241001+cpu
+                  1.1.0.dev20241002+cpu
                 </div>
               
             
@@ -1383,10 +1383,10 @@
       </ul></li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionAwaitable">EmbeddingBagCollectionAwaitable (class in torchrec.distributed.embeddingbag)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionContext">EmbeddingBagCollectionContext (class in torchrec.distributed.embeddingbag)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollectionInterface">EmbeddingBagCollectionInterface (class in torchrec.modules.embedding_modules)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embeddingbag.EmbeddingBagCollectionSharder">EmbeddingBagCollectionSharder (class in torchrec.distributed.embeddingbag)</a>
@@ -1414,6 +1414,8 @@
       <li><a href="torchrec.modules.html#torchrec.modules.embedding_configs.EmbeddingConfig">EmbeddingConfig (class in torchrec.modules.embedding_configs)</a>
 </li>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.enumerators.EmbeddingEnumerator">EmbeddingEnumerator (class in torchrec.distributed.planner.enumerators)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.EmbeddingEvent">EmbeddingEvent (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.EmbeddingModuleShardingPlan">EmbeddingModuleShardingPlan (class in torchrec.distributed.types)</a>
 </li>
@@ -2289,17 +2291,21 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta.keys">keys (torchrec.distributed.embedding_sharding.KJTSplitsAllToAllMeta attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.keys">keys() (torchrec.sparse.jagged_tensor.KeyedJaggedTensor method)</a>
 
       <ul>
         <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.KeyedTensor.keys">(torchrec.sparse.jagged_tensor.KeyedTensor method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.html#torchrec.distributed.types.KeyValueParams">KeyValueParams (class in torchrec.distributed.types)</a>
 </li>
       <li><a href="torchrec.sparse.html#torchrec.sparse.jagged_tensor.kjt_is_equal">kjt_is_equal() (in module torchrec.sparse.jagged_tensor)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.EmbeddingEvent.KJT_SPLITS_DIST">KJT_SPLITS_DIST (torchrec.distributed.types.EmbeddingEvent attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.EmbeddingEvent.KJT_TENSORS_DIST">KJT_TENSORS_DIST (torchrec.distributed.types.EmbeddingEvent attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.dist_data.KJTAllToAll">KJTAllToAll (class in torchrec.distributed.dist_data)</a>, <a href="torchrec.distributed.sharding.html#torchrec.distributed.dist_data.KJTAllToAll">[1]</a>
 </li>
@@ -2463,6 +2469,8 @@
         <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.Stats.log">(torchrec.distributed.planner.types.Stats method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.EmbeddingEvent.LOOKUP">LOOKUP (torchrec.distributed.types.EmbeddingEvent attribute)</a>
+</li>
       <li><a href="torchrec.modules.html#torchrec.modules.crossnet.LowRankCrossNet">LowRankCrossNet (class in torchrec.modules.crossnet)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.crossnet.LowRankMixtureCrossNet">LowRankMixtureCrossNet (class in torchrec.modules.crossnet)</a>
@@ -2512,6 +2520,8 @@
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.ManagedCollisionModule">ManagedCollisionModule (class in torchrec.modules.mc_modules)</a>
 </li>
       <li><a href="torchrec.optim.html#torchrec.optim.warmup.WarmupStage.max_iters">max_iters (torchrec.optim.warmup.WarmupStage attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.utils.maybe_annotate_embedding_event">maybe_annotate_embedding_event() (in module torchrec.distributed.utils)</a>
 </li>
       <li><a href="torchrec.modules.html#torchrec.modules.mc_modules.MCHEvictionPolicy">MCHEvictionPolicy (class in torchrec.modules.mc_modules)</a>
 </li>
@@ -2998,11 +3008,13 @@
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding_types.OptimType">OptimType (class in torchrec.distributed.embedding_types)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.partitioners.OrderedDeviceHardware">OrderedDeviceHardware (class in torchrec.distributed.planner.partitioners)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.PlannerErrorType.OTHER">OTHER (torchrec.distributed.planner.types.PlannerErrorType attribute)</a>
+</li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.EmbeddingEvent.OUTPUT_DIST">OUTPUT_DIST (torchrec.distributed.types.EmbeddingEvent attribute)</a>
 </li>
       <li><a href="torchrec.distributed.html#torchrec.distributed.embedding.ShardedEmbeddingCollection.output_dist">output_dist() (torchrec.distributed.embedding.ShardedEmbeddingCollection method)</a>
 
@@ -3018,6 +3030,8 @@
         <li><a href="torchrec.distributed.html#torchrec.distributed.types.ShardedModule.output_dist">(torchrec.distributed.types.ShardedModule method)</a>
 </li>
       </ul></li>
+      <li><a href="torchrec.distributed.html#torchrec.distributed.types.EmbeddingEvent.OUTPUT_DIST_WAIT">OUTPUT_DIST_WAIT (torchrec.distributed.types.EmbeddingEvent attribute)</a>
+</li>
       <li><a href="torchrec.distributed.planner.html#id11">output_dtype (torchrec.distributed.planner.types.ParameterConstraints attribute)</a>, <a href="torchrec.distributed.planner.html#torchrec.distributed.planner.types.ParameterConstraints.output_dtype">[1]</a>
 
       <ul>
