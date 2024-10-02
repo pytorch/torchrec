@@ -110,6 +110,7 @@ class ManagedCollisionEmbeddingBagCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedManagedCollisionEmbeddingBagCollection:
 
         if device is None:

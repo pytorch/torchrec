@@ -373,6 +373,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 module_sharding_plan,
                 self._env,
                 self.device,
+                path,
             )
             return module
 

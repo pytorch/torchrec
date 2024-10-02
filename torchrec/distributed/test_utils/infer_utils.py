@@ -432,6 +432,7 @@ class TestQuantFPEBCSharder(QuantFeatureProcessedEmbeddingBagCollectionSharder):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantFeatureProcessedEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
@@ -479,6 +480,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         params: Dict[str, ParameterSharding],
         env: Union[ShardingEnv, Dict[str, ShardingEnv]],
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
@@ -525,6 +527,7 @@ class TestQuantECSharder(QuantEmbeddingCollectionSharder):
         params: Dict[str, ParameterSharding],
         env: Union[Dict[str, ShardingEnv], ShardingEnv],
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantEmbeddingCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(

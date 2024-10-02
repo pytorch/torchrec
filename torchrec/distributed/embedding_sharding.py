@@ -36,10 +36,12 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    EmbeddingEvent,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardMetadata,
 )
+from torchrec.distributed.utils import maybe_annotate_embedding_event
 from torchrec.fx.utils import assert_fx_safe
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -660,10 +662,14 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
         self,
         awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
         ctx: C,
+        module_fqn: Optional[str] = None,
+        sharding_types: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
         self.ctx = ctx
+        self._module_fqn = module_fqn
+        self._sharding_types = sharding_types
 
     def _wait_impl(self) -> KJTListAwaitable:
         """
@@ -676,7 +682,16 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
         Returns:
             KJTListAwaitable: awaitables for tensors of the sparse features.
         """
-        tensors_awaitables = [w.wait() for w in self.awaitables]
+        tensors_awaitables = []
+
+        for i, w in enumerate(self.awaitables):
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.OUTPUT_DIST_WAIT,
+                self._module_fqn,
+                self._sharding_types[i] if self._sharding_types else None,
+            ):
+                tensors_awaitables.append(w.wait())
+
         _set_sharding_context_intra_a2a(tensors_awaitables, self.ctx)
         return KJTListAwaitable(tensors_awaitables, self.ctx)
 

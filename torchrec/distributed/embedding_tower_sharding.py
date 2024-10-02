@@ -560,10 +560,28 @@ class ShardedEmbeddingTowerCollection(
                 pg=self._intra_pg,
             )
             for i, tower in local_towers:
+                table_names = {}
+                if isinstance(tower.embedding, EmbeddingBagCollection):
+                    table_names = {
+                        table.name for table in tower.embedding.embedding_bag_configs()
+                    }
+                elif isinstance(tower.embedding, EmbeddingCollection):
+                    table_names = {
+                        table.name for table in tower.embedding.embedding_configs()
+                    }
+                elif hasattr(tower.embedding, "tables"):
+                    table_names = {table.name for table in tower.embedding.tables()}
+                else:
+                    # Use all tables if unable to determine from tower.embedding
+                    table_names = set(table_name_to_parameter_sharding.keys())
                 # pyre-ignore [16]
                 self.embeddings[i] = tower_sharder.embedding_sharder(tower).shard(
                     tower.embedding,
-                    table_name_to_parameter_sharding,
+                    {
+                        table: param
+                        for table, param in table_name_to_parameter_sharding.items()
+                        if table in table_names
+                    },
                     intra_env,
                     device,
                 )
@@ -839,6 +857,7 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingTower:
         kjt_features, wkjt_features = self.embedding_feature_names(module)
 
@@ -939,6 +958,7 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingTowerCollection:
 
         return ShardedEmbeddingTowerCollection(

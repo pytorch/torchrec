@@ -89,6 +89,15 @@ how you can contribute:
    :hidden:
 
    overview.rst
+   high-level-arch.rst
+   concepts.rst
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
+   :hidden:
+
+   setup-torchrec.rst
 
 .. toctree::
    :maxdepth: 1

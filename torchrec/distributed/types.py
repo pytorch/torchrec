@@ -139,6 +139,20 @@ class ShardingType(Enum):
     GRID_SHARD = "grid_shard"
 
 
+class EmbeddingEvent(Enum):
+    """
+    Events in sharded embedding module's forward, used for trace annotations
+    """
+
+    KJT_SPLITS_DIST = "splits_dist"
+    KJT_TENSORS_DIST = "tensors_dist"
+    LOOKUP = "lookup"
+    OUTPUT_DIST = "output_dist"
+    # When .wait() is called on output_dist awaitable
+    # Useful for linking backward comms event in trace to forward event
+    OUTPUT_DIST_WAIT = "output_dist_wait"
+
+
 class PipelineType(Enum):
     """
     Known pipeline types.
@@ -969,6 +983,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         params: EmbeddingModuleShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedModule[Any, Any, Any, Any]:
         """
         Does the actual sharding. It will allocate parameters on the requested locations
@@ -981,7 +996,8 @@ class ModuleSharder(abc.ABC, Generic[M]):
             params (EmbeddingModuleShardingPlan): dict of fully qualified parameter names
                 (module path + parameter name, '.'-separated) to its sharding spec.
             env (ShardingEnv): sharding environment that has the process group.
-            device (torch.device): compute device.
+            device (Optional[torch.device]): compute device.
+            path (Optional[str]): fully qualified name of the module. used for trace annotations in embedding modules
 
         Returns:
             ShardedModule[Any, Any, Any]: sharded module implementation.
