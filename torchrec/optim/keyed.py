@@ -417,6 +417,11 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
     def step(self, closure: Any = None) -> None:
         self._optimizer.step(closure=closure)
 
+    def set_optimizer_step(self, step: int) -> None:
+        if hasattr(self._optimizer, "set_optimizer_step"):
+            # pyre-ignore [16].
+            self._optimizer.set_optimizer_step(step)
+
 
 class OptimizerWrapper(KeyedOptimizer):
     """
@@ -464,3 +469,8 @@ class OptimizerWrapper(KeyedOptimizer):
 
     def save_param_groups(self, save: bool) -> None:
         self._optimizer.save_param_groups(save)
+
+    def set_optimizer_step(self, step: int) -> None:
+        if hasattr(self._optimizer, "set_optimizer_step"):
+            # pyre-ignore [16].
+            self._optimizer.set_optimizer_step(step)
