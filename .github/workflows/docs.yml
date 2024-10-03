@@ -18,6 +18,7 @@ jobs:
         include:
          - os: linux.20_04.4x
            python-version: 3.9
+           python-tag: "py39"
     steps:
     - name: Check ldd --version
       run: ldd --version
@@ -66,7 +67,8 @@ jobs:
         conda run -n build_binary pip install torchmetrics==1.0.3
     - name: Install TorchRec
       run: |
-        conda run -n build_binary pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary pip install -r requirements.txt
+        conda run -n build_binary python setup.py bdist_wheel --python-tag=${{ matrix.python-tag }}
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |

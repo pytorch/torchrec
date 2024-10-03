@@ -10,7 +10,7 @@
 import copy
 from functools import reduce
 from time import perf_counter
-from typing import cast, Dict, List, Optional, Tuple, Union
+from typing import Callable, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 
@@ -156,6 +156,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         debug (bool): whether to print debug information.
 
     Example::
+
         ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device("meta"))
         planner = EmbeddingShardingPlanner()
         plan = planner.plan(
@@ -177,6 +178,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         stats: Optional[Union[Stats, List[Stats]]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
+        callbacks: Optional[
+            List[Callable[[List[ShardingOption]], List[ShardingOption]]]
+        ] = None,
     ) -> None:
         if topology is None:
             topology = Topology(
@@ -228,6 +232,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._num_proposals: int = 0
         self._num_plans: int = 0
         self._best_plan: Optional[List[ShardingOption]] = None
+        self._callbacks: List[
+            Callable[[List[ShardingOption]], List[ShardingOption]]
+        ] = ([] if callbacks is None else callbacks)
 
     def collective_plan(
         self,
@@ -377,6 +384,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 proposal = proposer.propose()
 
         if best_plan:
+            for callback in self._callbacks:
+                best_plan = callback(best_plan)
+
             self._best_plan = best_plan
             sharding_plan = _to_sharding_plan(best_plan, self._topology)
 
@@ -486,6 +496,9 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
         stats: Optional[Dict[str, Union[Stats, List[Stats]]]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         debug: bool = True,
+        callbacks: Optional[
+            List[Callable[[List[ShardingOption]], List[ShardingOption]]]
+        ] = None,
     ) -> None:
         default_device = "cuda" if torch.cuda.is_available() else "cpu"
         if topology_groups is None:
@@ -573,6 +586,9 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
         self._num_proposals: int = 0
         self._num_plans: int = 0
         self._best_plan: Optional[List[ShardingOption]] = None
+        self._callbacks: List[
+            Callable[[List[ShardingOption]], List[ShardingOption]]
+        ] = ([] if callbacks is None else callbacks)
 
     def collective_plan(
         self,
@@ -717,6 +733,9 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
                     proposal = proposer.propose()
 
             if best_plan:
+                for callback in self._callbacks:
+                    best_plan = callback(best_plan)
+
                 self._best_plan = best_plan
                 sharding_plan = _to_sharding_plan(
                     best_plan, self._topology_groups[group]

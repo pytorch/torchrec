@@ -379,6 +379,16 @@ class ShardedEmbeddingModule(
 
         return "\n ".join(rep)
 
+    def train(self, mode: bool = True):  # pyre-ignore[3]
+        r"""Set the module in training mode."""
+        super().train(mode)
+
+        # adding additional handling for lookups
+        for lookup in self._lookups:
+            lookup.train(mode)
+
+        return self
+
 
 M = TypeVar("M", bound=nn.Module)
 

@@ -20,9 +20,9 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
 from torchrec.distributed.planner.stats import (
-    _calc_max_chi_divergence,
+    _calc_max_chi_sq_divergence,
     _calc_max_kl_divergence,
-    _chi_divergence,
+    _chi_sq_divergence,
     _kl_divergence,
     _normalize_float,
     _normalize_int,
@@ -126,10 +126,10 @@ class TestEmbeddingStats(unittest.TestCase):
 
     def test_chi_divergence(self) -> None:
         p_1 = [0.5, 0.5]
-        self.assertEqual(_chi_divergence(p_1), 0.0)
+        self.assertEqual(_chi_sq_divergence(p_1), 0.0)
 
         p_2 = [0.0, 1.0]
-        self.assertEqual(_chi_divergence(p_2), 1.0)
+        self.assertEqual(_chi_sq_divergence(p_2), 1.0)
 
     def test_kl_divergence(self) -> None:
         p_1 = [0.5, 0.5]
@@ -170,8 +170,8 @@ class TestEmbeddingStats(unittest.TestCase):
 
         self.assertTrue(
             math.isclose(
-                _chi_divergence(normalized_p, alpha),
-                _calc_max_chi_divergence(N, alpha),
+                _chi_sq_divergence(normalized_p),
+                _calc_max_chi_sq_divergence(N),
                 abs_tol=1e-10,
             )
         )
