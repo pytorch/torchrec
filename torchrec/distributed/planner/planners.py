@@ -156,6 +156,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         debug (bool): whether to print debug information.
 
     Example::
+
         ebc = EmbeddingBagCollection(tables=eb_configs, device=torch.device("meta"))
         planner = EmbeddingShardingPlanner()
         plan = planner.plan(
