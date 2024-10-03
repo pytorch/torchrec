@@ -21,7 +21,6 @@ import os
 import sys
 
 import pytorch_sphinx_theme
-import torchrec
 
 current_dir = os.path.dirname(__file__)
 target_dir = os.path.abspath(os.path.join(current_dir, "../.."))
@@ -36,7 +35,7 @@ author = "Meta"
 
 try:
     # pyre-ignore
-    version = torchrec.__version__
+    version = "1.0.0"  # TODO: Hardcode stable version for now
 except Exception:
     # when run internally, we don't have a version yet
     version = "0.0.0"
