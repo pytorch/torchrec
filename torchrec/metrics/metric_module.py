@@ -43,6 +43,7 @@ from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
 from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
+from torchrec.metrics.ne_positive import NEPositiveMetric
 from torchrec.metrics.output import OutputMetric
 from torchrec.metrics.precision import PrecisionMetric
 from torchrec.metrics.rauc import RAUCMetric
@@ -64,6 +65,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.NE: NEMetric,
+    RecMetricEnum.NE_POSITIVE: NEPositiveMetric,
     RecMetricEnum.SEGMENTED_NE: SegmentedNEMetric,
     RecMetricEnum.CTR: CTRMetric,
     RecMetricEnum.CALIBRATION: CalibrationMetric,

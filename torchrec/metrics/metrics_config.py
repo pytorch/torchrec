@@ -20,6 +20,7 @@ class RecMetricEnumBase(StrValueMixin, Enum):
 
 class RecMetricEnum(RecMetricEnumBase):
     NE = "ne"
+    NE_POSITIVE = "ne_positive"
     SEGMENTED_NE = "segmented_ne"
     LOG_LOSS = "log_loss"
     CTR = "ctr"
