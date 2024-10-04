@@ -40,6 +40,7 @@ class MetricName(MetricNameBase):
     DEFAULT = ""
 
     NE = "ne"
+    NE_POSITIVE = "ne_positive"
     SEGMENTED_NE = "segmented_ne"
     LOG_LOSS = "logloss"
     THROUGHPUT = "throughput"
@@ -83,6 +84,7 @@ class MetricNamespace(MetricNamespaceBase):
     DEFAULT = ""
 
     NE = "ne"
+    NE_POSITIVE = "ne_positive"
     SEGMENTED_NE = "segmented_ne"
     THROUGHPUT = "throughput"
     CTR = "ctr"
