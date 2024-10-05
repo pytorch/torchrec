@@ -159,7 +159,10 @@ class ITEPEmbeddingBagCollectionSharder(
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._ebc_sharder: EmbeddingBagCollectionSharder = (
-            ebc_sharder or EmbeddingBagCollectionSharder(self.qcomm_codecs_registry)
+            ebc_sharder
+            or EmbeddingBagCollectionSharder(
+                qcomm_codecs_registry=self.qcomm_codecs_registry
+            )
         )
 
     def shard(
