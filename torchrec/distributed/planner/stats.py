@@ -783,7 +783,7 @@ class EmbeddingStats(Stats):
         self._stats_table.append(f"#    {usable_memory : <{self._width-6}}#")
         self._stats_table.append(f"#    {usable_hbm_percentage : <{self._width-6}}#")
 
-        if isinstance(storage_reservation, HeuristicalStorageReservation):
+        try:
             dense_hbm = round(bytes_to_gb(dense_storage.hbm), 3)
             dense_ddr = round(bytes_to_gb(dense_storage.ddr), 3)
             dense_storage_text = f"HBM: {dense_hbm} GB, DDR: {dense_ddr} GB"
@@ -792,7 +792,12 @@ class EmbeddingStats(Stats):
                 f"# {'Dense Storage (per rank): ' : <{self._width-3}}#"
             )
             self._stats_table.append(f"#    {dense_storage_text : <{self._width-6}}#")
+        except Exception as e:
+            logger.info(
+                f"Dense Storage is not available for storage reservation type: {type(storage_reservation)}. Error message: {e}"
+            )
 
+        try:
             kjt_hbm = round(bytes_to_gb(kjt_storage.hbm), 3)
             kjt_ddr = round(bytes_to_gb(kjt_storage.ddr), 3)
             kjt_storage_text = f"HBM: {kjt_hbm} GB, DDR: {kjt_ddr} GB"
@@ -801,6 +806,10 @@ class EmbeddingStats(Stats):
                 f"# {'KJT Storage (per rank): ' : <{self._width-3}}#"
             )
             self._stats_table.append(f"#    {kjt_storage_text : <{self._width-6}}#")
+        except Exception as e:
+            logger.info(
+                f"KJT Storage is not available for storage reservation type: {type(storage_reservation)}. Error message: {e}"
+            )
 
     def _log_imbalance_tables(self, best_plan: List[ShardingOption]) -> None:
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
