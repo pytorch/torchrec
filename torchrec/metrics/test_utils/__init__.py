@@ -233,6 +233,7 @@ def rec_metric_value_test_helper(
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
     n_classes: Optional[int] = None,
     zero_weights: bool = False,
+    zero_labels: bool = False,
     **kwargs: Any,
 ) -> Tuple[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], ...]]:
     tasks = gen_test_tasks(task_names)
@@ -242,6 +243,10 @@ def rec_metric_value_test_helper(
         if zero_weights:
             weight_value = torch.zeros(batch_size)
 
+        label_value: Optional[torch.Tensor] = None
+        if zero_labels:
+            label_value = torch.zeros(batch_size)
+
         _model_outs = [
             gen_test_batch(
                 label_name=task.label_name,
@@ -250,6 +255,7 @@ def rec_metric_value_test_helper(
                 batch_size=batch_size,
                 n_classes=n_classes,
                 weight_value=weight_value,
+                label_value=label_value,
             )
             for task in tasks
         ]
@@ -506,6 +512,7 @@ def rec_metric_value_test_launcher(
     test_nsteps: int = 1,
     n_classes: Optional[int] = None,
     zero_weights: bool = False,
+    zero_labels: bool = False,
     **kwargs: Any,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -530,6 +537,7 @@ def rec_metric_value_test_launcher(
             batch_window_size=1,
             n_classes=n_classes,
             zero_weights=zero_weights,
+            zero_labels=zero_labels,
             **kwargs,
         )
 
