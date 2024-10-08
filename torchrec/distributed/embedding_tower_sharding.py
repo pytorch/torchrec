@@ -168,7 +168,7 @@ class ShardedEmbeddingTower(
             # Hierarchical DDP
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
-                device_ids=[self._device],
+                device_ids=[self._device] if self._device is not None else None,
                 process_group=self._intra_pg,
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
@@ -589,7 +589,7 @@ class ShardedEmbeddingTowerCollection(
                 # Hierarchical DDP
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
-                    device_ids=[self._device],
+                    device_ids=[self._device] if self._device is not None else None,
                     process_group=self._intra_pg,
                     gradient_as_bucket_view=True,
                     broadcast_buffers=False,
