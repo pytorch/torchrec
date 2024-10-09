@@ -14,6 +14,7 @@ import unittest
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
+from parameterized import parameterized_class
 from torch import nn
 from torchrec.ir.serializer import JsonSerializer
 
@@ -21,6 +22,7 @@ from torchrec.ir.utils import (
     decapsulate_ir_modules,
     encapsulate_ir_modules,
     mark_dynamic_kjt,
+    unlift_and_swap_modules,
 )
 
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -92,7 +94,38 @@ class CompoundModuleSerializer(JsonSerializer):
         return CompoundModule(ebc, comp, mlist)
 
 
+@parameterized_class(
+    [
+        {"deserialize_with_swap": True},
+        {"deserialize_with_swap": False},
+    ],
+    class_name_func=lambda cls, _, params: f"{cls.__name__}{'Swap' if params['deserialize_with_swap'] else ''}",
+)
 class TestJsonSerializer(unittest.TestCase):
+    def deserialize_model(
+        self,
+        ep: torch.export.ExportedProgram,
+        *,
+        device: Optional[torch.device] = None,
+        finalize_interpreter_modules: bool = False,
+        short_circuit_pytree_ebc_regroup: bool = False,
+    ) -> torch.nn.Module:
+
+        if self.deserialize_with_swap:  # pyre-ignore[16]
+            deserialized_model = unlift_and_swap_modules(ep, JsonSerializer, device)
+
+        else:
+            unflatten = torch.export.unflatten(ep)
+            deserialized_model = decapsulate_ir_modules(
+                unflatten,
+                JsonSerializer,
+                device,
+                finalize_interpreter_modules=finalize_interpreter_modules,
+                short_circuit_pytree_ebc_regroup=short_circuit_pytree_ebc_regroup,
+            )
+
+        return deserialized_model
+
     # in the model we have 5 duplicated EBCs, 1 fpEBC with fpCollection, and 1 fpEBC with fpDict
     def generate_model(self) -> nn.Module:
         class Model(nn.Module):
@@ -200,8 +233,7 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(eager_out[i].shape, tensor.shape)
 
         # Deserialize EBC
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        deserialized_model = self.deserialize_model(ep)
 
         # check EBC config
         for i in range(5):
@@ -285,8 +317,7 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(eager_out[i].shape, tensor.shape)
 
         # Deserialize EBC
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        deserialized_model = self.deserialize_model(ep)
         deserialized_model.load_state_dict(model.state_dict())
 
         # Run forward on deserialized model
@@ -339,10 +370,7 @@ class TestJsonSerializer(unittest.TestCase):
             if device == "cuda" and not torch.cuda.is_available():
                 continue
             device = torch.device(device)
-            unflatten_ep = torch.export.unflatten(ep)
-            deserialized_model = decapsulate_ir_modules(
-                unflatten_ep, JsonSerializer, device
-            )
+            deserialized_model = self.deserialize_model(ep, device=device)
             for name, m in deserialized_model.named_modules():
                 if hasattr(m, "device"):
                     assert m.device.type == device.type, f"{name} should be on {device}"
@@ -419,8 +447,7 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(x.shape, y.shape)
 
         # Deserialize
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        deserialized_model = self.deserialize_model(ep)
         # Check if Compound Module is deserialized correctly
         self.assertIsInstance(deserialized_model.comp, CompoundModule)
         self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
@@ -514,8 +541,7 @@ class TestJsonSerializer(unittest.TestCase):
         for key in eager_out.keys():
             self.assertEqual(ep_output[key].shape, eager_out[key].shape)
         # Deserialize EBC
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        deserialized_model = self.deserialize_model(ep)
         self.assertFalse(deserialized_model.regroup._is_inited)
         deserialized_out = deserialized_model(id_list_features)
         self.assertTrue(deserialized_model.regroup._is_inited)
@@ -592,10 +618,8 @@ class TestJsonSerializer(unittest.TestCase):
             # Allows KJT to not be unflattened and run a forward on unflattened EP
             preserve_module_call_signature=(tuple(sparse_fqns)),
         )
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(
-            unflatten_ep,
-            JsonSerializer,
+        deserialized_model = self.deserialize_model(
+            ep,
             short_circuit_pytree_ebc_regroup=True,
             finalize_interpreter_modules=True,
         )

@@ -18,6 +18,7 @@ import torch
 
 from torch import nn
 from torch.export import Dim, ShapesCollection
+from torch.export._swap import _swap_modules
 from torch.export.dynamic_shapes import _Dim as DIM
 from torch.export.unflatten import InterpreterModule
 from torch.fx import Node
@@ -166,6 +167,46 @@ def decapsulate_ir_modules(
                 mod.finalize()
 
     return module
+
+
+def unlift_and_swap_modules(
+    ep: torch.export.ExportedProgram,
+    serializer: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
+    device: Optional[torch.device] = None,
+) -> torch.fx.GraphModule:
+    """
+    Unlifts the given ExportedProgram into a fx.GraphModule, and then swaps
+    previously traced modules with new eager modules specified in the
+    `serializer`.
+
+    Args:
+        ep (ExportedProgram): Exported program
+        serializer: TorchRec serializer which will deserialize stored metadata
+            on the ExportedProgram to initialize new eager TorchRec modules
+        device: Device to initialize new eager modules on
+    """
+
+    gm = ep.module()
+
+    gm.graph.eliminate_dead_code()
+    module_fqn_to_swap = {
+        key[: -(len("ir_metadata") + 1)]
+        for key in ep.constants.keys()
+        if "ir_metadata" in key
+    }
+
+    def get_submodule(model: torch.nn.Module, fqn: str) -> torch.nn.Module:
+        for attr in fqn.split("."):
+            model = getattr(model, attr)
+        return model
+
+    modules_to_swap = {
+        fqn: serializer.decapsulate_module(get_submodule(gm, fqn), device)
+        for fqn in module_fqn_to_swap
+    }
+    gm = _swap_modules(ep, modules_to_swap)
+
+    return gm
 
 
 def _get_dim(name: str, min: Optional[int] = None, max: Optional[int] = None) -> DIM:
