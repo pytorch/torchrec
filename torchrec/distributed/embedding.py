@@ -595,8 +595,8 @@ class ShardedEmbeddingCollection(
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
                     device_ids=(
-                        [device]
-                        if self._device and self._device.type == "cuda"
+                        [self._device]
+                        if self._device is not None and self._device.type == "cuda"
                         else None
                     ),
                     process_group=env.process_group,

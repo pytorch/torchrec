@@ -1,63 +1,41 @@
-# TorchRec (Beta Release)
-[Docs](https://pytorch.org/torchrec/)
+# TorchRec
 
-TorchRec is a PyTorch domain library built to provide common sparsity & parallelism primitives needed for large-scale recommender systems (RecSys). It allows authors to train models with large embedding tables sharded across many GPUs.
+**TorchRec** is a PyTorch domain library built to provide common sparsity and parallelism primitives needed for large-scale recommender systems (RecSys). TorchRec allows training and inference of models with large embedding tables sharded across many GPUs and **powers many production RecSys models at Meta**.
 
-## TorchRec contains:
+## External Presence
+TorchRec has been used to accelerate advancements in recommendation systems, some examples:
+* [Latest version of Meta's DLRM (Deep Learning Recommendation Model)](https://github.com/facebookresearch/dlrm) is built using TorchRec
+* [Disaggregated Multi-Tower: Topology-aware Modeling Technique for Efficient Large-Scale Recommendation](https://arxiv.org/abs/2403.00877) paper
+* [The Algorithm ML](https://github.com/twitter/the-algorithm-ml) from Twitter
+* [Training Recommendation Models with Databricks](https://docs.databricks.com/en/machine-learning/train-recommender-models.html)
+
+
+## Introduction
+
+To begin learning about TorchRec, check out:
+* Our complete [TorchRec Tutorial](https://pytorch.org/tutorials/intermediate/torchrec_intro_tutorial.html)
+* The [TorchRec documentation](https://pytorch.org/torchrec/) for an overview of TorchRec and API references
+
+
+### TorchRec Features
 - Parallelism primitives that enable easy authoring of large, performant multi-device/multi-node models using hybrid data-parallelism/model-parallelism.
-- The TorchRec sharder can shard embedding tables with different sharding strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, column-wise, table-wise-column-wise sharding.
-- The TorchRec planner can automatically generate optimized sharding plans for models.
-- Pipelined training overlaps dataloading device transfer (copy to GPU), inter-device communications (input_dist), and computation (forward, backward) for increased performance.
-- Optimized kernels for RecSys powered by FBGEMM.
-- Quantization support for reduced precision training and inference.
+- Sharders to shard embedding tables with different strategies including data-parallel, table-wise, row-wise, table-wise-row-wise, column-wise, and table-wise-column-wise sharding.
+- Planner that can automatically generate optimized sharding plans for models.
+- Pipelined training overlapping dataloading device transfer (copy to GPU), inter-device communications (input_dist), and computation (forward, backward) for increased performance.
+- Optimized kernels for RecSys powered by [FBGEMM](https://github.com/pytorch/FBGEMM/tree/main).
+- Quantization support for reduced precision training and inference, along with optimizing a TorchRec model for C++ inference.
 - Common modules for RecSys.
-- Production-proven model architectures for RecSys.
 - RecSys datasets (criteo click logs and movielens)
 - Examples of end-to-end training such the dlrm event prediction model trained on criteo click logs dataset.
 
-# Installation
 
-Torchrec requires Python >= 3.8 and CUDA >= 11.8 (CUDA is highly recommended for performance but not required). The example below shows how to install with Python 3.8 and CUDA 12.1. This setup assumes you have conda installed.
+## Installation
 
-## Binaries
+Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html) section in the documentation for recommended ways to set up Torchrec.
 
-Experimental binary on Linux for Python 3.8, 3.9, 3.10, 3.11 and 3.12 (experimental), and CPU, CUDA 11.8 and CUDA 12.1 can be installed via pip wheels from [download.pytorch.org](download.pytorch.org) and PyPI (only for CUDA 12.1).
+### From Source
 
-Below we show installations for CUDA 12.1 as an example. For CPU or CUDA 11.8, swap "cu121" for "cpu" or "cu118".
-
-### Installations
-```
-Nightly
-
-pip install torch --index-url https://download.pytorch.org/whl/nightly/cu121
-pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu121
-pip install torchmetrics==1.0.3
-pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cu121
-
-Stable via pytorch.org
-
-pip install torch --index-url https://download.pytorch.org/whl/cu121
-pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/cu121
-pip install torchmetrics==1.0.3
-pip install torchrec --index-url https://download.pytorch.org/whl/cu121
-
-Stable via PyPI (only for CUDA 12.1)
-
-pip install torch
-pip install fbgemm-gpu
-pip install torchrec
-
-```
-
-
-### Colab example: introduction + install
-See our colab notebook for an introduction to torchrec which includes runnable installation.
-    - [Tutorial Source](https://github.com/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb)
-    - Open in [Google Colab](https://colab.research.google.com/github/pytorch/torchrec/blob/main/Torchrec_Introduction.ipynb)
-
-## From Source
-
-We are currently iterating on the setup experience. For now, we provide manual instructions on how to build from source. The example below shows how to install with CUDA 12.1. This setup assumes you have conda installed.
+**Generally, there isn't a need to build from source**. For most use cases, follow the section above to set up TorchRec. However, to build from source and to get the latest changes, do the following:
 
 1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/).
    ```
@@ -121,23 +99,30 @@ We are currently iterating on the setup experience. For now, we provide manual i
 
 ## Contributing
 
-### Pyre and linting
+See [CONTRIBUTING.md](https://github.com/pytorch/torchrec/blob/main/CONTRIBUTING.md) for details about contributing to TorchRec!
 
-Before landing, please make sure that pyre and linting look okay. To run our linters, you will need to
-```
-pip install pre-commit
-```
+## Citation
 
-, and run it.
-
-For Pyre, you will need to
+If you're using TorchRec, please refer to BibTeX entry to cite this work:
 ```
-cat .pyre_configuration
-pip install pyre-check-nightly==<VERSION FROM CONFIG>
-pyre check
+@inproceedings{10.1145/3523227.3547387,
+author = {Ivchenko, Dmytro and Van Der Staay, Dennis and Taylor, Colin and Liu, Xing and Feng, Will and Kindi, Rahul and Sudarshan, Anirudh and Sefati, Shahin},
+title = {TorchRec: a PyTorch Domain Library for Recommendation Systems},
+year = {2022},
+isbn = {9781450392785},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3523227.3547387},
+doi = {10.1145/3523227.3547387},
+abstract = {Recommendation Systems (RecSys) comprise a large footprint of production-deployed AI today. The neural network-based recommender systems differ from deep learning models in other domains in using high-cardinality categorical sparse features that require large embedding tables to be trained. In this talk we introduce TorchRec, a PyTorch domain library for Recommendation Systems. This new library provides common sparsity and parallelism primitives, enabling researchers to build state-of-the-art personalization models and deploy them in production. In this talk we cover the building blocks of the TorchRec library including modeling primitives such as embedding bags and jagged tensors, optimized recommender system kernels powered by FBGEMM, a flexible sharder that supports a veriety of strategies for partitioning embedding tables, a planner that automatically generates optimized and performant sharding plans, support for GPU inference and common modeling modules for building recommender system models. TorchRec library is currently used to train large-scale recommender models at Meta. We will present how TorchRec helped Meta’s recommender system platform to transition from CPU asynchronous training to accelerator-based full-sync training.},
+booktitle = {Proceedings of the 16th ACM Conference on Recommender Systems},
+pages = {482–483},
+numpages = {2},
+keywords = {information retrieval, recommender systems},
+location = {Seattle, WA, USA},
+series = {RecSys '22}
+}
 ```
-
-We will also check for these issues in our GitHub actions.
 
 ## License
 TorchRec is BSD licensed, as found in the [LICENSE](LICENSE) file.

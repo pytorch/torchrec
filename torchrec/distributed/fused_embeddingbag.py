@@ -70,7 +70,7 @@ class ShardedFusedEmbeddingBagCollection(
             if isinstance(sharding, DpPooledEmbeddingSharding):
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
-                    device_ids=[device],
+                    device_ids=[device] if device is not None else None,
                     process_group=env.process_group,
                     gradient_as_bucket_view=True,
                     broadcast_buffers=False,
