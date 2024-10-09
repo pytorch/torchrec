@@ -623,6 +623,78 @@ class ConstructParameterShardingTest(unittest.TestCase):
             "cpu",
         )
 
+    def test_row_wise_set_heterogenous_device(self) -> None:
+        embedding_bag_config = [
+            EmbeddingBagConfig(
+                name=f"table_{idx}",
+                feature_names=[f"feature_{idx}"],
+                embedding_dim=64,
+                num_embeddings=4096,
+            )
+            for idx in range(2)
+        ]
+        module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding={
+                "table_0": row_wise(
+                    sizes_placement=([2048, 1024, 1024], ["cpu", "cuda", "cuda"])
+                ),
+                "table_1": row_wise(
+                    sizes_placement=([2048, 1024, 1024], ["cpu", "cpu", "cpu"])
+                ),
+            },
+            local_size=1,
+            world_size=2,
+            device_type="cuda",
+        )
+
+        # Make sure per_param_sharding setting override the default device_type
+        device_table_0_shard_0 = (
+            # pyre-ignore[16]
+            module_sharding_plan["table_0"]
+            .sharding_spec.shards[0]
+            .placement
+        )
+        self.assertEqual(
+            device_table_0_shard_0.device().type,
+            "cpu",
+        )
+        # cpu always has rank 0
+        self.assertEqual(
+            device_table_0_shard_0.rank(),
+            0,
+        )
+        for i in range(1, 3):
+            device_table_0_shard_i = (
+                module_sharding_plan["table_0"].sharding_spec.shards[i].placement
+            )
+            self.assertEqual(
+                device_table_0_shard_i.device().type,
+                "cuda",
+            )
+            # first rank is assigned to cpu so index = rank - 1
+            self.assertEqual(
+                device_table_0_shard_i.device().index,
+                i - 1,
+            )
+            self.assertEqual(
+                device_table_0_shard_i.rank(),
+                i,
+            )
+        for i in range(3):
+            device_table_1_shard_i = (
+                module_sharding_plan["table_1"].sharding_spec.shards[i].placement
+            )
+            self.assertEqual(
+                device_table_1_shard_i.device().type,
+                "cpu",
+            )
+            # cpu always has rank 0
+            self.assertEqual(
+                device_table_1_shard_i.rank(),
+                0,
+            )
+
     def test_column_wise(self) -> None:
         embedding_bag_config = [
             EmbeddingBagConfig(

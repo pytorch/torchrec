@@ -11,7 +11,7 @@
 
 import math
 import warnings
-from typing import Callable, cast, Dict, List, Optional, Tuple, Type
+from typing import Callable, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from torch import distributed as dist, nn
@@ -70,11 +70,12 @@ def placement(
 
 
 # TODO: Consolidate placement and placement_helper into one function.
-def placement_helper(device_type: str, index: int = 0) -> str:
+def placement_helper(device_type: str, index: int = 0, rank: int = 0) -> str:
     if device_type == "cpu":
         return f"rank:0/{device_type}"  # cpu only use rank 0
 
-    return f"rank:{index}/{device_type}:{index}"
+    result = f"rank:{rank}/{device_type}:{index}"
+    return result
 
 
 def calculate_shard_sizes_and_offsets(
@@ -442,7 +443,7 @@ def table_wise(
             local_size,
             device_type,
             sharder,
-            placements=([placement_helper(device, rank)] if device else None),
+            placements=([placement_helper(device, rank, rank)] if device else None),
             compute_kernel=compute_kernel,
         )
 
@@ -450,7 +451,7 @@ def table_wise(
 
 
 def row_wise(
-    sizes_placement: Optional[Tuple[List[int], str]] = None
+    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::ROW_WISE` for construct_module_sharding_plan.
@@ -469,6 +470,12 @@ def row_wise(
             },
         )
     """
+
+    if sizes_placement is not None and isinstance(sizes_placement[1], list):
+        assert len(sizes_placement[0]) == len(
+            sizes_placement[1]
+        ), "sizes_placement and device per placement (in case of sharding "
+        "across HBM and CPU host) must have the same length"
 
     def _parameter_sharding_generator(
         param: nn.Parameter,
@@ -507,6 +514,21 @@ def row_wise(
                     f"Cannot fit tensor of {rows, cols} into sizes_ranks_placements = {sizes_placement}"
                 )
 
+        index: int = 0
+        placements: List[str] = []
+        if sizes_placement is not None:
+            device_type = ""
+            for i in range(len(sizes_placement[0])):
+                if isinstance(sizes_placement[1], list):
+                    device_type = sizes_placement[1][i]
+                    placements.append(placement_helper(device_type, index, i))
+                else:
+                    device_type = str(sizes_placement[1])
+                    placements.append(placement_helper(device_type, index, i))
+
+                if device_type == "cuda":
+                    index += 1
+
         return _get_parameter_sharding(
             param,
             ShardingType.ROW_WISE.value,
@@ -514,14 +536,7 @@ def row_wise(
             local_size,
             device_type,
             sharder,
-            placements=(
-                [
-                    placement_helper(sizes_placement[1], i)
-                    for i in range(len(sizes_placement[0]))
-                ]
-                if sizes_placement
-                else None
-            ),
+            placements=placements if sizes_placement else None,
             compute_kernel=(
                 EmbeddingComputeKernel.QUANT.value if sizes_placement else None
             ),
