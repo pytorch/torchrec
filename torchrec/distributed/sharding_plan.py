@@ -124,10 +124,38 @@ def calculate_shard_sizes_and_offsets(
         or sharding_type == ShardingType.TABLE_COLUMN_WISE.value
     ):
         return _calculate_cw_shard_sizes_and_offsets(columns, rows, col_wise_shard_dim)
+    elif sharding_type == ShardingType.GRID_SHARD.value:
+        return _calculate_grid_shard_sizes_and_offsets(
+            rows, local_world_size, columns, col_wise_shard_dim
+        )
 
     raise ValueError(
         f"Unrecognized or unsupported sharding type provided: {sharding_type}"
     )
+
+
+def _calculate_grid_shard_sizes_and_offsets(
+    hash_size: int,
+    num_device: int,
+    columns: int,
+    col_wise_shard_dim: Optional[int] = None,
+) -> Tuple[List[List[int]], List[List[int]]]:
+    """
+    Similar to row-wise case, but also splits columns into blocks of size `col_wise_shard_dim`.
+    """
+    row_shard_sizes, row_shard_offsets = _calculate_rw_shard_sizes_and_offsets(
+        hash_size, num_device, columns
+    )
+    block_size = _get_block_size_for_cw_shard(columns, col_wise_shard_dim)
+    num_col_wise_nodes, _residual = divmod(columns, block_size)
+    shard_sizes: List[List[int]] = []
+    shard_offsets: List[List[int]] = []
+
+    for node in range(num_col_wise_nodes):
+        for row_shard_size, row_shard_offset in zip(row_shard_sizes, row_shard_offsets):
+            shard_sizes.append([row_shard_size[0], block_size])
+            shard_offsets.append([row_shard_offset[0], block_size * node])
+    return shard_sizes, shard_offsets
 
 
 def _calculate_rw_shard_sizes_and_offsets(
@@ -199,6 +227,28 @@ def _find_base_dim(lower_bound: int, dim: int) -> int:
         if dim % i == 0 and i % 4 == 0:
             return i
     return dim
+
+
+def _get_block_size_for_cw_shard(
+    columns: int, column_wise_shard_dim: Optional[int]
+) -> int:
+    block_size: int = min(
+        (
+            _find_base_dim(column_wise_shard_dim, columns)
+            if column_wise_shard_dim
+            else _find_base_dim(MIN_CW_DIM, columns)
+        ),
+        columns,
+    )
+
+    if columns % block_size != 0:
+        warnings.warn(
+            f"Dim of {columns} cannot be evenly divided with column wise shard"
+            "dim {column_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
+            UserWarning,
+        )
+        block_size = columns
+    return block_size
 
 
 def _calculate_cw_shard_sizes_and_offsets(
@@ -645,6 +695,58 @@ def table_row_wise(
         return _get_parameter_sharding(
             param,
             ShardingType.TABLE_ROW_WISE.value,
+            size_offset_ranks,
+            local_size,
+            device_type,
+            sharder,
+        )
+
+    return _parameter_sharding_generator
+
+
+def grid_shard(
+    host_indexes: List[int],
+) -> ParameterShardingGenerator:
+    """
+    Returns a generator of ParameterShardingPlan for `ShardingType::GRID_SHARD` for construct_module_sharding_plan.
+
+    Args:
+    host_indexes (List[int]): index of hosts (nodes) to do row wise
+
+    Example::
+
+        ebc = EmbeddingBagCollection(...)
+        plan = construct_module_sharding_plan(
+            ebc,
+            {
+                "table_4": grid_shard(host_indexes=[1,2]),
+            },
+        )
+    """
+
+    def _parameter_sharding_generator(
+        param: nn.Parameter,
+        local_size: int,
+        world_size: int,
+        device_type: str,
+        sharder: ModuleSharder[nn.Module],
+    ) -> ParameterSharding:
+        size_and_offsets = _get_parameter_size_offsets(
+            param,
+            ShardingType.GRID_SHARD,
+            local_size,
+            world_size,
+        )
+        size_offset_ranks = []
+        for host_count, host_index in enumerate(host_indexes):
+            for rank in range(local_size):
+                (size, offset) = size_and_offsets[host_count * local_size + rank]
+                rank_offset = host_index * local_size
+                size_offset_ranks.append((size, offset, rank_offset + rank))
+
+        return _get_parameter_sharding(
+            param,
+            ShardingType.GRID_SHARD.value,
             size_offset_ranks,
             local_size,
             device_type,

@@ -169,16 +169,16 @@ class TestProposers(unittest.TestCase):
                 ("table_1", "row_wise", "fused"),
             ],
             [
+                ("table_0", "grid_shard", "fused"),
+                ("table_1", "row_wise", "fused"),
+            ],
+            [
                 ("table_1", "row_wise", "fused"),
                 ("table_0", "data_parallel", "dense"),
             ],
             [
                 ("table_1", "table_row_wise", "fused"),
                 ("table_0", "data_parallel", "dense"),
-            ],
-            [
-                ("table_0", "data_parallel", "dense"),
-                ("table_1", "data_parallel", "dense"),
             ],
         ]
 
@@ -349,10 +349,9 @@ class TestProposers(unittest.TestCase):
             - fused_uvm
         DP will have 1 possible compute kernel: dense
         So the total number of pruned options will be:
-            (num_sharding_types - 1) * 3 + 1 = 16
+            (num_sharding_types - 1) * 3 + 1 = 19
         """
-        # NOTE - remove -2 from sharding type length once grid sharding in planner is added
-        num_pruned_options = (len(ShardingType) - 2) * 3 + 1
+        num_pruned_options = (len(ShardingType) - 1) * 3 + 1
         self.grid_search_proposer.load(search_space)
         for (
             sharding_options

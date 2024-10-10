@@ -24,6 +24,7 @@ from torchrec.distributed.sharding_plan import (
     FeatureProcessedEmbeddingBagCollectionSharder,
     FusedEmbeddingBagCollectionSharder,
     get_module_to_default_sharders,
+    grid_shard,
     ManagedCollisionEmbeddingBagCollectionSharder,
     ManagedCollisionEmbeddingCollectionSharder,
     ParameterShardingGenerator,
@@ -240,7 +241,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
                 embedding_dim=256,
                 num_embeddings=32 * 32,
             )
-            for idx in range(5)
+            for idx in range(6)
         ]
 
         expected = {
@@ -567,6 +568,95 @@ class ConstructParameterShardingTest(unittest.TestCase):
                     ]
                 ),
             ),
+            "table_5": ParameterSharding(
+                sharding_type="grid_shard",
+                compute_kernel="dense",
+                ranks=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                sharding_spec=EnumerableShardingSpec(
+                    shards=[
+                        ShardMetadata(
+                            shard_offsets=[0, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:0/cuda:0",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[128, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:1/cuda:1",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[256, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:2/cuda:2",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[384, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:3/cuda:3",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[512, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:4/cuda:4",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[640, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:5/cuda:5",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[768, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:6/cuda:6",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[896, 0],
+                            shard_sizes=[128, 128],
+                            placement="rank:7/cuda:7",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[0, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:8/cuda:0",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[128, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:9/cuda:1",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[256, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:10/cuda:2",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[384, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:11/cuda:3",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[512, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:12/cuda:4",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[640, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:13/cuda:5",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[768, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:14/cuda:6",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[896, 128],
+                            shard_sizes=[128, 128],
+                            placement="rank:15/cuda:7",
+                        ),
+                    ]
+                ),
+            ),
         }
 
         module_sharding_plan = construct_module_sharding_plan(
@@ -577,6 +667,7 @@ class ConstructParameterShardingTest(unittest.TestCase):
                 "table_2": row_wise(),
                 "table_3": column_wise(ranks=[8, 9]),
                 "table_4": table_row_wise(host_index=3),
+                "table_5": grid_shard(host_indexes=[0, 1]),
             },
             local_size=8,
             world_size=32,
