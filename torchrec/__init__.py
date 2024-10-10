@@ -8,6 +8,7 @@
 # pyre-strict
 
 import torchrec.distributed  # noqa
+import torchrec.inference  # noqa
 import torchrec.quant  # noqa
 from torchrec.fx import tracer  # noqa
 from torchrec.modules.embedding_configs import (  # noqa
