@@ -413,6 +413,7 @@ class EmbeddingStats(Stats):
                     f"{so.tensor.shape[1]} ({so.shards[0].size[1]})"
                     if so.sharding_type == ShardingType.COLUMN_WISE.value
                     or so.sharding_type == ShardingType.TABLE_COLUMN_WISE.value
+                    or so.sharding_type == ShardingType.GRID_SHARD.value
                     else f"{so.tensor.shape[1]}"
                 )
                 sharder_cache_load_factor = (
@@ -875,6 +876,8 @@ def _get_sharding_type_abbr(sharding_type: str) -> str:
         return "TWRW"
     elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
         return "TWCW"
+    elif sharding_type == ShardingType.GRID_SHARD.value:
+        return "GS"
     else:
         raise ValueError(
             f"Unrecognized or unsupported sharding type provided: {sharding_type}"

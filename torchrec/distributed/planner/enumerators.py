@@ -245,7 +245,6 @@ class EmbeddingEnumerator(Enumerator):
         filtered_sharding_types = list(
             set(constrained_sharding_types) & set(allowed_sharding_types)
         )
-
         if not filtered_sharding_types:
             logger.warn(
                 "No available sharding types after applying user provided "
@@ -380,6 +379,7 @@ def get_partition_by_type(sharding_type: str) -> str:
         ShardingType.ROW_WISE.value,
         ShardingType.DATA_PARALLEL.value,
     }
+    multi_host_sharding_types = {ShardingType.GRID_SHARD.value}
 
     if sharding_type in device_sharding_types:
         return PartitionByType.DEVICE.value
@@ -387,6 +387,8 @@ def get_partition_by_type(sharding_type: str) -> str:
         return PartitionByType.HOST.value
     elif sharding_type in uniform_sharding_types:
         return PartitionByType.UNIFORM.value
+    elif sharding_type in multi_host_sharding_types:
+        return PartitionByType.MULTI_HOST.value
 
     raise ValueError(
         f"Unrecognized or unsupported sharding type provided: {sharding_type}"

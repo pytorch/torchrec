@@ -537,6 +537,8 @@ class PartitionByType(Enum):
     HOST = "host"
     # Uniform, (ie. fixed layout)
     UNIFORM = "uniform"
+    # Partitioning based on multiple hosts
+    MULTI_HOST = "multi_host"
 
 
 @dataclass
