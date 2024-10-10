@@ -368,6 +368,7 @@ class ManagedCollisionCollection(nn.Module):
                 table: JaggedTensor(
                     values=kjt.values(),
                     lengths=kjt.lengths(),
+                    weights=torch.tensor(kjt.length_per_key()),
                 )
             }
             mc_input = mc_module(mc_input)
