@@ -646,6 +646,8 @@ class ShardedManagedCollisionCollection(
                         table: JaggedTensor(
                             values=kjt.values(),
                             lengths=kjt.lengths(),
+                            # TODO: improve this temp solution by passing real weights
+                            weights=torch.tensor(kjt.length_per_key()),
                         )
                     }
                     mcm = self._managed_collision_modules[table]
@@ -660,6 +662,8 @@ class ShardedManagedCollisionCollection(
                     table: JaggedTensor(
                         values=features.values(),
                         lengths=features.lengths(),
+                        # TODO: improve this temp solution by passing real weights
+                        weights=torch.tensor(kjt.length_per_key()),
                     )
                 }
                 mcm = self._managed_collision_modules[table]
@@ -673,6 +677,7 @@ class ShardedManagedCollisionCollection(
                     keys=fns,
                     values=values,
                     lengths=features.lengths(),
+                    # original weights instead of features splits
                     weights=features.weights_or_none(),
                 )
             )
