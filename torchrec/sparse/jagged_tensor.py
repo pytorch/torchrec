@@ -2511,14 +2511,13 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         permuted_stride_per_key_per_rank: List[List[int]] = []
         permuted_length_per_key: List[int] = []
         permuted_length_per_key_sum = 0
-        for index in indices:
-            key = self.keys()[index]
-            permuted_keys.append(key)
-            permuted_length_per_key.append(length_per_key[index])
-            if self.variable_stride_per_key():
-                permuted_stride_per_key_per_rank.append(
-                    self.stride_per_key_per_rank()[index]
-                )
+        keys = self.keys()
+
+        permuted_keys = [keys[idx] for idx in indices]
+        permuted_length_per_key = [length_per_key[idx] for idx in indices]
+        if self.variable_stride_per_key():
+            stride_per_key = self.stride_per_key_per_rank()
+            permuted_stride_per_key_per_rank = [stride_per_key[idx] for idx in indices]
 
         permuted_length_per_key_sum = sum(permuted_length_per_key)
         if not torch.jit.is_scripting() and is_non_strict_exporting():
