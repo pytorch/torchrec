@@ -67,6 +67,14 @@ from torchrec.streamable import Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
+# This is required to support older torch package export for older models
+try:
+    from torchrec.distributed.comm_ops import torchrec_use_sync_collectives
+except ImportError:
+    logger.warning("torchrec_use_sync_collectives is not available")
+
+torch.ops.import_module("fbgemm_gpu.sparse_ops")
+
 
 class ModelDetachedException(Exception):
     pass
@@ -1553,6 +1561,8 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
             custom_model_fwd,
         )
 
+        torch._logging.set_logs(compiled_autograd_verbose=True)
+
         # it will check this path on model to inject configuration other than
         # the default one.
         self.compiled_autograd_options: Dict[str, Union[str, bool]] = getattr(
@@ -1564,8 +1574,6 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
                 "fullgraph": True,
             },
         )
-
-        torch._dynamo.config.optimize_ddp = "python_reducer"
         torch._dynamo.config.inline_inbuilt_nn_modules = True
         torch._dynamo.config.skip_fsdp_hooks = False
         torch._functorch.config.recompute_views = True
@@ -1593,16 +1601,49 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
             torch.compile(**self.compiled_autograd_options)
         )
 
-    @contextmanager
-    def sync_collectives_ctx(self) -> Iterator[None]:
-        try:
-            if is_torchdynamo_compiling():
-                torchrec.distributed.comm_ops.set_use_sync_collectives(True)
-            yield
-        finally:
-            torchrec.distributed.comm_ops.set_use_sync_collectives(False)
-
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        if not self._model_attached:
+            self.attach(self._model)
 
-        with self.get_compiled_autograd_ctx(), self.sync_collectives_ctx():
-            return super().progress(dataloader_iter)
+        self.fill_pipeline(dataloader_iter)
+        if not self.batches:
+            raise StopIteration
+
+        # TODO: Remove once Bulk Eval migrated (needed for bwd compat, this class only)
+        self._set_module_context(self.contexts[0])
+
+        if self._model.training:
+            with record_function("## zero_grad ##"):
+                self._optimizer.zero_grad()
+
+        with record_function("## wait_for_batch ##"):
+            _wait_for_batch(cast(In, self.batches[0]), self._data_dist_stream)
+
+        if len(self.batches) >= 2:
+            self.start_sparse_data_dist(self.batches[1], self.contexts[1])
+
+        # batch i+2
+        self.enqueue_batch(dataloader_iter)
+
+        # forward
+        ctx = self.get_compiled_autograd_ctx()
+        with ctx, torchrec_use_sync_collectives(), record_function("## forward ##"):
+            losses, output = self._model_fwd(self.batches[0])
+
+        if len(self.batches) >= 2:
+            self.wait_sparse_data_dist(self.contexts[1])
+
+        if self._model.training:
+            # backward
+            ctx = self.get_compiled_autograd_ctx()
+            with ctx, torchrec_use_sync_collectives(), record_function(
+                "## backward ##"
+            ):
+                torch.sum(losses, dim=0).backward()
+
+            # update
+            with record_function("## optimizer ##"):
+                self._optimizer.step()
+
+        self.dequeue_batch()
+        return output
