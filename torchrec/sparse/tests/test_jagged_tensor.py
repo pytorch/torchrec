@@ -17,6 +17,7 @@ from torch.fx._pytree import tree_flatten_spec
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
+    _fbgemm_permute_pooled_embs,
     _kt_regroup_arguments,
     _regroup_keyed_tensors,
     ComputeJTDictToKJT,
@@ -2342,6 +2343,7 @@ class TestKeyedTensor(unittest.TestCase):
             KeyedTensor.regroup,
             regroup_kts,
             permute_multi_embedding,
+            _fbgemm_permute_pooled_embs,
         ],
         device_str=["cpu", "cuda", "meta"],
     )
@@ -2376,6 +2378,7 @@ class TestKeyedTensor(unittest.TestCase):
             KeyedTensor.regroup,
             regroup_kts,
             permute_multi_embedding,
+            _fbgemm_permute_pooled_embs,
         ],
         device_str=["cpu", "cuda", "meta"],
     )
@@ -2446,18 +2449,33 @@ class TestKeyedTensor(unittest.TestCase):
         torch.allclose(actual_kt_0_grad, expected_kt_0_grad)
         torch.allclose(actual_kt_1_grad, expected_kt_1_grad)
 
-    def test_regroup_backward(self) -> None:
+    @repeat_test(
+        regroup_func=[
+            KeyedTensor.regroup,
+            regroup_kts,
+            permute_multi_embedding,
+            _fbgemm_permute_pooled_embs,
+        ],
+        device_str=["cpu", "cuda"],
+    )
+    def test_regroup_backward(
+        self, regroup_func: Callable[..., List[torch.Tensor]], device_str: str
+    ) -> None:
+        if device_str == "cuda" and not torch.cuda.is_available():
+            return
+        else:
+            device = torch.device(device_str)
         kts = build_kts(
             dense_features=20,
             sparse_features=20,
             dim_dense=64,
             dim_sparse=128,
             batch_size=128,
-            device=torch.device("cpu"),
+            device=device,
             run_backward=True,
         )
         groups = build_groups(kts=kts, num_groups=2, skips=False, duplicates=False)
-        labels = torch.randint(0, 1, (128,), device=torch.device("cpu")).float()
+        labels = torch.randint(0, 1, (128,), device=device).float()
 
         tensor_groups = KeyedTensor.regroup(kts, groups)
         pred0 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
@@ -2473,7 +2491,7 @@ class TestKeyedTensor(unittest.TestCase):
         kts[0].values().grad = None
         kts[1].values().grad = None
 
-        tensor_groups = _regroup_keyed_tensors(kts, groups)
+        tensor_groups = regroup_func(kts, groups)
         pred1 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
         loss = torch.nn.functional.l1_loss(pred1, labels).sum()
         expected_kt_0_grad = torch.autograd.grad(

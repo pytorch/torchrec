@@ -386,7 +386,10 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     expected_cache_fetches=expected_cache_fetches,
                     is_inference=is_inference,
                 )
-            elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+            elif (
+                sharding_type == ShardingType.TABLE_ROW_WISE.value
+                or sharding_type == ShardingType.GRID_SHARD.value
+            ):
                 shard_perf = cls._get_twrw_sharding_perf(
                     batch_sizes=batch_sizes,
                     world_size=world_size,
@@ -729,7 +732,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         if is_weighted:
             bwd_compute = bwd_compute * weighted_feature_bwd_compute_multiplier
 
-        # for table-wise-row-wise, expected_cache_fetches per shard is / local_world_size
+        # for table-wise-row-wise or grid_shard, expected_cache_fetches per shard is / local_world_size
         prefetch_compute = cls._get_expected_cache_prefetch_time(
             ddr_mem_bw,
             expected_cache_fetches / local_world_size,
@@ -984,7 +987,6 @@ class EmbeddingStorageEstimator(ShardEstimator):
                     if hasattr(sharder, "fused_params") and sharder.fused_params
                     else None
                 )
-
             shard_storages = calculate_shard_storages(
                 sharder=sharder,
                 sharding_type=sharding_option.sharding_type,
@@ -1006,7 +1008,6 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 is_inference=self._is_inference,
                 multipass_prefetch_max_pass=mpp_conf.num_passes if mpp_conf else None,
             )
-
             for shard, storage in zip(sharding_option.shards, shard_storages):
                 shard.storage = storage
 
@@ -1256,7 +1257,10 @@ def _calculate_shard_io_sizes(
             num_poolings=num_poolings,
             is_pooled=is_pooled,
         )
-    elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+    elif (
+        sharding_type == ShardingType.TABLE_ROW_WISE.value
+        or sharding_type == ShardingType.GRID_SHARD.value  # same as table row wise
+    ):
         return _calculate_twrw_shard_io_sizes(
             batch_sizes=batch_sizes,
             world_size=world_size,

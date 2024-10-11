@@ -419,6 +419,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             types += [
                 ShardingType.ROW_WISE.value,
                 ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.GRID_SHARD.value,
             ]
 
         return types

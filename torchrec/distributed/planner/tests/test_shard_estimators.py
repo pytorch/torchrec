@@ -248,6 +248,49 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
                     bwd_comms=0.004316567291897281,
                 ),
             ],
+            # grid_shard is the same as table_row_wise
+            ("fused", "grid_shard"): [
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
+            ],
+            ("fused_uvm", "grid_shard"): [
+                Perf(
+                    fwd_compute=0.011967677696078432,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.023935355392156864,
+                    bwd_comms=0.018426483752680762,
+                ),
+                Perf(
+                    fwd_compute=0.011967677696078432,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.023935355392156864,
+                    bwd_comms=0.018426483752680762,
+                ),
+            ],
+            ("fused_uvm_caching", "grid_shard"): [
+                Perf(
+                    fwd_compute=0.0027718054609445954,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.005543610921889191,
+                    bwd_comms=0.004316567291897281,
+                ),
+                Perf(
+                    fwd_compute=0.0027718054609445954,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.005543610921889191,
+                    bwd_comms=0.004316567291897281,
+                ),
+            ],
         }
 
         perfs = {
@@ -310,6 +353,13 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ("fused", "table_row_wise"): [0.0002561205605599394, 0.0002561205605599394],
             ("fused_uvm", "table_row_wise"): [0.03392836626838235, 0.03392836626838235],
             ("fused_uvm_caching", "table_row_wise"): [
+                0.007906921553027076,
+                0.007906921553027076,
+            ],
+            # grid_shard is the same as table_row_wise
+            ("fused", "grid_shard"): [0.0002561205605599394, 0.0002561205605599394],
+            ("fused_uvm", "grid_shard"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm_caching", "grid_shard"): [
                 0.007906921553027076,
                 0.007906921553027076,
             ],
@@ -506,12 +556,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
                 0.007304490781297871,
                 0.007304490781297871,
             ],
+            ("table_0", "fused_uvm_caching", "grid_shard"): [
+                0.007304490781297871,
+                0.007304490781297871,
+            ],
             ("table_0", "fused_uvm_caching", "table_wise"): [0.014608981562595743],
             ("table_1", "fused", "column_wise"): [0.0],
             ("table_1", "fused", "row_wise"): [0.0, 0.0],
             ("table_1", "fused", "table_column_wise"): [0.0],
             ("table_1", "fused", "table_row_wise"): [0.0, 0.0],
             ("table_1", "fused", "table_wise"): [0.0],
+            ("table_1", "fused", "grid_shard"): [0.0, 0.0],
         }
 
         prefetch_computes = {
