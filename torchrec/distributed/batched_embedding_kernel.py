@@ -211,6 +211,42 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             local_metadata: List[ShardMetadata]
             embedding_weights: List[torch.Tensor]
 
+        def get_optimizer_single_value_shard_metadata_and_global_metadata(
+            table_global_metadata: ShardedTensorMetadata,
+            optimizer_state: torch.Tensor,
+        ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
+            table_global_shards_metadata: List[ShardMetadata] = (
+                table_global_metadata.shards_metadata
+            )
+
+            table_shard_metadata_to_optimizer_shard_metadata = {}
+            for offset, table_shard_metadata in enumerate(table_global_shards_metadata):
+                table_shard_metadata_to_optimizer_shard_metadata[
+                    table_shard_metadata
+                ] = ShardMetadata(
+                    shard_sizes=[1],  # single value optimizer state
+                    shard_offsets=[offset],  # offset increases by 1 for each shard
+                    placement=table_shard_metadata.placement,
+                )
+
+            tensor_properties = TensorProperties(
+                dtype=optimizer_state.dtype,
+                layout=optimizer_state.layout,
+                requires_grad=False,
+            )
+            single_value_optimizer_st_metadata = ShardedTensorMetadata(
+                shards_metadata=list(
+                    table_shard_metadata_to_optimizer_shard_metadata.values()
+                ),
+                size=torch.Size([len(table_global_shards_metadata)]),
+                tensor_properties=tensor_properties,
+            )
+
+            return (
+                table_shard_metadata_to_optimizer_shard_metadata,
+                single_value_optimizer_st_metadata,
+            )
+
         def get_optimizer_rowwise_shard_metadata_and_global_metadata(
             table_global_metadata: ShardedTensorMetadata,
             optimizer_state: torch.Tensor,
@@ -356,7 +392,10 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             if optimizer_states:
                 optimizer_state_values = tuple(optimizer_states.values())
                 for optimizer_state_value in optimizer_state_values:
-                    assert table_config.local_rows == optimizer_state_value.size(0)
+                    assert (
+                        table_config.local_rows == optimizer_state_value.size(0)
+                        or optimizer_state_value.nelement() == 1  # single value state
+                    )
                 optimizer_states_keys_by_table[table_config.name] = list(
                     optimizer_states.keys()
                 )
@@ -435,29 +474,35 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                     momentum_local_shards: List[Shard] = []
                     optimizer_sharded_tensor_metadata: ShardedTensorMetadata
 
-                    is_rowwise_optimizer_state: bool = (
-                        # pyre-ignore
-                        shard_params.optimizer_states[0][momentum_idx - 1].dim()
-                        == 1
-                    )
-
-                    if is_rowwise_optimizer_state:
+                    optim_state = shard_params.optimizer_states[0][momentum_idx - 1]  # pyre-ignore[16]
+                    if optim_state.nelement() == 1:
+                        # single value state: one value per table
+                        (
+                            table_shard_metadata_to_optimizer_shard_metadata,
+                            optimizer_sharded_tensor_metadata,
+                        ) = get_optimizer_single_value_shard_metadata_and_global_metadata(
+                            table_config.global_metadata,
+                            optim_state,
+                        )
+                    elif optim_state.dim() == 1:
+                        # rowwise state: param.shape[0] == state.shape[0], state.shape[1] == 1
                         (
                             table_shard_metadata_to_optimizer_shard_metadata,
                             optimizer_sharded_tensor_metadata,
                         ) = get_optimizer_rowwise_shard_metadata_and_global_metadata(
                             table_config.global_metadata,
-                            shard_params.optimizer_states[0][momentum_idx - 1],
+                            optim_state,
                             sharding_dim,
                             is_grid_sharded,
                         )
                     else:
+                        # pointwise state: param.shape == state.shape
                         (
                             table_shard_metadata_to_optimizer_shard_metadata,
                             optimizer_sharded_tensor_metadata,
                         ) = get_optimizer_pointwise_shard_metadata_and_global_metadata(
                             table_config.global_metadata,
-                            shard_params.optimizer_states[0][momentum_idx - 1],
+                            optim_state,
                         )
 
                     for optimizer_state, table_shard_local_metadata in zip(
