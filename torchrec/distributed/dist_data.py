@@ -1106,6 +1106,7 @@ class SeqEmbeddingsAllToOne(nn.Module):
         return torch.ops.fbgemm.all_to_one_device(
             tensors,
             self._device,
+            # tensors[0].device,
         )
 
 
