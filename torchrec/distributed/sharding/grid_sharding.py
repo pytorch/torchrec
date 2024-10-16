@@ -115,7 +115,8 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
     def _init_combined_embeddings(self) -> None:
         """
-        similar to CW sharding, but this time each CW shard is on a node and not rank
+        Initializes combined embeddings, similar to the CW sharding implementation,
+        but in this case the CW shard is treated on a per node basis and not per rank.
         """
         embedding_names = []
         for grouped_embedding_configs in self._grouped_embedding_configs_per_node:
@@ -179,6 +180,17 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self,
         sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
+        """
+        Shards the embedding tables.
+        This method takes the sharding infos and returns a list of lists of
+        sharded embedding tables, where each inner list represents the tables
+        for a specific rank.
+
+        Args:
+            sharding_infos (List[EmbeddingShardingInfo]): The sharding infos.
+        Returns:
+            List[List[ShardedEmbeddingTable]]: The sharded embedding tables.
+        """
         world_size = self._world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
             [] for i in range(world_size)
@@ -198,7 +210,7 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
-            # expectation is planner CW shards across a node, so each CW shard will have local_size num row shards
+            # Expectation is planner CW shards across a node, so each CW shard will have local_size number of row shards
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):
                 tables_per_rank[rank].append(
@@ -212,7 +224,6 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         pooling=info.embedding_config.pooling,
                         is_weighted=info.embedding_config.is_weighted,
                         has_feature_processor=info.embedding_config.has_feature_processor,
-                        # sharding by row and col
                         local_rows=shards[i].shard_sizes[0],
                         local_cols=shards[i].shard_sizes[1],
                         compute_kernel=EmbeddingComputeKernel(
@@ -420,7 +431,7 @@ class GridPooledEmbeddingSharding(
     ]
 ):
     """
-    Shards embedding bags table-wise then row-wise.
+    Shards embedding bags into column wise shards and shards each CW shard table wise row wise within a node
     """
 
     def create_input_dist(
