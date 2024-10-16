@@ -17,8 +17,10 @@ from torchrec.metrics.precision import compute_precision, PrecisionMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
     RecTaskInfo,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -32,8 +34,8 @@ class TestPrecisionMetric(TestMetric):
         labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
-        true_pos_sum = torch.sum(weights * ((predictions >= 0.5) == labels))
-        false_pos_sum = torch.sum(weights * ((predictions >= 0.5) == (1 - labels)))
+        true_pos_sum = torch.sum(weights * ((predictions >= 0.5) * labels))
+        false_pos_sum = torch.sum(weights * ((predictions >= 0.5) * (1 - labels)))
         return {
             "true_pos_sum": true_pos_sum,
             "false_pos_sum": false_pos_sum,
@@ -51,34 +53,33 @@ class PrecisionMetricTest(unittest.TestCase):
     target_clazz: Type[RecMetric] = PrecisionMetric
     task_name: str = "precision"
 
-    # Temporarily comment out fuse unit tests due to unknown failure (D56856649).
-    # def test_unfused_precision(self) -> None:
-    #     rec_metric_value_test_launcher(
-    #         target_clazz=PrecisionMetric,
-    #         target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-    #         test_clazz=TestPrecisionMetric,
-    #         metric_name=PrecisionMetricTest.task_name,
-    #         task_names=["t1", "t2", "t3"],
-    #         fused_update_limit=0,
-    #         compute_on_all_ranks=False,
-    #         should_validate_update=False,
-    #         world_size=WORLD_SIZE,
-    #         entry_point=metric_test_helper,
-    #     )
+    def test_unfused_precision(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=PrecisionMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestPrecisionMetric,
+            metric_name=PrecisionMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
 
-    # def test_fused_precision(self) -> None:
-    #     rec_metric_value_test_launcher(
-    #         target_clazz=PrecisionMetric,
-    #         target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-    #         test_clazz=TestPrecisionMetric,
-    #         metric_name=PrecisionMetricTest.task_name,
-    #         task_names=["t1", "t2", "t3"],
-    #         fused_update_limit=0,
-    #         compute_on_all_ranks=False,
-    #         should_validate_update=False,
-    #         world_size=WORLD_SIZE,
-    #         entry_point=metric_test_helper,
-    #     )
+    def test_fused_precision(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=PrecisionMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            test_clazz=TestPrecisionMetric,
+            metric_name=PrecisionMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
 
 
 class PrecisionMetricValueTest(unittest.TestCase):
@@ -253,3 +254,24 @@ class ThresholdValueTest(unittest.TestCase):
             except AssertionError:
                 print("Assertion error caught with data set ", inputs)
                 raise
+
+
+class PrecisionGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = PrecisionMetric
+    task_name: str = "precision"
+
+    def test_sync_precision(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=PrecisionMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestPrecisionMetric,
+            metric_name=PrecisionGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
+        )

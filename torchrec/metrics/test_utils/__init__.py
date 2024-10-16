@@ -365,7 +365,7 @@ def rec_metric_gpu_sync_test_launcher(
     entry_point: Callable[..., None],
     batch_size: int = BATCH_SIZE,
     batch_window_size: int = BATCH_WINDOW_SIZE,
-    **kwargs: Any,
+    **kwargs: Dict[str, Any],
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         lc = get_launch_config(
@@ -385,6 +385,7 @@ def rec_metric_gpu_sync_test_launcher(
             should_validate_update,
             batch_size,
             batch_window_size,
+            kwargs.get("n_classes", None),
         )
 
 
@@ -402,6 +403,7 @@ def sync_test_helper(
     batch_window_size: int = BATCH_WINDOW_SIZE,
     n_classes: Optional[int] = None,
     zero_weights: bool = False,
+    **kwargs: Dict[str, Any],
 ) -> None:
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
@@ -413,6 +415,10 @@ def sync_test_helper(
 
     tasks = gen_test_tasks(task_names)
 
+    if n_classes:
+        # pyre-ignore[6]: Incompatible parameter type
+        kwargs["number_of_classes"] = n_classes
+
     auc = target_clazz(
         world_size=world_size,
         batch_size=batch_size,
@@ -420,6 +426,8 @@ def sync_test_helper(
         compute_on_all_ranks=compute_on_all_ranks,
         tasks=tasks,
         window_size=batch_window_size * world_size,
+        # pyre-ignore[6]: Incompatible parameter type
+        **kwargs,
     )
 
     weight_value: Optional[torch.Tensor] = None
@@ -466,10 +474,17 @@ def sync_test_helper(
     res = auc.compute()
 
     if rank == 0:
-        assert torch.allclose(
-            test_metrics[1][task_names[0]],
-            res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
-        )
+        # Serving Calibration uses Calibration naming inconsistently
+        if metric_name == "serving_calibration":
+            assert torch.allclose(
+                test_metrics[1][task_names[0]],
+                res[f"{metric_name}-{task_names[0]}|window_calibration"],
+            )
+        else:
+            assert torch.allclose(
+                test_metrics[1][task_names[0]],
+                res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
+            )
 
     # we also test the case where other rank has more tensors than rank 0
     auc.reset()
@@ -489,10 +504,17 @@ def sync_test_helper(
     res = auc.compute()
 
     if rank == 0:
-        assert torch.allclose(
-            test_metrics[1][task_names[0]],
-            res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
-        )
+        # Serving Calibration uses Calibration naming inconsistently
+        if metric_name == "serving_calibration":
+            assert torch.allclose(
+                test_metrics[1][task_names[0]],
+                res[f"{metric_name}-{task_names[0]}|window_calibration"],
+            )
+        else:
+            assert torch.allclose(
+                test_metrics[1][task_names[0]],
+                res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
+            )
 
     dist.destroy_process_group()
 

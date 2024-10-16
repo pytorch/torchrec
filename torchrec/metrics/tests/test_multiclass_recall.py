@@ -19,7 +19,9 @@ from torchrec.metrics.multiclass_recall import (
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -111,5 +113,28 @@ class MulticlassRecallMetricTest(unittest.TestCase):
             world_size=WORLD_SIZE,
             entry_point=metric_test_helper,
             batch_window_size=10,
+            n_classes=N_CLASSES,
+        )
+
+
+class MulticlassRecallGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = MulticlassRecallMetric
+    task_name: str = "multiclass_recall"
+
+    def test_sync_multiclass_recall(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=MulticlassRecallMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestMulticlassRecallMetric,
+            metric_name=MulticlassRecallGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
+            # pyre-ignore[6] Incompatible parameter type
             n_classes=N_CLASSES,
         )
