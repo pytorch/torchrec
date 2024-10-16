@@ -29,7 +29,8 @@ def generate_model_output() -> Dict[str, torch._tensor.Tensor]:
 
 
 class NEPositiveValueTest(unittest.TestCase):
-    r"""This set of tests verify the computation logic of AUC in several
+    """
+    This set of tests verify the computation logic of AUC in several
     corner cases that we know the computation results. The goal is to
     provide some confidence of the correctness of the math formula.
     """

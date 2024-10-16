@@ -15,7 +15,9 @@ from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -76,4 +78,25 @@ class CalibrationMetricTest(unittest.TestCase):
             should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=metric_test_helper,
+        )
+
+
+class CalibrationGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = CalibrationMetric
+    task_name: str = "calibration"
+
+    def test_sync_calibration(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=CalibrationMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestCalibrationMetric,
+            metric_name=CalibrationGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
         )
