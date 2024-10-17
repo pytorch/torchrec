@@ -17,8 +17,10 @@ from torchrec.metrics.metrics_config import DefaultTaskInfo
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
     RecTaskInfo,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -251,3 +253,24 @@ class ThresholdValueTest(unittest.TestCase):
             except AssertionError:
                 print("Assertion error caught with data set ", inputs)
                 raise
+
+
+class AccuracyGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = AccuracyMetric
+    task_name: str = "accuracy"
+
+    def test_sync_accuracy(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=AccuracyMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestAccuracyMetric,
+            metric_name=AccuracyGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
+        )
