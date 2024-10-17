@@ -76,6 +76,11 @@ def _mcc_lazy_init(
     return (features, created_feature_order, features_order)
 
 
+@torch.fx.wrap
+def _get_length_per_key(kjt: KeyedJaggedTensor) -> torch.Tensor:
+    return torch.tensor(kjt.length_per_key())
+
+
 @torch.no_grad()
 def dynamic_threshold_filter(
     id_counts: torch.Tensor,
@@ -368,6 +373,7 @@ class ManagedCollisionCollection(nn.Module):
                 table: JaggedTensor(
                     values=kjt.values(),
                     lengths=kjt.lengths(),
+                    weights=_get_length_per_key(kjt),
                 )
             }
             mc_input = mc_module(mc_input)
