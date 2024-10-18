@@ -128,6 +128,7 @@ class PrefetchTrainPipelineContext(TrainPipelineContext):
 class EmbeddingTrainPipelineContext(TrainPipelineContext):
     embedding_a2a_requests: Dict[str, Multistreamable] = field(default_factory=dict)
     embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
+    embedding_features: List[List[Union[str, List[str]]]] = field(default_factory=list)
     detached_embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
 
 
@@ -408,6 +409,8 @@ class EmbeddingPipelinedForward(BaseForward):
             # pyre-ignore [16]
             self._context.embedding_tensors.append(tensors)
             # pyre-ignore [16]
+            self._context.embedding_features.append(list(embeddings.keys()))
+            # pyre-ignore [16]
             self._context.detached_embedding_tensors.append(detached_tensors)
         else:
             assert isinstance(embeddings, KeyedTensor)
@@ -418,6 +421,13 @@ class EmbeddingPipelinedForward(BaseForward):
             tensors.append(tensor)
             detached_tensors.append(detached_tensor)
             self._context.embedding_tensors.append(tensors)
+            # KeyedTensor is returned by EmbeddingBagCollections and its variants
+            # KeyedTensor holds dense data from multiple features and .values()
+            # returns a single concatenated dense tensor. To ensure that
+            # context.embedding_tensors[i] has the same length as
+            # context.embedding_features[i], we pass in a list with a single item:
+            # a list containing all the embedding feature names.
+            self._context.embedding_features.append([list(embeddings.keys())])
             self._context.detached_embedding_tensors.append(detached_tensors)
 
         return LazyNoWait(embeddings)
