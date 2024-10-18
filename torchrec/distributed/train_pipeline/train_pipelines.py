@@ -21,6 +21,7 @@ from typing import (
     Deque,
     Dict,
     Generic,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -911,17 +912,40 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             if cast(int, context.index) % 2 == 0
             else self._embedding_odd_streams
         )
-        for stream, emb_tensors, detached_emb_tensors in zip(
+        assert len(context.embedding_features) == len(context.embedding_tensors)
+        for stream, emb_tensors, embedding_features, detached_emb_tensors in zip(
             streams,
             context.embedding_tensors,
+            context.embedding_features,
             context.detached_embedding_tensors,
         ):
             with self._stream_context(stream):
                 grads = [tensor.grad for tensor in detached_emb_tensors]
                 if stream:
                     stream.wait_stream(default_stream)
-                # pyre-ignore
-                torch.autograd.backward(emb_tensors, grads)
+                # Some embeddings may never get used in the final loss computation,
+                # so the grads will be `None`. If we don't exclude these, it will fail
+                # with error: "grad can be implicitly created only for scalar outputs"
+                # Alternatively, if the tensor has only 1 element, pytorch can still
+                # figure out how to do autograd
+                embs_to_backprop, grads_to_use, invalid_features = [], [], []
+                assert len(embedding_features) == len(emb_tensors)
+                for features, tensor, grad in zip(
+                    embedding_features, emb_tensors, grads
+                ):
+                    if tensor.numel() == 1 or grad is not None:
+                        embs_to_backprop.append(tensor)
+                        grads_to_use.append(grad)
+                    else:
+                        if isinstance(features, Iterable):
+                            invalid_features.extend(features)
+                        else:
+                            invalid_features.append(features)
+                if invalid_features and context.index == 0:
+                    logger.warning(
+                        f"SemiSync, the following features have no gradients: {invalid_features}"
+                    )
+                torch.autograd.backward(embs_to_backprop, grads_to_use)
 
     def copy_batch_to_gpu(
         self,
