@@ -476,7 +476,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                     momentum_local_shards: List[Shard] = []
                     optimizer_sharded_tensor_metadata: ShardedTensorMetadata
 
-                    optim_state = shard_params.optimizer_states[0][momentum_idx - 1]  # pyre-ignore[16]
+                    optim_state = shard_params.optimizer_states[0][
+                        momentum_idx - 1
+                    ]  # pyre-ignore[16]
                     if (
                         optim_state.nelement() == 1 and state_key != "momentum1"
                     ):  # special handling for backward compatibility, momentum1 is rowwise state for rowwise_adagrad
