@@ -663,7 +663,7 @@ class ShardedManagedCollisionCollection(
                         values=features.values(),
                         lengths=features.lengths(),
                         # TODO: improve this temp solution by passing real weights
-                        weights=torch.tensor(kjt.length_per_key()),
+                        weights=torch.tensor(features.length_per_key()),
                     )
                 }
                 mcm = self._managed_collision_modules[table]
