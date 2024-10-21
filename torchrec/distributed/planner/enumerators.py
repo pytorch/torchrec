@@ -235,11 +235,17 @@ class EmbeddingEnumerator(Enumerator):
     def _filter_sharding_types(
         self, name: str, allowed_sharding_types: List[str]
     ) -> List[str]:
+        print(f"filtering sharding types for {name} {self._constraints=}")
+        # GRID_SHARD is only supported if specified by user in parameter constraints
         if not self._constraints or not self._constraints.get(name):
-            return allowed_sharding_types
+            return [
+                t for t in allowed_sharding_types if t != ShardingType.GRID_SHARD.value
+            ]
         constraints: ParameterConstraints = self._constraints[name]
         if not constraints.sharding_types:
-            return allowed_sharding_types
+            return [
+                t for t in allowed_sharding_types if t != ShardingType.GRID_SHARD.value
+            ]
         constrained_sharding_types: List[str] = constraints.sharding_types
 
         filtered_sharding_types = list(
@@ -255,6 +261,7 @@ class EmbeddingEnumerator(Enumerator):
                 "sharding types are too restrictive, if the sharder allows the "
                 "sharding types, or if non-strings are passed in."
             )
+        print(f"filtered sharding types for {name} {filtered_sharding_types=}")
         return filtered_sharding_types
 
     def _filter_compute_kernels(
@@ -269,6 +276,7 @@ class EmbeddingEnumerator(Enumerator):
             and self._constraints.get(name)
             and self._constraints[name].compute_kernels
         ):
+            print(f"filtering compute kernels for {name} {self._constraints=}")
             # pyre-ignore
             constrained_compute_kernels: List[str] = self._constraints[
                 name

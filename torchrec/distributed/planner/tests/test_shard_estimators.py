@@ -11,7 +11,7 @@ import math
 import unittest
 from typing import cast, Dict, List, Tuple
 
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import torch
 import torchrec.optim as trec_optim
@@ -59,6 +59,7 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(
             topology=self.topology, batch_size=BATCH_SIZE, estimator=self.estimator
         )
+        self._sharding_types = [x.value for x in ShardingType]
 
     def test_1_table_perf(self) -> None:
         tables = [
@@ -70,6 +71,16 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             )
         ]
         model = TestSparseNN(tables=tables, weighted_tables=[])
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
+        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        the same.
+        """
+        self.enumerator._filter_sharding_types = MagicMock(
+            return_value=self._sharding_types
+        )
         sharding_options = self.enumerator.enumerate(
             module=model,
             sharders=[
@@ -321,6 +332,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             )
         )
 
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
+        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        the same.
+        """
+        self.enumerator._filter_sharding_types = MagicMock(
+            return_value=self._sharding_types
+        )
+
         sharding_options = self.enumerator.enumerate(
             module=model,
             sharders=[
@@ -530,6 +552,14 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             estimator=self.estimator,
             constraints=constraints,
         )
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
+        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        the same.
+        """
+        enumerator._filter_sharding_types = MagicMock(return_value=self._sharding_types)
         model = TestSparseNN(tables=tables, weighted_tables=[])
         sharding_options = enumerator.enumerate(
             module=model,
