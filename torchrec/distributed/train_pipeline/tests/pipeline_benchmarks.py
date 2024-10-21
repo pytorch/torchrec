@@ -94,6 +94,12 @@ def _gen_pipelines(
     help="Batch size.",
 )
 @click.option(
+    "--sharding_type",
+    type=ShardingType,
+    default=ShardingType.TABLE_WISE,
+    help="ShardingType.",
+)
+@click.option(
     "--pooling_factor",
     type=int,
     default=100,
@@ -129,6 +135,7 @@ def main(
     dim_emb: int,
     n_batches: int,
     batch_size: int,
+    sharding_type: ShardingType,
     pooling_factor: int,
     input_type: str,
     pipeline: str,
@@ -178,7 +185,7 @@ def main(
             callable=runner,
             tables=tables,
             weighted_tables=weighted_tables,
-            sharding_type=ShardingType.TABLE_WISE.value,
+            sharding_type=sharding_type.value,
             kernel_type=EmbeddingComputeKernel.FUSED.value,
             batches=batches,
             fused_params={},
@@ -190,7 +197,7 @@ def main(
         single_runner(
             tables=tables,
             weighted_tables=weighted_tables,
-            sharding_type=ShardingType.TABLE_WISE.value,
+            sharding_type=sharding_type.value,
             kernel_type=EmbeddingComputeKernel.FUSED.value,
             batches=batches,
             fused_params={},
