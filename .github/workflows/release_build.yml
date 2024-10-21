@@ -43,7 +43,7 @@ jobs:
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
     - name: Update pip
       run: |
         sudo yum update -y
