@@ -102,7 +102,7 @@ jobs:
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
         path: dist/torchrec-*.whl
