@@ -19,36 +19,31 @@ jobs:
       matrix:
         include:
          - os: linux.2xlarge
-           python-version: 3.8
-           python-tag: "py38"
-           cuda-tag: "cu121"
-         - os: linux.2xlarge
            python-version: 3.9
            python-tag: "py39"
-           cuda-tag: "cu121"
+           cuda-tag: "cu124"
          - os: linux.2xlarge
            python-version: '3.10'
            python-tag: "py310"
-           cuda-tag: "cu121"
+           cuda-tag: "cu124"
          - os: linux.2xlarge
            python-version: '3.11'
            python-tag: "py311"
-           cuda-tag: "cu121"
+           cuda-tag: "cu124"
          - os: linux.2xlarge
            python-version: '3.12'
            python-tag: "py312"
-           cuda-tag: "cu121"
+           cuda-tag: "cu124"
     steps:
     # Checkout the repository to the GitHub Actions runner
     - name: Check ldd --version
       run: ldd --version
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
     - name: Update pip
       run: |
         sudo yum update -y
         sudo yum -y install git python3-pip
-        sudo pip3 install --upgrade pip
     - name: Setup conda
       run: |
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
@@ -73,12 +68,12 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda run -n build_binary pip install torch --index-url https://download.pytorch.org/whl/test/cu121
+        conda run -n build_binary pip install torch
     - name: Install fbgemm
       shell: bash
       run: |
         conda run -n build_binary pip install numpy
-        conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/cu121
+        conda run -n build_binary pip install fbgemm-gpu
     - name: Install Dependencies
       shell: bash
       run: |
@@ -102,7 +97,7 @@ jobs:
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}
     - name: Upload wheel as GHA artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
         path: dist/torchrec-*.whl
@@ -112,9 +107,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [linux.4xlarge.nvidia.gpu]
-        python-version: [3.8, 3.9, "3.10", "3.11", "3.12"]
-        cuda-tag: ["cu121"]
+        os: [linux.g5.12xlarge.nvidia.gpu]
+        python-version: [3.9, "3.10", "3.11", "3.12"]
+        cuda-tag: ["cu124"]
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
@@ -149,12 +144,11 @@ jobs:
         sudo lshw -C display
     # Checkout the repository to the GitHub Actions runner
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
     - name: Update pip
       run: |
         sudo yum update -y
         sudo yum -y install git python3-pip
-        sudo pip3 install --upgrade pip
     - name: Setup conda
       run: |
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
@@ -179,19 +173,19 @@ jobs:
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
-        conda run -n build_binary pip install torch --index-url https://download.pytorch.org/whl/test/cu121
+        conda run -n build_binary pip install torch
     # download wheel from GHA
     - name: Install fbgemm
       shell: bash
       run: |
         conda run -n build_binary pip install numpy
-        conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/cu121
+        conda run -n build_binary pip install fbgemm-gpu
     - name: Install torchmetrics
       shell: bash
       run: |
         conda run -n build_binary pip install torchmetrics==1.0.3
     - name: Download wheel
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
       with:
         name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
     - name: Display structure of downloaded files
