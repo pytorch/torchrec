@@ -23,7 +23,7 @@ Below demonstrates the compatability matrix that is currently tested:
    * - Python Version
      - 3.9, 3.10, 3.11, 3.12
    * - Compute Platform
-     - CPU, CUDA 11.8, CUDA 12.1
+     - CPU, CUDA 11.8, CUDA 12.1, CUDA 12.4
 
 Aside from those requirements, TorchRec's core dependencies are PyTorch and FBGEMM.
 If your system is compatible with both libraries generally, then it should be sufficient for TorchRec.
@@ -50,7 +50,7 @@ Therefore, specific versions of TorchRec and FBGEMM should correspond to a speci
 
 Installation
 ------------
-Below we show installations for CUDA 12.1 as an example. For CPU or CUDA 11.8, swap ``cu121`` for ``cpu`` or ``cu118``.
+Below we show installations for CUDA 12.1 as an example. For CPU, CUDA 11.8, or CUDA 12.4, swap ``cu121`` for ``cpu``, ``cu118``, or ``cu124`` respectively.
 
 .. tab-set::
 
@@ -63,7 +63,7 @@ Below we show installations for CUDA 12.1 as an example. For CPU or CUDA 11.8, s
             pip install torchmetrics==1.0.3
             pip install torchrec --index-url https://download.pytorch.org/whl/cu121
 
-    .. tab-item:: **Stable via PyPI (Only for CUDA 12.1)**
+    .. tab-item:: **Stable via PyPI (Only for CUDA 12.4)**
 
         .. code-block:: bash
 
