@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: conda-incubator/setup-miniconda@v2
         with:
-          python-version: 3.9
+          python-version: 3.11
       - name: Checkout Torchrec
         uses: actions/checkout@v2
       - name: Install dependencies
@@ -22,6 +22,6 @@ jobs:
           conda install --yes pytorch cpuonly -c pytorch-nightly &&
           pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu &&
           pip install -r requirements.txt &&
-          pip install pyre-check-nightly==$(cat .pyre_configuration | grep version | awk '{print $2}' | sed 's/\"//g')
+          pip install pyre-check-nightly==$(grep "version" .pyre_configuration | sed -n -e 's/.*\(0\.0\.[0-9]*\).*/\1/p')
       - name: Pyre check
         run: pyre check
