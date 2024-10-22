@@ -111,6 +111,7 @@ class TestProposers(unittest.TestCase):
         self.uniform_proposer = UniformProposer()
         self.grid_search_proposer = GridSearchProposer()
         self.dynamic_programming_proposer = DynamicProgrammingProposer()
+        self._sharding_types = [x.value for x in ShardingType]
 
     def test_greedy_two_table(self) -> None:
         tables = [
@@ -127,6 +128,17 @@ class TestProposers(unittest.TestCase):
                 feature_names=["feature_1"],
             ),
         ]
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however, 
+        adding parameter constraints does not work because of the non deterministic nature of 
+        _filter_sharding_types (set & set) operation when constraints are present. This means 
+        the greedy proposer will have a different order of sharding types on each test invocation
+        which we cannot have a harcoded "correct" answer for. We mock the call to _filter_sharding_types 
+        to ensure the order of the sharding types list is always the same.
+        """
+        self.enumerator._filter_sharding_types = MagicMock(
+            return_value=self._sharding_types
+        )
 
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
         search_space = self.enumerator.enumerate(
@@ -335,6 +347,16 @@ class TestProposers(unittest.TestCase):
             for i in range(1, 4)
         ]
         model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
+        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        the same.
+        """
+        self.enumerator._filter_sharding_types = MagicMock(
+            return_value=self._sharding_types
+        )
         search_space = self.enumerator.enumerate(
             module=model,
             sharders=[

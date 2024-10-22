@@ -725,14 +725,30 @@ class ModelParallelBase(ModelParallelTestShared):
             backend=self.backend,
             qcomms_config=qcomms_config,
             constraints={
-                "table_0": ParameterConstraints(min_partition=8),
-                "table_1": ParameterConstraints(min_partition=12),
-                "table_2": ParameterConstraints(min_partition=16),
-                "table_3": ParameterConstraints(min_partition=20),
-                "table_4": ParameterConstraints(min_partition=8),
-                "table_5": ParameterConstraints(min_partition=12),
-                "weighted_table_0": ParameterConstraints(min_partition=8),
-                "weighted_table_1": ParameterConstraints(min_partition=12),
+                "table_0": ParameterConstraints(
+                    min_partition=8, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_1": ParameterConstraints(
+                    min_partition=12, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_2": ParameterConstraints(
+                    min_partition=16, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_3": ParameterConstraints(
+                    min_partition=20, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_4": ParameterConstraints(
+                    min_partition=8, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_5": ParameterConstraints(
+                    min_partition=12, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "weighted_table_0": ParameterConstraints(
+                    min_partition=8, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "weighted_table_1": ParameterConstraints(
+                    min_partition=12, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
@@ -800,14 +816,30 @@ class ModelParallelBase(ModelParallelTestShared):
             backend=self.backend,
             qcomms_config=qcomms_config,
             constraints={
-                "table_0": ParameterConstraints(min_partition=8),
-                "table_1": ParameterConstraints(min_partition=12),
-                "table_2": ParameterConstraints(min_partition=8),
-                "table_3": ParameterConstraints(min_partition=10),
-                "table_4": ParameterConstraints(min_partition=4),
-                "table_5": ParameterConstraints(min_partition=6),
-                "weighted_table_0": ParameterConstraints(min_partition=2),
-                "weighted_table_1": ParameterConstraints(min_partition=3),
+                "table_0": ParameterConstraints(
+                    min_partition=8, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_1": ParameterConstraints(
+                    min_partition=12, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_2": ParameterConstraints(
+                    min_partition=8, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_3": ParameterConstraints(
+                    min_partition=10, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_4": ParameterConstraints(
+                    min_partition=4, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "table_5": ParameterConstraints(
+                    min_partition=6, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "weighted_table_0": ParameterConstraints(
+                    min_partition=2, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
+                "weighted_table_1": ParameterConstraints(
+                    min_partition=3, sharding_types=[ShardingType.GRID_SHARD.value]
+                ),
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
