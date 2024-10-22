@@ -2153,8 +2153,8 @@ class ReduceScatterBase_Req(Function):
         if rsi.codecs is not None:
             inputs = rsi.codecs.forward.encode(inputs)
         output = inputs.new_empty((inputs.size(0) // my_size, inputs.size(1)))
-        with record_function("## reduce_scatter_base ##"):
-            req = dist._reduce_scatter_base(
+        with record_function("## reduce_scatter_tensor ##"):
+            req = dist.reduce_scatter_tensor(
                 output,
                 inputs,
                 group=pg,
@@ -2222,7 +2222,7 @@ class ReduceScatterBase_Wait(Function):
             grad_output = rsi.codecs.backward.encode(grad_output)
         grad_inputs = grad_output.new_empty(rsi.input_sizes)
         with record_function("## reduce_scatter_base_bw (all_gather) ##"):
-            req = dist._all_gather_base(
+            req = dist.all_gather_into_tensor(
                 grad_inputs,
                 grad_output.contiguous(),
                 group=ctx.pg,
@@ -2250,8 +2250,8 @@ class AllGatherBase_Req(Function):
             input = agi.codecs.forward.encode(input)
 
         outputs = input.new_empty((input.size(0) * my_size, input.size(1)))
-        with record_function("## all_gather_base ##"):
-            req = dist._all_gather_base(
+        with record_function("## all_gather_into_tensor ##"):
+            req = dist.all_gather_into_tensor(
                 outputs,
                 input,
                 group=pg,
@@ -2319,7 +2319,7 @@ class AllGatherBase_Wait(Function):
             grad_outputs = agi.codecs.backward.encode(grad_outputs)
         grad_input = grad_outputs.new_empty(agi.input_size)
         with record_function("## all_gather_base_bw (reduce_scatter) ##"):
-            req = dist._reduce_scatter_base(
+            req = dist.reduce_scatter_tensor(
                 grad_input,
                 grad_outputs.contiguous(),
                 group=ctx.pg,
@@ -2349,11 +2349,11 @@ class ReduceScatterV_Req(Function):
 
         output = input.new_empty(rsi.input_sizes[my_rank])
 
-        # Use dist._reduce_scatter_base when a vector reduce-scatter is not needed
+        # Use dist.reduce_scatter_tensor when a vector reduce-scatter is not needed
         # else use dist.reduce_scatter which internally supports vector reduce-scatter
         if rsi.equal_splits:
-            with record_function("## reduce_scatter_base ##"):
-                req = dist._reduce_scatter_base(
+            with record_function("## reduce_scatter_tensor ##"):
+                req = dist.reduce_scatter_tensor(
                     output,
                     input,
                     group=pg,
@@ -2434,7 +2434,7 @@ class ReduceScatterV_Wait(Function):
 
         if rsi.equal_splits:
             with record_function("## reduce_scatter_base_bw (all_gather) ##"):
-                req = dist._all_gather_base(
+                req = dist.all_gather_into_tensor(
                     grad_input,
                     grad_output.contiguous(),
                     group=ctx.pg,
