@@ -11,6 +11,7 @@
 
 import abc
 import itertools
+import logging
 import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -47,6 +48,7 @@ from torchrec.metrics.metrics_namespace import (
     MetricPrefix,
 )
 
+logger: logging.Logger = logging.getLogger(__name__)
 
 RecModelOutput = Union[torch.Tensor, Dict[str, torch.Tensor]]
 
@@ -520,6 +522,31 @@ class RecMetric(nn.Module, abc.ABC):
     ) -> None:
         with torch.no_grad():
             if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
+                task_names = [task.name for task in self._tasks]
+
+                if not isinstance(predictions, torch.Tensor):
+                    logger.info(
+                        "Converting predictions to tensors for RecComputeMode.FUSED_TASKS_COMPUTATION"
+                    )
+                    predictions = torch.stack(
+                        [predictions[task_name] for task_name in task_names]
+                    )
+
+                if not isinstance(labels, torch.Tensor):
+                    logger.info(
+                        "Converting labels to tensors for RecComputeMode.FUSED_TASKS_COMPUTATION"
+                    )
+                    labels = torch.stack(
+                        [labels[task_name] for task_name in task_names]
+                    )
+                if weights is not None and not isinstance(weights, torch.Tensor):
+                    logger.info(
+                        "Converting weights to tensors for RecComputeMode.FUSED_TASKS_COMPUTATION"
+                    )
+                    weights = torch.stack(
+                        [weights[task_name] for task_name in task_names]
+                    )
+
                 assert isinstance(predictions, torch.Tensor) and isinstance(
                     labels, torch.Tensor
                 )
