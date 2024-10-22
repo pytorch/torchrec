@@ -8,6 +8,7 @@ TorchRec has been used to accelerate advancements in recommendation systems, som
 * [Disaggregated Multi-Tower: Topology-aware Modeling Technique for Efficient Large-Scale Recommendation](https://arxiv.org/abs/2403.00877) paper
 * [The Algorithm ML](https://github.com/twitter/the-algorithm-ml) from Twitter
 * [Training Recommendation Models with Databricks](https://docs.databricks.com/en/machine-learning/train-recommender-models.html)
+* [Toward 100TB model with Embedding Offloading Paper](https://dl.acm.org/doi/10.1145/3640457.3688037)
 
 
 ## Introduction
@@ -39,6 +40,10 @@ Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html
 
 1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/).
    ```
+   CUDA 12.4
+
+   pip install torch --index-url https://download.pytorch.org/whl/nightly/cu124
+
    CUDA 12.1
 
    pip install torch --index-url https://download.pytorch.org/whl/nightly/cu121
@@ -60,6 +65,10 @@ Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html
 
 3. Install FBGEMM.
    ```
+   CUDA 12.4
+
+   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu124
+
    CUDA 12.1
 
    pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu121
