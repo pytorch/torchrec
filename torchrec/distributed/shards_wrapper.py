@@ -27,8 +27,6 @@ from torch.distributed.checkpoint.planner import (
 aten = torch.ops.aten  # pyre-ignore[5]
 
 
-# pyre-fixme[13]: Attribute `_local_shards` is never initialized.
-# pyre-fixme[13]: Attribute `_storage_meta` is never initialized.
 class LocalShardsWrapper(torch.Tensor):
     """
     A wrapper class to hold local shards of a DTensor.
@@ -37,7 +35,9 @@ class LocalShardsWrapper(torch.Tensor):
     """
 
     __slots__ = ["_local_shards", "_storage_meta"]
+    # pyre-fixme[13]: Attribute `_local_shards` is never initialized.
     _local_shards: List[torch.Tensor]
+    # pyre-fixme[13]: Attribute `_storage_meta` is never initialized.
     _storage_meta: TensorStorageMetadata
 
     @staticmethod

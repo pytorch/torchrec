@@ -773,6 +773,8 @@ class TestMemoryBalancedPartitioner(unittest.TestCase):
             for shard in sharding_option.shards:
                 if shard.storage and shard.rank is not None:
                     greedy_perf_hbm_uses[
+                        # pyre-fixme[6]: For 1st argument expected `SupportsIndex`
+                        #  but got `Optional[int]`.
                         shard.rank
                     ] += shard.storage.hbm  # pyre-ignore[16]
 
@@ -796,6 +798,8 @@ class TestMemoryBalancedPartitioner(unittest.TestCase):
         for sharding_option in sharding_options:
             for shard in sharding_option.shards:
                 if shard.storage and shard.rank:
+                    # pyre-fixme[6]: For 1st argument expected `SupportsIndex` but
+                    #  got `Optional[int]`.
                     memory_balanced_hbm_uses[shard.rank] += shard.storage.hbm
 
         self.assertTrue(max(memory_balanced_hbm_uses) < max(greedy_perf_hbm_uses))

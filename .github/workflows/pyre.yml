@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: conda-incubator/setup-miniconda@v2
         with:
-          python-version: 3.9
+          python-version: 3.11
       - name: Checkout Torchrec
         uses: actions/checkout@v2
       - name: Install dependencies

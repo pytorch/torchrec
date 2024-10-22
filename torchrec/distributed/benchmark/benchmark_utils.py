@@ -431,6 +431,7 @@ def transform_module(
     compile_mode: CompileMode,
     world_size: int,
     batch_size: int,
+    # pyre-fixme[24]: Generic type `ContextManager` expects 1 type parameter.
     ctx: ContextManager,
     benchmark_unsharded_module: bool = False,
 ) -> torch.nn.Module:
@@ -616,7 +617,11 @@ def benchmark(
         if device_type == "cuda":
             with torch.profiler.profile(
                 activities=[
+                    # pyre-fixme[16]: Module `profiler` has no attribute
+                    #  `ProfilerActivity`.
                     torch.profiler.ProfilerActivity.CPU,
+                    # pyre-fixme[16]: Module `profiler` has no attribute
+                    #  `ProfilerActivity`.
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
                 record_shapes=True,
@@ -745,7 +750,11 @@ def benchmark_func(
                 a = a * torch.rand(16384, 16384, device="cuda")
             with torch.profiler.profile(
                 activities=[
+                    # pyre-fixme[16]: Module `profiler` has no attribute
+                    #  `ProfilerActivity`.
                     torch.profiler.ProfilerActivity.CPU,
+                    # pyre-fixme[16]: Module `profiler` has no attribute
+                    #  `ProfilerActivity`.
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
                 record_shapes=True,
