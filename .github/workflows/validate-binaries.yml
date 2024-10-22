@@ -23,7 +23,6 @@ on:
           - release
           - nightly
           - test
-          - pypi_release
       ref:
         description: 'Reference to checkout, defaults to empty'
         default: ""
