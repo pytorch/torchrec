@@ -74,7 +74,8 @@ try:
 except ImportError:
     logger.warning("torchrec_use_sync_collectives is not available")
 
-torch.ops.import_module("fbgemm_gpu.sparse_ops")
+if not torch._running_with_deploy():
+    torch.ops.import_module("fbgemm_gpu.sparse_ops")
 
 
 class ModelDetachedException(Exception):
