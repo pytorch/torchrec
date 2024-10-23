@@ -235,11 +235,16 @@ class EmbeddingEnumerator(Enumerator):
     def _filter_sharding_types(
         self, name: str, allowed_sharding_types: List[str]
     ) -> List[str]:
+        # GRID_SHARD is only supported if specified by user in parameter constraints
         if not self._constraints or not self._constraints.get(name):
-            return allowed_sharding_types
+            return [
+                t for t in allowed_sharding_types if t != ShardingType.GRID_SHARD.value
+            ]
         constraints: ParameterConstraints = self._constraints[name]
         if not constraints.sharding_types:
-            return allowed_sharding_types
+            return [
+                t for t in allowed_sharding_types if t != ShardingType.GRID_SHARD.value
+            ]
         constrained_sharding_types: List[str] = constraints.sharding_types
 
         filtered_sharding_types = list(

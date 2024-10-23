@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: "Channel to use (nightly, release, test)"
+        description: "Channel to use (nightly, release, test, pypi)"
         required: true
         type: choice
         options:
