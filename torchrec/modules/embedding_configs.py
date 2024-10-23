@@ -20,6 +20,12 @@ from torchrec.types import DataType
 
 
 @unique
+class EmbeddingTableType(Enum):
+    NORMAL = "NORMAL"
+    HASH_ZCH = "HASH_ZCH"
+
+
+@unique
 class PoolingType(Enum):
     """
     Pooling type for embedding table.
