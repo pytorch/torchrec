@@ -13,6 +13,8 @@ import argparse
 import sys
 from typing import List
 
+import torch
+
 from dlrm_predict import create_training_batch, DLRMModelConfig, DLRMPredictFactory
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 
@@ -102,7 +104,7 @@ def main(argv: List[str]) -> None:
         sample_input=batch,
     )
 
-    script_module = DLRMPredictFactory(model_config).create_predict_module(world_size=1)
+    script_module = DLRMPredictFactory(model_config).create_predict_module(device="cuda")
 
     script_module.save(args.output_path)
     print(f"Package is saved to {args.output_path}")
