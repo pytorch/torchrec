@@ -382,9 +382,7 @@ def runner(
                 rank=rank,
             )
             if rank == 0:
-                print(
-                    f"  {pipeline_clazz.__name__: <{35}} | Runtime (P90): {result.runtime_percentile(90)/1000:5.3f} s | Memory (P90): {result.max_mem_percentile(90)/1000:5.3f} GB"
-                )
+                print(result)
 
 
 def single_runner(
@@ -456,9 +454,7 @@ def single_runner(
             rank=0,
         )
 
-        print(
-            f"  {pipeline_clazz.__name__: <{35}} | Runtime (P90): {result.runtime_percentile(90)/1000:5.3f} s | Memory (P90): {result.max_mem_percentile(90)/1000:5.3f} GB"
-        )
+        print(result)
 
 
 if __name__ == "__main__":
