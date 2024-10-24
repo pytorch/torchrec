@@ -144,7 +144,7 @@ class TestBinaryCriteoUtils(CriteoTest):
             self.assertEqual(dense.shape, (num_rows, INT_FEATURE_COUNT))
             self.assertEqual(dense.dtype, np.float32)
             self.assertEqual(sparse.shape, (num_rows, CAT_FEATURE_COUNT))
-            self.assertEqual(sparse.dtype, np.int32)
+            self.assertEqual(sparse.dtype, np.int64)
             self.assertEqual(labels.shape, (num_rows, 1))
             self.assertEqual(labels.dtype, np.int32)
 
