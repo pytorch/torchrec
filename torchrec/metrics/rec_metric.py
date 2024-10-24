@@ -46,6 +46,7 @@ from torchrec.metrics.metrics_namespace import (
     MetricNamespaceBase,
     MetricPrefix,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 
 RecModelOutput = Union[torch.Tensor, Dict[str, torch.Tensor]]
@@ -136,6 +137,7 @@ class RecMetricComputation(Metric, abc.ABC):
         process_group: Optional[dist.ProcessGroup] = None,
         fused_update_limit: int = 0,
         allow_missing_label_with_zero_weight: bool = False,
+        enable_pt2_compile: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -159,6 +161,7 @@ class RecMetricComputation(Metric, abc.ABC):
                 dist_reduce_fx=lambda x: torch.any(x, dim=0).byte(),
                 persistent=True,
             )
+        self.enable_pt2_compile = enable_pt2_compile
 
     @staticmethod
     def get_window_state_name(state_name: str) -> str:
@@ -244,6 +247,7 @@ class RecMetricComputation(Metric, abc.ABC):
         """
         return
 
+    @pt2_compile_callable
     def compute(self) -> List[MetricComputationReport]:
         with record_function(f"## {self.__class__.__name__}:compute ##"):
             if self._my_rank == 0 or self._compute_on_all_ranks:

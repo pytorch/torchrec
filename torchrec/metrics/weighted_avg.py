@@ -16,6 +16,7 @@ from torchrec.metrics.rec_metric import (
     RecMetric,
     RecMetricComputation,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 
 def get_mean(value_sum: torch.Tensor, num_samples: torch.Tensor) -> torch.Tensor:
@@ -40,6 +41,7 @@ class WeightedAvgMetricComputation(RecMetricComputation):
             persistent=True,
         )
 
+    @pt2_compile_callable
     def update(
         self,
         *,

@@ -17,6 +17,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 
 THRESHOLD = "threshold"
@@ -96,6 +97,7 @@ class RecallMetricComputation(RecMetricComputation):
         )
         self._threshold: float = threshold
 
+    @pt2_compile_callable
     def update(
         self,
         *,

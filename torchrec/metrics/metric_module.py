@@ -393,6 +393,8 @@ def _generate_rec_metrics(
         if metric_def and metric_def.arguments is not None:
             kwargs = metric_def.arguments
 
+        kwargs["enable_pt2_compile"] = metrics_config.enable_pt2_compile
+
         rec_tasks: List[RecTaskInfo] = []
         if metric_def.rec_tasks and metric_def.rec_task_indices:
             raise ValueError(
@@ -468,7 +470,7 @@ def generate_metric_module(
         metrics_config, world_size, my_rank, batch_size, process_group
     )
     """
-    Batch_size_stages currently only used by ThroughputMetric to ensure total_example correct so 
+    Batch_size_stages currently only used by ThroughputMetric to ensure total_example correct so
     different training jobs have aligned mertics.
     TODO: update metrics other than ThroughputMetric if it has dependency on batch_size
     """

@@ -10,6 +10,7 @@
 from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
+
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
     MetricComputationReport,
@@ -17,6 +18,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 
 ERROR_SUM = "error_sum"
@@ -80,6 +82,7 @@ class MSEMetricComputation(RecMetricComputation):
             persistent=True,
         )
 
+    @pt2_compile_callable
     def update(
         self,
         *,
