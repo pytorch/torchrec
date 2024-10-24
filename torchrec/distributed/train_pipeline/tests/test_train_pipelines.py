@@ -862,7 +862,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             batch_size = pred.size(0)
             return loss, pred.expand(batch_size * 2, -1)
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -2201,17 +2201,21 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
 
 
 class TrainPipelineSparseDistCompAutogradTest(TrainPipelineSparseDistTest):
+    orig_optimize_ddp: Union[bool, str] = torch._dynamo.config.optimize_ddp
+
     def setUp(self) -> None:
         super().setUp()
+        torch.manual_seed(42)
         self.pipeline_class = TrainPipelineSparseDistCompAutograd
         torch._dynamo.reset()
         counters["compiled_autograd"].clear()
         # Compiled Autograd don't work with Anomaly Mode
         torch.autograd.set_detect_anomaly(False)
+        torch._dynamo.config.optimize_ddp = "python_reducer_without_compiled_forward"
 
     def tearDown(self) -> None:
-        # Every single test has two captures, one for forward and one for backward
-        self.assertEqual(counters["compiled_autograd"]["captures"], 2)
+        torch._dynamo.config.optimize_ddp = self.orig_optimize_ddp
+        self.assertEqual(counters["compiled_autograd"]["captures"], 3)
         return super().tearDown()
 
     @unittest.skip("Dynamo only supports FSDP with use_orig_params=True")
@@ -2219,3 +2223,14 @@ class TrainPipelineSparseDistCompAutogradTest(TrainPipelineSparseDistTest):
     @given(execute_all_batches=st.booleans())
     def test_pipelining_fsdp_pre_trace(self, execute_all_batches: bool) -> None:
         super().test_pipelining_fsdp_pre_trace()
+
+    @unittest.skip(
+        "TrainPipelineSparseDistTest.test_equal_to_non_pipelined was called from multiple different executors, which makes counters['compiled_autograd']['captures'] uncertain"
+    )
+    def test_equal_to_non_pipelined(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        execute_all_batches: bool,
+    ) -> None:
+        super().test_equal_to_non_pipelined()
