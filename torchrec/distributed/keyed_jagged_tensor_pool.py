@@ -667,9 +667,9 @@ class ShardedInferenceKeyedJaggedTensorPool(
     ) -> None:
         raise NotImplementedError("Inference does not support update")
 
+    # pyre-fixme[7]: Expected `KeyedJaggedTensor` but got implicit return value of
+    #  `None`.
     def _update_preproc(self, values: KeyedJaggedTensor) -> KeyedJaggedTensor:
-        # pyre-fixme[7]: Expected `KeyedJaggedTensor` but got implicit return value
-        #  of `None`.
         pass
 
 

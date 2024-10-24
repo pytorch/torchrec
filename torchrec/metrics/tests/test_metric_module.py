@@ -528,6 +528,7 @@ class MetricModuleTest(unittest.TestCase):
             )
         mock_time.time = MagicMock(return_value=0.0)
 
+        # pyre-fixme[53]: Captured variable `batch` is not annotated.
         def _train(metric_module: RecMetricModule) -> float:
             for _ in range(metric_module.compute_interval_steps):
                 metric_module.update(batch)

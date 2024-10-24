@@ -44,7 +44,6 @@ try:
     # other metaclasses (i.e. AwaitableMeta) for customized
     # behaviors, as Generic is non-trival metaclass in
     # python 3.6 and below
-    # pyre-fixme[21]: Could not find name `GenericMeta` in `typing` (stubbed).
     from typing import GenericMeta
 except ImportError:
     # In python 3.7+, GenericMeta doesn't exist as it's no
@@ -975,6 +974,9 @@ class ModuleSharder(abc.ABC, Generic[M]):
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
+    # pyre-fixme[56]: Pyre doesn't yet support decorators with ParamSpec applied to
+    #  generic functions. Consider using a context manager instead of a decorator, if
+    #  possible.
     @abc.abstractclassmethod
     # pyre-ignore [3]
     def shard(

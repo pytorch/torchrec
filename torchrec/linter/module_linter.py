@@ -37,7 +37,9 @@ def print_error_message(
     """
     lint_item = {
         "path": python_path,
+        # pyre-fixme[16]: `AST` has no attribute `lineno`.
         "line": node.lineno,
+        # pyre-fixme[16]: `AST` has no attribute `col_offset`.
         "char": node.col_offset + 1,
         "severity": severity,
         "name": name,
