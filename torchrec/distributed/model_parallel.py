@@ -474,7 +474,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 state_dict, prefix
             )
             add_prefix_to_state_dict(state_dict, prefix + _DDP_STATE_DICT_PREFIX)
-        if isinstance(module, ShardedModule):
+        if getattr(module, "_FORCE_STATE_DICT_LOAD", False):
             return module.load_state_dict(state_dict, strict=strict)
         else:
             module._load_from_state_dict(

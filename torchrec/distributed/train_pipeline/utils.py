@@ -10,7 +10,7 @@
 import copy
 import itertools
 import logging
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
 
 from itertools import chain
@@ -48,6 +48,7 @@ from torch.fx.immutable_collections import (
     immutable_list as fx_immutable_list,
 )
 from torch.fx.node import Node
+from torch.nn.modules.module import _IncompatibleKeys
 from torch.profiler import record_function
 from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
 from torchrec.distributed.embedding_sharding import (
@@ -249,6 +250,8 @@ class PipelinedPreproc(torch.nn.Module):
         setattr(model, fqn, preproc)
     """
 
+    _FORCE_STATE_DICT_LOAD = True
+
     def __init__(
         self,
         preproc_module: torch.nn.Module,
@@ -319,6 +322,64 @@ class PipelinedPreproc(torch.nn.Module):
 
     def get_context(self) -> TrainPipelineContext:
         return self._context
+
+    def named_modules(
+        self,
+        memo: Optional[Set[torch.nn.Module]] = None,
+        prefix: str = "",
+        remove_duplicate: bool = True,
+    ) -> Iterator[Tuple[str, torch.nn.Module]]:
+        if memo is None:
+            memo = set()
+        if self not in memo:
+            if remove_duplicate:
+                memo.add(self)
+            # This is needed because otherwise the rewrite won't find the existing preproc, and will create a new one
+            # Also, `named_modules` need to include self - see base implementation in the nn.modules.Module
+            yield prefix, self
+            # Difference from base implementation is here - the child name (_preproc_module) is not added to the prefix
+            yield from self._preproc_module.named_modules(
+                memo, prefix, remove_duplicate
+            )
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        yield from self._preproc_module.named_parameters(
+            prefix,
+            recurse,
+            remove_duplicate,
+        )
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from self._preproc_module.named_buffers(prefix, recurse, remove_duplicate)
+
+    # pyre-ignore [14]
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        # super().state_dict(destination, prefix, keep_vars)
+        if destination is None:
+            destination = OrderedDict()
+            # pyre-ignore [16]
+            destination._metadata = OrderedDict()
+        self._preproc_module.state_dict(
+            destination=destination, prefix=prefix, keep_vars=keep_vars
+        )
+        return destination
+
+    # pyre-ignore [14]
+    def load_state_dict(
+        self,
+        state_dict: OrderedDict[str, torch.Tensor],
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        return self._preproc_module.load_state_dict(state_dict, strict=strict)
 
 
 class BaseForward:

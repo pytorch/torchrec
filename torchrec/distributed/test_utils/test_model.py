@@ -1788,6 +1788,8 @@ class TestNegSamplingModule(torch.nn.Module):
         ModelInput
     """
 
+    TEST_BUFFER_NAME = "test_buffer"
+
     def __init__(
         self,
         extra_input: ModelInput,
@@ -1795,6 +1797,7 @@ class TestNegSamplingModule(torch.nn.Module):
     ) -> None:
         super().__init__()
         self._extra_input = extra_input
+        self.register_buffer(self.TEST_BUFFER_NAME, torch.zeros(1))
         if has_params:
             self._linear: nn.Module = nn.Linear(30, 30)
 
