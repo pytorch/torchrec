@@ -252,7 +252,7 @@ class BinaryCriteoUtils:
         # using int64. Numpy will automatically handle dense values >= 2 ** 31.
         dense_np = np.array(dense, dtype=np.int32)
         del dense
-        sparse_np = np.array(sparse, dtype=np.int32)
+        sparse_np = np.array(sparse, dtype=np.int64)
         del sparse
         labels_np = np.array(labels, dtype=np.int32)
         del labels
