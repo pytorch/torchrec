@@ -21,6 +21,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -128,6 +129,7 @@ class RecallSessionMetricComputation(RecMetricComputation):
         self.run_ranking_of_labels: bool = session_metric_def.run_ranking_of_labels
         self.session_var_name: Optional[str] = session_metric_def.session_var_name
 
+    @pt2_compile_callable
     def update(
         self,
         *,

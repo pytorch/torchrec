@@ -18,6 +18,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 
 NUM_EXAMPLES = "num_examples"
@@ -98,6 +99,7 @@ class ServingNEMetricComputation(RecMetricComputation):
             eta=self.eta,
         )
 
+    @pt2_compile_callable
     def update(
         self,
         *,

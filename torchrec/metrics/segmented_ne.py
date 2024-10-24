@@ -19,6 +19,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 PREDICTIONS = "predictions"
 LABELS = "labels"
@@ -206,6 +207,7 @@ class SegmentedNEMetricComputation(RecMetricComputation):
         )
         self.eta = 1e-12
 
+    @pt2_compile_callable
     def update(
         self,
         *,
