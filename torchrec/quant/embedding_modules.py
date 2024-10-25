@@ -79,6 +79,10 @@ MODULE_ATTR_EMB_CONFIG_NAME_TO_NUM_ROWS_POST_PRUNING_DICT: str = (
     "__emb_name_to_num_rows_post_pruning"
 )
 
+MODULE_ATTR_REMOVE_STBE_PADDING_BOOL: str = "__remove_stbe_padding"
+
+MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT_BOOL: str = "__use_batching_hinted_output"
+
 DEFAULT_ROW_ALIGNMENT = 16
 
 
@@ -894,7 +898,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 if self.register_tbes
                 else emb_module.forward(indices=indices, offsets=offsets)
             )
-            lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
+            if getattr(self, MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT_BOOL, True):
+                lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
             embedding_names = self._embedding_names_by_batched_tables[key]
             jt = construct_jagged_tensors_inference(
                 embeddings=lookup,
@@ -902,6 +907,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 values=indices,
                 embedding_names=embedding_names,
                 need_indices=self.need_indices(),
+                remove_padding=getattr(
+                    self, MODULE_ATTR_REMOVE_STBE_PADDING_BOOL, False
+                ),
             )
             for embedding_name in embedding_names:
                 feature_embeddings[embedding_name] = jt[embedding_name]
