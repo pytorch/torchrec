@@ -459,8 +459,8 @@ class ShardedInferenceTensorPool(
             deduped_ids, dedup_permutation = deterministic_dedup(ids)
             shard.update(deduped_ids, values[dedup_permutation])
 
+    # pyre-fixme[7]: Expected `Tensor` but got implicit return value of `None`.
     def _update_preproc(self, values: torch.Tensor) -> torch.Tensor:
-        # pyre-fixme[7]: Expected `Tensor` but got implicit return value of `None`.
         pass
 
     def update(self, ids: torch.Tensor, values: torch.Tensor) -> None:

@@ -131,16 +131,16 @@ class ShardedObjectPool(
         *input,
         # pyre-ignore[2]
         **kwargs,
+        # pyre-fixme[7]: Expected `Awaitable[Awaitable[Tensor]]` but got implicit return
+        #  value of `None`.
     ) -> Awaitable[Awaitable[torch.Tensor]]:
-        # pyre-fixme[7]: Expected `Awaitable[Awaitable[Tensor]]` but got implicit
-        #  return value of `None`.
         pass
 
+    # pyre-fixme[7]: Expected `DistOut` but got implicit return value of `None`.
     def compute(self, ctx: ShrdCtx, dist_input: torch.Tensor) -> DistOut:
-        # pyre-fixme[7]: Expected `DistOut` but got implicit return value of `None`.
         pass
 
+    # pyre-fixme[7]: Expected `LazyAwaitable[Out]` but got implicit return value of
+    #  `None`.
     def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
-        # pyre-fixme[7]: Expected `LazyAwaitable[Variable[Out]]` but got implicit
-        #  return value of `None`.
         pass

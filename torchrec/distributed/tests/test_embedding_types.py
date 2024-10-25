@@ -29,9 +29,9 @@ class FakeShardedEmbeddingModule(ShardedEmbeddingModule[CompIn, DistOut, Out, Sh
             torch.nn.Module(),
         ]
 
+    # pyre-fixme[7]: Expected `EmbeddingBagCollectionContext` but got implicit
+    #  return value of `None`.
     def create_context(self) -> ShrdCtx:
-        # pyre-fixme[7]: Expected `EmbeddingBagCollectionContext` but got implicit
-        #  return value of `None`.
         pass
 
     def input_dist(
@@ -41,19 +41,18 @@ class FakeShardedEmbeddingModule(ShardedEmbeddingModule[CompIn, DistOut, Out, Sh
         *input,
         # pyre-ignore[2]
         **kwargs,
-    ) -> Awaitable[Awaitable[CompIn]]:
         # pyre-fixme[7]: Expected `Awaitable[Awaitable[KJTList]]` but got implicit
         #  return value of `None`.
+    ) -> Awaitable[Awaitable[CompIn]]:
         pass
 
+    # pyre-fixme[7]: Expected `List[Tensor]` but got implicit return value of `None`.
     def compute(self, ctx: ShrdCtx, dist_input: CompIn) -> DistOut:
-        # pyre-fixme[7]: Expected `List[Tensor]` but got implicit return value of
-        #  `None`.
         pass
 
+    # pyre-fixme[7]: Expected `LazyAwaitable[Dict[str, Tensor]]` but got implicit
+    #  return value of `None`.
     def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
-        # pyre-fixme[7]: Expected `LazyAwaitable[Dict[str, Tensor]]` but got
-        #  implicit return value of `None`.
         pass
 
 

@@ -1613,6 +1613,7 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
 
     def get_compiled_autograd_ctx(
         self,
+        # pyre-fixme[24]: Generic type `ContextManager` expects 1 type parameter.
     ) -> ContextManager:
         # this allows for pipelining
         # to avoid doing a sum on None

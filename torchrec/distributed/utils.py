@@ -476,7 +476,11 @@ def init_parameters(module: nn.Module, device: torch.device) -> None:
 
 
 def maybe_annotate_embedding_event(
-    event: EmbeddingEvent, module_fqn: Optional[str], sharding_type: Optional[str]
+    event: EmbeddingEvent,
+    module_fqn: Optional[str],
+    sharding_type: Optional[str],
+    # pyre-fixme[24]: Generic type `AbstractContextManager` expects 2 type parameters,
+    #  received 1.
 ) -> AbstractContextManager[None]:
     if module_fqn and sharding_type:
         annotation = f"[{event.value}]_[{module_fqn}]_[{sharding_type}]"

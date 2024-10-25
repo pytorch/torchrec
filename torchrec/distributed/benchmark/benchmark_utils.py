@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
+# pyre-ignore-all-errors[16]
 
 #!/usr/bin/env python3
 
@@ -431,6 +432,7 @@ def transform_module(
     compile_mode: CompileMode,
     world_size: int,
     batch_size: int,
+    # pyre-fixme[24]: Generic type `ContextManager` expects 1 type parameter.
     ctx: ContextManager,
     benchmark_unsharded_module: bool = False,
 ) -> torch.nn.Module:
@@ -1051,7 +1053,6 @@ def benchmark_module(
         for compile_mode in compile_modes:
             if not benchmark_unsharded:
                 # Test sharders should have a singular sharding_type
-                # pyre-ignore [16]
                 sharder._sharding_type = sharding_type.value
                 # pyre-ignore [6]
                 benchmark_type = benchmark_type_name(compile_mode, sharding_type)
