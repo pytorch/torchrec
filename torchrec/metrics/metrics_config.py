@@ -158,6 +158,7 @@ class MetricsConfig:
         should_validate_update (bool): whether to check the inputs of update() and skip
             update if the inputs are invalid. Invalid inputs include the case where all
             examples have 0 weights for a batch.
+        enable_pt2_compile (bool): whether to enable PT2 compilation for metrics.
     """
 
     rec_tasks: List[RecTaskInfo] = field(default_factory=list)
@@ -171,6 +172,7 @@ class MetricsConfig:
     max_compute_interval: float = float("inf")
     compute_on_all_ranks: bool = False
     should_validate_update: bool = False
+    enable_pt2_compile: bool = False
 
 
 DefaultTaskInfo = RecTaskInfo(

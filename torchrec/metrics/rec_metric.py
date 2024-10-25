@@ -11,7 +11,6 @@
 
 import abc
 import itertools
-import logging
 import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -47,8 +46,8 @@ from torchrec.metrics.metrics_namespace import (
     MetricNamespaceBase,
     MetricPrefix,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
-logger: logging.Logger = logging.getLogger(__name__)
 
 RecModelOutput = Union[torch.Tensor, Dict[str, torch.Tensor]]
 
@@ -138,6 +137,7 @@ class RecMetricComputation(Metric, abc.ABC):
         process_group: Optional[dist.ProcessGroup] = None,
         fused_update_limit: int = 0,
         allow_missing_label_with_zero_weight: bool = False,
+        enable_pt2_compile: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -161,6 +161,7 @@ class RecMetricComputation(Metric, abc.ABC):
                 dist_reduce_fx=lambda x: torch.any(x, dim=0).byte(),
                 persistent=True,
             )
+        self.enable_pt2_compile = enable_pt2_compile
 
     @staticmethod
     def get_window_state_name(state_name: str) -> str:
@@ -246,6 +247,7 @@ class RecMetricComputation(Metric, abc.ABC):
         """
         return
 
+    @pt2_compile_callable
     def compute(self) -> List[MetricComputationReport]:
         with record_function(f"## {self.__class__.__name__}:compute ##"):
             if self._my_rank == 0 or self._compute_on_all_ranks:
@@ -525,24 +527,15 @@ class RecMetric(nn.Module, abc.ABC):
                 task_names = [task.name for task in self._tasks]
 
                 if not isinstance(predictions, torch.Tensor):
-                    logger.info(
-                        "Converting predictions to tensors for RecComputeMode.FUSED_TASKS_COMPUTATION"
-                    )
                     predictions = torch.stack(
                         [predictions[task_name] for task_name in task_names]
                     )
 
                 if not isinstance(labels, torch.Tensor):
-                    logger.info(
-                        "Converting labels to tensors for RecComputeMode.FUSED_TASKS_COMPUTATION"
-                    )
                     labels = torch.stack(
                         [labels[task_name] for task_name in task_names]
                     )
                 if weights is not None and not isinstance(weights, torch.Tensor):
-                    logger.info(
-                        "Converting weights to tensors for RecComputeMode.FUSED_TASKS_COMPUTATION"
-                    )
                     weights = torch.stack(
                         [weights[task_name] for task_name in task_names]
                     )
