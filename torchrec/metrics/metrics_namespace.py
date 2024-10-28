@@ -45,6 +45,7 @@ class MetricName(MetricNameBase):
     LOG_LOSS = "logloss"
     THROUGHPUT = "throughput"
     TOTAL_EXAMPLES = "total_examples"
+    ATTEMPT_EXAMPLES = "attempt_examples"
     CTR = "ctr"
     CALIBRATION = "calibration"
     MSE = "mse"
@@ -124,6 +125,7 @@ class MetricPrefix(StrValueMixin, Enum):
     DEFAULT = ""
     LIFETIME = "lifetime_"
     WINDOW = "window_"
+    ATTEMPT = "attempt_"
 
 
 def task_wildcard_metrics_pattern(
