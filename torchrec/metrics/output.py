@@ -21,7 +21,6 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
     RecTaskInfo,
 )
-from torchrec.pt2.utils import pt2_compile_callable
 
 
 class OutputMetricComputation(RecMetricComputation):
@@ -47,7 +46,6 @@ class OutputMetricComputation(RecMetricComputation):
             persistent=False,
         )
 
-    @pt2_compile_callable
     def update(
         self,
         *,

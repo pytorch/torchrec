@@ -22,7 +22,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
     RecModelOutput,
 )
-from torchrec.pt2.utils import pt2_compile_callable
+
 
 WARMUP_STEPS = 100
 
@@ -79,7 +79,6 @@ class TowerQPSMetricComputation(RecMetricComputation):
         self._previous_ts = 0
         self._steps = 0
 
-    @pt2_compile_callable
     def update(
         self,
         *,

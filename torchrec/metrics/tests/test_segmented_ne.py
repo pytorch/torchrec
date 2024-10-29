@@ -65,7 +65,6 @@ class SegementedNEValueTest(unittest.TestCase):
             # pyre-ignore
             num_groups=max(2, torch.unique(grouping_keys)[-1].item() + 1),
         )
-        # pyre-ignore
         ne.update(**inputs)
         actual_ne = ne.compute()
 

@@ -21,7 +21,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
-from torchrec.pt2.utils import pt2_compile_callable
+
 
 PREDICTIONS = "predictions"
 LABELS = "labels"
@@ -236,7 +236,6 @@ class AUPRCMetricComputation(RecMetricComputation):
         if self._grouped_auprc:
             getattr(self, GROUPING_KEYS).append(torch.tensor([-1], device=self.device))
 
-    @pt2_compile_callable
     def update(
         self,
         *,

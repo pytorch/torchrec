@@ -111,11 +111,7 @@ class RecMetricTest(unittest.TestCase):
         self.assertGreater(mse_computation.weighted_num_samples, torch.tensor(0.0))
 
         res = mse.compute()
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["mse-DefaultTask|lifetime_mse"], torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["mse-DefaultTask|lifetime_rmse"], torch.tensor(0.0))
 
         # Test if weights = 0 for one task of an update
@@ -165,8 +161,6 @@ class RecMetricTest(unittest.TestCase):
 
         res = ne.compute()
         self.assertEqual(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["ne-t2|lifetime_ne"], torch.tensor(0.0))
 
         ne.update(
@@ -182,8 +176,6 @@ class RecMetricTest(unittest.TestCase):
         self.assertGreater(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
 
         res = ne.compute()
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
 
     def test_compute(self) -> None:

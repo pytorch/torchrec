@@ -379,7 +379,6 @@ class GroupedRAUCValueTest(unittest.TestCase):
             # pyre-ignore
             grouped_rauc=True,
         )
-        # pyre-ignore
         rauc.update(**inputs)
         actual_rauc = rauc.compute()
 
