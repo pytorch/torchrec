@@ -853,12 +853,12 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                     )
 
         self._embedding_names_by_batched_tables: Dict[DataType, List[str]] = {
-            key: list(itertools.chain(*get_embedding_names_by_table(tables)))
+            key: list(itertools.chain(*get_embedding_names_by_table(table)))
             for key, table in self._key_to_tables.items()
         }
 
         self._embedding_names_by_table: List[List[str]] = get_embedding_names_by_table(
-            tables
+            self._embedding_configs
         )
         setattr(
             self,
