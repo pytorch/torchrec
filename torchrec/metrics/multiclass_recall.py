@@ -18,7 +18,6 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
-from torchrec.pt2.utils import pt2_compile_callable
 
 
 def compute_true_positives_at_k(
@@ -110,7 +109,6 @@ class MulticlassRecallMetricComputation(RecMetricComputation):
             persistent=True,
         )
 
-    @pt2_compile_callable
     def update(
         self,
         *,

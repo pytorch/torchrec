@@ -17,7 +17,6 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
-from torchrec.pt2.utils import pt2_compile_callable
 
 
 ERROR_SUM = "error_sum"
@@ -73,7 +72,6 @@ class MAEMetricComputation(RecMetricComputation):
             persistent=True,
         )
 
-    @pt2_compile_callable
     # pyre-fixme[14]: `update` overrides method defined in `RecMetricComputation`
     #  inconsistently.
     def update(

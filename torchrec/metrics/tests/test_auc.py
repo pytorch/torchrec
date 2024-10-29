@@ -405,7 +405,6 @@ class GroupedAUCValueTest(unittest.TestCase):
             # pyre-ignore
             grouped_auc=True,
         )
-        # pyre-ignore
         auc.update(**inputs)
         actual_auc = auc.compute()
 
