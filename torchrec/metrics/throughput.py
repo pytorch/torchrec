@@ -71,7 +71,9 @@ class ThroughputMetric(nn.Module):
     _previous_ts: float
     _lifetime_throughput_key: str
     _window_throughput_key: str
+    _attempt_throughput_key: str
     _total_examples_key: str
+    _attempt_examples_key: str
     _steps: int
 
     def __init__(
@@ -119,6 +121,20 @@ class ThroughputMetric(nn.Module):
             "time_lapse_after_warmup", torch.tensor(0, dtype=torch.double)
         )
 
+        self.register_buffer(
+            "attempt_examples", torch.tensor(0, dtype=torch.long), persistent=False
+        )
+        self.register_buffer(
+            "attempt_warmup_examples",
+            torch.tensor(0, dtype=torch.long),
+            persistent=False,
+        )
+        self.register_buffer(
+            "attempt_time_lapse_after_warmup",
+            torch.tensor(0, dtype=torch.double),
+            persistent=False,
+        )
+
         self._window_time_lapse_buffer = deque(maxlen=MAX_WINDOW_TS)
         self._window_time_lapse = 0
         self._previous_ts = 0
@@ -135,12 +151,22 @@ class ThroughputMetric(nn.Module):
             self._metric_name,
             MetricPrefix.WINDOW,
         )
+        self._attempt_throughput_key = compose_metric_key(
+            self._namespace,
+            str(self._namespace),
+            self._metric_name,
+            MetricPrefix.ATTEMPT,
+        )
         self._total_examples_key = compose_metric_key(
             self._namespace,
             str(self._namespace),
             MetricName.TOTAL_EXAMPLES,
         )
-
+        self._attempt_examples_key = compose_metric_key(
+            self._namespace,
+            str(self._namespace),
+            MetricName.ATTEMPT_EXAMPLES,
+        )
         self._steps = 0
 
     def _get_batch_size(self) -> int:
@@ -177,28 +203,38 @@ class ThroughputMetric(nn.Module):
         self._steps += 1
         if self._batch_size_stages is not None:
             self.num_batch += 1
-        self.total_examples += self._batch_examples()
+        batch_examples = self._batch_examples()
+        self.total_examples += batch_examples
+        self.attempt_examples += batch_examples
 
         if self._steps <= self._warmup_steps:
-            self.warmup_examples += self._batch_examples()
+            self.warmup_examples += batch_examples
+            self.attempt_warmup_examples += batch_examples
             if self._steps == self._warmup_steps:
                 self._previous_ts = ts
         else:
             time_lapse = ts - self._previous_ts
             self.time_lapse_after_warmup += time_lapse
+            self.attempt_time_lapse_after_warmup += time_lapse
             self._window_time_lapse += time_lapse
             self._window_time_lapse_buffer.append(time_lapse)
             self._check_window()
             self._previous_ts = ts
 
     def compute(self) -> Dict[str, torch.Tensor]:
-        ret = {self._total_examples_key: self.total_examples}
+        ret = {
+            self._total_examples_key: self.total_examples,
+            self._attempt_examples_key: self.attempt_examples,
+        }
         if self._steps > self._warmup_steps and (
             not math.isclose(self.time_lapse_after_warmup.item(), 0)
         ):
             lifetime_throughput = (
                 self.total_examples - self.warmup_examples
             ) / self.time_lapse_after_warmup
+            attempt_throughput = (
+                self.attempt_examples - self.attempt_warmup_examples
+            ) / self.attempt_time_lapse_after_warmup
             if not math.isclose(self._window_time_lapse, 0):
                 window_throughput = (
                     len(self._window_time_lapse_buffer)
@@ -214,6 +250,12 @@ class ThroughputMetric(nn.Module):
                         self._window_throughput_key: torch.tensor(
                             window_throughput, dtype=torch.double
                         ),
+                    }
+                )
+            if not math.isclose(attempt_throughput.item(), 0):
+                ret.update(
+                    {
+                        self._attempt_throughput_key: attempt_throughput.clone().detach(),
                     }
                 )
         return ret
