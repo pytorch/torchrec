@@ -216,7 +216,7 @@ class LuusJaakolaSearch:
 
     def uniform(self, A: float, B: float) -> float:
         "Return a random uniform position in range [A,B]."
-        u = torch.rand(1, generator=self.gen).item()
+        u = torch.rand(1, generator=self.gen, device="cpu").item()
         return A + (B - A) * u
 
     def next(self, fy: float) -> Optional[float]:
