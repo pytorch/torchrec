@@ -224,7 +224,6 @@ class ThresholdValueTest(unittest.TestCase):
             # pyre-ignore
             threshold=threshold,  # threshold is one of the kwargs
         )
-        # pyre-ignore
         accuracy.update(**inputs)
         actual_accuracy = accuracy.compute()
 

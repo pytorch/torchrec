@@ -292,7 +292,6 @@ class GroupedAUPRCValueTest(unittest.TestCase):
             # pyre-ignore
             grouped_auprc=True,
         )
-        # pyre-ignore
         auprc.update(**inputs)
         actual_auprc = auprc.compute()
 

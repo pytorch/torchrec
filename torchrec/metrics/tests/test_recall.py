@@ -219,7 +219,6 @@ class ThresholdValueTest(unittest.TestCase):
             # pyre-ignore
             threshold=threshold,  # threshold is one of the kwargs
         )
-        # pyre-ignore
         recall.update(**inputs)
         actual_recall = recall.compute()
 

@@ -17,7 +17,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
-from torchrec.pt2.utils import pt2_compile_callable
+
 
 CALIBRATION_NUM = "calibration_num"
 CALIBRATION_DENOM = "calibration_denom"
@@ -66,7 +66,6 @@ class CalibrationMetricComputation(RecMetricComputation):
             persistent=True,
         )
 
-    @pt2_compile_callable
     def update(
         self,
         *,

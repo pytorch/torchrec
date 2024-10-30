@@ -137,7 +137,6 @@ class RecMetricComputation(Metric, abc.ABC):
         process_group: Optional[dist.ProcessGroup] = None,
         fused_update_limit: int = 0,
         allow_missing_label_with_zero_weight: bool = False,
-        enable_pt2_compile: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -161,7 +160,6 @@ class RecMetricComputation(Metric, abc.ABC):
                 dist_reduce_fx=lambda x: torch.any(x, dim=0).byte(),
                 persistent=True,
             )
-        self.enable_pt2_compile = enable_pt2_compile
 
     @staticmethod
     def get_window_state_name(state_name: str) -> str:
@@ -247,7 +245,6 @@ class RecMetricComputation(Metric, abc.ABC):
         """
         return
 
-    @pt2_compile_callable
     def compute(self) -> List[MetricComputationReport]:
         with record_function(f"## {self.__class__.__name__}:compute ##"):
             if self._my_rank == 0 or self._compute_on_all_ranks:
@@ -367,6 +364,13 @@ class RecMetric(nn.Module, abc.ABC):
             self.LABELS: [],
             self.WEIGHTS: [],
         }
+        # pyre-fixme[8]: Attribute has type `bool`; used as `Union[bool,
+        #  Dict[str, Any]]`.
+        self.enable_pt2_compile: bool = kwargs.get("enable_pt2_compile", False)
+        # we need to remove the enable_pt2_compile from kwargs to avoid Metric object being initialized with it
+        if "enable_pt2_compile" in kwargs:
+            del kwargs["enable_pt2_compile"]
+
         if self._window_size < self._batch_size:
             raise ValueError(
                 f"Local window size must be larger than batch size. Got local window size {self._window_size} and batch size {self._batch_size}."
@@ -659,6 +663,7 @@ class RecMetric(nn.Module, abc.ABC):
                         **kwargs,
                     )
 
+    @pt2_compile_callable
     def update(
         self,
         *,
@@ -681,6 +686,7 @@ class RecMetric(nn.Module, abc.ABC):
 
     # The implementation of compute is very similar to local_compute, but compute overwrites
     # the abstract method compute in torchmetrics.Metric, which is wrapped by _wrap_compute
+    @pt2_compile_callable
     def compute(self) -> Dict[str, torch.Tensor]:
         self._check_fused_update(force=True)
         ret = {}

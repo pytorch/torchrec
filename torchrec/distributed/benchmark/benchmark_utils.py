@@ -102,15 +102,45 @@ class CompileMode(Enum):
 
 
 @dataclass
+class MemoryStats:
+    rank: int
+    malloc_retries: int
+    max_mem_allocated_mbs: int
+    max_mem_reserved_mbs: int
+
+    @classmethod
+    def for_device(cls, rank: int) -> "MemoryStats":
+        stats = torch.cuda.memory_stats(rank)
+        alloc_retries = stats.get("num_alloc_retries", 0)
+        max_allocated = stats.get("allocated_bytes.all.peak", 0)
+        max_reserved = stats.get("reserved_bytes.all.peak", 0)
+        return cls(
+            rank,
+            alloc_retries,
+            max_allocated // 1024 // 1024,
+            max_reserved // 1024 // 1024,
+        )
+
+    def __str__(self) -> str:
+        return f"Rank {self.rank}: retries={self.malloc_retries}, allocated={self.max_mem_allocated_mbs:7}mb, reserved={self.max_mem_reserved_mbs:7}mb"
+
+
+@dataclass
 class BenchmarkResult:
     "Class for holding results of benchmark runs"
     short_name: str
     elapsed_time: torch.Tensor  # milliseconds
-    max_mem_allocated: List[int]  # megabytes
+    mem_stats: List[MemoryStats]  # memory stats per rank
     rank: int = -1
 
     def __str__(self) -> str:
-        return f"{self.short_name: <{35}} | Runtime (P90): {self.runtime_percentile(90):g} ms | Memory (P90): {self.max_mem_percentile(90)/1000:.2g} GB"
+        runtime = f"Runtime (P90): {self.runtime_percentile(90):g} ms"
+        mem_alloc = (
+            f"Peak Memory alloc (P90): {self.max_mem_alloc_percentile(90)/1000:.2g} GB"
+        )
+        mem_reserved = f"Peak Memory reserved (P90): {self.max_mem_reserved_percentile(90)/1000:.2g} GB"
+        malloc_retries = f"Malloc retries (P50/P90/P100): {self.mem_retries(50) } / {self.mem_retries(90)} / {self.mem_retries(100)}"
+        return f"{self.short_name: <{35}} | {malloc_retries} | {runtime} | {mem_alloc} | {mem_reserved}"
 
     def runtime_percentile(
         self, percentile: int = 50, interpolation: str = "nearest"
@@ -121,11 +151,37 @@ class BenchmarkResult:
             interpolation=interpolation,
         )
 
-    def max_mem_percentile(
+    def max_mem_alloc_percentile(
         self, percentile: int = 50, interpolation: str = "nearest"
     ) -> torch.Tensor:
-        max_mem = torch.tensor(self.max_mem_allocated, dtype=torch.float)
-        return torch.quantile(max_mem, percentile / 100.0, interpolation=interpolation)
+        return self._mem_percentile(
+            lambda m: m.max_mem_allocated_mbs, percentile, interpolation
+        )
+
+    def max_mem_reserved_percentile(
+        self, percentile: int = 50, interpolation: str = "nearest"
+    ) -> torch.Tensor:
+        return self._mem_percentile(
+            lambda m: m.max_mem_reserved_mbs, percentile, interpolation
+        )
+
+    def mem_retries(
+        self, percentile: int = 50, interpolation: str = "nearest"
+    ) -> torch.Tensor:
+        return self._mem_percentile(
+            lambda m: m.malloc_retries, percentile, interpolation
+        )
+
+    def _mem_percentile(
+        self,
+        mem_selector: Callable[[MemoryStats], int],
+        percentile: int = 50,
+        interpolation: str = "nearest",
+    ) -> torch.Tensor:
+        mem_data = torch.tensor(
+            [mem_selector(mem_stat) for mem_stat in self.mem_stats], dtype=torch.float
+        )
+        return torch.quantile(mem_data, percentile / 100.0, interpolation=interpolation)
 
 
 class ECWrapper(torch.nn.Module):
@@ -346,11 +402,9 @@ def write_report(
 
         qps = int(num_requests / avg_dur_s)
 
-        mem_allocated_by_rank = benchmark_res.max_mem_allocated
-
         mem_str = ""
-        for i, mem_mb in enumerate(mem_allocated_by_rank):
-            mem_str += f"Rank {i}: {mem_mb:7}mb  "
+        for memory_stats in benchmark_res.mem_stats:
+            mem_str += f"{memory_stats}\n"
 
         report_str += f"{benchmark_res.short_name:40} Avg QPS:{qps:10} Avg Duration: {int(1000*avg_dur_s):5}"
         report_str += f"ms Standard Dev Duration: {(1000*std_dur_s):.2f}ms\n"
@@ -523,7 +577,7 @@ def benchmark(
     device_type: str = "cuda",
     benchmark_unsharded_module: bool = False,
 ) -> BenchmarkResult:
-    max_mem_allocated: List[int] = []
+    memory_stats: List[MemoryStats] = []
     if enable_logging:
         logger.info(f" BENCHMARK_MODEL[{name}]:\n{model}")
 
@@ -582,12 +636,10 @@ def benchmark(
         if rank == -1:
             # Add up all memory allocated in inference mode
             for di in range(world_size):
-                b = torch.cuda.max_memory_allocated(di)
-                max_mem_allocated.append(b // 1024 // 1024)
+                memory_stats.append(MemoryStats.for_device(di))
         else:
             # Only add up memory allocated for current rank in training mode
-            b = torch.cuda.max_memory_allocated(rank)
-            max_mem_allocated.append(b // 1024 // 1024)
+            memory_stats.append(MemoryStats.for_device(rank))
 
     if output_dir != "":
         # Only do profiling if output_dir is set
@@ -642,7 +694,7 @@ def benchmark(
     return BenchmarkResult(
         short_name=name,
         elapsed_time=elapsed_time,
-        max_mem_allocated=max_mem_allocated,
+        mem_stats=memory_stats,
         rank=rank,
     )
 
@@ -662,14 +714,16 @@ def benchmark_func(
     device_type: str = "cuda",
     pre_gpu_load: int = 0,
 ) -> BenchmarkResult:
-    max_mem_allocated: List[int] = []
+    memory_stats: List[MemoryStats] = []
     if device_type == "cuda":
         if rank == -1:
             # Reset memory for measurement, no process per rank so do all
             for di in range(world_size):
                 torch.cuda.reset_peak_memory_stats(di)
+                torch.cuda.reset_accumulated_memory_stats(di)
         else:
             torch.cuda.reset_peak_memory_stats(rank)
+            torch.cuda.reset_accumulated_memory_stats(rank)
 
     start = []
     end = []
@@ -718,12 +772,10 @@ def benchmark_func(
         if rank == -1:
             # Add up all memory allocated in inference mode
             for di in range(world_size):
-                b = torch.cuda.max_memory_allocated(di)
-                max_mem_allocated.append(b // 1024 // 1024)
+                memory_stats.append(MemoryStats.for_device(di))
         else:
             # Only add up memory allocated for current rank in training mode
-            b = torch.cuda.max_memory_allocated(rank)
-            max_mem_allocated.append(b // 1024 // 1024)
+            memory_stats.append(MemoryStats.for_device(rank))
 
     if profile_dir != "":
         # Only do profiling if output_dir is set
@@ -770,7 +822,7 @@ def benchmark_func(
     return BenchmarkResult(
         short_name=name,
         elapsed_time=elapsed_time,
-        max_mem_allocated=max_mem_allocated,
+        mem_stats=memory_stats,
         rank=rank,
     )
 
@@ -944,7 +996,7 @@ def multi_process_benchmark(
         res = qq.get()
 
         benchmark_res_per_rank.append(res)
-        assert len(res.max_mem_allocated) == 1
+        assert len(res.mem_stats) == 1
 
     for p in processes:
         p.join()
@@ -953,13 +1005,13 @@ def multi_process_benchmark(
     total_benchmark_res = BenchmarkResult(
         benchmark_res_per_rank[0].short_name,
         benchmark_res_per_rank[0].elapsed_time,
-        [0] * world_size,
+        [MemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
         0,
     )
 
     for res in benchmark_res_per_rank:
         # Each rank's BenchmarkResult contains 1 memory measurement
-        total_benchmark_res.max_mem_allocated[res.rank] = res.max_mem_allocated[0]
+        total_benchmark_res.mem_stats[res.rank] = res.mem_stats[0]
 
     return total_benchmark_res
 

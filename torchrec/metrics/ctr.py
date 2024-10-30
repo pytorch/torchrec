@@ -18,7 +18,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
-from torchrec.pt2.utils import pt2_compile_callable
+
 
 CTR_NUM = "ctr_num"
 CTR_DENOM = "ctr_denom"
@@ -63,7 +63,6 @@ class CTRMetricComputation(RecMetricComputation):
             persistent=True,
         )
 
-    @pt2_compile_callable
     def update(
         self,
         *,

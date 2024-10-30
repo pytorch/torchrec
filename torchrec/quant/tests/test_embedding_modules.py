@@ -527,11 +527,15 @@ class EmbeddingCollectionTest(unittest.TestCase):
         embeddings = ec(features)
 
         # test forward
-        ec.qconfig = torch.quantization.QConfig(
+        ec.qconfig = QuantConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
             ),
             weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+            per_table_weight_dtype={
+                x.name: torch.quint4x2 if x.data_type == DataType.INT4 else torch.qint8
+                for x in ec._embedding_configs
+            },
         )
 
         qec = QuantEmbeddingCollection.from_float(ec)
@@ -590,8 +594,15 @@ class EmbeddingCollectionTest(unittest.TestCase):
             feature_names=["f3", "f4"],
             data_type=data_type,
         )
+        eb3_config = EmbeddingConfig(
+            name="t3",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f5", "f6"],
+            data_type=DataType.INT4,
+        )
         features = KeyedJaggedTensor(
-            keys=["f1", "f2", "f3", "f4"],
+            keys=["f1", "f2", "f3", "f4", "f5", "f6"],
             values=torch.as_tensor(
                 [
                     5,
@@ -636,12 +647,26 @@ class EmbeddingCollectionTest(unittest.TestCase):
                     8,
                     1,
                     9,
+                    7,
+                    7,
+                    9,
+                    1,
+                    2,
+                    6,
+                    7,
+                    6,
+                    1,
+                    8,
+                    3,
+                    8,
+                    1,
+                    9,
                 ]
             ),
-            lengths=torch.as_tensor([9, 12, 9, 12]),
+            lengths=torch.as_tensor([9, 12, 9, 12, 5, 9]),
         )
         self._test_ec(
-            tables=[eb1_config, eb2_config],
+            tables=[eb3_config, eb1_config, eb2_config],
             features=features,
             quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
         )

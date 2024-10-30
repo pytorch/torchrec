@@ -17,7 +17,6 @@ from torchrec.metrics.rec_metric import (
     RecMetric,
     RecMetricComputation,
 )
-from torchrec.pt2.utils import pt2_compile_callable
 
 
 class ScalarMetricComputation(RecMetricComputation):
@@ -42,7 +41,6 @@ class ScalarMetricComputation(RecMetricComputation):
             persistent=False,
         )
 
-    @pt2_compile_callable
     def update(
         self,
         *,
