@@ -15,7 +15,11 @@ from typing import Any, Callable, Dict, List
 import click
 
 import torch
-from torchrec.distributed.benchmark.benchmark_utils import benchmark, BenchmarkResult
+from torchrec.distributed.benchmark.benchmark_utils import (
+    benchmark,
+    BenchmarkResult,
+    MemoryStats,
+)
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import (
     _fbgemm_permute_pooled_embs,
@@ -104,11 +108,13 @@ def bench(
         result = BenchmarkResult(
             short_name=name,
             elapsed_time=torch.tensor(times) * 1e3,
-            max_mem_allocated=[0],
+            mem_stats=[MemoryStats(0, 0, 0, 0)],
         )
 
+    mem_alloc = f"Memory alloc (P90): {result.max_mem_alloc_percentile(90):5.1f}"
+    mem_reserved = f"Memory alloc (P90): {result.max_mem_reserved_percentile(90):5.1f}"
     print(
-        f"  {name : <{30}} | B: {batch_size : <{8}} | F: {feature_count : <{8}} | device: {device_type : <{8}} | Runtime (P90): {result.runtime_percentile(90):5.2f} ms | Memory (P90): {result.max_mem_percentile(90):5.1f}"
+        f"  {name : <{30}} | B: {batch_size : <{8}} | F: {feature_count : <{8}} | device: {device_type : <{8}} | Runtime (P90): {result.runtime_percentile(90):5.2f} ms | {mem_alloc} | {mem_reserved}"
     )
 
 
