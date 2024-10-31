@@ -376,7 +376,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._dataloader_iter: Optional[Iterator[In]] = None
         self._dataloader_exhausted: bool = False
         self._context_type: Type[TrainPipelineContext] = context_type
-
         self._model_fwd: Callable[[Optional[In]], Tuple[torch.Tensor, Out]] = (
             custom_model_fwd if custom_model_fwd else model
         )
