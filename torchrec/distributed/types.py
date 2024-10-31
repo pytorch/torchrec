@@ -872,6 +872,8 @@ class ShardedModule(
         from data-parallel to model parallel and vise-versa.
     """
 
+    _FORCE_STATE_DICT_LOAD = True
+
     @abc.abstractmethod
     def __init__(
         self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
