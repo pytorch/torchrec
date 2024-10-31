@@ -8,10 +8,12 @@
 # pyre-strict
 
 import unittest
+from copy import deepcopy
 from dataclasses import replace
-from typing import Dict, List, Optional, Type
+from typing import cast, Dict, List, Optional, Type
 
 import hypothesis.strategies as st
+
 import torch
 from hypothesis import given, settings, Verbosity
 from torchrec import inference as trec_infer
@@ -27,13 +29,23 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
 )
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
+from torchrec.modules.mc_modules import (
+    DistanceLFU_EvictionPolicy,
+    ManagedCollisionCollection,
+    ManagedCollisionModule,
+    MCHManagedCollisionModule,
+)
+
 from torchrec.quant.embedding_modules import (
     _fx_trec_unwrap_kjt,
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
     quant_prep_enable_quant_state_dict_split_scale_bias,
+    QuantManagedCollisionEmbeddingCollection,
 )
 from torchrec.sparse.jagged_tensor import (
+    ComputeJTDictToKJT,
     ComputeKJTToJTDict,
     JaggedTensor,
     KeyedJaggedTensor,
@@ -863,3 +875,141 @@ class EmbeddingCollectionTest(unittest.TestCase):
 
         self.assertEqual(indices.dtype, sharded_indices.dtype)
         self.assertEqual(offsets.dtype, sharded_offsets.dtype)
+
+    # pyre-fixme[56]
+    @given(
+        data_type=st.sampled_from(
+            [
+                DataType.FP32,
+                DataType.INT8,
+            ]
+        ),
+        quant_type=st.sampled_from(
+            [
+                torch.half,
+                torch.qint8,
+            ]
+        ),
+        output_type=st.sampled_from(
+            [
+                torch.half,
+                torch.float,
+            ]
+        ),
+        device_type=st.sampled_from(
+            [
+                "cpu",
+                "cuda",
+            ]
+        ),
+        quant_state_dict_split_scale_bias=st.booleans(),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=16, deadline=None)
+    def test_qmcec(
+        self,
+        data_type: DataType,
+        quant_type: torch.dtype,
+        output_type: torch.dtype,
+        device_type: str,
+        quant_state_dict_split_scale_bias: bool,
+    ) -> None:
+        device = torch.device("cpu" if device_type == "cpu" else "cuda:0")
+        zch_size = 20
+        update_interval = 2
+        update_size = 10
+
+        embedding_configs = [
+            EmbeddingConfig(
+                name="t1",
+                embedding_dim=8,
+                num_embeddings=zch_size,
+                feature_names=["f1", "f2"],
+                data_type=data_type,
+            ),
+        ]
+        ec = EmbeddingCollection(
+            tables=embedding_configs,
+            device=device,
+        )
+
+        mc_modules = {
+            "t1": cast(
+                ManagedCollisionModule,
+                MCHManagedCollisionModule(
+                    zch_size=zch_size,
+                    device=device,
+                    eviction_interval=update_interval,
+                    eviction_policy=DistanceLFU_EvictionPolicy(),
+                ),
+            ),
+        }
+
+        for _, value in mc_modules.items():
+            value.train(False)
+
+        mcc_ec = ManagedCollisionCollection(
+            managed_collision_modules=deepcopy(mc_modules),
+            # pyre-ignore[6]
+            embedding_configs=embedding_configs,
+        )
+
+        mc_ec = ManagedCollisionEmbeddingCollection(
+            ec,
+            mcc_ec,
+            return_remapped_features=True,
+        )
+
+        update_one = KeyedJaggedTensor.from_lengths_sync(
+            keys=["f1", "f2"],
+            values=torch.concat(
+                [
+                    torch.arange(1000, 1000 + update_size, dtype=torch.int64),
+                    torch.arange(
+                        1000 + update_size,
+                        1000 + 2 * update_size,
+                        dtype=torch.int64,
+                    ),
+                ]
+            ),
+            lengths=torch.ones((2 * update_size,), dtype=torch.int64),
+            weights=None,
+        )
+
+        update_one = update_one.to(device)
+
+        out1, remapped_kjt1 = mc_ec.forward(update_one)
+
+        if quant_state_dict_split_scale_bias:
+            quant_prep_enable_quant_state_dict_split_scale_bias(ec)
+
+        mc_ec.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        qmc_ec = QuantManagedCollisionEmbeddingCollection.from_float(mc_ec)
+
+        out2, remapped_kjt2 = qmc_ec.forward(update_one)
+
+        self._comp_ec_output(
+            cast(Dict[str, JaggedTensor], out1), cast(Dict[str, JaggedTensor], out2)
+        )
+
+        from torchrec.fx import symbolic_trace
+
+        gm = symbolic_trace(qmc_ec, leaf_modules=[ComputeJTDictToKJT.__name__])
+        out3, remapped_kjt3 = gm.forward(update_one)
+
+        self._comp_ec_output(
+            cast(Dict[str, JaggedTensor], out1),
+            cast(Dict[str, JaggedTensor], out3),
+        )
+        scripted_module = torch.jit.script(gm)
+        out4, remapped_kjt4 = scripted_module(update_one)
+        self._comp_ec_output(
+            cast(Dict[str, JaggedTensor], out3),
+            cast(Dict[str, JaggedTensor], out4),
+            atol=0,
+        )

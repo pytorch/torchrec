@@ -44,7 +44,10 @@ from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
 from torchrec.modules.fp_embedding_modules import (
     FeatureProcessedEmbeddingBagCollection as OriginalFeatureProcessedEmbeddingBagCollection,
 )
-
+from torchrec.modules.mc_embedding_modules import (
+    ManagedCollisionEmbeddingCollection as OriginalManagedCollisionEmbeddingCollection,
+)
+from torchrec.modules.mc_modules import ManagedCollisionCollection
 from torchrec.modules.utils import construct_jagged_tensors_inference
 from torchrec.sparse.jagged_tensor import (
     ComputeKJTToJTDict,
@@ -970,3 +973,133 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
     @property
     def device(self) -> torch.device:
         return self._device
+
+
+class QuantManagedCollisionEmbeddingCollection(nn.Module):
+    """
+    QuantManagedCollisionEmbeddingCollection represents a quantized EC module and a set of managed collision modules.
+    The inputs into the MC-EC/EBC will first be modified by the managed collision module before being passed into the embedding collection.
+
+    Args:
+        tables (List[EmbeddingConfig]): A list of EmbeddingConfig objects representing the embedding tables in the collection.
+        device (torch.device): The device on which the embedding collection will be allocated.
+        need_indices (bool, optional): Whether to return the indices along with the embeddings. Defaults to False.
+        output_dtype (torch.dtype, optional): The data type of the output embeddings. Defaults to torch.float.
+        table_name_to_quantized_weights (Dict[str, Tuple[Tensor, Tensor]], optional): A dictionary mapping table names to their corresponding quantized weights. Defaults to None.
+        register_tbes (bool, optional): Whether to register the TBEs in the model. Defaults to False.
+        quant_state_dict_split_scale_bias (bool, optional): Whether to split the scale and bias parameters when saving the quantized state dict. Defaults to False.
+        row_alignment (int, optional): The alignment of rows in the quantized weights. Defaults to DEFAULT_ROW_ALIGNMENT.
+        managed_collision_collection (ManagedCollisionCollection, optional): The managed collision collection to use for managing collisions. Defaults to None.
+        return_remapped_features (bool, optional): Whether to return the remapped input features in addition to the embeddings. Defaults to False.
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingConfig],
+        device: torch.device,
+        need_indices: bool = False,
+        output_dtype: torch.dtype = torch.float,
+        table_name_to_quantized_weights: Optional[
+            Dict[str, Tuple[Tensor, Tensor]]
+        ] = None,
+        register_tbes: bool = False,
+        quant_state_dict_split_scale_bias: bool = False,
+        row_alignment: int = DEFAULT_ROW_ALIGNMENT,
+        managed_collision_collection: Optional[ManagedCollisionCollection] = None,
+        return_remapped_features: bool = False,
+    ) -> None:
+        super().__init__()
+        assert (
+            managed_collision_collection
+        ), "Managed collision collection cannot be None"
+        self._managed_collision_collection: ManagedCollisionCollection = (
+            managed_collision_collection
+        )
+        self._return_remapped_features = return_remapped_features
+        self._embedding_module = EmbeddingCollection(
+            tables,
+            device,
+            need_indices,
+            output_dtype,
+            table_name_to_quantized_weights,
+            register_tbes,
+            quant_state_dict_split_scale_bias,
+            row_alignment,
+        )
+
+        assert str(self._embedding_module.embedding_configs()) == str(
+            self._managed_collision_collection.embedding_configs()
+        ), "Embedding Collection and Managed Collision Collection must contain the same Embedding Configs"
+
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> Tuple[
+        Union[KeyedTensor, Dict[str, JaggedTensor]], Optional[KeyedJaggedTensor]
+    ]:
+        features = self._managed_collision_collection(features)
+
+        embedding_res = self._embedding_module(features)
+
+        if not self._return_remapped_features:
+            return embedding_res, None
+        return embedding_res, features
+
+    def _get_name(self) -> str:
+        return "QuantManagedCollisionEmbeddingCollection"
+
+    @classmethod
+    def from_float(
+        cls,
+        module: OriginalManagedCollisionEmbeddingCollection,
+        return_remapped_features: bool = False,
+    ) -> "QuantManagedCollisionEmbeddingCollection":
+        mc_ec = module
+        ec = module._embedding_module
+        qconfig = module.qconfig
+        assert hasattr(
+            module, "qconfig"
+        ), "QuantManagedCollisionEmbeddingCollection input float module must have qconfig defined"
+
+        embedding_configs = copy.deepcopy(ec.embedding_configs())
+        _update_embedding_configs(
+            cast(List[BaseEmbeddingConfig], embedding_configs),
+            qconfig,
+        )
+        _update_embedding_configs(
+            mc_ec._managed_collision_collection._embedding_configs,
+            qconfig,
+        )
+
+        pruning_dict: Dict[str, torch.Tensor] = getattr(
+            module, MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT, {}
+        )
+
+        for config in embedding_configs:
+            if config.name in pruning_dict:
+                pruning_indices_remapping = pruning_dict[config.name]
+                config.num_embeddings = pruned_num_embeddings(pruning_indices_remapping)
+                config.pruning_indices_remapping = pruning_indices_remapping
+
+        table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
+        device = quantize_state_dict(
+            ec,
+            table_name_to_quantized_weights,
+            {table.name: table.data_type for table in embedding_configs},
+            pruning_dict,
+        )
+        return cls(
+            embedding_configs,
+            device=device,
+            output_dtype=qconfig.activation().dtype,
+            table_name_to_quantized_weights=table_name_to_quantized_weights,
+            register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
+            quant_state_dict_split_scale_bias=getattr(
+                ec, MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS, False
+            ),
+            row_alignment=getattr(
+                ec, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
+            ),
+            managed_collision_collection=mc_ec._managed_collision_collection,
+            return_remapped_features=mc_ec._return_remapped_features,
+        )

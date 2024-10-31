@@ -23,7 +23,7 @@ from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, Keyed
 
 def evict(
     evictions: Dict[str, Optional[torch.Tensor]],
-    ebc: Union[EmbeddingBagCollection, EmbeddingCollection],
+    ebc: nn.Module,
 ) -> None:
     # TODO: write function
     return
