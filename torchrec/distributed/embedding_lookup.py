@@ -128,6 +128,14 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
     ) -> None:
+        def _exist_customized_compute_kernel(config: GroupedEmbeddingConfig):
+            # only confirm that config.compute_kernel not in EmbeddingComputeKernel
+            exist_key = "customized_compute_kernel"
+            if exist_key in config.fused_params:
+                if config.compute_kernel == config.fused_params[exist_key]:
+                    return True
+            return False
+        
         # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
@@ -143,6 +151,14 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
                 )
             elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
                 return BatchedFusedEmbedding(
+                    config=config,
+                    pg=pg,
+                    device=device,
+                )
+            elif _exist_customized_compute_kernel(config):
+                assert "ComputeKernel" in config.fused_params
+                ComputeKernel = config.fused_params["ComputeKernel"]
+                return ComputeKernel(
                     config=config,
                     pg=pg,
                     device=device,

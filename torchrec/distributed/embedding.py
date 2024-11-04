@@ -170,9 +170,12 @@ def create_sharding_infos_by_sharding(
         if parameter_sharding.compute_kernel not in [
             kernel.value for kernel in EmbeddingComputeKernel
         ]:
-            raise ValueError(
-                f"Compute kernel not supported {parameter_sharding.compute_kernel}"
-            )
+            compute_kernel_params = parameter_sharding.get_params_of_compute_kernel()
+            if "customized_compute_kernel" in compute_kernel_params and \
+                parameter_sharding.compute_kernel != compute_kernel_params["customized_compute_kernel"]:
+                raise ValueError(
+                    f"Compute kernel not supported {parameter_sharding.compute_kernel}"
+                )
 
         param_name = "embeddings." + config.name + ".weight"
         assert param_name in parameter_by_name or param_name in state_dict
@@ -200,6 +203,7 @@ def create_sharding_infos_by_sharding(
             per_table_fused_params, parameter_sharding
         )
         per_table_fused_params = convert_to_fbgemm_types(per_table_fused_params)
+        per_table_fused_params.update(parameter_sharding.get_params_of_compute_kernel())
 
         sharding_type_to_sharding_infos[parameter_sharding.sharding_type].append(
             (
@@ -507,12 +511,18 @@ class ShardedEmbeddingCollection(
         self._model_parallel_name_to_local_shards = OrderedDict()
         self._model_parallel_name_to_sharded_tensor = OrderedDict()
         model_parallel_name_to_compute_kernel: Dict[str, str] = {}
+        customized_table_names = []
         for (
             table_name,
             parameter_sharding,
         ) in self.module_sharding_plan.items():
             if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
                 continue
+            if parameter_sharding.compute_kernel not in [compute_kernel.value for 
+                                                         compute_kernel in EmbeddingComputeKernel]:
+                customized_table_names.append(table_name)
+                continue
+
             self._model_parallel_name_to_local_shards[table_name] = []
             model_parallel_name_to_compute_kernel[table_name] = (
                 parameter_sharding.compute_kernel
@@ -535,6 +545,8 @@ class ShardedEmbeddingCollection(
                 # save local_shards for transforming MP params to shardedTensor
                 for key, v in lookup.state_dict().items():
                     table_name = key[: -len(".weight")]
+                    if table_name in customized_table_names:
+                        continue
                     self._model_parallel_name_to_local_shards[table_name].extend(
                         v.local_shards()
                     )
@@ -798,7 +810,7 @@ class ShardedEmbeddingCollection(
                         features_before_input_dist=features,
                         unbucketize_permute_tensor=(
                             input_dist.unbucketize_permute_tensor
-                            if isinstance(input_dist, RwSparseFeaturesDist)
+                            if hasattr(input_dist, "unbucketize_permute_tensor")
                             else None
                         ),
                     )

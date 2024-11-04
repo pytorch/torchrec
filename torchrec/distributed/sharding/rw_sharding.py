@@ -125,6 +125,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             device = torch.device("cpu")
         self._device: torch.device = device
         sharded_tables_per_rank = self._shard(sharding_infos)
+        self._init_customized_distributor(sharding_infos)
         self._need_pos = need_pos
         self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
             []
@@ -161,6 +162,15 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
+            if info.param_sharding.compute_kernel not in [
+                kernel.value for kernel in EmbeddingComputeKernel
+            ]:
+                compute_kernel = info.param_sharding.get_params_of_compute_kernel(
+                    )["customized_compute_kernel"]
+            else:
+                compute_kernel = EmbeddingComputeKernel(
+                    info.param_sharding.compute_kernel
+                )
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
@@ -175,9 +185,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         has_feature_processor=info.embedding_config.has_feature_processor,
                         local_rows=shards[rank].shard_sizes[0],
                         local_cols=info.embedding_config.embedding_dim,
-                        compute_kernel=EmbeddingComputeKernel(
-                            info.param_sharding.compute_kernel
-                        ),
+                        compute_kernel=compute_kernel,
                         local_metadata=shards[rank],
                         global_metadata=global_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
@@ -186,6 +194,31 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     )
                 )
         return tables_per_rank
+
+    def _init_customized_distributor(self, sharding_infos: List[EmbeddingShardingInfo]):
+        common_dist_type = None
+        common_customized_dist = None
+        
+        self._dist_type_per_feature: Dict[str, str]  = {}
+        for sharding_info in sharding_infos:
+            if "dist_type" in sharding_info.fused_params:
+                dist_type = sharding_info.fused_params["dist_type"]
+                if common_dist_type == None:
+                    common_dist_type = dist_type
+                else:
+                    assert(dist_type != common_dist_type, "Customized distributor type must keep the same.")
+                dist_ = sharding_info.fused_params["Distributor"]
+                if common_customized_dist == None:
+                    common_customized_dist = dist_
+                else:
+                    assert(common_customized_dist != dist_, "Customized distributor implementation must keep the same.")
+            else:
+                dist_type = "continuous" 
+            feature_names = sharding_info.embedding_config.feature_names
+            for f in feature_names:
+                self._dist_type_per_feature[f] = dist_type
+        
+        self._customized_dist = common_customized_dist
 
     def embedding_dims(self) -> List[int]:
         embedding_dims = []
@@ -465,17 +498,32 @@ class RwPooledEmbeddingSharding(
     ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
-        return RwSparseFeaturesDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
-            pg=self._pg,
-            num_features=num_features,
-            feature_hash_sizes=feature_hash_sizes,
-            device=device if device is not None else self._device,
-            is_sequence=False,
-            has_feature_processor=self._has_feature_processor,
-            need_pos=self._need_pos,
-        )
+        
+        if self._customized_dist:
+            return self._customized_dist(
+                # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+                #  `Optional[ProcessGroup]`.
+                pg=self._pg,
+                num_features=num_features,
+                feature_hash_sizes=feature_hash_sizes,
+                device=device if device is not None else self._device,
+                is_sequence=False,
+                has_feature_processor=self._has_feature_processor,
+                need_pos=self._need_pos,
+                dist_type_per_feature=self._dist_type_per_feature,
+            )
+        else:
+            return RwSparseFeaturesDist(
+                # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+                #  `Optional[ProcessGroup]`.
+                pg=self._pg,
+                num_features=num_features,
+                feature_hash_sizes=feature_hash_sizes,
+                device=device if device is not None else self._device,
+                is_sequence=False,
+                has_feature_processor=self._has_feature_processor,
+                need_pos=self._need_pos,
+            )
 
     def create_lookup(
         self,

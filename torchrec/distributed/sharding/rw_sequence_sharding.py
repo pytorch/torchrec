@@ -115,17 +115,31 @@ class RwSequenceEmbeddingSharding(
     ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
-        return RwSparseFeaturesDist(
-            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
-            pg=self._pg,
-            num_features=num_features,
-            feature_hash_sizes=feature_hash_sizes,
-            device=device if device is not None else self._device,
-            is_sequence=True,
-            has_feature_processor=self._has_feature_processor,
-            need_pos=False,
-        )
+        if self._customized_dist:
+            return self._customized_dist(
+                # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+                #  `Optional[ProcessGroup]`.
+                pg=self._pg,
+                num_features=num_features,
+                feature_hash_sizes=feature_hash_sizes,
+                device=device if device is not None else self._device,
+                is_sequence=True,
+                has_feature_processor=self._has_feature_processor,
+                need_pos=False,
+                dist_type_per_feature=self._dist_type_per_feature,
+            )
+        else:
+            return RwSparseFeaturesDist(
+                # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+                #  `Optional[ProcessGroup]`.
+                pg=self._pg,
+                num_features=num_features,
+                feature_hash_sizes=feature_hash_sizes,
+                device=device if device is not None else self._device,
+                is_sequence=True,
+                has_feature_processor=self._has_feature_processor,
+                need_pos=False,
+            )
 
     def create_lookup(
         self,
