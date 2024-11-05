@@ -44,6 +44,8 @@ class RecMetricEnum(RecMetricEnumBase):
     SERVING_CALIBRATION = "serving_calibration"
     OUTPUT = "output"
     TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
+    CALI_FREE_NE = "cali_free_ne"
+    UNWEIGHTED_NE = "unweighted_ne"
 
 
 @dataclass(unsafe_hash=True, eq=True)
