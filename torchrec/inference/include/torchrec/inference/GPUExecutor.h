@@ -32,7 +32,7 @@
 #include "torchrec/inference/BatchingQueue.h"
 #include "torchrec/inference/Observer.h"
 #include "torchrec/inference/ResultSplit.h"
-#include "torchrec/inference/include/torchrec/inference/Observer.h"
+#include "torchrec/inference/include/torchrec/inference/Observer.h" // @manual
 
 namespace torchrec {
 

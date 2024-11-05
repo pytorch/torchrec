@@ -488,6 +488,7 @@ def shard_quant_model(
     sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
     device_memory_size: Optional[int] = None,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
+    ddr_cap: Optional[int] = None,
 ) -> Tuple[torch.nn.Module, ShardingPlan]:
     """
     Shard a quantized TorchRec model, used for generating the most optimal model for inference and
@@ -557,6 +558,7 @@ def shard_quant_model(
         compute_device=compute_device,
         local_world_size=world_size,
         hbm_cap=hbm_cap,
+        ddr_cap=ddr_cap,
     )
     batch_size = 1
     model_plan = trec_dist.planner.EmbeddingShardingPlanner(
