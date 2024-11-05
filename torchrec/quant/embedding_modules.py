@@ -81,7 +81,9 @@ MODULE_ATTR_EMB_CONFIG_NAME_TO_NUM_ROWS_POST_PRUNING_DICT: str = (
 
 MODULE_ATTR_REMOVE_STBE_PADDING_BOOL: str = "__remove_stbe_padding"
 
-MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT_BOOL: str = "__use_batching_hinted_output"
+MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING: str = (
+    "__use_unflattened_lengths_for_batching"
+)
 
 DEFAULT_ROW_ALIGNMENT = 16
 
@@ -106,6 +108,14 @@ def _get_kjt_keys(feature: KeyedJaggedTensor) -> List[str]:
 @torch.fx.wrap
 def _cat_embeddings(embeddings: List[Tensor]) -> Tensor:
     return embeddings[0] if len(embeddings) == 1 else torch.cat(embeddings, dim=1)
+
+
+@torch.fx.wrap
+def _get_unflattened_lengths(lengths: torch.Tensor, num_features: int) -> torch.Tensor:
+    """
+    Unflatten lengths tensor from [F * B] to [F, B].
+    """
+    return lengths.view(num_features, -1)
 
 
 def for_each_module_of_type_do(
@@ -893,14 +903,18 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             f = kjts_per_key[i]
             lengths = _get_feature_length(f)
             indices, offsets = _fx_trec_unwrap_kjt(f)
+            embedding_names = self._embedding_names_by_batched_tables[key]
             lookup = (
                 emb_module(indices=indices, offsets=offsets)
                 if self.register_tbes
                 else emb_module.forward(indices=indices, offsets=offsets)
             )
-            if getattr(self, MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT_BOOL, True):
+            if getattr(self, MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING, False):
+                lengths = _get_unflattened_lengths(lengths, len(embedding_names))
                 lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
-            embedding_names = self._embedding_names_by_batched_tables[key]
+            else:
+                lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
+                lengths = _get_unflattened_lengths(lengths, len(embedding_names))
             jt = construct_jagged_tensors_inference(
                 embeddings=lookup,
                 lengths=lengths,

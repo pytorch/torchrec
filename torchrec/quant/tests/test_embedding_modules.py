@@ -29,8 +29,11 @@ from torchrec.modules.embedding_modules import (
 )
 from torchrec.quant.embedding_modules import (
     _fx_trec_unwrap_kjt,
+    _get_batching_hinted_output,
+    _get_unflattened_lengths,
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
+    MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING,
     quant_prep_enable_quant_state_dict_split_scale_bias,
 )
 from torchrec.sparse.jagged_tensor import (
@@ -863,3 +866,94 @@ class EmbeddingCollectionTest(unittest.TestCase):
 
         self.assertEqual(indices.dtype, sharded_indices.dtype)
         self.assertEqual(offsets.dtype, sharded_offsets.dtype)
+
+    def test_using_flattened_or_unflattened_length_rebatching(self) -> None:
+        data_type = DataType.FP16
+        quant_type = torch.half
+        output_type = torch.half
+
+        ec1_config = EmbeddingConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1", "f2"],
+            data_type=data_type,
+        )
+        ec2_config = EmbeddingConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f3", "f4"],
+            data_type=data_type,
+        )
+
+        ec = EmbeddingCollection(tables=[ec1_config, ec2_config])
+        ec.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        qec = QuantEmbeddingCollection.from_float(ec)
+
+        import copy
+
+        from torchrec.fx import symbolic_trace
+
+        # test using flattened lengths for rebatching (default)
+
+        gm = symbolic_trace(copy.deepcopy(qec))
+
+        found_get_unflattened_lengths_func = False
+
+        for node in gm.graph.nodes:
+            if (
+                node.op == "call_function"
+                and node.name == _get_unflattened_lengths.__name__
+            ):
+                found_get_unflattened_lengths_func = True
+                for user in node.users:
+                    if (
+                        user.op == "call_function"
+                        and user.name == _get_batching_hinted_output.__name__
+                    ):
+                        self.assertTrue(
+                            False,
+                            "Should not call _get_batching_hinted_output after _get_unflattened_lengths",
+                        )
+
+        self.assertTrue(
+            found_get_unflattened_lengths_func,
+            "_get_unflattened_lengths must exist in the graph",
+        )
+
+        # test using unflattened lengths for rebatching
+
+        setattr(qec, MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING, True)
+
+        gm = symbolic_trace(qec)
+
+        found_get_unflattened_lengths_func = False
+        for node in gm.graph.nodes:
+            if (
+                node.op == "call_function"
+                and node.name == _get_unflattened_lengths.__name__
+            ):
+                found_get_unflattened_lengths_func = True
+                found_get_batching_hinted_output_func = False
+                for user in node.users:
+                    if (
+                        user.op == "call_function"
+                        and user.name == _get_batching_hinted_output.__name__
+                    ):
+                        found_get_batching_hinted_output_func = True
+                self.assertTrue(
+                    found_get_batching_hinted_output_func,
+                    "Should call _get_batching_hinted_output after _get_unflattened_lengths",
+                )
+
+        self.assertTrue(
+            found_get_unflattened_lengths_func,
+            "_get_unflattened_lengths must exist in the graph",
+        )

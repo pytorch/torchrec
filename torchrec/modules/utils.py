@@ -41,14 +41,6 @@ def _fx_to_list(tensor: torch.Tensor) -> List[int]:
 
 
 @torch.fx.wrap
-def _get_unflattened_lengths(lengths: torch.Tensor, num_features: int) -> torch.Tensor:
-    """
-    Unflatten lengths tensor from [F * B] to [F, B].
-    """
-    return lengths.view(num_features, -1)
-
-
-@torch.fx.wrap
 def _slice_1d_tensor(tensor: torch.Tensor, start: int, end: int) -> torch.Tensor:
     """
     Slice tensor.
@@ -311,23 +303,18 @@ def construct_jagged_tensors_inference(
     remove_padding: bool = False,
 ) -> Dict[str, JaggedTensor]:
     with record_function("## construct_jagged_tensors_inference ##"):
-        # [F * B] -> [F, B]
-        unflattened_lengths = _get_unflattened_lengths(lengths, len(embedding_names))
-
         if reverse_indices is not None:
             embeddings = torch.index_select(
                 embeddings, 0, reverse_indices.to(torch.int32)
             )
         elif remove_padding:
-            embeddings = _slice_1d_tensor(
-                embeddings, 0, unflattened_lengths.sum().item()
-            )
+            embeddings = _slice_1d_tensor(embeddings, 0, lengths.sum().item())
 
         ret: Dict[str, JaggedTensor] = {}
 
-        length_per_key: List[int] = _fx_to_list(torch.sum(unflattened_lengths, dim=1))
+        length_per_key: List[int] = _fx_to_list(torch.sum(lengths, dim=1))
 
-        lengths_tuple = torch.unbind(unflattened_lengths, dim=0)
+        lengths_tuple = torch.unbind(lengths, dim=0)
 
         embeddings_list = torch.split(embeddings, length_per_key, dim=0)
         values_list = torch.split(values, length_per_key) if need_indices else None
