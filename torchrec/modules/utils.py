@@ -48,6 +48,17 @@ def _slice_1d_tensor(tensor: torch.Tensor, start: int, end: int) -> torch.Tensor
     return tensor[start:end]
 
 
+# PLEASE DO NOT USE THIS FUNCTION, THIS FUNCTION IS FOR BACKWARD COMPATIBILITY ONLY
+# USE THE ONE IN torchrec/quant/embedding_modules.py
+# TODO(@shuaoxiong): remove this function after we make sure all models switch to the new reference
+@torch.fx.wrap
+def _get_unflattened_lengths(lengths: torch.Tensor, num_features: int) -> torch.Tensor:
+    """
+    Unflatten lengths tensor from [F * B] to [F, B].
+    """
+    return lengths.view(num_features, -1)
+
+
 def extract_module_or_tensor_callable(
     module_or_callable: Union[
         Callable[[], torch.nn.Module],
