@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -53,6 +53,15 @@ def apply_feature_processors_to_kjt(
         offset_per_key=features._offset_per_key,
         index_per_key=features._index_per_key,
     )
+
+
+class FeatureProcessorDictWrapper(FeatureProcessorsCollection):
+    def __init__(self, feature_processors: nn.ModuleDict) -> None:
+        super().__init__()
+        self._feature_processors = feature_processors
+
+    def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
+        return apply_feature_processors_to_kjt(features, self._feature_processors)
 
 
 class FeatureProcessedEmbeddingBagCollection(nn.Module):
@@ -124,6 +133,18 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
         for table_config in self._embedding_bag_collection.embedding_bag_configs():
             feature_names_set.update(table_config.feature_names)
         self._feature_names: List[str] = list(feature_names_set)
+
+    def split(
+        self,
+    ) -> Tuple[FeatureProcessorsCollection, EmbeddingBagCollection]:
+        if isinstance(self._feature_processors, nn.ModuleDict):
+            return (
+                FeatureProcessorDictWrapper(self._feature_processors),
+                self._embedding_bag_collection,
+            )
+        else:
+            assert isinstance(self._feature_processors, FeatureProcessorsCollection)
+            return self._feature_processors, self._embedding_bag_collection
 
     def forward(
         self,
