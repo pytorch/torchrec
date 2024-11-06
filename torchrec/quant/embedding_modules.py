@@ -85,6 +85,8 @@ MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING: str = (
     "__use_unflattened_lengths_for_batching"
 )
 
+MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT: str = "__use_batching_hinted_output"
+
 DEFAULT_ROW_ALIGNMENT = 16
 
 
@@ -913,7 +915,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 lengths = _get_unflattened_lengths(lengths, len(embedding_names))
                 lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
             else:
-                lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
+                if getattr(self, MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT, True):
+                    lookup = _get_batching_hinted_output(lengths=lengths, output=lookup)
                 lengths = _get_unflattened_lengths(lengths, len(embedding_names))
             jt = construct_jagged_tensors_inference(
                 embeddings=lookup,
