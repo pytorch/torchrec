@@ -95,6 +95,15 @@ class PositionWeightedModuleEmbeddingBagCollectionTest(unittest.TestCase):
         self.assertEqual(pooled_embeddings.values().size(), (3, 16))
         self.assertEqual(pooled_embeddings.offset_per_key(), [0, 8, 16])
 
+        # Test split method, FP then EBC
+        fp, ebc = fp_ebc.split()
+        fp_kjt = fp(features)
+        pooled_embeddings_split = ebc(fp_kjt)
+
+        self.assertEqual(pooled_embeddings_split.keys(), ["f1", "f2"])
+        self.assertEqual(pooled_embeddings_split.values().size(), (3, 16))
+        self.assertEqual(pooled_embeddings_split.offset_per_key(), [0, 8, 16])
+
 
 class PositionWeightedModuleCollectionEmbeddingBagCollectionTest(unittest.TestCase):
     def generate_fp_ebc(self) -> FeatureProcessedEmbeddingBagCollection:
@@ -144,3 +153,12 @@ class PositionWeightedModuleCollectionEmbeddingBagCollectionTest(unittest.TestCa
             pooled_embeddings_gm_script.offset_per_key(),
             pooled_embeddings.offset_per_key(),
         )
+
+        # Test split method, FP then EBC
+        fp, ebc = fp_ebc.split()
+        fp_kjt = fp(features)
+        pooled_embeddings_split = ebc(fp_kjt)
+
+        self.assertEqual(pooled_embeddings_split.keys(), ["f1", "f2"])
+        self.assertEqual(pooled_embeddings_split.values().size(), (3, 16))
+        self.assertEqual(pooled_embeddings_split.offset_per_key(), [0, 8, 16])
