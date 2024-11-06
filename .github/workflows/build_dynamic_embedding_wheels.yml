@@ -20,8 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        pyver: [ cp39, cp310 ]
-        cuver: [ "11.8" ]
+        pyver: [ cp39, cp310, cp311, cp312 ]
+        cuver: [ "12.1" ]
 
     steps:
       -

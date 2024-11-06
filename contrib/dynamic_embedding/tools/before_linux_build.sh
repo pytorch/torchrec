@@ -9,7 +9,7 @@ set -xe
 
 distro=rhel7
 arch=x86_64
-CUDA_VERSION="${CUDA_VERSION:-11.8}"
+CUDA_VERSION="${CUDA_VERSION:-12.1}"
 
 CUDA_MAJOR_VERSION=$(echo "${CUDA_VERSION}" | tr '.' ' ' | awk '{print $1}')
 CUDA_MINOR_VERSION=$(echo "${CUDA_VERSION}" | tr '.' ' ' | awk '{print $2}')
