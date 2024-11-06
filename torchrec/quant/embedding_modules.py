@@ -85,6 +85,8 @@ MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING: str = (
     "__use_unflattened_lengths_for_batching"
 )
 
+MODULE_ATTR_ENABLE_PERMUTE_ORDER_CACHE: str = "__enable_permute_order_cache"
+
 DEFAULT_ROW_ALIGNMENT = 16
 
 
@@ -276,6 +278,18 @@ def _fx_trec_unwrap_kjt(
         return indices.int(), offsets.int()
 
 
+@torch.fx.wrap
+def _feature_permute(
+    features: KeyedJaggedTensor,
+    features_order: List[int],
+    features_order_tensor: torch.Tensor,
+) -> KeyedJaggedTensor:
+    return features.permute(
+        features_order,
+        features_order_tensor,
+    )
+
+
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
     """
     EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
@@ -354,6 +368,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         register_tbes: bool = False,
         quant_state_dict_split_scale_bias: bool = False,
         row_alignment: int = DEFAULT_ROW_ALIGNMENT,
+        enable_permute_order_cache: bool = False,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -489,6 +504,44 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
 
+        setattr(
+            self, MODULE_ATTR_ENABLE_PERMUTE_ORDER_CACHE, enable_permute_order_cache
+        )
+        self._has_uninitialized_kjt_permute_order: bool = True
+        self._has_features_permute: bool = True
+        self._features_order: List[int] = []
+
+    def _permute_kjt_order(
+        self, features: KeyedJaggedTensor
+    ) -> List[KeyedJaggedTensor]:
+        if self._has_uninitialized_kjt_permute_order:
+            kjt_keys = features.keys()
+            for f in self._feature_names:
+                self._features_order.append(kjt_keys.index(f))
+
+            if self._features_order == kjt_keys:
+                self._has_features_permute = False
+            else:
+                self.register_buffer(
+                    "_features_order_tensor",
+                    torch.tensor(
+                        self._features_order,
+                        device=features.device(),
+                        dtype=torch.int32,
+                    ),
+                    persistent=False,
+                )
+
+            self._has_uninitialized_kjt_permute_order = False
+
+        if self._has_features_permute:
+            features_permute = _feature_permute(
+                features, self._features_order, self._features_order_tensor
+            )
+        else:
+            features_permute = features
+        return features_permute.split(self._feature_splits)
+
     def forward(
         self,
         features: KeyedJaggedTensor,
@@ -502,10 +555,13 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         """
 
         embeddings = []
-        kjt_keys = _get_kjt_keys(features)
-        kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
-        kjt_permute = features.permute(kjt_permute_order)
-        kjts_per_key = kjt_permute.split(self._feature_splits)
+        if getattr(self, MODULE_ATTR_ENABLE_PERMUTE_ORDER_CACHE, False):
+            kjts_per_key = self._permute_kjt_order(features)
+        else:
+            kjt_keys = _get_kjt_keys(features)
+            kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
+            kjt_permute = features.permute(kjt_permute_order)
+            kjts_per_key = kjt_permute.split(self._feature_splits)
 
         for i, (emb_op, _) in enumerate(
             zip(self._emb_modules, self._key_to_tables.keys())
@@ -575,6 +631,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             ),
             row_alignment=getattr(
                 module, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
+            ),
+            enable_permute_order_cache=getattr(
+                module, MODULE_ATTR_ENABLE_PERMUTE_ORDER_CACHE, False
             ),
         )
 
