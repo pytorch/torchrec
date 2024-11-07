@@ -1372,16 +1372,27 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         lengths = torch.IntTensor([1, 0, 1, 3, 0, 1, 0, 2, 0])
         keys = ["index_0", "index_1", "index_2"]
         stride_per_key_per_rank = [[2], [4], [3]]
+        inverse_indices = (
+            ["index_0", "index_1", "index_2"],
+            torch.Tensor(
+                [
+                    [0, 0, 0, 0, 0, 1, 1, 1, 1],
+                    [0, 0, 1, 1, 3, 3, 2, 2, 1],
+                    [2, 2, 1, 0, 0, 2, 1, 2, 0],
+                ]
+            ),
+        )
 
         jag_tensor = KeyedJaggedTensor.from_lengths_sync(
             values=values,
             keys=keys,
             lengths=lengths,
             stride_per_key_per_rank=stride_per_key_per_rank,
+            inverse_indices=inverse_indices,
         )
 
         indices = [1, 0, 2]
-        permuted_jag_tensor = jag_tensor.permute(indices)
+        permuted_jag_tensor = jag_tensor.permute(indices, include_inverse_indices=True)
 
         self.assertEqual(permuted_jag_tensor.keys(), ["index_1", "index_0", "index_2"])
         self.assertEqual(
@@ -1401,6 +1412,15 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             )
         )
         self.assertEqual(permuted_jag_tensor.weights_or_none(), None)
+        self.assertEqual(
+            jag_tensor.inverse_indices()[0], permuted_jag_tensor.inverse_indices()[0]
+        )
+        self.assertTrue(
+            torch.equal(
+                jag_tensor.inverse_indices()[1],
+                permuted_jag_tensor.inverse_indices()[1],
+            )
+        )
 
     def test_permute_vb_duplicate(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
