@@ -14,7 +14,7 @@ import hypothesis.strategies as st
 import torch
 from hypothesis import given, settings
 from torch import nn
-from torchrec.fx import symbolic_trace
+from torchrec.fx import symbolic_trace, Tracer
 from torchrec.modules.mlp import MLP, Perceptron
 
 
@@ -99,13 +99,15 @@ class TestMLP(unittest.TestCase):
         # Dry-run to initialize lazy module.
         m(torch.randn(batch_size, in_features))
 
-        gm = symbolic_trace(m)
-        torch.jit.script(gm)
+        gm = torch.fx.GraphModule(m, Tracer().trace(m))
+        # TODO: Causes std::bad_alloc in OSS env
+        # torch.jit.script(gm)
 
     def test_fx_script_MLP(self) -> None:
         in_features = 3
         layer_sizes = [16, 8, 4]
         m = MLP(in_features, layer_sizes)
 
-        gm = symbolic_trace(m)
-        torch.jit.script(gm)
+        gm = torch.fx.GraphModule(m, Tracer().trace(m))
+        # TODO: Causes std::bad_alloc in OSS env
+        # torch.jit.script(gm)
