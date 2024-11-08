@@ -76,6 +76,9 @@ class MetricName(MetricNameBase):
     SERVING_CALIBRATION = "serving_calibration"
     TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
 
+    CALI_FREE_NE = "cali_free_ne"
+    UNWEIGHTED_NE = "unweighted_ne"
+
 
 class MetricNamespaceBase(StrValueMixin, Enum):
     pass
@@ -119,6 +122,9 @@ class MetricNamespace(MetricNamespaceBase):
 
     OUTPUT = "output"
     TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
+
+    CALI_FREE_NE = "cali_free_ne"
+    UNWEIGHTED_NE = "unweighted_ne"
 
 
 class MetricPrefix(StrValueMixin, Enum):

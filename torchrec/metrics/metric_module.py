@@ -21,6 +21,7 @@ from torch.profiler import record_function
 from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.auprc import AUPRCMetric
+from torchrec.metrics.cali_free_ne import CaliFreeNEMetric
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.mae import MAEMetric
@@ -57,6 +58,7 @@ from torchrec.metrics.serving_ne import ServingNEMetric
 from torchrec.metrics.tensor_weighted_avg import TensorWeightedAvgMetric
 from torchrec.metrics.throughput import ThroughputMetric
 from torchrec.metrics.tower_qps import TowerQPSMetric
+from torchrec.metrics.unweighted_ne import UnweightedNEMetric
 from torchrec.metrics.weighted_avg import WeightedAvgMetric
 from torchrec.metrics.xauc import XAUCMetric
 
@@ -88,6 +90,8 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.SERVING_CALIBRATION: ServingCalibrationMetric,
     RecMetricEnum.OUTPUT: OutputMetric,
     RecMetricEnum.TENSOR_WEIGHTED_AVG: TensorWeightedAvgMetric,
+    RecMetricEnum.CALI_FREE_NE: CaliFreeNEMetric,
+    RecMetricEnum.UNWEIGHTED_NE: UnweightedNEMetric,
 }
 
 
