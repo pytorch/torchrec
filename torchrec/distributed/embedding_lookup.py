@@ -21,6 +21,9 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from fbgemm_gpu.tbe.ssd.training import SSDTableBatchedEmbeddingBags
+from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
+    PartiallyMaterializedTensor,
+)
 from torch import nn
 
 from torch.autograd.function import FunctionCtx
@@ -648,6 +651,18 @@ class GroupedPooledEmbeddingsLookup(
                 tbe_slice,
             ) in embedding_kernel.named_parameters_by_table():
                 yield (table_name, tbe_slice)
+
+    def get_named_split_embedding_weights_snapshot(
+        self,
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+        """
+        Return an iterator over embedding tables, yielding both the table name as well as the embedding
+        table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
+        RocksDB snapshot to support windowed access.
+        """
+        for emb_module in self._emb_modules:
+            if isinstance(emb_module, KeyValueEmbeddingBag):
+                yield from emb_module.get_named_split_embedding_weights_snapshot()
 
     def flush(self) -> None:
         for emb_module in self._emb_modules:

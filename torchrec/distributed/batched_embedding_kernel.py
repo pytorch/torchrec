@@ -42,6 +42,9 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from fbgemm_gpu.tbe.ssd import ASSOC, SSDTableBatchedEmbeddingBags
+from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
+    PartiallyMaterializedTensor,
+)
 from torch import nn
 from torchrec.distributed.comm import get_local_rank, get_local_size
 from torchrec.distributed.composable.table_batched_embedding_slice import (
@@ -580,6 +583,27 @@ def _gen_named_parameters_by_table_ssd(
         table_name = table.name
         # placeholder
         weight: nn.Parameter = nn.Parameter(torch.empty(0))
+        # pyre-ignore
+        weight._in_backward_optimizers = [EmptyFusedOptimizer()]
+        yield (table_name, weight)
+
+
+def _gen_named_parameters_by_table_ssd_pmt(
+    emb_module: SSDTableBatchedEmbeddingBags,
+    table_name_to_count: Dict[str, int],
+    config: GroupedEmbeddingConfig,
+    pg: Optional[dist.ProcessGroup] = None,
+) -> Iterator[Tuple[str, nn.Parameter]]:
+    """
+    Return an iterator over module parameters that are embedding tables, yielding both the table
+    name as well as the parameter itself. The embedding table is in the form of
+    PartiallyMaterializedTensor to support windowed access.
+    """
+    pmts = emb_module.split_embedding_weights()
+    for table_config, pmt in zip(config.embedding_tables, pmts):
+        table_name = table_config.name
+        emb_table = pmt
+        weight: nn.Parameter = nn.Parameter(emb_table)
         # pyre-ignore
         weight._in_backward_optimizers = [EmptyFusedOptimizer()]
         yield (table_name, weight)
@@ -1257,7 +1281,7 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
             pg,
         )
         self._param_per_table: Dict[str, nn.Parameter] = dict(
-            _gen_named_parameters_by_table_ssd(
+            _gen_named_parameters_by_table_ssd_pmt(
                 emb_module=self._emb_module,
                 table_name_to_count=self.table_name_to_count.copy(),
                 config=self._config,
@@ -1291,11 +1315,31 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         destination: Optional[Dict[str, Any]] = None,
         prefix: str = "",
         keep_vars: bool = False,
+        no_snapshot: bool = True,
     ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
+        """
+        Args:
+            no_snapshot (bool): the tensors in the returned dict are
+                PartiallyMaterializedTensors. this argument controls wether the
+                PartiallyMaterializedTensor owns a RocksDB snapshot handle. True means the
+                PartiallyMaterializedTensor doesn't have a RocksDB snapshot handle.  False means the
+                PartiallyMaterializedTensor has a RocksDB snapshot handle
+        """
+        # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
+        # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        return destination
+        emb_tables = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            emb_table.local_metadata.placement._device = torch.device("cpu")
+        ret = get_state_dict(
+            emb_table_config_copy,
+            emb_tables,
+            self._pg,
+            destination,
+            prefix,
+        )
+        return ret
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -1308,14 +1352,16 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         ):
             # hack before we support optimizer on sharded parameter level
             # can delete after PEA deprecation
+            # pyre-ignore [6]
             param = nn.Parameter(tensor)
             # pyre-ignore
             param._in_backward_optimizers = [EmptyFusedOptimizer()]
             yield name, param
 
+    # pyre-ignore [15]
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
         assert (
             remove_duplicate
         ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
@@ -1324,6 +1370,21 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
             self.split_embedding_weights(),
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, tensor
+
+    def get_named_split_embedding_weights_snapshot(
+        self, prefix: str = ""
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+        """
+        Return an iterator over embedding tables, yielding both the table name as well as the embedding
+        table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
+        RocksDB snapshot to support windowed access.
+        """
+        for config, tensor in zip(
+            self._config.embedding_tables,
+            self.split_embedding_weights(no_snapshot=False),
+        ):
+            key = append_prefix(prefix, f"{config.name}")
             yield key, tensor
 
     def flush(self) -> None:
@@ -1340,11 +1401,11 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
 
-    def split_embedding_weights(self) -> List[torch.Tensor]:
-        """
-        Return fake tensors.
-        """
-        return [param.data for param in self._param_per_table.values()]
+    # pyre-ignore [15]
+    def split_embedding_weights(
+        self, no_snapshot: bool = True
+    ) -> List[PartiallyMaterializedTensor]:
+        return self.emb_module.split_embedding_weights(no_snapshot)
 
 
 class BatchedFusedEmbeddingBag(
