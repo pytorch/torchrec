@@ -832,7 +832,7 @@ class ShardedEmbeddingBagCollection(
         self._model_parallel_name_to_sharded_tensor = OrderedDict()
         self._model_parallel_name_to_dtensor = OrderedDict()
 
-        model_parallel_name_to_compute_kernel: Dict[str, str] = {}
+        self._model_parallel_name_to_compute_kernel: Dict[str, str] = {}
         for (
             table_name,
             parameter_sharding,
@@ -843,7 +843,7 @@ class ShardedEmbeddingBagCollection(
             self._model_parallel_name_to_shards_wrapper[table_name] = OrderedDict(
                 [("local_tensors", []), ("local_offsets", [])]
             )
-            model_parallel_name_to_compute_kernel[table_name] = (
+            self._model_parallel_name_to_compute_kernel[table_name] = (
                 parameter_sharding.compute_kernel
             )
 
@@ -897,18 +897,17 @@ class ShardedEmbeddingBagCollection(
                     "weight", nn.Parameter(torch.empty(0))
                 )
                 if (
-                    model_parallel_name_to_compute_kernel[table_name]
+                    self._model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
                     self.embedding_bags[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
-            if model_parallel_name_to_compute_kernel[table_name] in {
-                EmbeddingComputeKernel.KEY_VALUE.value
-            }:
-                continue
 
             if self._output_dtensor:
+                assert self._model_parallel_name_to_compute_kernel[table_name] not in {
+                    EmbeddingComputeKernel.KEY_VALUE.value
+                }
                 if shards_wrapper_map["local_tensors"]:
                     self._model_parallel_name_to_dtensor[table_name] = (
                         DTensor.from_local(
@@ -937,6 +936,8 @@ class ShardedEmbeddingBagCollection(
                     )
             else:
                 # created ShardedTensors once in init, use in post_state_dict_hook
+                # note: at this point kvstore backed tensors don't own valid snapshots, so no read
+                # access is allowed on them.
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
                     ShardedTensor._init_from_local_shards(
                         local_shards,
@@ -944,6 +945,21 @@ class ShardedEmbeddingBagCollection(
                         process_group=self._env.process_group,
                     )
                 )
+
+        def extract_sharded_kvtensors(
+            module: ShardedEmbeddingBagCollection,
+        ) -> OrderedDict[str, ShardedTensor]:
+            # retrieve all kvstore backed tensors
+            ret = OrderedDict()
+            for (
+                table_name,
+                sharded_t,
+            ) in module._model_parallel_name_to_sharded_tensor.items():
+                if self._model_parallel_name_to_compute_kernel[table_name] in {
+                    EmbeddingComputeKernel.KEY_VALUE.value
+                }:
+                    ret[table_name] = sharded_t
+            return ret
 
         def post_state_dict_hook(
             module: ShardedEmbeddingBagCollection,
@@ -964,6 +980,26 @@ class ShardedEmbeddingBagCollection(
             ) in module._model_parallel_name_to_dtensor.items():
                 destination_key = f"{prefix}embedding_bags.{table_name}.weight"
                 destination[destination_key] = d_tensor
+
+            # kvstore backed tensors do not have a valid backing snapshot at this point. Fill in a valid
+            # snapshot for read access.
+            sharded_kvtensors = extract_sharded_kvtensors(module)
+            sharded_kvtensors_copy = copy.deepcopy(sharded_kvtensors)
+            for lookup, sharding in zip(module._lookups, module._embedding_shardings):
+                if isinstance(sharding, DpPooledEmbeddingSharding):
+                    # unwrap DDP
+                    lookup = lookup.module
+                else:
+                    for key, v in lookup.get_named_split_embedding_weights_snapshot():
+                        destination_key = f"{prefix}embedding_bags.{key}.weight"
+                        assert key in sharded_kvtensors_copy
+                        sharded_kvtensors_copy[key].local_shards()[0].tensor = v
+            for (
+                table_name,
+                sharded_kvtensor,
+            ) in sharded_kvtensors_copy.items():
+                destination_key = f"{prefix}embedding_bags.{table_name}.weight"
+                destination[destination_key] = sharded_kvtensor
 
         self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)

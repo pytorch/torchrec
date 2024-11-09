@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
+    PartiallyMaterializedTensor,
+)
 from torch import nn
 from torch.distributed._tensor import DTensor
 from torchrec.distributed.embedding_types import (
@@ -60,6 +63,7 @@ def get_state_dict(
         List[Union[nn.Module, torch.Tensor]],
         List[torch.Tensor],
         List[Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]],
+        List[PartiallyMaterializedTensor],
     ],
     pg: Optional[dist.ProcessGroup] = None,
     destination: Optional[Dict[str, Any]] = None,
@@ -99,7 +103,9 @@ def get_state_dict(
             qbias = param[2]
             param = param[0]
 
-        assert embedding_table.local_rows == param.size(0)  # pyre-ignore[16]
+        assert embedding_table.local_rows == param.size(  # pyre-ignore[16]
+            0
+        ), f"{embedding_table.local_rows=}, {param.size(0)=}, {param.shape=}"  # pyre-ignore[16]
 
         if qscale is not None:
             assert embedding_table.local_cols == param.size(1)  # pyre-ignore[16]
