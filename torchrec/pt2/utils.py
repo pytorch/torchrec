@@ -172,6 +172,7 @@ def pt2_compile_callable(f: Callable) -> Callable:
         **kwargs: Any,
     ) -> Any:
         if hasattr(ref, "enable_pt2_compile") and ref.enable_pt2_compile:
+            # print("##### WH: PT2 compile enabled #####")
             pt2_compiled_attr_name = f"_{f.__name__}_pt2_compiled"
             if not hasattr(ref, pt2_compiled_attr_name):
                 setattr(ref, pt2_compiled_attr_name, torch.compile(f))
