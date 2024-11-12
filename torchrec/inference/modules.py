@@ -418,7 +418,6 @@ def quantize_inference_model(
         model: torch.nn.Module,
         fp_module: FeatureProcessedEmbeddingBagCollection,
         fp_module_fqn: str,
-        activation_dtype: torch.dtype = torch.float,
         weight_dtype: torch.dtype = DEFAULT_QUANTIZATION_DTYPE,
         per_fp_table_weight_dtype: Optional[Dict[str, torch.dtype]] = None,
     ) -> None:
@@ -428,7 +427,7 @@ def quantize_inference_model(
 
         quant_prep_enable_register_tbes(model, [FeatureProcessedEmbeddingBagCollection])
         fp_module.qconfig = QuantConfig(
-            activation=quant.PlaceholderObserver.with_args(dtype=activation_dtype),
+            activation=quant.PlaceholderObserver.with_args(dtype=output_dtype),
             weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
             per_table_weight_dtype=per_fp_table_weight_dtype,
         )

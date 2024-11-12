@@ -14,7 +14,8 @@ import unittest
 
 import torch
 from torch import nn
-from torch.distributed._composable import fully_shard
+
+# from torch.distributed._composable import fully_shard
 from torch.distributed._shard.sharded_tensor import ShardedTensor
 from torch.distributed._tensor import DTensor
 
@@ -24,6 +25,7 @@ from torch.distributed.checkpoint import (
     load_state_dict,
     save_state_dict,
 )
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 from torch.distributed.optim import (
@@ -91,15 +93,15 @@ class FullyShardTest(MultiProcessTestBase):
                 device=ctx.device,
                 plan=row_wise(),
             )
-            m.dense = fully_shard(
+            m.dense = FSDP(  # pyre-ignore
                 m.dense,
+                auto_wrap_policy=ModuleWrapPolicy({nn.Linear}),
                 device_id=ctx.device.index,
-                policy=ModuleWrapPolicy({nn.Linear}),
             )
-            m.over = fully_shard(
+            m.over = FSDP(
                 m.over,
+                auto_wrap_policy=ModuleWrapPolicy({nn.Linear}),
                 device_id=ctx.device.index,
-                policy=ModuleWrapPolicy({nn.Linear}),
             )
 
             dense_opt = KeyedOptimizerWrapper(
