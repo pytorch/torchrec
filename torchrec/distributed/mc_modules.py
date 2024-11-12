@@ -389,35 +389,19 @@ class ShardedManagedCollisionCollection(
         input_feature_names: List[str],
     ) -> None:
         for sharding, sharding_features in zip(
-            self._embedding_shardings,
-            self._sharding_features,
+            self._embedding_shardings, self._sharding_features
         ):
             assert isinstance(sharding, BaseRwEmbeddingSharding)
-            feature_num_buckets: List[int] = [
-                self._managed_collision_modules[self._feature_to_table[f]].buckets()
-                for f in sharding_features
-            ]
-
-            input_sizes: List[int] = [
+            feature_hash_sizes: List[int] = [
                 self._managed_collision_modules[self._feature_to_table[f]].input_size()
                 for f in sharding_features
             ]
-
-            feature_hash_sizes: List[int] = []
-            feature_total_num_buckets: List[int] = []
-            for input_size, num_buckets in zip(
-                input_sizes,
-                feature_num_buckets,
-            ):
-                feature_hash_sizes.append(input_size)
-                feature_total_num_buckets.append(num_buckets)
 
             input_dist = RwSparseFeaturesDist(
                 # pyre-ignore [6]
                 pg=sharding._pg,
                 num_features=sharding._get_num_features(),
                 feature_hash_sizes=feature_hash_sizes,
-                feature_total_num_buckets=feature_total_num_buckets,
                 device=sharding._device,
                 is_sequence=True,
                 has_feature_processor=sharding._has_feature_processor,
