@@ -204,7 +204,6 @@ def bucketize_kjt_before_all2all(
     kjt: KeyedJaggedTensor,
     num_buckets: int,
     block_sizes: torch.Tensor,
-    total_num_blocks: Optional[torch.Tensor] = None,
     output_permute: bool = False,
     bucketize_pos: bool = False,
     block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
@@ -220,7 +219,6 @@ def bucketize_kjt_before_all2all(
     Args:
         num_buckets (int): number of buckets to bucketize the values into.
         block_sizes: (torch.Tensor): bucket sizes for the keyed dimension.
-        total_num_blocks: (Optional[torch.Tensor]): number of blocks per feature, useful for two-level bucketization
         output_permute (bool): output the memory location mapping from the unbucketized
             values to bucketized values or not.
         bucketize_pos (bool): output the changed position of the bucketized values or
@@ -237,7 +235,7 @@ def bucketize_kjt_before_all2all(
         block_sizes.numel() == num_features,
         f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received.",
     )
-
+    block_sizes_new_type = _fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values())
     (
         bucketized_lengths,
         bucketized_indices,
@@ -249,24 +247,14 @@ def bucketize_kjt_before_all2all(
         kjt.values(),
         bucketize_pos=bucketize_pos,
         sequence=output_permute,
-        block_sizes=_fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values()),
-        total_num_blocks=(
-            _fx_wrap_tensor_to_device_dtype(total_num_blocks, kjt.values())
-            if total_num_blocks is not None
-            else None
-        ),
+        block_sizes=block_sizes_new_type,
         my_size=num_buckets,
         weights=kjt.weights_or_none(),
         batch_size_per_feature=_fx_wrap_batch_size_per_feature(kjt),
         max_B=_fx_wrap_max_B(kjt),
-        block_bucketize_pos=(
-            _fx_wrap_tensor_to_device_dtype(block_bucketize_row_pos, kjt.lengths())
-            if block_bucketize_row_pos is not None
-            else None
-        ),
+        block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
         keep_orig_idx=keep_original_indices,
     )
-
     return (
         KeyedJaggedTensor(
             # duplicate keys will be resolved by AllToAll
