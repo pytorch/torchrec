@@ -192,6 +192,7 @@ class QuantBatchedEmbeddingBag(
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
+        data_type_changed: bool = False,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -216,27 +217,35 @@ class QuantBatchedEmbeddingBag(
         self._runtime_device: torch.device = _get_runtime_device(device, config)
         # 16 for CUDA, 1 for others like CPU and MTIA.
         self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
+        embedding_specs = []
+        for local_rows, local_cols, table, location in zip(
+            self._local_rows,
+            self._local_cols,
+            config.embedding_tables,
+            managed,
+        ):
+            embedding_specs.append(
+                (
+                    table.name,
+                    local_rows,
+                    (
+                        local_cols
+                        if self._quant_state_dict_split_scale_bias
+                        else table.embedding_dim
+                    ),
+                    data_type_to_sparse_type(
+                        # if data_type has changed, we want to default to the up-to-date config.data_type, instead of the embedding_tables which does not have the quantized data type
+                        config.data_type
+                        if data_type_changed
+                        else table.data_type
+                    ),
+                    location,
+                )
+            )
+
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
             IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=[
-                    (
-                        table.name,
-                        local_rows,
-                        (
-                            local_cols
-                            if self._quant_state_dict_split_scale_bias
-                            else table.embedding_dim
-                        ),
-                        data_type_to_sparse_type(config.data_type),
-                        location,
-                    )
-                    for local_rows, local_cols, table, location in zip(
-                        self._local_rows,
-                        self._local_cols,
-                        config.embedding_tables,
-                        managed,
-                    )
-                ],
+                embedding_specs=embedding_specs,
                 device=device,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
@@ -359,8 +368,16 @@ class QuantBatchedEmbeddingBag(
         )
         device = next(iter(state_dict.values())).device
 
+        data_type_changed = False
+        # qconfig data type can be different from the config data type - if we are quantizing already sharded embeddings.
+        # This means the embedding_tables within GroupedEmbeddingConfig do not have the up-to-date data type - as they have not yet been quantized
+        if data_type != module.config.data_type:
+            data_type_changed = True
+        # We update the config to have the right data_type, sparse_type, and device. This update does not change the embedding_tables data type
         config = _copy_config(module.config, data_type, sparse_type, device)
-        ret = QuantBatchedEmbeddingBag(config=config, device=device)
+        ret = QuantBatchedEmbeddingBag(
+            config=config, device=device, data_type_changed=data_type_changed
+        )
 
         # pyre-ignore
         quant_weight_list = _quantize_weight(state_dict, data_type)
@@ -411,7 +428,11 @@ class QuantBatchedEmbedding(
                             if self._quant_state_dict_split_scale_bias
                             else table.embedding_dim
                         ),
-                        data_type_to_sparse_type(config.data_type),
+                        (
+                            data_type_to_sparse_type(config.data_type)
+                            if config.data_type is not None
+                            else data_type_to_sparse_type(table.data_type)
+                        ),
                         location,
                     )
                     for local_rows, local_cols, table, location in zip(
