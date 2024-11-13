@@ -253,7 +253,7 @@ def _get_ndcg_states(
             dim=-1,
             index=expanded_session_ids,
             src=adjusted_weights,  # [num_tasks, batch_size]
-            reduce="max",
+            reduce="amax",
         )
     )
 
