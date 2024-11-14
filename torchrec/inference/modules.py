@@ -26,6 +26,7 @@ from torch.fx.passes.split_utils import getattr_recursive
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fused_params import (
     FUSED_PARAM_BOUNDS_CHECK_MODE,
+    FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP,
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     FUSED_PARAM_REGISTER_TBE_BOOL,
 )
@@ -82,6 +83,7 @@ DEFAULT_FUSED_PARAMS: Dict[str, Any] = {
     FUSED_PARAM_REGISTER_TBE_BOOL: True,
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: True,
     FUSED_PARAM_BOUNDS_CHECK_MODE: BoundsCheckMode.NONE,
+    FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP: False,
 }
 
 DEFAULT_SHARDERS: List[ModuleSharder[torch.nn.Module]] = [
