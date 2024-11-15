@@ -135,8 +135,8 @@ def intra_and_cross_node_pg(
                     "[Connection] intra_group: [%d] -> [%s]" % (my_rank, peers)
                 )
                 _INTRA_PG = curr_intra_group_pg
-
-    dist.barrier()
+        assert _INTRA_PG is not None
+        dist.barrier()
 
     if _CROSS_PG is None:
         for l_rank in range(local_size):
@@ -147,7 +147,7 @@ def intra_and_cross_node_pg(
                     "[Connection] cross_group: [%d] -> [%s]" % (my_rank, peers)
                 )
                 _CROSS_PG = curr_cross_group_pg
-
-    dist.barrier()
+        assert _CROSS_PG is not None
+        dist.barrier()
 
     return _INTRA_PG, _CROSS_PG
