@@ -16,6 +16,7 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
+from torchrec.distributed.planner.proposers import EmbeddingOffloadScaleupProposer
 from torchrec.distributed.planner.types import (
     PlannerError,
     PlannerErrorType,
@@ -291,3 +292,66 @@ class TestEmbeddingShardingPlannerWithConstraints(unittest.TestCase):
                 constraint.bounds_check_mode, sharding_option.bounds_check_mode
             )
             self.assertEqual(constraint.is_weighted, sharding_option.is_weighted)
+
+
+class AutoSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [ShardingType.ROW_WISE.value, ShardingType.TABLE_WISE.value]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [k.value for k in EmbeddingComputeKernel]
+
+
+class TestAutoPlannerWithScaleupProposer(unittest.TestCase):
+    def setUp(self) -> None:
+        compute_device = "cuda"
+        self.topology = Topology(
+            world_size=2,
+            hbm_cap=1024 * 1024 * 2,
+            compute_device=compute_device,
+        )
+        self.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(4)
+        ]
+        self.constraints = {
+            f"table_{i}": ParameterConstraints(
+                # Just needs to be non-None for ScaleupProposer to work.
+                cache_params=CacheParams(algorithm=CacheAlgorithm.LRU),
+            )
+            for i in range(4)
+        }
+        self.planner = EmbeddingShardingPlanner(
+            topology=self.topology,
+            proposer=EmbeddingOffloadScaleupProposer(),
+            constraints=self.constraints,
+        )
+
+    def test_auto_sharder_solution(self) -> None:
+        model = TestSparseNN(tables=self.tables, sparse_device=torch.device("meta"))
+        sharding_plan = self.planner.plan(module=model, sharders=[AutoSharder()])
+        expected_ranks = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        ranks = [
+            cast(List[int], param_shard.ranks)
+            for param_shard in cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ebc"]
+            ).values()
+        ]
+        compute_kernels = {
+            param_shard.compute_kernel
+            for param_shard in cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ebc"]
+            ).values()
+        }
+
+        self.assertEqual(sorted(expected_ranks), sorted(ranks))
+        self.assertSetEqual(
+            {EmbeddingComputeKernel.FUSED_UVM_CACHING.value}, compute_kernels
+        )
