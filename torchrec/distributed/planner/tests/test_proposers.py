@@ -41,6 +41,7 @@ from torchrec.distributed.planner.types import (
 )
 from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.types import (
+    CacheAlgorithm,
     CacheParams,
     CacheStatistics,
     ModuleSharder,
@@ -103,6 +104,51 @@ def mock_calculate_storage_specific_sizes(
     )
 
 
+def make_sharding_option(
+    name: str,
+    raw_size: int,
+    clf: Optional[float],
+    perf: Optional[Perf] = None,
+) -> ShardingOption:
+    """
+    Convenience factory method for creating a sharding option with a single shard.
+    """
+    return ShardingOption(
+        name=name,
+        tensor=torch.zeros(1),
+        # pyre-ignore
+        module=("model", None),
+        input_lengths=[],
+        batch_size=8,
+        sharding_type="row_wise",
+        partition_by="DEVICE",
+        compute_kernel="fused" if clf is None else "fused_uvm_caching",
+        shards=[
+            Shard(
+                size=[1, raw_size],
+                offset=[0, 0],
+                perf=(
+                    Perf(
+                        fwd_compute=0,
+                        fwd_comms=0,
+                        bwd_compute=0,
+                        bwd_comms=0,
+                    )
+                    if perf is None
+                    else perf
+                ),
+            )
+        ],
+        cache_params=(
+            None
+            if clf is None
+            else CacheParams(
+                load_factor=clf,
+            )
+        ),
+    )
+
+
 class TestProposers(unittest.TestCase):
     def setUp(self) -> None:
         topology = Topology(world_size=2, compute_device="cuda")
@@ -112,6 +158,7 @@ class TestProposers(unittest.TestCase):
         self.grid_search_proposer = GridSearchProposer()
         self.dynamic_programming_proposer = DynamicProgrammingProposer()
         self._sharding_types = [x.value for x in ShardingType]
+        self.maxDiff = None
 
     def test_greedy_two_table(self) -> None:
         tables = [
@@ -129,11 +176,11 @@ class TestProposers(unittest.TestCase):
             ),
         ]
         """
-        GRID_SHARD only is available if specified by user in parameter constraints, however, 
-        adding parameter constraints does not work because of the non deterministic nature of 
-        _filter_sharding_types (set & set) operation when constraints are present. This means 
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present. This means
         the greedy proposer will have a different order of sharding types on each test invocation
-        which we cannot have a harcoded "correct" answer for. We mock the call to _filter_sharding_types 
+        which we cannot have a harcoded "correct" answer for. We mock the call to _filter_sharding_types
         to ensure the order of the sharding types list is always the same.
         """
         self.enumerator._filter_sharding_types = MagicMock(
@@ -350,8 +397,8 @@ class TestProposers(unittest.TestCase):
         """
         GRID_SHARD only is available if specified by user in parameter constraints, however,
         adding parameter constraints does not work because of the non deterministic nature of
-        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
-        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the
+        call to _filter_sharding_types to ensure the order of the sharding types list is always
         the same.
         """
         self.enumerator._filter_sharding_types = MagicMock(
@@ -547,6 +594,10 @@ class TestProposers(unittest.TestCase):
                     stats=MockCacheStatistics(expected_lookups=0, cacheability=0.5),
                 ),
             ),
+            "table_3": ParameterConstraints(
+                compute_kernels=[EmbeddingComputeKernel.FUSED.value],
+                cache_params=CacheParams(),
+            ),
         }
 
         GB = 1024 * 1024 * 1024
@@ -634,40 +685,6 @@ class TestProposers(unittest.TestCase):
         )
 
     def test_promote_high_prefetch_overheaad_table_to_hbm(self) -> None:
-        def make_sharding_option(
-            name: str, raw_size: int, clf: Optional[float]
-        ) -> ShardingOption:
-            return ShardingOption(
-                name=name,
-                tensor=torch.zeros(1),
-                # pyre-ignore
-                module=("model", None),
-                input_lengths=[],
-                batch_size=8,
-                sharding_type="row_wise",
-                partition_by="DEVICE",
-                compute_kernel="fused" if clf is None else "fused_uvm_caching",
-                shards=[
-                    Shard(
-                        size=[1, raw_size],
-                        offset=[0, 0],
-                        perf=Perf(
-                            fwd_compute=0,
-                            fwd_comms=0,
-                            bwd_compute=0,
-                            bwd_comms=0,
-                        ),
-                    )
-                ],
-                cache_params=(
-                    None
-                    if clf is None
-                    else CacheParams(
-                        load_factor=clf,
-                    )
-                ),
-            )
-
         def expect_sharding_option(
             so: List[ShardingOption],
             names: List[str],
@@ -892,6 +909,114 @@ class TestProposers(unittest.TestCase):
         expected_list_names = ["p1so1", "p1so2", "p2so1", "p2so2", "p3so1", "p3so2"]
 
         self.assertEqual(proposals_list_names, expected_list_names)
+
+    def test_embedding_offload_scaleup_proposer_uses_fused_kernel_when_possible(
+        self,
+    ) -> None:
+        def mock_storage_estimator_func(so: List[ShardingOption]) -> None:
+            # This mock storage estimator will give all tables a penalty
+            # for using UVM caching.
+            for s in so:
+                size = s.shards[0].size[0] * s.shards[0].size[1]
+                if s.compute_kernel == "fused_uvm_caching":
+                    assert s.cache_params
+                    assert s.cache_params.load_factor
+                    penalty = 50
+                    s.shards[0].storage = Storage(
+                        ddr=size,
+                        hbm=int(size * s.cache_params.load_factor) + penalty,
+                    )
+                else:
+                    s.shards[0].storage = Storage(
+                        ddr=0,
+                        hbm=size,
+                    )
+
+        mock_enumerator = MagicMock()
+        mock_enumerator.populate_estimates.side_effect = mock_storage_estimator_func
+
+        p = EmbeddingOffloadScaleupProposer()
+        search_space = [
+            # We should pick the first option since it has a fused_uvm_caching kernel
+            # even though it doesn't have the best perf.
+            make_sharding_option("table-1", 5000, 0.1, Perf(9, 9, 9, 9)),
+            make_sharding_option("table-1", 5000, None, Perf(1, 1, 1, 1)),
+            make_sharding_option("table-1", 1, None, Perf(1, 1, 1, 1)),
+            # Neither option has fused_uvm_caching, so we should pick the one with best perf.
+            make_sharding_option("table-2", 10, None, Perf(9, 9, 9, 9)),
+            make_sharding_option("table-2", 50, None, Perf(1, 1, 1, 1)),
+        ]
+
+        mock_storage_estimator_func(search_space)
+        p.load(search_space=search_space, enumerator=mock_enumerator)
+
+        self.assertEqual(p.starting_proposal[0].name, "table-1")
+        self.assertEqual(p.starting_proposal[0].compute_kernel, "fused_uvm_caching")
+        self.assertEqual(p.starting_proposal[0].total_storage.hbm, 550)
+        self.assertEqual(p.starting_proposal[0].total_storage.ddr, 5000)
+
+        self.assertEqual(p.starting_proposal[1].name, "table-2")
+        self.assertEqual(p.starting_proposal[1].compute_kernel, "fused")
+        self.assertEqual(p.starting_proposal[1].total_storage.hbm, 50)
+        self.assertEqual(p.starting_proposal[1].total_storage.ddr, 0)
+
+    @unittest.mock.patch("torchrec.distributed.planner.proposers.logger")
+    def test_build_proposal_from_sharding_options(self, mock_logger: MagicMock) -> None:
+        table_4_sharding_option = make_sharding_option("table-4", 1, 0.1)
+        assert table_4_sharding_option.cache_params  # appease pyre
+        table_4_sharding_option.cache_params.algorithm = CacheAlgorithm.LFU
+
+        sharding_options_by_fqn = {
+            # Case 1: Only one option, use it even though it isn't fused_uvm_caching. Don't log anything.
+            "table-1": [make_sharding_option("table-1", 1, None)],
+            # Case 2: Multiple options, 1+ with fused_uvm_caching, use the first with fused_uvm_caching. Log warning.
+            "table-2": [
+                make_sharding_option("table-2", 1, None),
+                make_sharding_option("table-2", 1, 0.1),
+                make_sharding_option("table-2", 1, None),
+                make_sharding_option("table-2", 1, 0.1),
+            ],
+            # Case 3: Multiple options, none with fused_uvm_caching, use the first one. Log warning.
+            "table-3": [
+                make_sharding_option("table-3", 1, None),
+                make_sharding_option("table-3", 1, None),
+            ],
+            # Case 4: One option, but it's using LFU cache constraints. Use it, but log error.
+            "table-4": [table_4_sharding_option],
+        }
+
+        proposer = EmbeddingOffloadScaleupProposer()
+        proposal = proposer._build_proposal_from_sharding_options(
+            sharding_options_by_fqn
+        )
+
+        self.assertEqual(len(proposal), 4)
+        self.assertEqual(mock_logger.warning.call_count, 2)
+        self.assertEqual(mock_logger.error.call_count, 1)
+
+        # Case 1
+        self.assertEqual(proposal[0], sharding_options_by_fqn["table-1"][0])
+
+        # Case 2
+        self.assertEqual(proposal[1], sharding_options_by_fqn["table-2"][1])
+        self.assertRegex(
+            mock_logger.warning.call_args_list[0].args[0],
+            r"^EmbeddingOffloadScaleupProposer - ignored .* sharding options for table name: table-2",
+        )
+
+        # Case 3
+        self.assertEqual(proposal[2], sharding_options_by_fqn["table-3"][0])
+        self.assertRegex(
+            mock_logger.warning.call_args_list[1].args[0],
+            r"^EmbeddingOffloadScaleupProposer - ignored .* sharding options for table name: table-3",
+        )
+
+        # Case 4
+        self.assertEqual(proposal[3], sharding_options_by_fqn["table-4"][0])
+        self.assertIn(
+            "EmbeddingOffloadScaleupProposer - proposer only supports LRU cache algorithm",
+            mock_logger.error.call_args_list[0].args[0],
+        )
 
 
 if __name__ == "__main__":

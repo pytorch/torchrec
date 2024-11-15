@@ -26,6 +26,7 @@ from torchrec.distributed.planner.types import (
     Topology,
 )
 from torchrec.distributed.planner.utils import bytes_to_gb, LuusJaakolaSearch, prod
+from torchrec.distributed.types import CacheAlgorithm
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -467,6 +468,46 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         self.proposal: Optional[List[ShardingOption]] = None
         self.search: Optional[LuusJaakolaSearch] = None
 
+    def _build_proposal_from_sharding_options(
+        self,
+        sharding_options_by_fqn: Dict[str, List[ShardingOption]],
+    ) -> List[ShardingOption]:
+        """
+        Given a list of sharding options for each embedding table, selects which to include in the proposal.
+        """
+        # TODO(T206831945): Currently only uses 1 sharding option for proposal.
+        # There is room for potentially exploring multiple options if done
+        # carefully, e.g. traversing like GreedyProposer.
+        proposal: List[ShardingOption] = []
+        for table_sharding_options in sharding_options_by_fqn.values():
+            if len(table_sharding_options) > 1:
+                logger.warning(
+                    f"EmbeddingOffloadScaleupProposer - ignored {len(table_sharding_options) - 1} sharding options for table {table_sharding_options[0]} in proposal"
+                )
+
+            selected_option = next(
+                (
+                    sharding_option
+                    for sharding_option in table_sharding_options
+                    if sharding_option.compute_kernel
+                    == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+                ),
+                table_sharding_options[0],
+            )
+            proposal.append(selected_option)
+
+            # Miss-ratio curves used for stats are modeled for an LRU cache, LFU cache would not work well with ScaleupProposer.
+            if (
+                selected_option.cache_params is not None
+                and selected_option.cache_params.algorithm is not None
+                and selected_option.cache_params.algorithm != CacheAlgorithm.LRU
+            ):
+                logger.error(
+                    f"EmbeddingOffloadScaleupProposer - proposer only supports LRU cache algorithm, but {selected_option.cache_params.algorithm} is used for {selected_option}"
+                )
+
+        return proposal
+
     def load(
         self,
         search_space: List[ShardingOption],
@@ -482,11 +523,11 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             sharding_options.sort(
                 key=lambda x: _sharding_option_score(x, self.use_depth)
             )
-        # currently only use 1st sharding option for proposal only.
-        # TODO: could traverse through multiple options like GreedyProposer
-        proposal = [
-            sharding_options[0] for sharding_options in sharding_options_by_fqn.values()
-        ]
+
+        proposal: List[ShardingOption] = self._build_proposal_from_sharding_options(
+            sharding_options_by_fqn
+        )
+
         # deepcopy so it won't affect other proposers
         self.starting_proposal = copy.deepcopy(proposal)
         self.promote_high_prefetch_overheaad_table_to_hbm(
