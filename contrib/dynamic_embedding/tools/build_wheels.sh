@@ -6,6 +6,8 @@ export CIBW_BEFORE_BUILD="tools/before_linux_build.sh"
 # all kinds of CPython.
 export CIBW_BUILD=${CIBW_BUILD:-"cp39-manylinux_x86_64"}
 
+export CIBW_MANYLINUX_X86_64_IMAGE=${CIBW_MANYLINUX_X86_64_IMAGE:-"manylinux_2_28"}
+
 # Do not auditwheels since tde uses torch's shared libraries.
 export CIBW_REPAIR_WHEEL_COMMAND="tools/repair_wheel.sh {wheel} {dest_dir}"
 
