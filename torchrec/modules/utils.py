@@ -64,7 +64,7 @@ def extract_module_or_tensor_callable(
         Callable[[], torch.nn.Module],
         torch.nn.Module,
         Callable[[torch.Tensor], torch.Tensor],
-    ]
+    ],
 ) -> Union[torch.nn.Module, Callable[[torch.Tensor], torch.Tensor]]:
     try:
         # pyre-ignore[20]: PositionalOnly call expects argument in position 0
@@ -150,8 +150,7 @@ def convert_list_of_modules_to_modulelist(
     assert (
         # pyre-fixme[6]: Expected `Sized` for 1st param but got
         #  `Iterable[torch.nn.Module]`.
-        len(modules)
-        == sizes[0]
+        len(modules) == sizes[0]
         # pyre-fixme[6]: For 1st argument expected `pyre_extensions.PyreReadOnly[Sized]`
         #  but got `Iterable[Module]`.
     ), f"the counts of modules ({len(modules)}) do not match with the required counts {sizes}"

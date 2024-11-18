@@ -16,7 +16,6 @@ from torchrec.modules.deepfm import DeepFM, FactorizationMachine
 
 class TestDeepFM(unittest.TestCase):
     def test_deepfm_shape(self) -> None:
-
         batch_size = 3
         output_dim = 30
         # the input embedding are in torch.Tensor of [batch_size, num_embeddings, embedding_dim]
@@ -113,7 +112,6 @@ class TestDeepFM(unittest.TestCase):
 
 class TestFM(unittest.TestCase):
     def test_fm_shape(self) -> None:
-
         batch_size = 3
         # the input embedding are in torch.Tensor of [batch_size, num_embeddings, embedding_dim]
         input_embeddings = [

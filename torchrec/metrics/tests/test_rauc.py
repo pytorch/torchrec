@@ -32,7 +32,6 @@ from torchrec.metrics.test_utils import (
 def compute_rauc(
     predictions: torch.Tensor, labels: torch.Tensor, weights: torch.Tensor
 ) -> torch.Tensor:
-
     n = len(predictions)
     cnt = 0.0
     for i in range(n - 1):

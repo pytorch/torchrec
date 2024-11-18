@@ -579,11 +579,11 @@ class LFU_EvictionPolicy(MCHEvictionPolicy):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         mch_counts = mch_metadata["counts"]
         # update metadata for matching ids
-        mch_counts[
-            coalesced_history_mch_matching_indices
-        ] += coalesced_history_sorted_unique_ids_counts[
-            coalesced_history_mch_matching_elements_mask
-        ]
+        mch_counts[coalesced_history_mch_matching_indices] += (
+            coalesced_history_sorted_unique_ids_counts[
+                coalesced_history_mch_matching_elements_mask
+            ]
+        )
 
         # incoming non-matching ids
         new_sorted_uniq_ids_counts = coalesced_history_sorted_unique_ids_counts[
@@ -657,7 +657,6 @@ class LRU_EvictionPolicy(MCHEvictionPolicy):
         additional_ids: Optional[torch.Tensor] = None,
         threshold_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
-
         coalesced_history_metadata: Dict[str, torch.Tensor] = {}
         history_last_access_iter = history_metadata["last_access_iter"]
         if additional_ids is not None:
@@ -847,11 +846,11 @@ class DistanceLFU_EvictionPolicy(MCHEvictionPolicy):
         ]
 
         # update metadata for matching ids
-        mch_counts[
-            coalesced_history_mch_matching_indices
-        ] += coalesced_history_sorted_unique_ids_counts[
-            coalesced_history_mch_matching_elements_mask
-        ]
+        mch_counts[coalesced_history_mch_matching_indices] += (
+            coalesced_history_sorted_unique_ids_counts[
+                coalesced_history_mch_matching_elements_mask
+            ]
+        )
         mch_last_access_iter[coalesced_history_mch_matching_indices] = (
             coalesced_history_sorted_uniq_ids_last_access_iter[
                 coalesced_history_mch_matching_elements_mask
@@ -1336,7 +1335,6 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         output_segments: List[int],
         device: Optional[torch.device] = None,
     ) -> "MCHManagedCollisionModule":
-
         new_zch_size = output_id_range[1] - output_id_range[0]
 
         return type(self)(

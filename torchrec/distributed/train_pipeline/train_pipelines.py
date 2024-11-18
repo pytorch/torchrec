@@ -259,9 +259,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
                 # Mandatory dynamo configuration for Torchrec PT2 compilation
                 torch._dynamo.config.capture_scalar_outputs = True
                 torch._dynamo.config.capture_dynamic_output_shape_ops = True
-                torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = (
-                    True
-                )
+                torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = True
                 torch._dynamo.config.skip_torchrec = False
 
                 # Importing only before compilation to not slow-done train_pipelines import
@@ -775,7 +773,6 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             param.grad = grad
 
     def _init_embedding_streams(self) -> None:
-
         for _ in self._pipelined_modules:
             self._embedding_odd_streams.append(
                 (torch.get_device_module(self._device).Stream(priority=0))

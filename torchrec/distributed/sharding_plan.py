@@ -501,7 +501,7 @@ def table_wise(
 
 
 def row_wise(
-    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None
+    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::ROW_WISE` for construct_module_sharding_plan.

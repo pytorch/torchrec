@@ -165,9 +165,7 @@ class MLP(torch.nn.Module):
                     ]
                 )
             else:
-                assert (
-                    ValueError
-                ), "This MLP only support str version activation function of relu, sigmoid, and swish_layernorm"
+                assert ValueError, "This MLP only support str version activation function of relu, sigmoid, and swish_layernorm"
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         """

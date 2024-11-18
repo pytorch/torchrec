@@ -35,7 +35,6 @@ from tqdm import tqdm
 
 # OSS import
 try:
-
     # pyre-ignore[21]
     # @manual=//torchrec/github/examples/bert4rec:bert4rec_metrics
     from bert4rec_metrics import recalls_and_ndcgs_for_ks

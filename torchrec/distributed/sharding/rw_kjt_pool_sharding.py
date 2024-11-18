@@ -311,25 +311,28 @@ class KeyedJaggedTensorPoolRwSharding(ObjectPoolSharding):
         self, lookup: KeyedJaggedTensorPoolLookup
     ) -> Iterable[Tuple[str, torch.Tensor]]:
         for fqn, tensor in lookup.states_to_register():
-            yield fqn, ShardedTensor._init_from_local_shards(
-                [
-                    Shard(
-                        tensor=tensor,
-                        metadata=ShardMetadata(
-                            shard_offsets=[
-                                self._env.rank * self._block_size,
-                                0,
-                            ],
-                            shard_sizes=[
-                                tensor.shape[0],
-                                tensor.shape[1],
-                            ],
-                            placement=f"rank:{self._env.rank}/{str(tensor.device)}",
-                        ),
-                    )
-                ],
-                torch.Size([self._pool_size, tensor.shape[1]]),
-                process_group=self._env.process_group,
+            yield (
+                fqn,
+                ShardedTensor._init_from_local_shards(
+                    [
+                        Shard(
+                            tensor=tensor,
+                            metadata=ShardMetadata(
+                                shard_offsets=[
+                                    self._env.rank * self._block_size,
+                                    0,
+                                ],
+                                shard_sizes=[
+                                    tensor.shape[0],
+                                    tensor.shape[1],
+                                ],
+                                placement=f"rank:{self._env.rank}/{str(tensor.device)}",
+                            ),
+                        )
+                    ],
+                    torch.Size([self._pool_size, tensor.shape[1]]),
+                    process_group=self._env.process_group,
+                ),
             )
 
     def create_context(self) -> ObjectPoolRwShardingContext:
@@ -518,25 +521,28 @@ class KeyedJaggedTensorPoolRwReplicatedSharding(ObjectPoolSharding):
         self, lookup: KeyedJaggedTensorPoolLookup
     ) -> Iterable[Tuple[str, torch.Tensor]]:
         for fqn, tensor in lookup.states_to_register():
-            yield fqn, ShardedTensor._init_from_local_shards(
-                [
-                    Shard(
-                        tensor=tensor,
-                        metadata=ShardMetadata(
-                            shard_offsets=[
-                                self._local_env.rank * self._block_size,
-                                0,
-                            ],
-                            shard_sizes=[
-                                tensor.shape[0],
-                                tensor.shape[1],
-                            ],
-                            placement=f"rank:{self._local_env.rank}/{str(tensor.device)}",
-                        ),
-                    )
-                ],
-                torch.Size([self._pool_size, tensor.shape[1]]),
-                process_group=self._local_env.process_group,
+            yield (
+                fqn,
+                ShardedTensor._init_from_local_shards(
+                    [
+                        Shard(
+                            tensor=tensor,
+                            metadata=ShardMetadata(
+                                shard_offsets=[
+                                    self._local_env.rank * self._block_size,
+                                    0,
+                                ],
+                                shard_sizes=[
+                                    tensor.shape[0],
+                                    tensor.shape[1],
+                                ],
+                                placement=f"rank:{self._local_env.rank}/{str(tensor.device)}",
+                            ),
+                        )
+                    ],
+                    torch.Size([self._pool_size, tensor.shape[1]]),
+                    process_group=self._local_env.process_group,
+                ),
             )
 
     def create_context(self) -> ObjectPoolReplicatedRwShardingContext:

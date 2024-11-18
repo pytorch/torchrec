@@ -98,13 +98,11 @@ class FusedEmbeddingCollectionSharder(BaseEmbeddingSharder[FusedEmbeddingCollect
         device: Optional[torch.device] = None,
         module_fqn: Optional[str] = None,
     ) -> ShardedFusedEmbeddingCollection:
-
         return ShardedFusedEmbeddingCollection(module, params, env, device)
 
     def shardable_parameters(
         self, module: FusedEmbeddingCollection
     ) -> Dict[str, nn.Parameter]:
-
         params = {
             # state_dict value looks like model.embeddings.table_0.weights
             name.split(".")[-2]: param

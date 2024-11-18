@@ -128,7 +128,6 @@ class ShardedITEPEmbeddingBagCollection(
         ctx: ITEPEmbeddingBagCollectionContext,
         output: List[torch.Tensor],
     ) -> LazyAwaitable[KeyedTensor]:
-
         ebc_awaitable = self._embedding_bag_collection.output_dist(ctx, output)
         return ebc_awaitable
 
@@ -173,7 +172,6 @@ class ITEPEmbeddingBagCollectionSharder(
         device: Optional[torch.device] = None,
         module_fqn: Optional[str] = None,
     ) -> ShardedITEPEmbeddingBagCollection:
-
         # Enforce GPU for ITEPEmbeddingBagCollection
         if device is None:
             device = torch.device("cuda")

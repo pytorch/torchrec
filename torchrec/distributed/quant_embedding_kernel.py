@@ -237,22 +237,20 @@ class QuantBatchedEmbeddingBag(
                 )
             )
 
-        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
-            IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=embedding_specs,
-                device=device,
-                pooling_mode=self._pooling,
-                feature_table_map=self._feature_table_map,
-                row_alignment=self._tbe_row_alignment,
-                uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
-                bounds_check_mode=(
-                    bounds_check_mode if bounds_check_mode else BoundsCheckMode.WARNING
-                ),
-                feature_names_per_table=[
-                    table.feature_names for table in config.embedding_tables
-                ],
-                **(tbe_fused_params(fused_params) or {}),
-            )
+        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
+            embedding_specs=embedding_specs,
+            device=device,
+            pooling_mode=self._pooling,
+            feature_table_map=self._feature_table_map,
+            row_alignment=self._tbe_row_alignment,
+            uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+            bounds_check_mode=(
+                bounds_check_mode if bounds_check_mode else BoundsCheckMode.WARNING
+            ),
+            feature_names_per_table=[
+                table.feature_names for table in config.embedding_tables
+            ],
+            **(tbe_fused_params(fused_params) or {}),
         )
         if device is not None:
             self._emb_module.initialize_weights()
@@ -313,9 +311,7 @@ class QuantBatchedEmbeddingBag(
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        assert (
-            remove_duplicate
-        ), "remove_duplicate=False not supported in QuantBatchedEmbeddingBag.named_split_embedding_weights"
+        assert remove_duplicate, "remove_duplicate=False not supported in QuantBatchedEmbeddingBag.named_split_embedding_weights"
         for config, (weight, weight_qscale, weight_qbias) in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights_with_scale_bias(
@@ -326,9 +322,10 @@ class QuantBatchedEmbeddingBag(
         ):
             yield append_prefix(prefix, f"{config.name}.weight"), weight
             if self._quant_state_dict_split_scale_bias:
-                yield append_prefix(
-                    prefix, f"{config.name}.weight_qscale"
-                ), weight_qscale
+                yield (
+                    append_prefix(prefix, f"{config.name}.weight_qscale"),
+                    weight_qscale,
+                )
                 yield append_prefix(prefix, f"{config.name}.weight_qbias"), weight_qbias
 
     def split_embedding_weights(
@@ -403,37 +400,35 @@ class QuantBatchedEmbedding(
         self._runtime_device: torch.device = _get_runtime_device(device, config)
         # 16 for CUDA, 1 for others like CPU and MTIA.
         self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
-        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
-            IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=[
+        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = IntNBitTableBatchedEmbeddingBagsCodegen(
+            embedding_specs=[
+                (
+                    table.name,
+                    local_rows,
                     (
-                        table.name,
-                        local_rows,
-                        (
-                            local_cols
-                            if self._quant_state_dict_split_scale_bias
-                            else table.embedding_dim
-                        ),
-                        data_type_to_sparse_type(table.data_type),
-                        location,
-                    )
-                    for local_rows, local_cols, table, location in zip(
-                        self._local_rows,
-                        self._local_cols,
-                        config.embedding_tables,
-                        managed,
-                    )
-                ],
-                device=device,
-                pooling_mode=PoolingMode.NONE,
-                feature_table_map=self._feature_table_map,
-                row_alignment=self._tbe_row_alignment,
-                uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
-                feature_names_per_table=[
-                    table.feature_names for table in config.embedding_tables
-                ],
-                **(tbe_fused_params(fused_params) or {}),
-            )
+                        local_cols
+                        if self._quant_state_dict_split_scale_bias
+                        else table.embedding_dim
+                    ),
+                    data_type_to_sparse_type(table.data_type),
+                    location,
+                )
+                for local_rows, local_cols, table, location in zip(
+                    self._local_rows,
+                    self._local_cols,
+                    config.embedding_tables,
+                    managed,
+                )
+            ],
+            device=device,
+            pooling_mode=PoolingMode.NONE,
+            feature_table_map=self._feature_table_map,
+            row_alignment=self._tbe_row_alignment,
+            uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+            feature_names_per_table=[
+                table.feature_names for table in config.embedding_tables
+            ],
+            **(tbe_fused_params(fused_params) or {}),
         )
         if device is not None:
             self._emb_module.initialize_weights()
@@ -494,9 +489,10 @@ class QuantBatchedEmbedding(
         ):
             yield append_prefix(prefix, f"{config.name}.weight"), weight
             if self._quant_state_dict_split_scale_bias:
-                yield append_prefix(
-                    prefix, f"{config.name}.weight_qscale"
-                ), weight_qscale
+                yield (
+                    append_prefix(prefix, f"{config.name}.weight_qscale"),
+                    weight_qscale,
+                )
                 yield append_prefix(prefix, f"{config.name}.weight_qbias"), weight_qbias
 
     @classmethod

@@ -120,7 +120,6 @@ class TestBinarySearchPredicate(unittest.TestCase):
 
 
 class TestLuusJaakolaSearch(unittest.TestCase):
-
     # Find minimum of f between x0 and x1.
     # Evaluate multiple times with different random seeds to ensure we're not
     # just getting lucky.

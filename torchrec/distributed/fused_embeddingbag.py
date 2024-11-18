@@ -96,7 +96,6 @@ class FusedEmbeddingBagCollectionSharder(
         device: Optional[torch.device] = None,
         module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingBagCollection:
-
         return ShardedFusedEmbeddingBagCollection(
             module,
             params,
@@ -108,7 +107,6 @@ class FusedEmbeddingBagCollectionSharder(
     def shardable_parameters(
         self, module: FusedEmbeddingBagCollection
     ) -> Dict[str, nn.Parameter]:
-
         params = {
             name.split(".")[-2]: param
             for name, param in module.state_dict().items()

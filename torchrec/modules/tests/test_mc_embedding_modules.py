@@ -125,7 +125,6 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         for mc_module in mc_modules:
-
             self.assertEqual(
                 mc_module._managed_collision_collection.open_slots()["t1"].item(),
                 zch_size - 1,
@@ -325,8 +324,7 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
 
             assert torch.all(
                 # pyre-ignore[16]
-                remapped_kjt1["f1"].values()
-                == zch_size - 1
+                remapped_kjt1["f1"].values() == zch_size - 1
             ), "all remapped ids should be mapped to end of range"
             assert torch.all(
                 remapped_kjt1["f2"].values() == zch_size - 1

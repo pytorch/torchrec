@@ -214,7 +214,6 @@ def create_sharding_infos_by_sharding(
     fused_params: Optional[Dict[str, Any]],
     suffix: Optional[str] = "weight",
 ) -> Dict[str, List[EmbeddingShardingInfo]]:
-
     if fused_params is None:
         fused_params = {}
 
@@ -319,7 +318,6 @@ def create_sharding_infos_by_sharding_device_group(
     fused_params: Optional[Dict[str, Any]],
     suffix: Optional[str] = "weight",
 ) -> Dict[Tuple[str, str], List[EmbeddingShardingInfo]]:
-
     if fused_params is None:
         fused_params = {}
 

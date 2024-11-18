@@ -210,7 +210,6 @@ class ShardedEmbeddingCollectionParallelTest(MultiProcessTestBase):
         use_apply_optimizer_in_backward: bool,
         use_index_dedup: bool,
     ) -> None:
-
         WORLD_SIZE = 2
 
         embedding_config = [

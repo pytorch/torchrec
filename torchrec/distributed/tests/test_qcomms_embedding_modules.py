@@ -185,7 +185,6 @@ class ConstructParameterShardingTest(MultiProcessTestBase):
         per_param_sharding: Dict[str, ParameterShardingGenerator],
         qcomms_config: QCommsConfig,
     ) -> None:
-
         WORLD_SIZE = 2
         EMBEDDING_DIM = 8
         NUM_EMBEDDINGS = 4

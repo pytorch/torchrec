@@ -437,7 +437,6 @@ class TestGroupTablesPerRank(unittest.TestCase):
             and tables[0].pooling == tables[1].pooling
             and tables[0].has_feature_processor == tables[1].has_feature_processor
         ):
-
             self.assertEqual(
                 sorted(_get_table_names_by_groups(tables)),
                 [["table_0", "table_1"]],
@@ -452,7 +451,6 @@ class TestGroupTablesPerRank(unittest.TestCase):
     def test_use_one_tbe_per_table(
         self,
     ) -> None:
-
         tables = [
             ShardedEmbeddingTable(
                 name=f"table_{i}",

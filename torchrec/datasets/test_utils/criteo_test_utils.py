@@ -103,7 +103,6 @@ class CriteoTest(unittest.TestCase):
         labels: Optional[np.ndarray] = None,
     ) -> Generator[Tuple[str, ...], None, None]:
         with tempfile.TemporaryDirectory() as tmpdir:
-
             if filenames is None:
                 filenames = [filename]
 

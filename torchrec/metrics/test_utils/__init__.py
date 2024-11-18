@@ -268,7 +268,6 @@ def rec_metric_value_test_helper(
         time_mock: Optional[Mock] = None,
         **kwargs: Any,
     ) -> Dict[str, torch.Tensor]:
-
         window_size = world_size * batch_size * batch_window_size
         if n_classes:
             kwargs["number_of_classes"] = n_classes

@@ -581,9 +581,7 @@ class ModelInput(Pipelineable):
         for rank in range(world_size):
             label_per_rank.append(torch.rand(dedup_factor * average_batch_size))
             local_float = global_float[
-                rank
-                * dedup_factor
-                * average_batch_size : (rank + 1)
+                rank * dedup_factor * average_batch_size : (rank + 1)
                 * dedup_factor
                 * average_batch_size
             ]

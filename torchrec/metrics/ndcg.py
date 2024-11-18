@@ -202,8 +202,9 @@ def _get_ndcg_states(
     (
         discounts_for_label_by_label,
         discounts_for_label_by_prediction,
-    ) = torch.reciprocal(torch.log2(label_by_label_ranks + 1)), torch.reciprocal(
-        torch.log2(label_by_prediction_ranks + 1)
+    ) = (
+        torch.reciprocal(torch.log2(label_by_label_ranks + 1)),
+        torch.reciprocal(torch.log2(label_by_prediction_ranks + 1)),
     )
 
     # Account for edge cases and when we want to compute NDCG @ K.
@@ -408,7 +409,6 @@ class NDCGComputation(RecMetricComputation):
             self._aggregate_window_state(state_name, state_value, predictions.shape[-1])
 
     def _compute(self) -> List[MetricComputationReport]:
-
         return [
             MetricComputationReport(
                 name=MetricName.NDCG,

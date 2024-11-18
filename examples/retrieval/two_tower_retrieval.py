@@ -27,7 +27,6 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 # OSS import
 try:
-
     # pyre-ignore[21]
     # @manual=//torchrec/github/examples/retrieval:knn_index
     from knn_index import get_index

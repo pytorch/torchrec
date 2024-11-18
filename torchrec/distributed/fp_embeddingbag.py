@@ -115,7 +115,6 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         ctx: EmbeddingBagCollectionContext,
         dist_input: KJTList,
     ) -> List[torch.Tensor]:
-
         fp_features = self.apply_feature_processors_to_kjt_list(dist_input)
         return self._embedding_bag_collection.compute(ctx, fp_features)
 
@@ -186,7 +185,6 @@ class FeatureProcessedEmbeddingBagCollectionSharder(
         device: Optional[torch.device] = None,
         module_fqn: Optional[str] = None,
     ) -> ShardedFeatureProcessedEmbeddingBagCollection:
-
         if device is None:
             device = torch.device("cuda")
 
