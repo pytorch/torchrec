@@ -35,7 +35,7 @@ jobs:
             - os: linux.2xlarge
               python-version: '3.12'
               python-tag: "py312"
-    uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       runner: ${{ matrix.os }}
       timeout: 15
