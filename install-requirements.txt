@@ -1,4 +1,5 @@
 fbgemm-gpu
+tensordict
 torchmetrics==1.0.3
 tqdm
 pyre-extensions

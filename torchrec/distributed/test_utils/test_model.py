@@ -14,6 +14,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
+from tensordict import TensorDict
 from torchrec.distributed.embedding_tower_sharding import (
     EmbeddingTowerCollectionSharder,
     EmbeddingTowerSharder,
@@ -46,8 +47,8 @@ from torchrec.streamable import Pipelineable
 @dataclass
 class ModelInput(Pipelineable):
     float_features: torch.Tensor
-    idlist_features: KeyedJaggedTensor
-    idscore_features: Optional[KeyedJaggedTensor]
+    idlist_features: Union[KeyedJaggedTensor, TensorDict]
+    idscore_features: Optional[Union[KeyedJaggedTensor, TensorDict]]
     label: torch.Tensor
 
     @staticmethod
@@ -76,11 +77,13 @@ class ModelInput(Pipelineable):
         randomize_indices: bool = True,
         device: Optional[torch.device] = None,
         max_feature_lengths: Optional[List[int]] = None,
+        input_type: str = "kjt",
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
         and a list of local (multi-rank training) batches of world_size.
         """
+
         batch_size_by_rank = [batch_size] * world_size
         if variable_batch_size:
             batch_size_by_rank = [
@@ -199,11 +202,26 @@ class ModelInput(Pipelineable):
                 )
             global_idlist_lengths.append(lengths)
             global_idlist_indices.append(indices)
-        global_idlist_kjt = KeyedJaggedTensor(
-            keys=idlist_features,
-            values=torch.cat(global_idlist_indices),
-            lengths=torch.cat(global_idlist_lengths),
-        )
+
+        if input_type == "kjt":
+            global_idlist_input = KeyedJaggedTensor(
+                keys=idlist_features,
+                values=torch.cat(global_idlist_indices),
+                lengths=torch.cat(global_idlist_lengths),
+            )
+        elif input_type == "td":
+            dict_of_nt = {
+                k: torch.nested.nested_tensor_from_jagged(
+                    values=values,
+                    lengths=lengths,
+                )
+                for k, values, lengths in zip(
+                    idlist_features, global_idlist_indices, global_idlist_lengths
+                )
+            }
+            global_idlist_input = TensorDict(source=dict_of_nt)
+        else:
+            raise ValueError(f"For IdList features, unknown input type {input_type}")
 
         for idx in range(len(idscore_ind_ranges)):
             ind_range = idscore_ind_ranges[idx]
@@ -245,16 +263,25 @@ class ModelInput(Pipelineable):
             global_idscore_lengths.append(lengths)
             global_idscore_indices.append(indices)
             global_idscore_weights.append(weights)
-        global_idscore_kjt = (
-            KeyedJaggedTensor(
-                keys=idscore_features,
-                values=torch.cat(global_idscore_indices),
-                lengths=torch.cat(global_idscore_lengths),
-                weights=torch.cat(global_idscore_weights),
+
+        if input_type == "kjt":
+            global_idscore_input = (
+                KeyedJaggedTensor(
+                    keys=idscore_features,
+                    values=torch.cat(global_idscore_indices),
+                    lengths=torch.cat(global_idscore_lengths),
+                    weights=torch.cat(global_idscore_weights),
+                )
+                if global_idscore_indices
+                else None
             )
-            if global_idscore_indices
-            else None
-        )
+        elif input_type == "td":
+            assert (
+                len(idscore_features) == 0
+            ), "TensorDict does not support weighted features"
+            global_idscore_input = None
+        else:
+            raise ValueError(f"For weighted features, unknown input type {input_type}")
 
         if randomize_indices:
             global_float = torch.rand(
@@ -303,27 +330,48 @@ class ModelInput(Pipelineable):
                     weights[lengths_cumsum[r] : lengths_cumsum[r + 1]]
                 )
 
-            local_idlist_kjt = KeyedJaggedTensor(
-                keys=idlist_features,
-                values=torch.cat(local_idlist_indices),
-                lengths=torch.cat(local_idlist_lengths),
-            )
-
-            local_idscore_kjt = (
-                KeyedJaggedTensor(
-                    keys=idscore_features,
-                    values=torch.cat(local_idscore_indices),
-                    lengths=torch.cat(local_idscore_lengths),
-                    weights=torch.cat(local_idscore_weights),
+            if input_type == "kjt":
+                local_idlist_input = KeyedJaggedTensor(
+                    keys=idlist_features,
+                    values=torch.cat(local_idlist_indices),
+                    lengths=torch.cat(local_idlist_lengths),
                 )
-                if local_idscore_indices
-                else None
-            )
+
+                local_idscore_input = (
+                    KeyedJaggedTensor(
+                        keys=idscore_features,
+                        values=torch.cat(local_idscore_indices),
+                        lengths=torch.cat(local_idscore_lengths),
+                        weights=torch.cat(local_idscore_weights),
+                    )
+                    if local_idscore_indices
+                    else None
+                )
+            elif input_type == "td":
+                dict_of_nt = {
+                    k: torch.nested.nested_tensor_from_jagged(
+                        values=values,
+                        lengths=lengths,
+                    )
+                    for k, values, lengths in zip(
+                        idlist_features, local_idlist_indices, local_idlist_lengths
+                    )
+                }
+                local_idlist_input = TensorDict(source=dict_of_nt)
+                assert (
+                    len(idscore_features) == 0
+                ), "TensorDict does not support weighted features"
+                local_idscore_input = None
+
+            else:
+                raise ValueError(
+                    f"For weighted features, unknown input type {input_type}"
+                )
 
             local_input = ModelInput(
                 float_features=global_float[r * batch_size : (r + 1) * batch_size],
-                idlist_features=local_idlist_kjt,
-                idscore_features=local_idscore_kjt,
+                idlist_features=local_idlist_input,
+                idscore_features=local_idscore_input,
                 label=global_label[r * batch_size : (r + 1) * batch_size],
             )
             local_inputs.append(local_input)
@@ -331,8 +379,8 @@ class ModelInput(Pipelineable):
         return (
             ModelInput(
                 float_features=global_float,
-                idlist_features=global_idlist_kjt,
-                idscore_features=global_idscore_kjt,
+                idlist_features=global_idlist_input,
+                idscore_features=global_idscore_input,
                 label=global_label,
             ),
             local_inputs,
@@ -623,8 +671,9 @@ class ModelInput(Pipelineable):
 
     def record_stream(self, stream: torch.Stream) -> None:
         self.float_features.record_stream(stream)
-        self.idlist_features.record_stream(stream)
-        if self.idscore_features is not None:
+        if isinstance(self.idlist_features, KeyedJaggedTensor):
+            self.idlist_features.record_stream(stream)
+        if isinstance(self.idscore_features, KeyedJaggedTensor):
             self.idscore_features.record_stream(stream)
         self.label.record_stream(stream)
 
@@ -1753,10 +1802,12 @@ class TestModelWithPreproc(nn.Module):
         if self._preproc_module is not None:
             modified_input = self._preproc_module(modified_input)
         elif self._run_preproc_inline:
+            idlist_features = modified_input.idlist_features
+            assert isinstance(idlist_features, KeyedJaggedTensor)
             modified_input.idlist_features = KeyedJaggedTensor.from_lengths_sync(
-                modified_input.idlist_features.keys(),
-                modified_input.idlist_features.values(),
-                modified_input.idlist_features.lengths(),
+                idlist_features.keys(),
+                idlist_features.values(),
+                idlist_features.lengths(),
             )
 
         modified_idlist_features = self.preproc_nonweighted(
@@ -1820,6 +1871,8 @@ class TestNegSamplingModule(torch.nn.Module):
         )
 
         # stride will be same but features will be joined
+        assert isinstance(modified_input.idlist_features, KeyedJaggedTensor)
+        assert isinstance(self._extra_input.idlist_features, KeyedJaggedTensor)
         modified_input.idlist_features = KeyedJaggedTensor.concat(
             [modified_input.idlist_features, self._extra_input.idlist_features]
         )
