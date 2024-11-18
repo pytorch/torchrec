@@ -429,6 +429,21 @@ class TestGroupTablesPerRank(unittest.TestCase):
             )
             return
 
+        # If both kernels are quantized, we assume this is inference which we no longer split by data_type
+        # So if other attributes are the same between the two tables (regardless of data type), we combine them
+        if (
+            tables[0].compute_kernel == EmbeddingComputeKernel.QUANT
+            and tables[1].compute_kernel == EmbeddingComputeKernel.QUANT
+            and tables[0].pooling == tables[1].pooling
+            and tables[0].has_feature_processor == tables[1].has_feature_processor
+        ):
+
+            self.assertEqual(
+                sorted(_get_table_names_by_groups(tables)),
+                [["table_0", "table_1"]],
+            )
+            return
+
         self.assertEqual(
             sorted(_get_table_names_by_groups(tables)),
             [["table_0"], ["table_1"]],
