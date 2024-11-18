@@ -147,10 +147,14 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 hasattr(module, "_feature_processor")
                 and hasattr(module._feature_processor, "feature_processor_modules")
                 and isinstance(
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                    #  attribute `feature_processor_modules`.
                     module._feature_processor.feature_processor_modules,
                     nn.ModuleDict,
                 )
                 and sharding_option.name
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `feature_processor_modules`.
                 in module._feature_processor.feature_processor_modules.keys()
             ):
                 has_feature_processor = True

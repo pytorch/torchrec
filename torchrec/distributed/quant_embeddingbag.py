@@ -623,6 +623,8 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
             if self._has_features_permute:
                 features = features.permute(
                     self._features_order,
+                    # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
+                    #  but got `Union[Module, Tensor]`.
                     self._features_order_tensor,
                 )
             else:

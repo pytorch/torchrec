@@ -30,9 +30,12 @@ def _apply_functions_after_first_forward(
 ) -> None:
     _functions_to_lazy_apply = getattr(module, "_functions_to_lazy_apply", None)
     if _functions_to_lazy_apply is not None:
+        # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Tensor, Module]` is not a
+        #  function.
         for fn in _functions_to_lazy_apply:
             module.apply(fn)
         delattr(module, "_functions_to_lazy_apply")
+    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `remove`.
     module._lazy_apply_hook.remove()
     delattr(module, "_lazy_apply_hook")
 
@@ -80,11 +83,14 @@ def lazy_apply(
     """
 
     if not hasattr(module, "_functions_to_lazy_apply"):
+        # pyre-fixme[16]: `Module` has no attribute `_functions_to_lazy_apply`.
         module._functions_to_lazy_apply = []
     if not hasattr(module, "_lazy_apply_hook"):
+        # pyre-fixme[16]: `Module` has no attribute `_lazy_apply_hook`.
         module._lazy_apply_hook = module.register_forward_hook(
             _apply_functions_after_first_forward
         )
+    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `append`.
     module._functions_to_lazy_apply.append(fn)
     return module
 

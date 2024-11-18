@@ -164,16 +164,20 @@ class GenericITEPModule(nn.Module):
         with torch.no_grad():
             # Don't use register_buffer for buffer_offsets and emb_sizes because they
             # may change as the sharding plan changes between preemption/resumption
+            # pyre-fixme[16]: `GenericITEPModule` has no attribute `buffer_offsets`.
             self.buffer_offsets = torch.tensor(
                 buffer_offsets, dtype=torch.int64, device=self.current_device
             )
+            # pyre-fixme[16]: `GenericITEPModule` has no attribute `emb_sizes`.
             self.emb_sizes = torch.tensor(
                 emb_sizes, dtype=torch.int64, device=self.current_device
             )
 
+            # pyre-fixme[16]: `GenericITEPModule` has no attribute `address_lookup`.
             self.address_lookup = torch.zeros(
                 buffer_size, dtype=torch.int64, device=self.current_device
             )
+            # pyre-fixme[16]: `GenericITEPModule` has no attribute `row_util`.
             self.row_util = torch.zeros(
                 buffer_size, dtype=torch.float32, device=self.current_device
             )
@@ -182,10 +186,12 @@ class GenericITEPModule(nn.Module):
             for idx, table_name in enumerate(table_names):
                 self.register_buffer(
                     f"{table_name}_itp_address_lookup",
+                    # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, ...
                     self.address_lookup[buffer_offsets[idx] : buffer_offsets[idx + 1]],
                 )
                 self.register_buffer(
                     f"{table_name}_itp_row_util",
+                    # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, ...
                     self.row_util[buffer_offsets[idx] : buffer_offsets[idx + 1]],
                 )
 

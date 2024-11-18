@@ -256,12 +256,16 @@ class InferShardingsTest(unittest.TestCase):
 
         self.assertEqual(
             len(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse`.
                 sharded_model._module.sparse.ebc._lookups[0]._embedding_lookups_per_rank
             ),
             2,
         )
         self.assertEqual(
             len(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse`.
                 sharded_model._module.sparse.weighted_ebc._lookups[
                     0
                 ]._embedding_lookups_per_rank
@@ -419,6 +423,8 @@ class InferShardingsTest(unittest.TestCase):
             )
 
             module_plan = construct_module_sharding_plan(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse`.
                 non_sharded_model._module.sparse.ebc,
                 per_param_sharding={
                     "table_0": column_wise(ranks=[1, 0, 1, 0]),
@@ -621,6 +627,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": column_wise(ranks=[1, 0]),
@@ -747,6 +755,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": column_wise(ranks=[2, 1]),
@@ -1290,6 +1300,7 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(
@@ -1331,6 +1342,7 @@ class InferShardingsTest(unittest.TestCase):
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
+        # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedSeque...
         tbes = get_tbes_from_sharded_module(sharded_model._module_kjt_input[0])
         for tbe in tbes:
             self.assertTrue(tbe.weight_initialized)
@@ -1414,6 +1426,7 @@ class InferShardingsTest(unittest.TestCase):
         sharder = QuantEmbeddingCollectionSharder()
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(),
@@ -1525,6 +1538,7 @@ class InferShardingsTest(unittest.TestCase):
         sharder = QuantEmbeddingCollectionSharder()
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(),
@@ -1627,6 +1641,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": row_wise(([size0, size1, size2], device)),
@@ -1778,6 +1794,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": row_wise(
@@ -1856,6 +1874,8 @@ class InferShardingsTest(unittest.TestCase):
         sharder = QuantEmbeddingBagCollectionSharder()
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": row_wise(

@@ -1590,6 +1590,8 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
 
         # it will check this path on model to inject configuration other than
         # the default one.
+        # pyre-fixme[8]: Attribute has type `Dict[str, Union[bool, str]]`; used as
+        #  `Union[Tensor, Module]`.
         self.compiled_autograd_options: Dict[str, Union[str, bool]] = getattr(
             model,
             "_compiled_autograd_options",

@@ -348,6 +348,7 @@ class QuantBatchedEmbeddingBag(
             module, "qconfig"
         ), "BaseEmbedding input float module must have qconfig defined"
 
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `weight`.
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         sparse_type = data_type_to_sparse_type(data_type)
 
@@ -504,6 +505,7 @@ class QuantBatchedEmbedding(
             module, "qconfig"
         ), "BaseEmbedding input float module must have qconfig defined"
 
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `weight`.
         data_type = dtype_to_data_type(module.qconfig.weight().dtype)
         sparse_type = data_type_to_sparse_type(data_type)
 

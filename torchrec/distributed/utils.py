@@ -470,6 +470,7 @@ def init_parameters(module: nn.Module, device: torch.device) -> None:
 
             def maybe_reset_parameters(m: nn.Module) -> None:
                 if hasattr(m, "reset_parameters"):
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     m.reset_parameters()
 
             module.apply(maybe_reset_parameters)

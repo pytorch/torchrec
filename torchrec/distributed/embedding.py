@@ -778,6 +778,8 @@ class ShardedEmbeddingCollection(
             for (
                 table_name,
                 tbe_slice,
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+                #  `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
                 self.embeddings[table_name].register_parameter("weight", tbe_slice)
         for table_name in self._model_parallel_name_to_local_shards.keys():
@@ -1089,6 +1091,8 @@ class ShardedEmbeddingCollection(
         if self._features_order:
             unpadded_features = unpadded_features.permute(
                 self._features_order,
+                # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]` but
+                #  got `TypeUnion[Module, Tensor]`.
                 self._features_order_tensor,
             )
 
@@ -1148,6 +1152,8 @@ class ShardedEmbeddingCollection(
             if self._features_order:
                 features = features.permute(
                     self._features_order,
+                    # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
+                    #  but got `TypeUnion[Module, Tensor]`.
                     self._features_order_tensor,
                 )
             features_by_shards = features.split(self._feature_splits)

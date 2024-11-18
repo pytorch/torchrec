@@ -1093,5 +1093,7 @@ def replace_sharded_quant_modules_tbes_with_mock_tbes(M: torch.nn.Module) -> Non
     for m in M.modules():
         if isinstance(m, ShardedQuantEmbeddingBagCollection):
             for lookup in m._lookups:
+                # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Module, Tensor]` is
+                #  not a function.
                 for lookup_per_rank in lookup._embedding_lookups_per_rank:
                     replace_registered_tbes_with_mock_tbes(lookup_per_rank)

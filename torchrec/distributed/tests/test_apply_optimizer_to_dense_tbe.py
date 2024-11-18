@@ -107,6 +107,8 @@ class ApplyOptmizerDenseTBETest(ModelParallelSingleRankBase):
 
         ### apply Rowwise Adagrad optimizer to fused TBEs ###
         # fused TBE optimizer needs to be configured before initializing
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `named_parameters`.
         for _, param in unsharded_model.sparse.named_parameters():
             apply_optimizer_in_backward(
                 RowWiseAdagrad,
@@ -128,6 +130,8 @@ class ApplyOptmizerDenseTBETest(ModelParallelSingleRankBase):
         non_fused_tables_optimizer = KeyedOptimizerWrapper(
             dict(
                 in_backward_optimizer_filter(
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                    #  attribute `named_parameters`.
                     sharded_model.module.sparse.named_parameters()
                 )
             ),
@@ -160,11 +164,15 @@ class ApplyOptmizerDenseTBETest(ModelParallelSingleRankBase):
         batch = local_batch[0].to(self.device)
 
         # record signatures
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `dhn_arch`.
         dense_signature = sharded_model.module.over.dhn_arch.linear0.weight.sum().item()
         non_fused_table_signature = (
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
             sharded_model.module.sparse.ebc.embedding_bags.table_0.weight.sum().item()
         )
         fused_table_signature = (
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
             sharded_model.module.sparse.ebc.embedding_bags.table_1.weight.sum().item()
         )
 
@@ -182,16 +190,20 @@ class ApplyOptmizerDenseTBETest(ModelParallelSingleRankBase):
         dense_opt.step()
 
         self.assertEqual(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
             sharded_model.module.sparse.ebc.embedding_bags.table_1.weight.sum().item()
             != fused_table_signature,
             bool(fused_learning_rate),
         )
         self.assertEqual(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
             sharded_model.module.sparse.ebc.embedding_bags.table_0.weight.sum().item()
             != non_fused_table_signature,
             bool(non_fused_learning_rate),
         )
         self.assertEqual(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `dhn_arch`.
             sharded_model.module.over.dhn_arch.linear0.weight.sum().item()
             != dense_signature,
             bool(dense_learning_rate),

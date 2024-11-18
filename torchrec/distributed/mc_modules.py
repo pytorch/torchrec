@@ -410,8 +410,12 @@ class ShardedManagedCollisionCollection(
             )
             self._input_dists.append(input_dist)
 
+        # pyre-fixme[16]: `ShardedManagedCollisionCollection` has no attribute
+        #  `_features_order`.
         self._features_order: List[int] = []
         for f in self._feature_names:
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `append`.
             self._features_order.append(input_feature_names.index(f))
         self._features_order = (
             []
@@ -532,7 +536,11 @@ class ShardedManagedCollisionCollection(
         with torch.no_grad():
             if self._features_order:
                 features = features.permute(
+                    # pyre-fixme[6]: For 1st argument expected `List[int]` but got
+                    #  `Union[Module, Tensor]`.
                     self._features_order,
+                    # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
+                    #  but got `Union[Module, Tensor]`.
                     self._features_order_tensor,
                 )
 

@@ -671,6 +671,8 @@ class ShardedQuantEmbeddingCollection(
         features: KeyedJaggedTensor,
     ) -> ListOfKJTList:
         if self._has_uninitialized_input_dist:
+            # pyre-fixme[16]: `ShardedQuantEmbeddingCollection` has no attribute
+            #  `_input_dist`.
             self._input_dist = ShardedQuantEcInputDist(
                 input_feature_names=features.keys() if features is not None else [],
                 sharding_type_device_group_to_sharding=self._sharding_type_device_group_to_sharding,
@@ -688,6 +690,7 @@ class ShardedQuantEmbeddingCollection(
             unbucketize_permute_tensor_list,
             bucket_mapping_tensor_list,
             bucketized_length_list,
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
         ) = self._input_dist(features)
 
         with torch.no_grad():

@@ -163,6 +163,7 @@ def decapsulate_ir_modules(
     if finalize_interpreter_modules:
         for mod in module.modules():
             if isinstance(mod, InterpreterModule):
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 mod.finalize()
 
     return module
@@ -241,6 +242,7 @@ def move_to_copy_nodes_to_device(
     """
     Moves all the copy nodes to the given device.
     """
+    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `nodes`.
     for nodes in unflattened_module.graph.nodes:
         if "_to_copy" in nodes.name:
             new_kwargs = {}
@@ -299,6 +301,7 @@ def prune_pytree_flatten_unflatten(
     """
 
     def _get_graph_node(mod: nn.Module, fqn: str) -> Tuple[nn.Module, Node]:
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `nodes`.
         for node in mod.graph.nodes:
             if node.op == "call_module" and node.target == fqn:
                 return mod, node
@@ -329,6 +332,8 @@ def prune_pytree_flatten_unflatten(
         logger.info(f"Removing tree_unflatten from {fqn}")
         input_nodes = tree_unflatten.args[0]
         node.args = (input_nodes,)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `eliminate_dead_code`.
         submodule.graph.eliminate_dead_code()
 
     # remove tree_flatten_spec from the out_fqns (out-going nodes)
@@ -349,5 +354,7 @@ def prune_pytree_flatten_unflatten(
         logger.info(f"Removing tree_flatten_spec from {fqn}")
         getitem_node = tree_flatten_users[0]
         getitem_node.replace_all_uses_with(node)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `eliminate_dead_code`.
         submodule.graph.eliminate_dead_code()
     return module

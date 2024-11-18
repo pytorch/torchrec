@@ -59,6 +59,7 @@ def post_state_dict_hook(
     for (
         table_name,
         sharded_t,
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `items`.
     ) in module._table_name_to_sharded_tensor.items():
         destination[f"{prefix}{tables_weights_prefix}.{table_name}.weight"] = sharded_t
 
@@ -77,6 +78,7 @@ def post_state_dict_hook(
         for (
             table_name,
             sharded_t,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `items`.
         ) in dict_sharded_t.items():
             destination[f"{prefix}{tables_weights_prefix}.{table_name}.{sfx}"] = (
                 sharded_t
@@ -84,6 +86,7 @@ def post_state_dict_hook(
         for (
             table_name,
             t_list,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `items`.
         ) in dict_t_list.items():
             destination[f"{prefix}{tables_weights_prefix}.{table_name}.{sfx}"] = t_list
 
@@ -105,23 +108,39 @@ class ShardedQuantEmbeddingModuleState(
         )
 
         # weight
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_local_shards`.
         self._table_name_to_local_shards: Dict[str, List[Shard]] = {}
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_sharded_tensor`.
         self._table_name_to_sharded_tensor: Dict[
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
 
         # weight_qscale
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_local_shards_qscale`.
         self._table_name_to_local_shards_qscale: Dict[str, List[Shard]] = {}
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_sharded_tensor_qscale`.
         self._table_name_to_sharded_tensor_qscale: Dict[
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_tensors_list_qscale`.
         self._table_name_to_tensors_list_qscale: Dict[str, List[torch.Tensor]] = {}
 
         # weight_qbias
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_local_shards_qbias`.
         self._table_name_to_local_shards_qbias: Dict[str, List[Shard]] = {}
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_sharded_tensor_qbias`.
         self._table_name_to_sharded_tensor_qbias: Dict[
             str, Union[torch.Tensor, ShardedTensorBase]
         ] = {}
+        # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
+        #  `_table_name_to_tensors_list_qbias`.
         self._table_name_to_tensors_list_qbias: Dict[str, List[torch.Tensor]] = {}
 
         for tbe, config in tbes.items():
@@ -144,6 +163,8 @@ class ShardedQuantEmbeddingModuleState(
                 if metadata.placement.device != tbe_split_w.device:
                     metadata.placement = _remote_device(tbe_split_w.device)
                 _append_table_shard(
+                    # pyre-fixme[6]: For 1st argument expected `Dict[str,
+                    #  List[Shard]]` but got `Union[Tensor, Module]`.
                     self._table_name_to_local_shards,
                     table.name,
                     Shard(tensor=tbe_split_w, metadata=metadata),
@@ -183,14 +204,18 @@ class ShardedQuantEmbeddingModuleState(
                     sharding_type: str = parameter_sharding.sharding_type
 
                     if sharding_type == ShardingType.COLUMN_WISE.value:
+                        # pyre-fixme[58]: `not in` is not supported for right
+                        #  operand type `Union[Tensor, Module]`.
                         if table.name not in table_name_to_tensors_list:
                             assert parameter_sharding.ranks
                             num_shards: int = len(parameter_sharding.ranks)
+                            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Unio...
                             table_name_to_tensors_list[table.name] = [
                                 torch.empty([])
                             ] * num_shards
 
                         column_idx = int(shard_offsets_cols / shard_sizes_cols)
+                        # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[No...
                         table_name_to_tensors_list[table.name][
                             column_idx
                         ] = tbe_split_qparam
@@ -210,6 +235,8 @@ class ShardedQuantEmbeddingModuleState(
                                 tbe_split_qparam.device
                             )
                         _append_table_shard(
+                            # pyre-fixme[6]: For 1st argument expected `Dict[str,
+                            #  List[Shard]]` but got `Union[Tensor, Module]`.
                             table_name_to_local_shards,
                             table.name,
                             Shard(tensor=tbe_split_qparam, metadata=qmetadata),
@@ -227,9 +254,12 @@ class ShardedQuantEmbeddingModuleState(
                 self._table_name_to_sharded_tensor_qbias,
             ),
         ]:
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `items`.
             for table_name, local_shards in table_name_to_local_shards.items():
                 if len(local_shards) == 1:
                     # Single Tensor per table (TW sharding)
+                    # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, ...
                     table_name_to_sharded_tensor[table_name] = local_shards[0].tensor
                     continue
 
@@ -250,6 +280,7 @@ class ShardedQuantEmbeddingModuleState(
                     shards_metadata=[ls.metadata for ls in local_shards],
                     size=torch.Size([global_rows, global_cols]),
                 )
+                # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _Nes...
                 table_name_to_sharded_tensor[table_name] = (
                     ShardedTensorBase._init_from_local_shards_and_global_metadata(
                         local_shards=local_shards,

@@ -78,12 +78,16 @@ class OutputMetricComputation(RecMetricComputation):
             MetricComputationReport(
                 name=MetricName.OUTPUT,
                 metric_prefix=MetricPrefix.DEFAULT,
+                # pyre-fixme[6]: For 3rd argument expected `Tensor` but got
+                #  `Union[Tensor, Module]`.
                 value=self.latest_imp,
                 description="_latest_imp",
             ),
             MetricComputationReport(
                 name=MetricName.OUTPUT,
                 metric_prefix=MetricPrefix.DEFAULT,
+                # pyre-fixme[6]: For 3rd argument expected `Tensor` but got
+                #  `Union[Tensor, Module]`.
                 value=self.total_latest_imp,
                 description="_total_latest_imp",
             ),

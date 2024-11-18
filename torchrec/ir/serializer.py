@@ -240,8 +240,10 @@ class EBCJsonSerializer(JsonSerializer):
         ebc_metadata = EBCMetadata(
             tables=[
                 embedding_bag_config_to_metadata(table_config)
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 for table_config in module.embedding_bag_configs()
             ],
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             is_weighted=module.is_weighted(),
             device=str(module.device),
         )
@@ -307,7 +309,10 @@ class PWMCJsonSerializer(JsonSerializer):
     def serialize_to_dict(cls, module: nn.Module) -> Dict[str, Any]:
         metadata = PositionWeightedModuleCollectionMetadata(
             max_feature_lengths=[  # convert to list of tuples to preserve the order
-                (feature, len) for feature, len in module.max_feature_lengths.items()
+                (feature, len)
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `items`.
+                for feature, len in module.max_feature_lengths.items()
             ],
         )
         return metadata.__dict__
@@ -348,6 +353,8 @@ class FPEBCJsonSerializer(JsonSerializer):
         else:
             metadata = FPEBCMetadata(
                 is_fp_collection=False,
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `keys`.
                 features=list(module._feature_processors.keys()),
             )
         return metadata.__dict__
@@ -398,7 +405,11 @@ class KTRegroupAsDictJsonSerializer(JsonSerializer):
         module: nn.Module,
     ) -> Dict[str, Any]:
         metadata = KTRegroupAsDictMetadata(
+            # pyre-fixme[6]: For 1st argument expected `List[str]` but got
+            #  `Union[Module, Tensor]`.
             keys=module._keys,
+            # pyre-fixme[6]: For 2nd argument expected `List[List[str]]` but got
+            #  `Union[Module, Tensor]`.
             groups=module._groups,
         )
         return metadata.__dict__
