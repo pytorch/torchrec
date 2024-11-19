@@ -262,6 +262,7 @@ def model_input_to_forward_args_kjt(
     Optional[torch.Tensor],
 ]:
     kjt = mi.idlist_features
+    assert isinstance(kjt, KeyedJaggedTensor)
     return (
         kjt._keys,
         kjt._values,
@@ -289,7 +290,8 @@ def model_input_to_forward_args(
 ]:
     idlist_kjt = mi.idlist_features
     idscore_kjt = mi.idscore_features
-    assert idscore_kjt is not None
+    assert isinstance(idlist_kjt, KeyedJaggedTensor)
+    assert isinstance(idscore_kjt, KeyedJaggedTensor)
     return (
         mi.float_features,
         idlist_kjt._keys,

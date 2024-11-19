@@ -169,6 +169,7 @@ def generate_kjt(
         randomize_indices=True,
         device=device,
     )[0]
+    assert isinstance(global_input.idlist_features, KeyedJaggedTensor)
     return global_input.idlist_features
 
 

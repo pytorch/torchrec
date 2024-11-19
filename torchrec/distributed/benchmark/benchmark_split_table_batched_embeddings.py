@@ -9,6 +9,8 @@
 
 #!/usr/bin/env python3
 
+from typing import Dict, List
+
 import click
 
 import torch
@@ -82,9 +84,10 @@ def op_bench(
     )
 
     def _func_to_benchmark(
-        kjt: KeyedJaggedTensor,
+        kjts: List[Dict[str, KeyedJaggedTensor]],
         model: torch.nn.Module,
     ) -> torch.Tensor:
+        kjt = kjts[0]["feature"]
         return model.forward(kjt.values(), kjt.offsets())
 
     # breakpoint()  # import fbvscode; fbvscode.set_trace()
@@ -108,8 +111,8 @@ def op_bench(
 
     result = benchmark_func(
         name=f"SplitTableBatchedEmbeddingBagsCodegen-{num_embeddings}-{embedding_dim}-{num_tables}-{batch_size}-{bag_size}",
-        bench_inputs=inputs,  # pyre-ignore
-        prof_inputs=inputs,  # pyre-ignore
+        bench_inputs=[{"feature": inputs}],
+        prof_inputs=[{"feature": inputs}],
         num_benchmarks=10,
         num_profiles=10,
         profile_dir=".",

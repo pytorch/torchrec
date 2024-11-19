@@ -30,6 +30,7 @@ class TensorWeightedAvgMetricComputation(RecMetricComputation):
         *args: Any,
         tensor_name: Optional[str] = None,
         weighted: bool = True,
+        description: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -53,6 +54,7 @@ class TensorWeightedAvgMetricComputation(RecMetricComputation):
             dist_reduce_fx="sum",
             persistent=True,
         )
+        self._description = description
 
     def update(
         self,
@@ -96,6 +98,7 @@ class TensorWeightedAvgMetricComputation(RecMetricComputation):
                     cast(torch.Tensor, self.weighted_sum),
                     cast(torch.Tensor, self.weighted_num_samples),
                 ),
+                description=self._description,
             ),
             MetricComputationReport(
                 name=MetricName.WEIGHTED_AVG,
@@ -104,6 +107,7 @@ class TensorWeightedAvgMetricComputation(RecMetricComputation):
                     self.get_window_state("weighted_sum"),
                     self.get_window_state("weighted_num_samples"),
                 ),
+                description=self._description,
             ),
         ]
 

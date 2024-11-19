@@ -301,7 +301,11 @@ class TrainPipelinePT2Test(unittest.TestCase):
         optimizer_cpu = optim.SGD(model_cpu.model.parameters(), lr=0.01)
         optimizer_gpu = optim.SGD(model_gpu.model.parameters(), lr=0.01)
 
-        data = [i.idlist_features for i in local_model_inputs]
+        data = [
+            i.idlist_features
+            for i in local_model_inputs
+            if isinstance(i.idlist_features, KeyedJaggedTensor)
+        ]
         dataloader = iter(data)
         pipeline = TrainPipelinePT2(
             model_gpu, optimizer_gpu, self.device, input_transformer=kjt_for_pt2_tracing

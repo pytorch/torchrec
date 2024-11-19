@@ -216,27 +216,30 @@ class QuantBatchedEmbeddingBag(
         self._runtime_device: torch.device = _get_runtime_device(device, config)
         # 16 for CUDA, 1 for others like CPU and MTIA.
         self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
+        embedding_specs = []
+        for local_rows, local_cols, table, location in zip(
+            self._local_rows,
+            self._local_cols,
+            config.embedding_tables,
+            managed,
+        ):
+            embedding_specs.append(
+                (
+                    table.name,
+                    local_rows,
+                    (
+                        local_cols
+                        if self._quant_state_dict_split_scale_bias
+                        else table.embedding_dim
+                    ),
+                    data_type_to_sparse_type(table.data_type),
+                    location,
+                )
+            )
+
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
             IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=[
-                    (
-                        table.name,
-                        local_rows,
-                        (
-                            local_cols
-                            if self._quant_state_dict_split_scale_bias
-                            else table.embedding_dim
-                        ),
-                        data_type_to_sparse_type(config.data_type),
-                        location,
-                    )
-                    for local_rows, local_cols, table, location in zip(
-                        self._local_rows,
-                        self._local_cols,
-                        config.embedding_tables,
-                        managed,
-                    )
-                ],
+                embedding_specs=embedding_specs,
                 device=device,
                 pooling_mode=self._pooling,
                 feature_table_map=self._feature_table_map,
@@ -411,7 +414,7 @@ class QuantBatchedEmbedding(
                             if self._quant_state_dict_split_scale_bias
                             else table.embedding_dim
                         ),
-                        data_type_to_sparse_type(config.data_type),
+                        data_type_to_sparse_type(table.data_type),
                         location,
                     )
                     for local_rows, local_cols, table, location in zip(
