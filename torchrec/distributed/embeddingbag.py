@@ -29,7 +29,7 @@ import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
-from torch.distributed._tensor import DTensor, Shard
+from torch.distributed._tensor import DTensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
@@ -67,6 +67,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
     ShardMetadata,
+    TensorProperties,
 )
 from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
@@ -95,13 +96,6 @@ try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:index_select_ops")
 except OSError:
-    pass
-
-
-# OSS
-try:
-    pass
-except ImportError:
     pass
 
 
@@ -938,11 +932,27 @@ class ShardedEmbeddingBagCollection(
                 # created ShardedTensors once in init, use in post_state_dict_hook
                 # note: at this point kvstore backed tensors don't own valid snapshots, so no read
                 # access is allowed on them.
+                sharding_spec = none_throws(
+                    self.module_sharding_plan[table_name].sharding_spec
+                )
+                metadata = sharding_spec.build_metadata(
+                    tensor_sizes=self._name_to_table_size[table_name],
+                    tensor_properties=(
+                        TensorProperties(
+                            dtype=local_shards[0].tensor.dtype,
+                            layout=local_shards[0].tensor.layout,
+                            requires_grad=local_shards[0].tensor.requires_grad,
+                        )
+                        if local_shards
+                        else TensorProperties()
+                    ),
+                )
+
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
-                    ShardedTensor._init_from_local_shards(
-                        local_shards,
-                        self._name_to_table_size[table_name],
-                        process_group=self._env.process_group,
+                    ShardedTensor._init_from_local_shards_and_global_metadata(
+                        local_shards=local_shards,
+                        sharded_tensor_metadata=metadata,
+                        process_group=none_throws(self._env.process_group),
                     )
                 )
 
