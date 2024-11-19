@@ -166,7 +166,6 @@ class RecallSessionValueTest(unittest.TestCase):
             raise
 
     def test_recall_session_with_no_positive_examples(self) -> None:
-
         # if we pass a batch with no positive examples, we should get NaN
         test_data_with_no_positive_examples = (
             generate_model_output_with_no_positive_examples()
@@ -210,7 +209,6 @@ class RecallSessionValueTest(unittest.TestCase):
             raise
 
     def test_error_messages(self) -> None:
-
         task_info1 = RecTaskInfo(
             name="Task1",
             label_name="label1",

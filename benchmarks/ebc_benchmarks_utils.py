@@ -26,7 +26,6 @@ def get_random_dataset(
     embedding_bag_configs: List[EmbeddingBagConfig],
     pooling_factors: Optional[Dict[str, int]] = None,
 ) -> IterableDataset[Batch]:
-
     if pooling_factors is None:
         pooling_factors = {}
 
@@ -57,7 +56,6 @@ def train_one_epoch(
     dataset: IterableDataset[Batch],
     device: torch.device,
 ) -> float:
-
     start_time = time.perf_counter()
 
     for data in dataset:
@@ -82,7 +80,6 @@ def train_one_epoch_fused_optimizer(
     dataset: IterableDataset[Batch],
     device: torch.device,
 ) -> float:
-
     start_time = time.perf_counter()
 
     for data in dataset:
@@ -106,7 +103,6 @@ def train(
     device: torch.device,
     epochs: int = 100,
 ) -> Tuple[float, float]:
-
     training_time = []
     for _ in range(epochs):
         if optimizer:

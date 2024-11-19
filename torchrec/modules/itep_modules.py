@@ -64,7 +64,6 @@ class GenericITEPModule(nn.Module):
         enable_pruning: bool = True,
         pruning_interval: int = 1001,  # Default pruning interval 1001 iterations
     ) -> None:
-
         super(GenericITEPModule, self).__init__()
 
         # Construct in-training embedding pruning args
@@ -204,7 +203,6 @@ class GenericITEPModule(nn.Module):
             while isinstance(lookup, DistributedDataParallel):
                 lookup = lookup.module
             for emb in lookup._emb_modules:
-
                 emb_tables: List[ShardedEmbeddingTable] = emb._config.embedding_tables
                 for table in emb_tables:
                     # Skip if table was already added previously (if multiple shards assigned to same rank)

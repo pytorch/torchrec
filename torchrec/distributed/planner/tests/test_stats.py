@@ -147,9 +147,7 @@ class TestEmbeddingStats(unittest.TestCase):
         # Generate most imbalanced distribution
         normalized_p = [
             1.0,
-        ] + [
-            0.0
-        ] * (N - 1)
+        ] + [0.0] * (N - 1)
         N = len(normalized_p)
         self.assertEqual(_kl_divergence(normalized_p), _calc_max_kl_divergence(N))
 
@@ -163,9 +161,7 @@ class TestEmbeddingStats(unittest.TestCase):
         # Generate most imbalanced distribution
         normalized_p = [
             1.0,
-        ] + [
-            0.0
-        ] * (N - 1)
+        ] + [0.0] * (N - 1)
         N = len(normalized_p)
 
         self.assertTrue(

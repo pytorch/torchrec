@@ -237,7 +237,6 @@ class ShardedEmbeddingTower(
         features: KeyedJaggedTensor,
         optional_features: Optional[KeyedJaggedTensor] = None,
     ) -> Awaitable[Awaitable[KJTList]]:
-
         # optional_features are populated only if both kjt and weighted kjt present in tower
         if self._wkjt_feature_names and self._kjt_feature_names:
             kjt_features = features
@@ -506,9 +505,7 @@ class ShardedEmbeddingTowerCollection(
                 if lt_tables.issubset(pt_tables):
                     found_physical_tower = True
                     break
-            assert (
-                found_physical_tower
-            ), f"tables in a logical tower must be in the same physical tower, logical tower tables: {lt_tables}, tables_per_pt: {tables_per_pt}"
+            assert found_physical_tower, f"tables in a logical tower must be in the same physical tower, logical tower tables: {lt_tables}, tables_per_pt: {tables_per_pt}"
 
         logical_to_physical_order: List[List[int]] = [
             [] for _ in range(self._cross_pg_world_size)
@@ -607,7 +604,6 @@ class ShardedEmbeddingTowerCollection(
         kjt_feature_names: List[str],
         wkjt_feature_names: List[str],
     ) -> None:
-
         if self._kjt_feature_names != kjt_feature_names:
             self._has_kjt_features_permute = True
             for f in self._kjt_feature_names:
@@ -944,7 +940,6 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
         fused_params: Optional[Dict[str, Any]] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-
         super().__init__(
             fused_params=fused_params, qcomm_codecs_registry=qcomm_codecs_registry
         )
@@ -960,7 +955,6 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
         device: Optional[torch.device] = None,
         module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingTowerCollection:
-
         return ShardedEmbeddingTowerCollection(
             module=module,
             table_name_to_parameter_sharding=params,

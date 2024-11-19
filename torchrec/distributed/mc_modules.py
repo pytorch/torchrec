@@ -262,7 +262,6 @@ class ShardedManagedCollisionCollection(
     def _create_managed_collision_modules(
         self, module: ManagedCollisionCollection
     ) -> None:
-
         self._mc_module_name_shard_metadata: DefaultDict[str, List[int]] = defaultdict()
         # To map mch output indices from local to global. key: table_name
         self._table_to_offset: Dict[str, int] = {}
@@ -366,8 +365,8 @@ class ShardedManagedCollisionCollection(
                     )
                     num_sharding_features += self._table_feature_splits[-1]
 
-            assert num_sharding_features == len(
-                sharding.feature_names()
+            assert (
+                num_sharding_features == len(sharding.feature_names())
             ), f"Shared feature is not supported. {num_sharding_features=}, {self._sharding_per_table_feature_splits[-1]=}"
 
             if self._sharding_features[-1] != sharding.feature_names():
@@ -781,7 +780,6 @@ class ManagedCollisionCollectionSharder(
         device: Optional[torch.device] = None,
         use_index_dedup: bool = False,
     ) -> ShardedManagedCollisionCollection:
-
         if device is None:
             device = torch.device("cpu")
 

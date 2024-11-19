@@ -63,15 +63,15 @@ class TestShardedKeyedJaggedTensorPool(MultiProcessTestBase):
             )
 
             # pyre-ignore
-            sharded_keyed_jagged_tensor_pool: (
-                ShardedKeyedJaggedTensorPool
-            ) = KeyedJaggedTensorPoolSharder().shard(
-                keyed_jagged_tensor_pool,
-                plan=sharding_plan,
-                device=ctx.device,
-                # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
-                #  got `Optional[ProcessGroup]`.
-                env=ShardingEnv.from_process_group(ctx.pg),
+            sharded_keyed_jagged_tensor_pool: ShardedKeyedJaggedTensorPool = (
+                KeyedJaggedTensorPoolSharder().shard(
+                    keyed_jagged_tensor_pool,
+                    plan=sharding_plan,
+                    device=ctx.device,
+                    # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
+                    #  got `Optional[ProcessGroup]`.
+                    env=ShardingEnv.from_process_group(ctx.pg),
+                )
             )
 
             # rank 0
@@ -213,15 +213,15 @@ class TestShardedKeyedJaggedTensorPool(MultiProcessTestBase):
             )
 
             # pyre-ignore
-            sharded_keyed_jagged_tensor_pool: (
-                ShardedKeyedJaggedTensorPool
-            ) = KeyedJaggedTensorPoolSharder().shard(
-                keyed_jagged_tensor_pool,
-                plan=sharding_plan,
-                device=ctx.device,
-                # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
-                #  got `Optional[ProcessGroup]`.
-                env=ShardingEnv.from_process_group(ctx.pg),
+            sharded_keyed_jagged_tensor_pool: ShardedKeyedJaggedTensorPool = (
+                KeyedJaggedTensorPoolSharder().shard(
+                    keyed_jagged_tensor_pool,
+                    plan=sharding_plan,
+                    device=ctx.device,
+                    # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
+                    #  got `Optional[ProcessGroup]`.
+                    env=ShardingEnv.from_process_group(ctx.pg),
+                )
             )
 
             sharded_keyed_jagged_tensor_pool.update(
@@ -346,15 +346,15 @@ class TestShardedKeyedJaggedTensorPool(MultiProcessTestBase):
             )
 
             # pyre-ignore
-            sharded_keyed_jagged_tensor_pool: (
-                ShardedKeyedJaggedTensorPool
-            ) = KeyedJaggedTensorPoolSharder().shard(
-                keyed_jagged_tensor_pool,
-                plan=sharding_plan,
-                device=ctx.device,
-                # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
-                #  got `Optional[ProcessGroup]`.
-                env=ShardingEnv.from_process_group(ctx.pg),
+            sharded_keyed_jagged_tensor_pool: ShardedKeyedJaggedTensorPool = (
+                KeyedJaggedTensorPoolSharder().shard(
+                    keyed_jagged_tensor_pool,
+                    plan=sharding_plan,
+                    device=ctx.device,
+                    # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
+                    #  got `Optional[ProcessGroup]`.
+                    env=ShardingEnv.from_process_group(ctx.pg),
+                )
             )
 
             # rank 0 input:
@@ -480,15 +480,15 @@ class TestShardedKeyedJaggedTensorPool(MultiProcessTestBase):
             )
 
             # pyre-ignore
-            sharded_keyed_jagged_tensor_pool: (
-                ShardedKeyedJaggedTensorPool
-            ) = KeyedJaggedTensorPoolSharder().shard(
-                keyed_jagged_tensor_pool,
-                plan=sharding_plan,
-                device=ctx.device,
-                # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
-                #  got `Optional[ProcessGroup]`.
-                env=ShardingEnv.from_process_group(ctx.pg),
+            sharded_keyed_jagged_tensor_pool: ShardedKeyedJaggedTensorPool = (
+                KeyedJaggedTensorPoolSharder().shard(
+                    keyed_jagged_tensor_pool,
+                    plan=sharding_plan,
+                    device=ctx.device,
+                    # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
+                    #  got `Optional[ProcessGroup]`.
+                    env=ShardingEnv.from_process_group(ctx.pg),
+                )
             )
 
             # rank 0 input:
@@ -605,15 +605,15 @@ class TestShardedKeyedJaggedTensorPool(MultiProcessTestBase):
             )
 
             # pyre-ignore
-            sharded_keyed_jagged_tensor_pool: (
-                ShardedKeyedJaggedTensorPool
-            ) = KeyedJaggedTensorPoolSharder().shard(
-                keyed_jagged_tensor_pool,
-                plan=sharding_plan,
-                device=ctx.device,
-                # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
-                #  got `Optional[ProcessGroup]`.
-                env=ShardingEnv.from_process_group(ctx.pg),
+            sharded_keyed_jagged_tensor_pool: ShardedKeyedJaggedTensorPool = (
+                KeyedJaggedTensorPoolSharder().shard(
+                    keyed_jagged_tensor_pool,
+                    plan=sharding_plan,
+                    device=ctx.device,
+                    # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but
+                    #  got `Optional[ProcessGroup]`.
+                    env=ShardingEnv.from_process_group(ctx.pg),
+                )
             )
 
             # init global state is

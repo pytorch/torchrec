@@ -175,7 +175,6 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
         table_name_to_unpruned_hash_sizes: Dict[str, int],
         table_name_to_pruned_hash_sizes: Dict[str, int],
     ) -> torch.Tensor:
-
         address_lookup = []
         for et in list_et:
             table_name = et.name

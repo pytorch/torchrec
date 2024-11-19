@@ -129,9 +129,9 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._device: torch.device = device
         sharded_tables_per_rank = self._shard(sharding_infos)
         self._need_pos = need_pos
-        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
-            []
-        )
+        self._grouped_embedding_configs_per_rank: List[
+            List[GroupedEmbeddingConfig]
+        ] = []
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[self._rank]

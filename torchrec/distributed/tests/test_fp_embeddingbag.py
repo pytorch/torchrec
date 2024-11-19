@@ -125,7 +125,6 @@ def _test_sharding(  # noqa C901
     use_dmp: bool = False,
     use_fp_collection: bool = False,
 ) -> None:
-
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         trec_dist.comm_ops.set_gradient_division(set_gradient_division)
 
@@ -229,7 +228,6 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     def test_sharding_ebc(
         self, set_gradient_division: bool, use_dmp: bool, use_fp_collection: bool
     ) -> None:
-
         import hypothesis
 
         # don't need to test entire matrix

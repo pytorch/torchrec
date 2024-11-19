@@ -49,7 +49,6 @@ def bench(
     fn_kwargs: Dict[str, Any],
     output_dir: str = "",
 ) -> None:
-
     # initial call
     fn(**fn_kwargs)
 

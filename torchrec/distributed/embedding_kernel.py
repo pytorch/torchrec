@@ -105,7 +105,15 @@ def get_state_dict(
 
         assert embedding_table.local_rows == param.size(  # pyre-ignore[16]
             0
-        ), f"{embedding_table.local_rows=}, {param.size(0)=}, {param.shape=}"  # pyre-ignore[16]
+        ), (
+            # pyre-fixme[16]: Item `Tuple` of `PartiallyMaterializedTensor | Tensor
+            #  | Module | Tuple[Tensor, Optional[Tensor], Optional[Tensor]]` has no
+            #  attribute `size`.
+            # pyre-fixme[16]: Item `Tuple` of `PartiallyMaterializedTensor | Tensor
+            #  | Module | Tuple[Tensor, Optional[Tensor], Optional[Tensor]]` has no
+            #  attribute `shape`.
+            f"{embedding_table.local_rows=}, {param.size(0)=}, {param.shape=}"
+        )
 
         if qscale is not None:
             assert embedding_table.local_cols == param.size(1)  # pyre-ignore[16]

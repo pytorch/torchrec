@@ -84,9 +84,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             sharded_tables_per_rank
         )
 
-        self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
-            []
-        )
+        self._grouped_embedding_configs_per_rank: List[
+            List[GroupedEmbeddingConfig]
+        ] = []
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[self._rank]

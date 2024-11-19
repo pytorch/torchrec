@@ -54,7 +54,6 @@ def _concat_if_needed(
 
 
 def count_reverse_pairs_divide_and_conquer(input: List[float]) -> float:
-
     n = len(input)
     total_inversions = divide(input, 0, len(input) - 1)
 
@@ -111,7 +110,6 @@ def _compute_rauc_helper(
     labels: torch.Tensor,
     weights: torch.Tensor,
 ) -> torch.Tensor:
-
     array = [
         x
         for x, _ in sorted(

@@ -16,6 +16,7 @@ It also contains
 - several modules wrapping KeyedOptimizer, called CombinedOptimizer and OptimizerWrapper
 - Optimizers used in RecSys: e.g. rowwise adagrad/adam/etc
 """
+
 from torchrec.optim.apply_optimizer_in_backward import (  # noqa
     apply_optimizer_in_backward,
 )

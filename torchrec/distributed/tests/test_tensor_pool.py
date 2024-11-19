@@ -31,7 +31,6 @@ class TestShardedTensorPool(MultiProcessTestBase):
     def _test_sharded_tensor_pool(
         rank: int, world_size: int, enable_uvm: bool = False
     ) -> None:
-
         pool_size = 5
         dim = 4
         backend = "nccl"
@@ -139,7 +138,6 @@ class TestShardedTensorPool(MultiProcessTestBase):
         rank: int,
         world_size: int,
     ) -> None:
-
         pool_size = 5
         dim = 3
         backend = "nccl"

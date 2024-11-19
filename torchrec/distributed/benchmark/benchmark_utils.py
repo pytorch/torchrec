@@ -128,6 +128,7 @@ class MemoryStats:
 @dataclass
 class BenchmarkResult:
     "Class for holding results of benchmark runs"
+
     short_name: str
     elapsed_time: torch.Tensor  # milliseconds
     mem_stats: List[MemoryStats]  # memory stats per rank
@@ -554,9 +555,7 @@ def transform_module(
         return fx_script_module(
             # pyre-fixme[6]: For 1st argument expected `Module` but got
             #  `Optional[Module]`.
-            sharded_module
-            if not benchmark_unsharded_module
-            else module
+            sharded_module if not benchmark_unsharded_module else module
         )
     else:
         # pyre-fixme[7]: Expected `Module` but got `Optional[Module]`.
@@ -967,7 +966,6 @@ def multi_process_benchmark(
     # pyre-ignore
     **kwargs,
 ) -> BenchmarkResult:
-
     def setUp() -> None:
         if "MASTER_ADDR" not in os.environ:
             os.environ["MASTER_ADDR"] = str("localhost")

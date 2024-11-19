@@ -317,7 +317,6 @@ def _construct_jagged_tensors(
     cw_features_to_permute_indices: Dict[str, torch.Tensor],
     key_to_feature_permuted_coordinates: Dict[str, torch.Tensor],
 ) -> Dict[str, JaggedTensor]:
-
     # Validating sharding type and parameters
     valid_sharding_types = [
         ShardingType.ROW_WISE.value,
@@ -543,9 +542,7 @@ class ShardedQuantEmbeddingCollection(
                     _,
                 ) in self._sharding_type_device_group_to_sharding.keys()
             )
-            assert (
-                table_wise_sharded_only
-            ), "ROW_WISE,COLUMN_WISE shardings can be used only in 'quant_state_dict_split_scale_bias' mode, specify fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS]=True to __init__ argument"
+            assert table_wise_sharded_only, "ROW_WISE,COLUMN_WISE shardings can be used only in 'quant_state_dict_split_scale_bias' mode, specify fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS]=True to __init__ argument"
 
             self.embeddings: nn.ModuleDict = nn.ModuleDict()
             for table in self._embedding_configs:
@@ -692,7 +689,6 @@ class ShardedQuantEmbeddingCollection(
 
         with torch.no_grad():
             for i in range(len(self._sharding_type_device_group_to_sharding)):
-
                 ctx.sharding_contexts.append(
                     InferSequenceShardingContext(
                         features=input_dist_result_list[i],
@@ -991,7 +987,9 @@ class ShardedQuantEcInputDist(torch.nn.Module):
             persistent=False,
         )
 
-    def forward(self, features: KeyedJaggedTensor) -> Tuple[
+    def forward(
+        self, features: KeyedJaggedTensor
+    ) -> Tuple[
         List[KJTList],
         List[KeyedJaggedTensor],
         List[Optional[torch.Tensor]],
