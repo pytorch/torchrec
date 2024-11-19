@@ -382,15 +382,14 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             if table.name in table_names:
                 raise ValueError(f"Duplicate table name {table.name}")
             table_names.add(table.name)
-            key = (table.pooling, table.data_type)
-            self._key_to_tables[key].append(table)
+            # pyre-ignore
+            self._key_to_tables[table.pooling].append(table)
 
         location = (
             EmbeddingLocation.HOST if device.type == "cpu" else EmbeddingLocation.DEVICE
         )
 
-        for key, emb_configs in self._key_to_tables.items():
-            (pooling, data_type) = key
+        for pooling, emb_configs in self._key_to_tables.items():
             embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
@@ -409,7 +408,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                             else table.num_embeddings
                         ),
                         table.embedding_dim,
-                        data_type_to_sparse_type(data_type),
+                        data_type_to_sparse_type(table.data_type),
                         location,
                     )
                 )
@@ -421,6 +420,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
 
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=embedding_specs,
+                # pyre-ignore
                 pooling_mode=pooling_type_to_pooling_mode(pooling),
                 weight_lists=weight_lists,
                 device=device,
