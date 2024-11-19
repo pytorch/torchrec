@@ -102,18 +102,25 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingBagCollection.
 
 
-    It processes sparse data in the form of `KeyedJaggedTensor` with values of the form
-    [F X B X L] where:
+    It is callable on arguments representing sparse data in the form of `KeyedJaggedTensor` with values of the shape
+    `(F, B, L_{f,i})` where:
 
-    * F: features (keys)
-    * B: batch size
-    * L: length of sparse features (jagged)
+    * `F`: number of features (keys)
+    * `B`: batch size
+    * `L_{f,i}`: length of sparse features (potentially distinct for each feature `f` and batch index `i`, that is, jagged)
 
-    and outputs a `KeyedTensor` with values of the form [B * (F * D)] where:
+    and outputs a `KeyedTensor` with values with shape `(B, D)` where:
 
-    * F: features (keys)
-    * D: each feature's (key's) embedding dimension
-    * B: batch size
+    * `B`: batch size
+    * `D`: sum of embedding dimensions of all embedding tables, that is, `sum([config.embedding_dim for config in tables])`
+
+    Assuming the argument is a `KeyedJaggedTensor` `J` with `F` features, batch size `B` and `L_{f,i}` sparse lengths
+    such that `J[f][i]` is the bag for feature `f` and batch index `i`, the output `KeyedTensor` `KT` is defined as follows:
+    `KT[i]` = `torch.cat([emb[f](J[f][i]) for f in J.keys()])` where `emb[f]` is the `EmbeddingBag` corresponding to the feature `f`.
+
+    Note that `J[f][i]` is a variable-length list of integer values (a bag), and `emb[f](J[f][i])` is pooled embedding
+    produced by reducing the embeddings of each of the values in `J[f][i]`
+    using the `EmbeddingBag` `emb[f]`'s mode (default is the mean).
 
     Args:
         tables (List[EmbeddingBagConfig]): list of embedding tables.
@@ -131,28 +138,34 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         ebc = EmbeddingBagCollection(tables=[table_0, table_1])
 
-        #        0       1        2  <-- batch
-        # "f1"   [0,1] None    [2]
-        # "f2"   [3]    [4]    [5,6,7]
+        #        i = 0     i = 1    i = 2  <-- batch indices
+        # "f1"   [0,1]     None      [2]
+        # "f2"   [3]       [4]     [5,6,7]
         #  ^
-        # feature
+        # features
 
         features = KeyedJaggedTensor(
             keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+            values=torch.tensor([0, 1,                  2,    # feature 'f1'
+                                    3,      4,    5, 6, 7]),  # feature 'f2'
+                            #    i = 1    i = 2    i = 3   <--- batch indices
+            offsets=torch.tensor([
+                    0, 2, 2,       # 'f1' bags are values[0:2], values[2:2], and values[2:3]
+                    3, 4, 5, 8]),  # 'f2' bags are values[3:4], values[4:5], and values[5:8]
         )
 
         pooled_embeddings = ebc(features)
         print(pooled_embeddings.values())
-        tensor([[-0.8899, -0.1342, -1.9060, -0.0905, -0.2814, -0.9369, -0.7783],
-            [ 0.0000,  0.0000,  0.0000,  0.1598,  0.0695,  1.3265, -0.1011],
-            [-0.4256, -1.1846, -2.1648, -1.0893,  0.3590, -1.9784, -0.7681]],
+        tensor([
+            #   f1 pooled embeddings from bags (dim 3)          f2 pooled embeddings from bags (dim 4)
+            [-0.8899, -0.1342, -1.9060,                -0.0905, -0.2814, -0.9369, -0.7783],  # batch index 0
+            [ 0.0000,  0.0000,  0.0000,                 0.1598,  0.0695,  1.3265, -0.1011],  # batch index 1
+            [-0.4256, -1.1846, -2.1648,                -1.0893,  0.3590, -1.9784, -0.7681]],  # batch index 2
             grad_fn=<CatBackward0>)
         print(pooled_embeddings.keys())
         ['f1', 'f2']
         print(pooled_embeddings.offset_per_key())
-        tensor([0, 3, 7])
+        tensor([0, 3, 7])  # embeddings have dimensions 3 and 4, so embeddings are at [0, 3) and [3, 7).
     """
 
     def __init__(
