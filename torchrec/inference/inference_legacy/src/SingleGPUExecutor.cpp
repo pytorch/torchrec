@@ -38,7 +38,7 @@ SingleGPUExecutor::SingleGPUExecutor(
   for (size_t i = 0; i < numProcessThreads_; ++i) {
     processExecutor_->add([&]() { process(); });
   }
-  for (const auto& exec_info : execInfos_) {
+  for ([[maybe_unused]] const auto& exec_info : execInfos_) {
     TORCHREC_CHECK(exec_info.interpIdx < manager_->allInstances().size());
   }
   TORCHREC_CHECK(observer_);
