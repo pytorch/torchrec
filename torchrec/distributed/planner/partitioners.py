@@ -75,6 +75,7 @@ def _group_and_sort_non_uniform_sharding_options(
     sort_by: SortBy = SortBy.STORAGE,
     balance_modules: bool = False,
 ) -> List[ShardingOptionGroup]:
+
     # count modules by name
     param_count: Dict[str, int] = {}
     for sharding_option in sharding_options:

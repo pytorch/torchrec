@@ -514,6 +514,7 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         return types
 
     def shardable_parameters(self, module: M) -> Dict[str, nn.Parameter]:
+
         shardable_params: Dict[str, nn.Parameter] = {}
         for name, param in module.state_dict().items():
             if name.endswith(".weight"):

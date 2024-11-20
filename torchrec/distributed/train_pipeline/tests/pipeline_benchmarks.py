@@ -318,6 +318,7 @@ def runner(
     pipelines: str,
     profile: str,
 ) -> None:
+
     torch.autograd.set_detect_anomaly(True)
     with MultiProcessContext(
         rank=rank,
@@ -325,6 +326,7 @@ def runner(
         backend="nccl",
         use_deterministic_algorithms=False,
     ) as ctx:
+
         unsharded_model = TestSparseNN(
             tables=tables,
             weighted_tables=weighted_tables,

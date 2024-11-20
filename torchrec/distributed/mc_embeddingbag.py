@@ -112,6 +112,7 @@ class ManagedCollisionEmbeddingBagCollectionSharder(
         device: Optional[torch.device] = None,
         module_fqn: Optional[str] = None,
     ) -> ShardedManagedCollisionEmbeddingBagCollection:
+
         if device is None:
             device = torch.device("cuda")
 

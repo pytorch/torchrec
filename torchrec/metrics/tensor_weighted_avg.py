@@ -122,6 +122,7 @@ class TensorWeightedAvgMetric(RecMetric):
         *args,
         **kwargs: Dict[str, Any],
     ) -> None:
+
         super().__init__(*args, **kwargs)
 
     def _get_task_kwargs(

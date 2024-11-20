@@ -785,7 +785,9 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        assert remove_duplicate, "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, param in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
@@ -897,7 +899,9 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        assert remove_duplicate, "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, tensor in zip(
             self._config.embedding_tables,
             self.split_embedding_weights(),
@@ -1078,9 +1082,8 @@ class BatchedDenseEmbedding(BaseBatchedEmbedding[torch.Tensor]):
         combined_key = "/".join(
             [config.name for config in self._config.embedding_tables]
         )
-        yield (
-            append_prefix(prefix, f"{combined_key}.weight"),
-            cast(nn.Parameter, self._emb_module.weights),
+        yield append_prefix(prefix, f"{combined_key}.weight"), cast(
+            nn.Parameter, self._emb_module.weights
         )
 
 
@@ -1098,8 +1101,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         self._pg = pg
 
         self._pooling: PoolingMode = pooling_type_to_pooling_mode(
-            config.pooling,
-            sharding_type,  # pyre-ignore[6]
+            config.pooling, sharding_type  # pyre-ignore[6]
         )
 
         self._local_rows: List[int] = []
@@ -1218,7 +1220,9 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        assert remove_duplicate, "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, tensor in zip(
             self._config.embedding_tables,
             self.emb_module.split_embedding_weights(),
@@ -1358,7 +1362,9 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
-        assert remove_duplicate, "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, tensor in zip(
             self._config.embedding_tables,
             self.split_embedding_weights(),
@@ -1561,7 +1567,6 @@ class BatchedDenseEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
         combined_key = "/".join(
             [config.name for config in self._config.embedding_tables]
         )
-        yield (
-            append_prefix(prefix, f"{combined_key}.weight"),
-            cast(nn.Parameter, self._emb_module.weights),
+        yield append_prefix(prefix, f"{combined_key}.weight"), cast(
+            nn.Parameter, self._emb_module.weights
         )

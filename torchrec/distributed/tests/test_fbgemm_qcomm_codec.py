@@ -47,6 +47,7 @@ class QuantizationCommCodecTest(unittest.TestCase):
         rand_seed: int,
         row_dim: int,
     ) -> None:
+
         (comm_precision, loss_scale) = comm_precisions_loss_scale
 
         if comm_precision == CommType.FP8:
@@ -107,6 +108,7 @@ class QuantizationCommCodecTest(unittest.TestCase):
         col_size: int,
         rand_seed: int,
     ) -> None:
+
         torch.manual_seed(rand_seed)
         shape = (row_size, col_size)
         input_tensor = torch.rand(shape, requires_grad=False) * 2 - 1

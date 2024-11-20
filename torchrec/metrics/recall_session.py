@@ -176,6 +176,7 @@ class RecallSessionMetricComputation(RecMetricComputation):
             self._aggregate_window_state(state_name, state_value, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
+
         return [
             MetricComputationReport(
                 name=MetricName.RECALL_SESSION_LEVEL,
@@ -202,6 +203,7 @@ class RecallSessionMetricComputation(RecMetricComputation):
         weights: torch.Tensor,
         session: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
+
         predictions_ranked = ranking_within_session(predictions, session)
         # pyre-fixme[58]: `<` is not supported for operand types `Tensor` and
         #  `Optional[int]`.

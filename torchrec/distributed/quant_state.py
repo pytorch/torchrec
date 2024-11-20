@@ -191,9 +191,9 @@ class ShardedQuantEmbeddingModuleState(
                             ] * num_shards
 
                         column_idx = int(shard_offsets_cols / shard_sizes_cols)
-                        table_name_to_tensors_list[table.name][column_idx] = (
-                            tbe_split_qparam
-                        )
+                        table_name_to_tensors_list[table.name][
+                            column_idx
+                        ] = tbe_split_qparam
                     else:
                         qmetadata = ShardMetadata(
                             shard_offsets=metadata.shard_offsets,

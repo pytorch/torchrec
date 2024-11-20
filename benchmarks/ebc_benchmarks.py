@@ -163,6 +163,7 @@ def get_fused_ebc_uvm_time(
     location: EmbeddingLocation,
     epochs: int = 100,
 ) -> Tuple[float, float]:
+
     fused_ebc = FusedEmbeddingBagCollection(
         tables=embedding_bag_configs,
         optimizer_type=torch.optim.SGD,
@@ -194,6 +195,7 @@ def get_ebc_comparison(
     device: torch.device,
     epochs: int = 100,
 ) -> Tuple[float, float, float, float, float]:
+
     # Simple EBC module wrapping a list of nn.EmbeddingBag
     ebc = EmbeddingBagCollection(
         tables=embedding_bag_configs,

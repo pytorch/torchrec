@@ -359,6 +359,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         module: nn.Module,
         path: str = "",
     ) -> nn.Module:
+
         # pre-sharded module
         if isinstance(module, ShardedModule):
             return module

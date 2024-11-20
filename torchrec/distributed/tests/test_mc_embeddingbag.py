@@ -168,6 +168,7 @@ def _test_sharding_and_remapping(  # noqa C901
     backend: str,
     local_size: Optional[int] = None,
 ) -> None:
+
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         kjt_input = kjt_input_per_rank[rank].to(ctx.device)
         kjt_out_per_iter = [
@@ -331,6 +332,7 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
     def test_sharding_zch_mc_ebc(self, backend: str) -> None:
+
         WORLD_SIZE = 2
 
         embedding_bag_config = [

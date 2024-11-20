@@ -226,7 +226,9 @@ class _BatchedFusedEmbeddingLookups(nn.Module, FusedOptimizerModule):
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
-        assert remove_duplicate, "remove_duplicate=False not supported in _BatchedFusedEmbeddingLookups.named_parameters"
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in _BatchedFusedEmbeddingLookups.named_parameters"
         for table, weight in zip(
             self._embedding_tables, self.split_embedding_weights()
         ):
@@ -237,7 +239,9 @@ class _BatchedFusedEmbeddingLookups(nn.Module, FusedOptimizerModule):
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
     ) -> Iterator[Tuple[str, torch.Tensor]]:
-        assert remove_duplicate, "remove_duplicate=False not supported in _BatchedFusedEmbeddingLookups.named_buffers"
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in _BatchedFusedEmbeddingLookups.named_buffers"
         for table, param in zip(self._embedding_tables, self.split_embedding_weights()):
             name = f"{table.name}.weight"
             key = f"{prefix}.{name}" if (prefix and name) else (prefix + name)
@@ -614,13 +618,10 @@ class FusedEmbeddingCollection(EmbeddingCollectionInterface, FusedOptimizerModul
         if device is None:
             device = torch.device("cpu")
 
-        assert (
-            device.type
-            in [
-                "cuda",
-                "meta",
-            ]
-        ), "FusedEmbeddingCollection is only supported for device in [CUDA, meta] currently. There are plans to support device=CPU."
+        assert device.type in [
+            "cuda",
+            "meta",
+        ], "FusedEmbeddingCollection is only supported for device in [CUDA, meta] currently. There are plans to support device=CPU."
 
         if location is None:
             if device.type in ["cpu", "meta"]:

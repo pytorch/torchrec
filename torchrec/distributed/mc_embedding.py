@@ -36,6 +36,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
+
     def __init__(
         self,
         sharding_contexts: Optional[List[SequenceShardingContext]] = None,
@@ -125,6 +126,7 @@ class ManagedCollisionEmbeddingCollectionSharder(
         device: Optional[torch.device] = None,
         module_fqn: Optional[str] = None,
     ) -> ShardedManagedCollisionEmbeddingCollection:
+
         if device is None:
             device = torch.device("cuda")
 

@@ -393,7 +393,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
-            ] = [] if table_name_to_quantized_weights else None
+            ] = ([] if table_name_to_quantized_weights else None)
             feature_table_map: List[int] = []
 
             for idx, table in enumerate(emb_configs):
@@ -799,7 +799,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
-            ] = [] if table_name_to_quantized_weights else None
+            ] = ([] if table_name_to_quantized_weights else None)
             feature_table_map: List[int] = []
             for idx, table in enumerate(emb_configs):
                 embedding_specs.append(

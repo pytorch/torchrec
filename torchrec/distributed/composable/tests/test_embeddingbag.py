@@ -292,6 +292,7 @@ class ShardedEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
         sharding_type: str,
         use_apply_optimizer_in_backward: bool,
     ) -> None:
+
         # TODO DistributedDataParallel needs full support of registering fused optims before we can enable this.
         assume(
             not (

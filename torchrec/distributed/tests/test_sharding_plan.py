@@ -742,7 +742,9 @@ class ConstructParameterShardingTest(unittest.TestCase):
         # Make sure per_param_sharding setting override the default device_type
         device_table_0_shard_0 = (
             # pyre-ignore[16]
-            module_sharding_plan["table_0"].sharding_spec.shards[0].placement
+            module_sharding_plan["table_0"]
+            .sharding_spec.shards[0]
+            .placement
         )
         self.assertEqual(
             device_table_0_shard_0.device().type,

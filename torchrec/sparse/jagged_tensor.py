@@ -149,6 +149,7 @@ def _assert_offsets_or_lengths_is_provided(
 def _regroup_keyed_tensors(
     keyed_tensors: List["KeyedTensor"], groups: List[List[str]]
 ) -> List[torch.Tensor]:
+
     embedding_dicts = [keyed_tensor.to_dict() for keyed_tensor in keyed_tensors]
     lengths = [keyed_tensor.length_per_key() for keyed_tensor in keyed_tensors]
     indices = [keyed_tensor._key_indices() for keyed_tensor in keyed_tensors]
@@ -419,6 +420,7 @@ def _jagged_values_string(
 def _optional_mask(
     tensor: Optional[torch.Tensor], mask: torch.Tensor
 ) -> Optional[torch.Tensor]:
+
     return tensor[mask] if tensor is not None else None
 
 
@@ -591,6 +593,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         lengths: Optional[torch.Tensor] = None,
         offsets: Optional[torch.Tensor] = None,
     ) -> None:
+
         self._values: torch.Tensor = values
         self._weights: Optional[torch.Tensor] = weights
         _assert_offsets_or_lengths_is_provided(offsets, lengths)
@@ -1596,7 +1599,7 @@ def kjt_is_equal(kjt_1: "KeyedJaggedTensor", kjt_2: "KeyedJaggedTensor") -> bool
 
 
 def _force_length_offset_computation(
-    kjt: Union["KeyedJaggedTensor", "JaggedTensor"],
+    kjt: Union["KeyedJaggedTensor", "JaggedTensor"]
 ) -> None:
     """Helper function to force length/offset computation for KJT or JT
     Mainly used for testing equality, as equal KJT's/JT's can be formed from just using lengths or offsets.
@@ -3038,8 +3041,7 @@ def _kjt_flatten_with_keys(
 
 
 def _kjt_unflatten(
-    values: List[Optional[torch.Tensor]],
-    context: List[str],  # context is the _keys
+    values: List[Optional[torch.Tensor]], context: List[str]  # context is the _keys
 ) -> KeyedJaggedTensor:
     return KeyedJaggedTensor(context, *values)
 

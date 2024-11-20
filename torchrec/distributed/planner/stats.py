@@ -220,9 +220,9 @@ class EmbeddingStats(Stats):
             fqn = sharding_option.fqn
 
             compute_kernels_to_count[sharding_option.compute_kernel] += 1
-            compute_kernels_to_storage[sharding_option.compute_kernel] += (
-                sharding_option.total_storage
-            )
+            compute_kernels_to_storage[
+                sharding_option.compute_kernel
+            ] += sharding_option.total_storage
 
             # for shard in sharding_option.shards:
             # compute_kernels_to_storage[sharding_option.compute_kernel] += shard.hbm

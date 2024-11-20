@@ -915,9 +915,9 @@ def _generate_sequence_embedding_batch(
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
     world_size = len(splits)
 
-    tensor_by_feature: Dict[
-        str, List[torch.Tensor]
-    ] = {}  # Model parallel, key as feature
+    tensor_by_feature: Dict[str, List[torch.Tensor]] = (
+        {}
+    )  # Model parallel, key as feature
     tensor_by_rank: Dict[str, List[torch.Tensor]] = {}  # Data parallel, key as rank
 
     emb_by_rank_feature = {}
@@ -1081,6 +1081,7 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
         variable_batch_size: bool,
         qcomms_config: Optional[QCommsConfig],
     ) -> None:
+
         world_size = 2
         seq_emb_dim = 3
         features = 3
@@ -1100,8 +1101,7 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
             lengths_after_a2a_per_rank = [
                 torch.tensor([3, 0, 2, 4, 3], dtype=int),  # pyre-ignore [6]
                 torch.tensor(
-                    [4, 1, 2, 1, 0, 1, 2, 0, 5, 0],
-                    dtype=int,  # pyre-ignore [6]
+                    [4, 1, 2, 1, 0, 1, 2, 0, 5, 0], dtype=int  # pyre-ignore [6]
                 ),
             ]
 
@@ -1122,8 +1122,7 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
             lengths_after_a2a_per_rank = [
                 torch.tensor([[3, 4, 4, 0]], dtype=int),  # pyre-ignore [6]
                 torch.tensor(
-                    [[1, 2, 2, 3], [6, 0, 1, 2]],
-                    dtype=int,  # pyre-ignore [6]
+                    [[1, 2, 2, 3], [6, 0, 1, 2]], dtype=int  # pyre-ignore [6]
                 ),
             ]
 

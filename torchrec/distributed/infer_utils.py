@@ -32,13 +32,10 @@ from torchrec.modules.embedding_modules import (
 def get_tbes_from_sharded_module(
     module: torch.nn.Module,
 ) -> List[IntNBitTableBatchedEmbeddingBagsCodegen]:
-    assert (
-        type(module)
-        in [
-            ShardedQuantEmbeddingBagCollection,
-            ShardedQuantEmbeddingCollection,
-        ]
-    ), "Only support ShardedQuantEmbeddingBagCollection and ShardedQuantEmbeddingCollection for get TBEs"
+    assert type(module) in [
+        ShardedQuantEmbeddingBagCollection,
+        ShardedQuantEmbeddingCollection,
+    ], "Only support ShardedQuantEmbeddingBagCollection and ShardedQuantEmbeddingCollection for get TBEs"
     tbes = []
     for lookup in module._lookups:
         for lookup_per_rank in lookup._embedding_lookups_per_rank:
@@ -52,13 +49,10 @@ def get_tbe_specs_from_sharded_module(
 ) -> List[
     Tuple[str, int, int, str, str]
 ]:  # # tuple of (feature_names, rows, dims, str(SparseType), str(EmbeddingLocation/placement))
-    assert (
-        type(module)
-        in [
-            ShardedQuantEmbeddingBagCollection,
-            ShardedQuantEmbeddingCollection,
-        ]
-    ), "Only support ShardedQuantEmbeddingBagCollection and ShardedQuantEmbeddingCollection for get TBE specs"
+    assert type(module) in [
+        ShardedQuantEmbeddingBagCollection,
+        ShardedQuantEmbeddingCollection,
+    ], "Only support ShardedQuantEmbeddingBagCollection and ShardedQuantEmbeddingCollection for get TBE specs"
     tbe_specs = []
     tbes = get_tbes_from_sharded_module(module)
     for tbe in tbes:

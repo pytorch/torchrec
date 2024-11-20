@@ -114,7 +114,9 @@ class TrainPipelineContext:
     events: List[torch.Event] = field(default_factory=list)
     preproc_fwd_results: Dict[str, Any] = field(default_factory=dict)
     index: Optional[int] = None
-    version: int = 0  # 1 is current version, 0 is deprecated but supported for backward compatibility
+    version: int = (
+        0  # 1 is current version, 0 is deprecated but supported for backward compatibility
+    )
 
 
 @dataclass
@@ -1169,8 +1171,8 @@ def _pipeline_detach_model(
             for input_dist in child_module._input_dists:
                 if hasattr(input_dist, "_dist"):
                     kjt_dists.append(input_dist._dist)
-    assert (
-        len(kjt_dists) == len(original_kjt_dist_forwards)
+    assert len(kjt_dists) == len(
+        original_kjt_dist_forwards
     ), f"Number of KJT dists ({len(kjt_dists)}) does not match number of kjt dist forwards provided ({len(original_kjt_dist_forwards)})"
 
     for kjt_dist, original_kjt_dist_fwd in zip(

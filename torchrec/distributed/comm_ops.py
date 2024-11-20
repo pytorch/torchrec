@@ -477,6 +477,7 @@ def variable_batch_alltoall_pooled(
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
 ) -> Awaitable[Tensor]:
+
     if group is None:
         group = dist.distributed_c10d._get_default_group()
 

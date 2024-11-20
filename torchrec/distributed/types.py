@@ -878,6 +878,7 @@ class ShardedModule(
     def __init__(
         self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
     ) -> None:
+
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 

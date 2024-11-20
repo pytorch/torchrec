@@ -71,6 +71,7 @@ def _to_sharding_plan(
     sharding_options: List[ShardingOption],
     topology: Topology,
 ) -> ShardingPlan:
+
     compute_device = topology.compute_device
     local_size = topology.local_world_size
 
@@ -233,7 +234,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._best_plan: Optional[List[ShardingOption]] = None
         self._callbacks: List[
             Callable[[List[ShardingOption]], List[ShardingOption]]
-        ] = [] if callbacks is None else callbacks
+        ] = ([] if callbacks is None else callbacks)
 
     def collective_plan(
         self,
@@ -587,7 +588,7 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
         self._best_plan: Optional[List[ShardingOption]] = None
         self._callbacks: List[
             Callable[[List[ShardingOption]], List[ShardingOption]]
-        ] = [] if callbacks is None else callbacks
+        ] = ([] if callbacks is None else callbacks)
 
     def collective_plan(
         self,

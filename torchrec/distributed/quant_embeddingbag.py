@@ -220,7 +220,9 @@ class ShardedQuantEmbeddingBagCollection(
                     _,
                 ) in self._sharding_type_device_group_to_sharding.keys()
             )
-            assert table_wise_sharded_only, "ROW_WISE,COLUMN_WISE shardings can be used only in 'quant_state_dict_split_scale_bias' mode, specify fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS]=True to __init__ argument"
+            assert (
+                table_wise_sharded_only
+            ), "ROW_WISE,COLUMN_WISE shardings can be used only in 'quant_state_dict_split_scale_bias' mode, specify fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS]=True to __init__ argument"
 
             self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
             for table in self._embedding_bag_configs:

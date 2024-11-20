@@ -48,8 +48,8 @@ class SparseArch(nn.Module):
         if max_feature_lengths is None:
             max_feature_lengths = [DEFAULT_MAX_FEATURE_LENGTH] * len(feature_names)
 
-        assert (
-            len(max_feature_lengths) == len(feature_names)
+        assert len(max_feature_lengths) == len(
+            feature_names
         ), "Expect max_feature_lengths to have the same number of items as feature_names"
 
         self._fp_ebc: FeatureProcessedEmbeddingBagCollection = (
@@ -100,6 +100,7 @@ def create_module_and_freeze(
     device: torch.device,
     max_feature_lengths: Optional[List[int]] = None,
 ) -> SparseArch:
+
     sparse_arch = SparseArch(tables, use_fp_collection, device, max_feature_lengths)
 
     torch.manual_seed(0)

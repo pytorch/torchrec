@@ -73,6 +73,7 @@ class BaseManagedCollisionEmbeddingCollection(nn.Module):
     ) -> Tuple[
         Union[KeyedTensor, Dict[str, JaggedTensor]], Optional[KeyedJaggedTensor]
     ]:
+
         features = self._managed_collision_collection(features)
 
         embedding_res = self._embedding_module(features)

@@ -306,18 +306,14 @@ class FusedEmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         state_dict = ebc.state_dict()
-        (
-            torch.testing.assert_close(
-                state_dict["embedding_bags.t1.weight"],
-                torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
-            ),
-        )
-        (
-            torch.testing.assert_close(
-                state_dict["embedding_bags.t2.weight"],
-                torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
-            ),
-        )
+        torch.testing.assert_close(
+            state_dict["embedding_bags.t1.weight"],
+            torch.Tensor([[1, 1, 1, 1], [2, 2, 2, 2]]).to(device),
+        ),
+        torch.testing.assert_close(
+            state_dict["embedding_bags.t2.weight"],
+            torch.Tensor([[4, 4, 4, 4], [8, 8, 8, 8]]).to(device),
+        ),
         torch.testing.assert_close(
             state_dict["embedding_bags.t3.weight"],
             torch.Tensor([[16, 16, 16, 16], [32, 32, 32, 32]]).to(device),

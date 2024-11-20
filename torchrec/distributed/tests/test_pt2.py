@@ -428,6 +428,7 @@ class TestPt2(unittest.TestCase):
     def test_kt_regroup_as_dict(
         self,
     ) -> None:
+
         class M(torch.nn.Module):
             def forward(self, inputs: List[KeyedTensor]) -> Dict[str, torch.Tensor]:
                 groups = [["dense_0", "sparse_1", "dense_2"], ["dense_1", "sparse_0"]]

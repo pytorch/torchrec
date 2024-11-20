@@ -63,6 +63,7 @@ def _reserve_dense_storage(
     multiplier: float,
     dense_tensor_estimate: Optional[int] = None,
 ) -> Storage:
+
     dense_tensor_size = _get_dense_tensor_size(module, shardable_modules, multiplier)
     if dense_tensor_estimate:
         logger.info(

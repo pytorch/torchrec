@@ -284,6 +284,7 @@ def sharding_single_rank_test(
     variable_batch_per_feature: bool = False,  # VBE
     global_constant_batch: bool = False,
 ) -> None:
+
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         # Generate model & inputs.
         (global_model, inputs) = gen_model_and_input(

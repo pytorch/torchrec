@@ -39,6 +39,7 @@ class MultiProcessContext:
         use_deterministic_algorithms: bool = True,
         disable_cuda_tf_32: bool = True,
     ) -> None:
+
         self.rank = rank
         self.world_size = world_size
         self.backend = backend
@@ -97,6 +98,7 @@ class MultiProcessContext:
 
 
 class MultiProcessTestBase(unittest.TestCase):
+
     @seed_and_log
     def setUp(self) -> None:
         os.environ["MASTER_ADDR"] = str("localhost")

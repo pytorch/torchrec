@@ -33,6 +33,7 @@ class _RandomRecBatch:
         *,
         min_ids_per_features: Optional[List[int]] = None,
     ) -> None:
+
         self.keys = keys
         self.keys_length: int = len(keys)
         self.batch_size = batch_size
@@ -75,6 +76,7 @@ class _RandomRecBatch:
         return batch
 
     def _generate_batch(self) -> Batch:
+
         values = []
         lengths = []
         for key_idx, _ in enumerate(self.keys):

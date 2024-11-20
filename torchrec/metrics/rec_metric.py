@@ -445,13 +445,7 @@ class RecMetric(nn.Module, abc.ABC):
                     if has_valid_update > 0
                     else torch.zeros_like(metric_value)
                 )
-                yield (
-                    task,
-                    metric_report.name,
-                    valid_metric_value,
-                    compute_scope + metric_report.metric_prefix.value,
-                    metric_report.description,
-                )
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _unfused_tasks_iter(self, compute_scope: str) -> ComputeIterType:
         for task, metric_computation in zip(self._tasks, self._metrics_computations):
@@ -469,13 +463,7 @@ class RecMetric(nn.Module, abc.ABC):
                     or metric_computation.has_valid_update[0] > 0
                     else torch.zeros_like(metric_report.value)
                 )
-                yield (
-                    task,
-                    metric_report.name,
-                    valid_metric_value,
-                    compute_scope + metric_report.metric_prefix.value,
-                    metric_report.description,
-                )
+                yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _fuse_update_buffers(self) -> Dict[str, RecModelOutput]:
         def fuse(outputs: List[RecModelOutput]) -> RecModelOutput:

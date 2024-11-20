@@ -111,6 +111,7 @@ class KeyedOptimizer(optim.Optimizer):
         param_state_dict_to_load: Dict[str, Any],
         parent_keys: List[Union[str, int, float, bool, None]],
     ) -> None:
+
         for k, v in current_param_state_dict.items():
             new_v = param_state_dict_to_load[k]
             parent_keys.append(k)

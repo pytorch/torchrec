@@ -59,6 +59,7 @@ def initialize_and_test_parameters(
     local_size: Optional[int] = None,
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+
         module_sharding_plan = construct_module_sharding_plan(
             embedding_tables,
             per_param_sharding={

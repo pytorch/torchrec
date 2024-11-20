@@ -24,6 +24,7 @@ def apply_feature_processors_to_kjt(
     features: KeyedJaggedTensor,
     feature_processors: Dict[str, nn.Module],
 ) -> KeyedJaggedTensor:
+
     processed_weights = []
     features_dict = features.to_dict()
 
@@ -112,17 +113,16 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
         else:
             self._feature_processors = nn.ModuleDict(feature_processors)
 
-            assert (
-                set(
-                    sum(
-                        [
-                            config.feature_names
-                            for config in self._embedding_bag_collection.embedding_bag_configs()
-                        ],
-                        [],
-                    )
+            assert set(
+                sum(
+                    [
+                        config.feature_names
+                        for config in self._embedding_bag_collection.embedding_bag_configs()
+                    ],
+                    [],
                 )
-                == set(feature_processors.keys())
+            ) == set(
+                feature_processors.keys()
             ), "Passed in feature processors do not match feature names of embedding bag"
 
         assert (

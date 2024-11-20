@@ -308,7 +308,7 @@ def model_input_to_forward_args(
 
 
 def create_cw_min_partition_constraints(
-    table_min_partition_pairs: List[Tuple[str, int]],
+    table_min_partition_pairs: List[Tuple[str, int]]
 ) -> Dict[str, ParameterConstraints]:
     return {
         name: ParameterConstraints(
@@ -996,7 +996,9 @@ def assert_weight_spec(
             # Assumption of only one TBE per rank
             if "rank:1" in placement:
                 tbe_idx = 1
-            sharded_weight_fqn: str = f"{ebc_fqn}.tbes.{tbe_idx}.{tbe_table_idxs[tbe_idx]}.{table_name}.weight"
+            sharded_weight_fqn: str = (
+                f"{ebc_fqn}.tbes.{tbe_idx}.{tbe_table_idxs[tbe_idx]}.{table_name}.weight"
+            )
             tbe_table_idxs[tbe_idx] += 1
             assert sharded_weight_fqn in weights_spec
             wspec = weights_spec[sharded_weight_fqn]

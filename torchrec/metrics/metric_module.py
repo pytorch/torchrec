@@ -392,6 +392,7 @@ def _generate_rec_metrics(
 ) -> RecMetricList:
     rec_metrics = []
     for metric_enum, metric_def in metrics_config.rec_metrics.items():
+
         kwargs: Dict[str, Any] = {}
         if metric_def and metric_def.arguments is not None:
             kwargs = metric_def.arguments

@@ -25,6 +25,7 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class PositionWeightedModuleEmbeddingBagCollectionTest(unittest.TestCase):
+
     def generate_fp_ebc(self) -> FeatureProcessedEmbeddingBagCollection:
         ebc = EmbeddingBagCollection(
             tables=[

@@ -229,6 +229,7 @@ class BaseShardedManagedCollisionEmbeddingCollection(
         ctx: ShrdCtx,
         output: List[torch.Tensor],
     ) -> Tuple[LazyAwaitable[KeyedTensor], LazyAwaitable[Optional[KeyedJaggedTensor]]]:
+
         # pyre-ignore [6]
         ebc_awaitable = self._embedding_module.output_dist(ctx, output)
 

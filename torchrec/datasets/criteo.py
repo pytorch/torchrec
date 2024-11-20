@@ -351,9 +351,8 @@ class BinaryCriteoUtils:
 
             # If the ranges overlap.
             if rank_left_g <= file_right_g and rank_right_g >= file_left_g:
-                overlap_left_g, overlap_right_g = (
-                    max(rank_left_g, file_left_g),
-                    min(rank_right_g, file_right_g),
+                overlap_left_g, overlap_right_g = max(rank_left_g, file_left_g), min(
+                    rank_right_g, file_right_g
                 )
 
                 # Convert overlap in global numbers to (local) numbers specific to the

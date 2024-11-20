@@ -314,6 +314,7 @@ class ModelParallelSingleRankBase(unittest.TestCase):
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         constraints: Optional[Dict[str, trec_dist.planner.ParameterConstraints]] = None,
     ) -> Tuple[List[DistributedModelParallel], ModelInput]:
+
         if constraints is None:
             constraints = {}
         if sharders is None:

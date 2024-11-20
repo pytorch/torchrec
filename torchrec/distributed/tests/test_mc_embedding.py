@@ -121,6 +121,7 @@ def _test_sharding_and_remapping(  # noqa C901
     local_size: Optional[int] = None,
     input_hash_size: int = 4000,
 ) -> None:
+
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         kjt_input = kjt_input_per_rank[rank].to(ctx.device)
         kjt_out_per_iter = [
@@ -239,7 +240,9 @@ def _test_sharding_and_resharding(  # noqa C901
     backend: str,
     local_size: Optional[int] = None,
 ) -> None:
+
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+
         kjt_input = kjt_input_per_rank[rank].to(ctx.device)
         kjt_out_per_iter = [
             kjt[rank].to(ctx.device) for kjt in kjt_out_per_iter_per_rank
@@ -406,6 +409,7 @@ def _test_sharding_dedup(  # noqa C901
     local_size: Optional[int] = None,
     input_hash_size: int = 4000,
 ) -> None:
+
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         return_remapped: bool = True
         kjt_input = kjt_input_per_rank[rank].to(ctx.device)
@@ -502,6 +506,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
     def test_sharding_zch_mc_ec_reshard(self, backend: str) -> None:
+
         WORLD_SIZE = 2
 
         embedding_config = [
@@ -675,6 +680,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
     def test_sharding_zch_mc_ec_remap(self, backend: str) -> None:
+
         WORLD_SIZE = 2
 
         embedding_config = [
@@ -831,6 +837,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
     def test_sharding_zch_mc_ec_dedup(self, backend: str) -> None:
+
         WORLD_SIZE = 2
 
         embedding_config = [
@@ -903,6 +910,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
     def test_sharding_zch_mc_ec_dedup_input_error(self, backend: str) -> None:
+
         WORLD_SIZE = 2
 
         embedding_config = [
@@ -950,25 +958,23 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
         ]
 
         try:
-            (
-                self._run_multi_process_test(
-                    callable=_test_sharding_dedup,
-                    world_size=WORLD_SIZE,
-                    tables=embedding_config,
-                    kjt_input_per_rank=kjt_input_per_rank,
-                    sharder=ManagedCollisionEmbeddingCollectionSharder(
-                        ec_sharder=EmbeddingCollectionSharder(
-                            use_index_dedup=False,
-                        )
-                    ),
-                    dedup_sharder=ManagedCollisionEmbeddingCollectionSharder(
-                        ec_sharder=EmbeddingCollectionSharder(
-                            use_index_dedup=True,
-                        )
-                    ),
-                    backend=backend,
-                    input_hash_size=(2**62) - 1 + 10,
+            self._run_multi_process_test(
+                callable=_test_sharding_dedup,
+                world_size=WORLD_SIZE,
+                tables=embedding_config,
+                kjt_input_per_rank=kjt_input_per_rank,
+                sharder=ManagedCollisionEmbeddingCollectionSharder(
+                    ec_sharder=EmbeddingCollectionSharder(
+                        use_index_dedup=False,
+                    )
                 ),
-            )
+                dedup_sharder=ManagedCollisionEmbeddingCollectionSharder(
+                    ec_sharder=EmbeddingCollectionSharder(
+                        use_index_dedup=True,
+                    )
+                ),
+                backend=backend,
+                input_hash_size=(2**62) - 1 + 10,
+            ),
         except AssertionError as e:
             self.assertTrue("0 != 1" in str(e))

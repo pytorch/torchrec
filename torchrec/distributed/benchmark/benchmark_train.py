@@ -157,7 +157,9 @@ def main() -> None:
             tables_info += f"\nTABLE[{i}][{num:9}, {dim:4}] {mb:6}Mb"
 
         ### Benchmark no VBE
-        report: str = f"REPORT BENCHMARK {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
+        report: str = (
+            f"REPORT BENCHMARK {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
+        )
         report += f"Module: {module_name}\n"
         report += tables_info
         report += "\n"
@@ -179,7 +181,9 @@ def main() -> None:
         )
 
         ### Benchmark with VBE
-        report: str = f"REPORT BENCHMARK (VBE) {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
+        report: str = (
+            f"REPORT BENCHMARK (VBE) {datetime_sfx} world_size:{args.world_size} batch_size:{args.batch_size}\n"
+        )
         report += f"Module: {module_name} (VBE)\n"
         report += tables_info
         report += "\n"

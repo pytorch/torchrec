@@ -209,6 +209,7 @@ class ShardedEmbeddingBagCollectionApplyOptimPerParamTest(MultiProcessTestBase):
         self,
         sharding_type: str,
     ) -> None:
+
         WORLD_SIZE = 2
 
         embedding_bag_config = [
@@ -426,6 +427,7 @@ class ShardedEmbeddingCollectionApplyOptimPerParamTest(MultiProcessTestBase):
         self,
         sharding_type: str,
     ) -> None:
+
         WORLD_SIZE = 2
 
         embedding_config = [

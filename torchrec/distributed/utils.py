@@ -230,6 +230,7 @@ def copy_to_device(
     current_device: torch.device,
     to_device: torch.device,
 ) -> nn.Module:
+
     with sharded_model_copy(device=None):
         copy_module = copy.deepcopy(module)
 
