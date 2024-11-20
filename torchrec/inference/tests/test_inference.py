@@ -13,6 +13,7 @@ from argparse import Namespace
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
+from torchrec import PoolingType
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.distributed.global_settings import set_propogate_device
 from torchrec.distributed.test_utils.test_model import (
@@ -298,3 +299,35 @@ class InferenceTest(unittest.TestCase):
                             spec[1],
                             expected_num_embeddings[spec[0]],
                         )
+
+    def test_quantized_tbe_count_different_pooling(self) -> None:
+        set_propogate_device(True)
+
+        self.tables[0].pooling = PoolingType.MEAN
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            num_float_features=10,
+            dense_device=torch.device("cpu"),
+            sparse_device=torch.device("cpu"),
+            over_arch_clazz=TestOverArchRegroupModule,
+        )
+
+        model.eval()
+        _, local_batch = ModelInput.generate(
+            batch_size=16,
+            world_size=1,
+            num_float_features=10,
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+        )
+
+        model(local_batch[0])
+
+        # Quantize the model and collect quantized weights
+        quantized_model = quantize_inference_model(model)
+        # We should have 2 TBEs for unweighted ebc as the 2 tables here have different pooling types
+        self.assertTrue(len(quantized_model.sparse.ebc.tbes) == 2)
+        self.assertTrue(len(quantized_model.sparse.weighted_ebc.tbes) == 1)
+        # Changing this back
+        self.tables[0].pooling = PoolingType.SUM
