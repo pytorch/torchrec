@@ -482,7 +482,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         for table_sharding_options in sharding_options_by_fqn.values():
             if len(table_sharding_options) > 1:
                 logger.warning(
-                    f"EmbeddingOffloadScaleupProposer - ignored {len(table_sharding_options) - 1} sharding options for table {table_sharding_options[0]} in proposal"
+                    f"EmbeddingOffloadScaleupProposer - ignored {len(table_sharding_options) - 1} sharding options for table {table_sharding_options[0].name} in proposal"
                 )
 
             selected_option = next(
