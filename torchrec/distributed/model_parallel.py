@@ -128,10 +128,12 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
             ),
         )
         if self._allreduce_comm_precision == "fp16":
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             dmp._dmp_wrapped_module.register_comm_hook(
                 None, ddp_default_hooks.fp16_compress_hook
             )
         elif self._allreduce_comm_precision == "bf16":
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             dmp._dmp_wrapped_module.register_comm_hook(
                 None, ddp_default_hooks.bf16_compress_hook
             )
@@ -412,6 +414,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
             # Init parameters if at least one parameter is over 'meta' device.
             if has_meta_param and hasattr(module, "reset_parameters"):
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 module.reset_parameters()
 
         module.apply(init_parameters)

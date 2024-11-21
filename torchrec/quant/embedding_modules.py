@@ -455,6 +455,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         ):
             for embedding_config, (weight, qscale, qbias) in zip(
                 tables,
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 emb_module.split_embedding_weights_with_scale_bias(
                     split_scale_bias_mode=2 if quant_state_dict_split_scale_bias else 0
                 ),
@@ -554,6 +555,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         embedding_bag_configs = copy.deepcopy(module.embedding_bag_configs())
         _update_embedding_configs(
             cast(List[BaseEmbeddingConfig], embedding_bag_configs),
+            # pyre-fixme[6]: For 2nd argument expected `Union[QuantConfig, QConfig]`
+            #  but got `Union[Module, Tensor]`.
             module.qconfig,
             pruning_dict,
         )
@@ -569,6 +572,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             embedding_bag_configs,
             module.is_weighted(),
             device=device,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `activation`.
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
             register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
@@ -659,6 +664,8 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
         embedding_bag_configs = copy.deepcopy(ebc.embedding_bag_configs())
         _update_embedding_configs(
             cast(List[BaseEmbeddingConfig], embedding_bag_configs),
+            # pyre-fixme[6]: For 2nd argument expected `Union[QuantConfig, QConfig]`
+            #  but got `Union[Module, Tensor]`.
             qconfig,
             pruning_dict,
         )
@@ -674,6 +681,8 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
             embedding_bag_configs,
             ebc.is_weighted(),
             device=device,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `activation`.
             output_dtype=qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
             register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),
@@ -943,7 +952,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         ), "EmbeddingCollection input float module must have qconfig defined"
         embedding_configs = copy.deepcopy(module.embedding_configs())
         _update_embedding_configs(
-            cast(List[BaseEmbeddingConfig], embedding_configs), module.qconfig
+            cast(List[BaseEmbeddingConfig], embedding_configs),
+            # pyre-fixme[6]: For 2nd argument expected `Union[QuantConfig, QConfig]`
+            #  but got `Union[Module, Tensor]`.
+            module.qconfig,
         )
         table_name_to_quantized_weights: Dict[str, Tuple[Tensor, Tensor]] = {}
         device = quantize_state_dict(
@@ -955,6 +967,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             embedding_configs,
             device=device,
             need_indices=module.need_indices(),
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `activation`.
             output_dtype=module.qconfig.activation().dtype,
             table_name_to_quantized_weights=table_name_to_quantized_weights,
             register_tbes=getattr(module, MODULE_ATTR_REGISTER_TBES_BOOL, False),

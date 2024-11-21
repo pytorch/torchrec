@@ -443,6 +443,7 @@ class FusedEmbeddingBagCollection(
         ):
             for embedding_config, weight in zip(
                 tables,
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 emb_module.split_embedding_weights(),
                 #  torch._tensor.Tensor]` is not a function.
             ):
@@ -697,6 +698,7 @@ class FusedEmbeddingCollection(EmbeddingCollectionInterface, FusedOptimizerModul
         ):
             for embedding_config, weight in zip(
                 tables,
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 emb_module.split_embedding_weights(),
                 #  torch._tensor.Tensor]` is not a function.
             ):

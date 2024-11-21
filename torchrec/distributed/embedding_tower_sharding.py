@@ -175,6 +175,8 @@ class ShardedEmbeddingTower(
             )
 
         # Setup output dists for quantized comms
+        # pyre-fixme[8]: Attribute has type `ModuleList`; used as `Union[Module,
+        #  Tensor]`.
         self._output_dists: nn.ModuleList = (
             self.embedding._output_dists if self.embedding else nn.ModuleList()
         )
@@ -377,6 +379,7 @@ class ShardedEmbeddingTower(
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
         if self.embedding:
+            # pyre-fixme[7]: Expected `KeyedOptimizer` but got `Union[Module, Tensor]`.
             return self.embedding.fused_optimizer
         else:
             return CombinedOptimizer([])
@@ -570,6 +573,7 @@ class ShardedEmbeddingTowerCollection(
                         table.name for table in tower.embedding.embedding_configs()
                     }
                 elif hasattr(tower.embedding, "tables"):
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     table_names = {table.name for table in tower.embedding.tables()}
                 else:
                     # Use all tables if unable to determine from tower.embedding

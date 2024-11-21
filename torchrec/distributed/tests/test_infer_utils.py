@@ -87,6 +87,7 @@ class UtilsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             quant_model[0],
             per_param_sharding={
                 "table_0": table_wise(rank=1),
@@ -102,6 +103,7 @@ class UtilsTest(unittest.TestCase):
         plan = ShardingPlan(plan={"": module_plan})
 
         sharded_model = _shard_modules(
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             module=quant_model[0],
             # pyre-fixme[6]: For 2nd argument expected
             #  `Optional[List[ModuleSharder[Module]]]` but got
@@ -164,6 +166,7 @@ class UtilsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             quant_model[0],
             per_param_sharding={
                 "table_0": table_wise(rank=1),
@@ -179,6 +182,7 @@ class UtilsTest(unittest.TestCase):
         plan = ShardingPlan(plan={"": module_plan})
 
         sharded_model = _shard_modules(
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             module=quant_model[0],
             # pyre-fixme[6]: For 2nd argument expected
             #  `Optional[List[ModuleSharder[Module]]]` but got
@@ -245,6 +249,7 @@ class UtilsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             quant_model[0],
             per_param_sharding={
                 "table_0": table_wise(rank=0),
@@ -259,6 +264,7 @@ class UtilsTest(unittest.TestCase):
         plan = ShardingPlan(plan={"": module_plan})
 
         sharded_model = _shard_modules(
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             module=quant_model[0],
             # pyre-fixme[6]: For 2nd argument expected
             #  `Optional[List[ModuleSharder[Module]]]` but got
@@ -349,7 +355,11 @@ class UtilsTest(unittest.TestCase):
         all_trec_mdoules = get_all_torchrec_modules(sharded_model)
 
         expected_all_trec_modules = {
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             "_module.sparse.ebc": sharded_model._module.sparse.ebc,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             "_module.sparse.weighted_ebc": sharded_model._module.sparse.weighted_ebc,
         }
 
@@ -365,6 +375,8 @@ class UtilsTest(unittest.TestCase):
         self.assertDictEqual(
             all_trec_mdoules,
             {
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse`.
                 "_module.sparse.ebc": sharded_model._module.sparse.ebc,
             },
         )

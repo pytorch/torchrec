@@ -178,8 +178,12 @@ class PositionWeightedCollectionModuleTest(unittest.TestCase):
             pwmc, current_device=torch.device("cpu"), to_device=torch.device("meta")
         )
 
+        # pyre-fixme[29]: `Union[(self: TensorBase) -> Tensor, Tensor, Module]` is
+        #  not a function.
         self.assertTrue(all(param.is_meta for param in res.position_weights.values()))
         self.assertTrue(
+            # pyre-fixme[29]: `Union[(self: TensorBase) -> Tensor, Tensor, Module]`
+            #  is not a function.
             all(param.is_meta for param in res.position_weights_dict.values())
         )
 

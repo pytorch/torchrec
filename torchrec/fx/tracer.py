@@ -135,6 +135,7 @@ class Tracer(torch.fx.Tracer):
         """
 
         if hasattr(mod, "_fx_path"):
+            # pyre-fixme[7]: Expected `str` but got `Union[Tensor, Module]`.
             return mod._fx_path
         else:
             return super().path_of_module(mod)

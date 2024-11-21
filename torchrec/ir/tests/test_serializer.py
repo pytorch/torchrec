@@ -89,6 +89,10 @@ class CompoundModuleSerializer(JsonSerializer):
         while hasattr(unflatten_ep.list, str(i)):
             mlist.append(getattr(unflatten_ep.list, str(i)))
             i += 1
+        # pyre-fixme[6]: For 1st argument expected `EmbeddingBagCollection` but got
+        #  `Union[Module, Tensor]`.
+        # pyre-fixme[6]: For 2nd argument expected `Optional[CompoundModule]` but
+        #  got `Union[Module, Tensor]`.
         return CompoundModule(ebc, comp, mlist)
 
 
@@ -298,7 +302,9 @@ class TestJsonSerializer(unittest.TestCase):
 
     def test_ir_emb_lookup_device(self) -> None:
         model = self.generate_model()
+        # pyre-fixme[16]: `Module` has no attribute `fpebc1`.
         model.fpebc1 = copy.deepcopy(model.ebc1)
+        # pyre-fixme[16]: `Module` has no attribute `fpebc2`.
         model.fpebc2 = copy.deepcopy(model.ebc1)
         feature1 = KeyedJaggedTensor.from_offsets_sync(
             keys=["f1", "f2", "f3"],
@@ -423,9 +429,13 @@ class TestJsonSerializer(unittest.TestCase):
         deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
         # Check if Compound Module is deserialized correctly
         self.assertIsInstance(deserialized_model.comp, CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `comp`.
         self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `comp`.
         self.assertIsInstance(deserialized_model.comp.comp.comp, CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `list`.
         self.assertIsInstance(deserialized_model.comp.list[1], CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `list`.
         self.assertIsInstance(deserialized_model.comp.list[1].comp, CompoundModule)
 
         deserialized_model.load_state_dict(model.state_dict())
@@ -505,8 +515,12 @@ class TestJsonSerializer(unittest.TestCase):
             preserve_module_call_signature=(tuple(sparse_fqns)),
         )
 
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
         self.assertFalse(model.regroup._is_inited)
         eager_out = model(id_list_features)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
         self.assertFalse(model.regroup._is_inited)
 
         # Run forward on ExportedProgram
@@ -516,8 +530,12 @@ class TestJsonSerializer(unittest.TestCase):
         # Deserialize EBC
         unflatten_ep = torch.export.unflatten(ep)
         deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
         self.assertFalse(deserialized_model.regroup._is_inited)
         deserialized_out = deserialized_model(id_list_features)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
         self.assertTrue(deserialized_model.regroup._is_inited)
         for key in eager_out.keys():
             self.assertEqual(deserialized_out[key].shape, eager_out[key].shape)
@@ -603,6 +621,8 @@ class TestJsonSerializer(unittest.TestCase):
         #  we export the model with ebc1 and unflatten the model,
         #  and then swap with ebc2 (you can think this as the the sharding process
         #  resulting a shardedEBC), so that we can mimic the key-order change
+        # pyre-fixme[16]: `Module` has no attribute `ebc`.
+        # pyre-fixme[16]: `Tensor` has no attribute `ebc`.
         deserialized_model.sparse.ebc = ebc2
 
         deserialized_out = deserialized_model(id_list_features)

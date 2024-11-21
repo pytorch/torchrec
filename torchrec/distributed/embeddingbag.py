@@ -881,6 +881,8 @@ class ShardedEmbeddingBagCollection(
             for (
                 table_name,
                 tbe_slice,
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+                #  `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
                 self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
 
@@ -1006,6 +1008,7 @@ class ShardedEmbeddingBagCollection(
                     # unwrap DDP
                     lookup = lookup.module
                 else:
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     for key, v in lookup.get_named_split_embedding_weights_snapshot():
                         destination_key = f"{prefix}embedding_bags.{key}.weight"
                         assert key in sharded_kvtensors_copy
@@ -1176,6 +1179,8 @@ class ShardedEmbeddingBagCollection(
             if self._has_features_permute:
                 features = features.permute(
                     self._features_order,
+                    # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
+                    #  but got `Union[Module, Tensor]`.
                     self._features_order_tensor,
                 )
             if self._has_mean_pooling_callback:

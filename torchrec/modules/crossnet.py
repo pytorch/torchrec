@@ -83,7 +83,9 @@ class CrossNet(torch.nn.Module):
         x_l = x_0
 
         for layer in range(self._num_layers):
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             xl_w = torch.matmul(self.kernels[layer], x_l)  # (B, N, 1)
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             x_l = x_0 * (xl_w + self.bias[layer]) + x_l  # (B, N, 1)
 
         return torch.squeeze(x_l, dim=2)
@@ -250,9 +252,11 @@ class VectorCrossNet(torch.nn.Module):
         for layer in range(self._num_layers):
             xl_w = torch.tensordot(
                 x_l,
+                # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                 self.kernels[layer],
                 dims=([1], [0]),
             )  # (B, 1, 1)
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             x_l = torch.matmul(x_0, xl_w) + self.bias[layer] + x_l  # (B, N, 1)
 
         return torch.squeeze(x_l, dim=2)  # (B, N)
@@ -403,17 +407,21 @@ class LowRankMixtureCrossNet(torch.nn.Module):
             experts = []
             for i in range(self._num_experts):
                 expert = torch.matmul(
+                    # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                     self.V_kernels[layer][i],
                     x_l,
                 )  # (B, r, 1)
                 expert = torch.matmul(
+                    # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                     self.C_kernels[layer][i],
                     self._activation(expert),
                 )  # (B, r, 1)
                 expert = torch.matmul(
+                    # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                     self.U_kernels[layer][i],
                     self._activation(expert),
                 )  # (B, N, 1)
+                # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                 expert = x_0 * (expert + self.bias[layer])  # (B, N, 1)
                 experts.append(expert.squeeze(2))  # (B, N)
             experts = torch.stack(experts, 2)  # (B, N, K)
