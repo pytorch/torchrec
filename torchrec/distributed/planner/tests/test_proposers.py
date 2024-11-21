@@ -574,6 +574,7 @@ class TestProposers(unittest.TestCase):
         # i.e. doesn't participate in scaleup.
         constraints = {
             "table_0": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
                 cache_params=CacheParams(
                     load_factor=0.1,
@@ -581,6 +582,7 @@ class TestProposers(unittest.TestCase):
                 ),
             ),
             "table_1": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
                 cache_params=CacheParams(
                     load_factor=0.1,
@@ -588,6 +590,7 @@ class TestProposers(unittest.TestCase):
                 ),
             ),
             "table_2": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
                 cache_params=CacheParams(
                     load_factor=0.002,
@@ -595,6 +598,7 @@ class TestProposers(unittest.TestCase):
                 ),
             ),
             "table_3": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED.value],
                 cache_params=CacheParams(),
             ),
