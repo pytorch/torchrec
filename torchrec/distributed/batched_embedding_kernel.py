@@ -46,7 +46,7 @@ from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
     PartiallyMaterializedTensor,
 )
 from torch import nn
-from torchrec.distributed.comm import get_local_rank, get_local_size
+from torchrec.distributed.comm import get_local_rank, get_node_group_size
 from torchrec.distributed.composable.table_batched_embedding_slice import (
     TableBatchedEmbeddingSlice,
 )
@@ -303,7 +303,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             )
             # for grid sharding, the row dimension is replicated CW shard times
             grid_shard_nodes = (
-                len(table_global_shards_metadata) // get_local_size()
+                len(table_global_shards_metadata) // get_node_group_size()
                 if is_grid_sharded
                 else 1
             )
@@ -1445,7 +1445,6 @@ class BatchedFusedEmbeddingBag(
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
-
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(

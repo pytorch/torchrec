@@ -13,12 +13,18 @@ from typing import List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
+from torchrec.distributed.types import ShardingEnv2D
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 # Global, only should be accessed via intra_and_cross_node_pg()
 _INTRA_PG: Optional[dist.ProcessGroup] = None
 _CROSS_PG: Optional[dist.ProcessGroup] = None
+
+# For 2D parallel
+_INTRA_PG_2D: Optional[dist.ProcessGroup] = None
+_CROSS_PG_2D: Optional[dist.ProcessGroup] = None
+_NODE_GROUP_SIZE_2D: Optional[int] = None
 
 
 def _env2int(env_list: List[str], default: int = -1) -> int:
@@ -52,6 +58,15 @@ def get_local_size(world_size: Optional[int] = None) -> int:
         )
         local_size = world_size
     return local_size
+
+
+def get_node_group_size(world_size: Optional[int] = None) -> int:
+    """
+    Get the local world size accounting for 2D environment, if not set, we fallback to global environment
+    """
+    if _NODE_GROUP_SIZE_2D is None:
+        return get_local_size(world_size)
+    return _NODE_GROUP_SIZE_2D
 
 
 def get_local_rank(world_size: Optional[int] = None, rank: Optional[int] = None) -> int:
@@ -151,3 +166,98 @@ def intra_and_cross_node_pg(
         dist.barrier()
 
     return _INTRA_PG, _CROSS_PG
+
+
+def intra_and_cross_node_pg_2D(
+    env: ShardingEnv2D,
+    device: Optional[torch.device] = None,
+) -> Tuple[Optional[dist.ProcessGroup], Optional[dist.ProcessGroup]]:
+    """
+    Creates sub process groups (intra and cross node) under 2D parallelism scheme
+    The concept of "intra" and "cross" node is lost under a 2D parallelism scheme
+    due to the ranks that exist under a sharding group do not have gurantee of the typical
+    node topology. And as such there are no guarantees of "intra" group exploiting intra node bandwidth.
+
+    NOTE:
+    These process groups are created for sharding schemes (ie: GRID) that were designed to exploit
+    intra node bandwidth for optimized comms. There will be future work to redesign the comms for GRID
+    sharding to be optimized under a 2D setup.
+
+    Example::
+    Here is what "intra" and "cross" groups look like in a 2D environment,
+    Sharding Groups:
+        Group 0: [0, 2, 4, 6]
+        Group 1: [1, 3, 5, 7]
+    devices_per_node = 2:
+    "intra" groups for each sharding group,
+        Group 0: [0, 2], [4, 6]
+        Group 1: [1, 3], [5, 7]
+    "cross" groups for each sharding group,
+        Group 0: [0, 4], [2, 6]
+        Group 1: [1, 5], [3, 7]
+
+    We can see as this scales to real world topologies how the "intra" and "cross" node ideas in a traditional
+    sense are not applicable here.
+    """
+    if device is not None and device.type == "meta":
+        return None, None
+
+    global _INTRA_PG_2D
+    global _CROSS_PG_2D
+    global _NODE_GROUP_SIZE_2D
+
+    backend = dist.get_backend(env.sharding_pg)
+    my_rank = dist.get_rank()
+
+    sharding_group_size = dist.get_world_size(
+        env.sharding_pg
+    )  # Local replica group world size
+    world_size = dist.get_world_size()  # Global world size
+    step = world_size // sharding_group_size
+    devices_per_node = (
+        env.node_group_size if env.node_group_size else get_local_size(world_size)
+    )
+    _NODE_GROUP_SIZE_2D = devices_per_node
+
+    assert (
+        sharding_group_size % devices_per_node == 0
+    ), f"node group size is not divisible by sharding group size, {devices_per_node=}, {sharding_group_size=}"
+    intra_pg_groups: List[List[List[int]]] = [[] for _ in range(step)]
+
+    if _INTRA_PG_2D is None:
+        for group_rank in range(step):
+            sharding_pg_peers = [
+                step * r + group_rank for r in range(sharding_group_size)
+            ]
+            for group in range(len(sharding_pg_peers) // devices_per_node):
+                intra_pg_peers = sharding_pg_peers[
+                    group * devices_per_node : (group + 1) * devices_per_node
+                ]
+                intra_pg_groups[group_rank].append(intra_pg_peers)
+                curr_intra_pg = dist.new_group(backend=backend, ranks=intra_pg_peers)
+                if my_rank in intra_pg_peers:
+                    logger.warning(
+                        f"[Connection] 2D rank {my_rank} -> intra_pg_peers {intra_pg_peers}"
+                    )
+                    _INTRA_PG_2D = curr_intra_pg
+        assert _INTRA_PG_2D is not None, "INTRA_PG_2D is not initialized!"
+        dist.barrier()
+
+    if _CROSS_PG_2D is None:
+        for group_rank in range(step):
+            intra_pg_group = intra_pg_groups[group_rank]
+            for cross_group_rank in range(devices_per_node):
+                cross_pg_peers = [
+                    intra_pg_group[j][cross_group_rank]
+                    for j in range(len(intra_pg_group))
+                ]
+                curr_cross_pg = dist.new_group(backend=backend, ranks=cross_pg_peers)
+                if my_rank in cross_pg_peers:
+                    logger.warning(
+                        f"[Connection] 2D rank {my_rank} -> cross_pg_peers {cross_pg_peers}"
+                    )
+                    _CROSS_PG_2D = curr_cross_pg
+        assert _CROSS_PG_2D is not None, "CROSS_PG_2D is not initialized!"
+        dist.barrier()
+
+    return _INTRA_PG_2D, _CROSS_PG_2D
