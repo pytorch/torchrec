@@ -280,68 +280,13 @@ def _fx_trec_unwrap_kjt(
 
 class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin):
     """
-    EmbeddingBagCollection represents a collection of pooled embeddings (EmbeddingBags).
-    This EmbeddingBagCollection is quantized for lower precision. It relies on fbgemm quantized ops and provides
-    table batching.
+    This class represents a reimplemented version of the EmbeddingBagCollection
+    class found in `torchrec/modules/embedding_modules.py`.
+    However, it is quantized for lower precision.
+    It relies on fbgemm quantized ops and provides table batching.
 
-    NOTE:
-        EmbeddingBagCollection is an unsharded module and is not performance optimized.
-        For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingBagCollection.
-
-    It processes sparse data in the form of KeyedJaggedTensor
-    with values of the form [F X B X L]
-    F: features (keys)
-    B: batch size
-    L: Length of sparse features (jagged)
-
-    and outputs a KeyedTensor with values of the form [B * (F * D)]
-    where
-    F: features (keys)
-    D: each feature's (key's) embedding dimension
-    B: batch size
-
-    Args:
-        table_name_to_quantized_weights (Dict[str, Tuple[Tensor, Tensor]]): map of tables to quantized weights
-        embedding_configs (List[EmbeddingBagConfig]): list of embedding tables
-        is_weighted: (bool): whether input KeyedJaggedTensor is weighted
-        device: (Optional[torch.device]): default compute device
-
-    Call Args:
-        features: KeyedJaggedTensor,
-
-    Returns:
-        KeyedTensor
-
-    Example::
-
-        table_0 = EmbeddingBagConfig(
-            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
-        )
-        table_1 = EmbeddingBagConfig(
-            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
-        )
-        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
-
-        #        0       1        2  <-- batch
-        # "f1"   [0,1] None    [2]
-        # "f2"   [3]    [4]    [5,6,7]
-        #  ^
-        # feature
-        features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
-        )
-
-        ebc.qconfig = torch.quantization.QConfig(
-            activation=torch.quantization.PlaceholderObserver.with_args(
-                dtype=torch.qint8
-            ),
-            weight=torch.quantization.PlaceholderObserver.with_args(dtype=torch.qint8),
-        )
-
-        qebc = QuantEmbeddingBagCollection.from_float(ebc)
-        quantized_embeddings = qebc(features)
+    For more details, including examples, please refer to
+    `torchrec/modules/embedding_modules.py`
     """
 
     def __init__(
@@ -690,62 +635,13 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
 
 class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
     """
-    EmbeddingCollection represents a collection of non-pooled embeddings.
+    This class represents a reimplemented version of the EmbeddingCollection
+    class found in `torchrec/modules/embedding_modules.py`.
+    However, it is quantized for lower precision.
+    It relies on fbgemm quantized ops and provides table batching.
 
-    NOTE:
-        EmbeddingCollection is an unsharded module and is not performance optimized.
-        For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingCollection.
-
-
-    It processes sparse data in the form of `KeyedJaggedTensor` of the form [F X B X L]
-    where:
-
-    * F: features (keys)
-    * B: batch size
-    * L: length of sparse features (variable)
-
-    and outputs `Dict[feature (key), JaggedTensor]`.
-    Each `JaggedTensor` contains values of the form (B * L) X D
-    where:
-
-    * B: batch size
-    * L: length of sparse features (jagged)
-    * D: each feature's (key's) embedding dimension and lengths are of the form L
-
-    Args:
-        tables (List[EmbeddingConfig]): list of embedding tables.
-        device (Optional[torch.device]): default compute device.
-        need_indices (bool): if we need to pass indices to the final lookup result dict
-
-    Example::
-
-        e1_config = EmbeddingConfig(
-            name="t1", embedding_dim=3, num_embeddings=10, feature_names=["f1"]
-        )
-        e2_config = EmbeddingConfig(
-            name="t2", embedding_dim=3, num_embeddings=10, feature_names=["f2"]
-        )
-
-        ec = EmbeddingCollection(tables=[e1_config, e2_config])
-
-        #     0       1        2  <-- batch
-        # 0   [0,1] None    [2]
-        # 1   [3]    [4]    [5,6,7]
-        # ^
-        # feature
-
-        features = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
-        )
-        feature_embeddings = ec(features)
-        print(feature_embeddings['f2'].values())
-        tensor([[-0.2050,  0.5478,  0.6054],
-        [ 0.7352,  0.3210, -3.0399],
-        [ 0.1279, -0.1756, -0.4130],
-        [ 0.7519, -0.4341, -0.0499],
-        [ 0.9329, -1.0697, -0.8095]], grad_fn=<EmbeddingBackward>)
+    For more details, including examples, please refer to
+    `torchrec/modules/embedding_modules.py`
     """
 
     def __init__(  # noqa C901
