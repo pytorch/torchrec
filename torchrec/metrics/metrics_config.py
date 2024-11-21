@@ -32,6 +32,7 @@ class RecMetricEnum(RecMetricEnumBase):
     MAE = "mae"
     MULTICLASS_RECALL = "multiclass_recall"
     RECALL_SESSION_LEVEL = "recall_session_level"
+    PRECISION_SESSION_LEVEL = "precision_session_level"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "tower_qps"
     ACCURACY = "accuracy"
