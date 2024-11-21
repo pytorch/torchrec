@@ -550,17 +550,17 @@ class RecMetric(nn.Module, abc.ABC):
 
                 predictions = (
                     # Reshape the predictions to size([len(self._tasks), self._batch_size])
-                    predictions.view(-1, self._batch_size)
+                    predictions.view(len(self._tasks), -1)
                     if predictions.dim() == labels.dim()
                     # predictions.dim() == labels.dim() + 1 for multiclass models
-                    else predictions.view(-1, self._batch_size, predictions.size()[-1])
+                    else predictions.view(len(self._tasks), -1, predictions.size()[-1])
                 )
-                labels = labels.view(-1, self._batch_size)
+                labels = labels.view(len(self._tasks), -1)
                 if weights is None:
                     weights = self._create_default_weights(predictions)
                 else:
                     assert isinstance(weights, torch.Tensor)
-                    weights = weights.view(-1, self._batch_size)
+                    weights = weights.view(len(self._tasks), -1)
                 if self._should_validate_update:
                     # has_valid_weights is a tensor of bool whose length equals to the number
                     # of tasks. Each value in it is corresponding to whether the weights
