@@ -1813,11 +1813,10 @@ class TestModelWithPreproc(nn.Module):
             modified_input = self._preproc_module(modified_input)
         elif self._run_preproc_inline:
             idlist_features = modified_input.idlist_features
-            assert isinstance(idlist_features, KeyedJaggedTensor)
             modified_input.idlist_features = KeyedJaggedTensor.from_lengths_sync(
-                idlist_features.keys(),
-                idlist_features.values(),
-                idlist_features.lengths(),
+                idlist_features.keys(),  # pyre-ignore [6]
+                idlist_features.values(),  # pyre-ignore [6]
+                idlist_features.lengths(),  # pyre-ignore [16]
             )
 
         modified_idlist_features = self.preproc_nonweighted(
