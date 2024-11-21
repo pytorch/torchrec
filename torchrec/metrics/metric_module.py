@@ -47,6 +47,7 @@ from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.ne_positive import NEPositiveMetric
 from torchrec.metrics.output import OutputMetric
 from torchrec.metrics.precision import PrecisionMetric
+from torchrec.metrics.precision_session import PrecisionSessionMetric
 from torchrec.metrics.rauc import RAUCMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.recall import RecallMetric
@@ -80,6 +81,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.WEIGHTED_AVG: WeightedAvgMetric,
     RecMetricEnum.TOWER_QPS: TowerQPSMetric,
     RecMetricEnum.RECALL_SESSION_LEVEL: RecallSessionMetric,
+    RecMetricEnum.PRECISION_SESSION_LEVEL: PrecisionSessionMetric,
     RecMetricEnum.ACCURACY: AccuracyMetric,
     RecMetricEnum.NDCG: NDCGMetric,
     RecMetricEnum.XAUC: XAUCMetric,
