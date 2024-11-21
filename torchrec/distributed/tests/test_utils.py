@@ -336,7 +336,9 @@ class KJTBucketizeTest(unittest.TestCase):
         block_sizes = torch.tensor(block_sizes_list, dtype=index_type).cuda()
 
         block_bucketized_kjt, _ = bucketize_kjt_before_all2all(
-            kjt, world_size, block_sizes, False, False
+            kjt=kjt,
+            num_buckets=world_size,
+            block_sizes=block_sizes,
         )
 
         expected_block_bucketized_kjt = block_bucketize_ref(
@@ -433,7 +435,10 @@ class KJTBucketizeTest(unittest.TestCase):
         """
         block_sizes = torch.tensor(block_sizes_list, dtype=index_type)
         block_bucketized_kjt, _ = bucketize_kjt_before_all2all(
-            kjt, world_size, block_sizes, False, False, block_bucketize_row_pos
+            kjt=kjt,
+            num_buckets=world_size,
+            block_sizes=block_sizes,
+            block_bucketize_row_pos=block_bucketize_row_pos,
         )
 
         expected_block_bucketized_kjt = block_bucketize_ref(
