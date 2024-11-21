@@ -1001,14 +1001,14 @@ class TestProposers(unittest.TestCase):
         self.assertEqual(proposal[1], sharding_options_by_fqn["table-2"][1])
         self.assertRegex(
             mock_logger.warning.call_args_list[0].args[0],
-            r"^EmbeddingOffloadScaleupProposer - ignored .* sharding options for table name: table-2",
+            r"^EmbeddingOffloadScaleupProposer - ignored \d+ sharding options for table table-2",
         )
 
         # Case 3
         self.assertEqual(proposal[2], sharding_options_by_fqn["table-3"][0])
         self.assertRegex(
             mock_logger.warning.call_args_list[1].args[0],
-            r"^EmbeddingOffloadScaleupProposer - ignored .* sharding options for table name: table-3",
+            r"^EmbeddingOffloadScaleupProposer - ignored \d+ sharding options for table table-3",
         )
 
         # Case 4
