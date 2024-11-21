@@ -65,6 +65,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensor,
     ShardingEnv,
+    ShardingEnv2D,
     ShardingType,
     ShardMetadata,
     TensorProperties,
@@ -149,6 +150,7 @@ def create_embedding_bag_sharding(
     EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
 ]:
     sharding_type = sharding_infos[0].param_sharding.sharding_type
+
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(sharding_infos)
     if sharding_type == ShardingType.TABLE_WISE.value:
@@ -949,10 +951,14 @@ class ShardedEmbeddingBagCollection(
                 )
 
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
-                    ShardedTensor._init_from_local_shards_and_global_metadata(
-                        local_shards=local_shards,
-                        sharded_tensor_metadata=metadata,
-                        process_group=none_throws(self._env.process_group),
+                    ShardedTensor._init_from_local_shards(
+                        local_shards,
+                        self._name_to_table_size[table_name],
+                        process_group=(
+                            self._env.sharding_pg
+                            if isinstance(self._env, ShardingEnv2D)
+                            else self._env.process_group
+                        ),
                     )
                 )
 

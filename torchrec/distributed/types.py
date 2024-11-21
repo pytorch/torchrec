@@ -843,6 +843,53 @@ class ShardingEnv:
         return cls(world_size, rank, None)
 
 
+class ShardingEnv2D(ShardingEnv):
+    """
+    Creates a sharding environment for 2D parallelism, enables usage of 2D parallelism in sharding
+    by seamlessly switching to the sub process group (sharding_pg) for a rank. This class is used
+    as source of truth for TorchRec to understand if we're in a 2D parallel environment.
+
+    NOTE:
+        - global pg is part of `process_group` attribute to keep the same API as ShardingEnv,
+        some parts of TorchRec require the global pg to work appropriately (ie: `DDPWrapper` in `DistributedModelParallel`)
+        - `world_size` and `rank` attributes return values relative to `sharding_pg`, this is different
+        from default ShardingEnv returning values relative to `global_pg`
+
+    Attributes:
+        sharding_pg: The process group containing the ranks to shard on.
+        global_pg: The process group representing global ranks.
+        device_mesh: A 2D device mesh representing the topology of the global world size
+            on "replicate" and "shard" dimensions.
+        node_group_size (Optional[int]): The size of each node group. If not provided, it will be inferred
+            from env var `LOCAL_WORLD_SIZE`.
+    """
+
+    def __init__(
+        self,
+        sharding_pg: dist.ProcessGroup,
+        global_pg: dist.ProcessGroup,
+        device_mesh: DeviceMesh,
+        node_group_size: Optional[int] = None,
+    ) -> None:
+        assert device_mesh.ndim == 2, "DeviceMesh must be two dimensional!"
+        self.world_size: int = dist.get_world_size(sharding_pg)
+        self.global_world_size: int = dist.get_world_size(global_pg)
+        self.rank: int = dist.get_rank(sharding_pg)
+        self.global_rank: int = dist.get_rank(global_pg)
+        self.process_group: dist.ProcessGroup = (
+            global_pg  # to keep consistent naming between ShardingEnv and ShardingEnv2D
+        )
+        self.sharding_pg: dist.ProcessGroup = sharding_pg
+        self.device_mesh: DeviceMesh = device_mesh
+        self.node_group_size: Optional[int] = node_group_size
+
+    def num_sharding_groups(self) -> int:
+        """
+        Return number of sharding groups, also known as the number of times model parallel is replicated
+        """
+        return self.global_world_size // self.world_size
+
+
 class NullShardingContext(Multistreamable):
     def record_stream(self, stream: torch.Stream) -> None:
         pass

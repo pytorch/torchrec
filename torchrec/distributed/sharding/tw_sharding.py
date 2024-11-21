@@ -47,6 +47,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
+    ShardingEnv2D,
     ShardMetadata,
 )
 from torchrec.distributed.utils import none_throws
@@ -73,11 +74,17 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
-        self._env = env
-        self._device = device
-        self._pg: Optional[dist.ProcessGroup] = self._env.process_group
+        self._env: ShardingEnv = env
+        self._device: Optional[torch.device] = device
+        self._is_2D_parallel: bool = isinstance(env, ShardingEnv2D)
+        self._pg: Optional[dist.ProcessGroup] = (
+            self._env.sharding_pg  # pyre-ignore[16]
+            if self._is_2D_parallel
+            else self._env.process_group
+        )
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
+
         sharded_tables_per_rank = self._shard(sharding_infos)
 
         self._sharded_tables_per_rank: List[List[ShardedEmbeddingTable]] = (
@@ -98,7 +105,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     ) -> List[List[ShardedEmbeddingTable]]:
         world_size = self._world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
+            [] for _ in range(world_size)
         ]
         for info in sharding_infos:
             # pyre-fixme [16]
@@ -123,7 +130,11 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             dtensor_metadata = None
             if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
                 dtensor_metadata = DTensorMetadata(
-                    mesh=self._env.device_mesh,
+                    mesh=(
+                        self._env.device_mesh["replicate"]  # pyre-ignore[16]
+                        if self._is_2D_parallel
+                        else self._env.device_mesh
+                    ),
                     placements=(Replicate(),),
                     size=(
                         info.embedding_config.num_embeddings,
@@ -134,8 +145,13 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             # to not pass onto TBE
             info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
-            # pyre-fixme [16]
-            tables_per_rank[info.param_sharding.ranks[0]].append(
+            rank = (
+                # pyre-ignore [16]
+                info.param_sharding.ranks[0] // self._env.num_sharding_groups()
+                if self._is_2D_parallel
+                else info.param_sharding.ranks[0]
+            )
+            tables_per_rank[rank].append(
                 ShardedEmbeddingTable(
                     num_embeddings=info.embedding_config.num_embeddings,
                     embedding_dim=info.embedding_config.embedding_dim,
