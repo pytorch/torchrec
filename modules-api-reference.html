@@ -457,18 +457,18 @@ If None, no pruning is applied.</p></li>
 For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingBagCollection.</p>
 </div>
 <p>It is callable on arguments representing sparse data in the form of <cite>KeyedJaggedTensor</cite> with values of the shape
-<cite>(F, B, L_{f,i})</cite> where:</p>
+<cite>(F, B, L[f][i])</cite> where:</p>
 <ul class="simple">
 <li><p><cite>F</cite>: number of features (keys)</p></li>
 <li><p><cite>B</cite>: batch size</p></li>
-<li><p><cite>L_{f,i}</cite>: length of sparse features (potentially distinct for each feature <cite>f</cite> and batch index <cite>i</cite>, that is, jagged)</p></li>
+<li><p><cite>L[f][i]</cite>: length of sparse features (potentially distinct for each feature <cite>f</cite> and batch index <cite>i</cite>, that is, jagged)</p></li>
 </ul>
 <p>and outputs a <cite>KeyedTensor</cite> with values with shape <cite>(B, D)</cite> where:</p>
 <ul class="simple">
 <li><p><cite>B</cite>: batch size</p></li>
 <li><p><cite>D</cite>: sum of embedding dimensions of all embedding tables, that is, <cite>sum([config.embedding_dim for config in tables])</cite></p></li>
 </ul>
-<p>Assuming the argument is a <cite>KeyedJaggedTensor</cite> <cite>J</cite> with <cite>F</cite> features, batch size <cite>B</cite> and <cite>L_{f,i}</cite> sparse lengths
+<p>Assuming the argument is a <cite>KeyedJaggedTensor</cite> <cite>J</cite> with <cite>F</cite> features, batch size <cite>B</cite> and <cite>L[f][i]</cite> sparse lengths
 such that <cite>J[f][i]</cite> is the bag for feature <cite>f</cite> and batch index <cite>i</cite>, the output <cite>KeyedTensor</cite> <cite>KT</cite> is defined as follows:
 <cite>KT[i]</cite> = <cite>torch.cat([emb[f](J[f][i]) for f in J.keys()])</cite> where <cite>emb[f]</cite> is the <cite>EmbeddingBag</cite> corresponding to the feature <cite>f</cite>.</p>
 <p>Note that <cite>J[f][i]</cite> is a variable-length list of integer values (a bag), and <cite>emb[f](J[f][i])</cite> is pooled embedding
@@ -512,10 +512,11 @@ using the <cite>EmbeddingBag</cite> <cite>emb[f]</cite>’s mode (default is the
 <span class="n">pooled_embeddings</span> <span class="o">=</span> <span class="n">ebc</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
 <span class="n">tensor</span><span class="p">([</span>
-    <span class="c1">#   f1 pooled embeddings from bags (dim 3)          f2 pooled embeddings from bags (dim 4)</span>
-    <span class="p">[</span><span class="o">-</span><span class="mf">0.8899</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1342</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.9060</span><span class="p">,</span>                <span class="o">-</span><span class="mf">0.0905</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2814</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.9369</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.7783</span><span class="p">],</span>  <span class="c1"># batch index 0</span>
-    <span class="p">[</span> <span class="mf">0.0000</span><span class="p">,</span>  <span class="mf">0.0000</span><span class="p">,</span>  <span class="mf">0.0000</span><span class="p">,</span>                 <span class="mf">0.1598</span><span class="p">,</span>  <span class="mf">0.0695</span><span class="p">,</span>  <span class="mf">1.3265</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1011</span><span class="p">],</span>  <span class="c1"># batch index 1</span>
-    <span class="p">[</span><span class="o">-</span><span class="mf">0.4256</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.1846</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.1648</span><span class="p">,</span>                <span class="o">-</span><span class="mf">1.0893</span><span class="p">,</span>  <span class="mf">0.3590</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.9784</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.7681</span><span class="p">]],</span>  <span class="c1"># batch index 2</span>
+    <span class="c1">#  f1 pooled embeddings              f2 pooled embeddings</span>
+    <span class="c1">#     from bags (dim. 3)                from bags (dim. 4)</span>
+    <span class="p">[</span><span class="o">-</span><span class="mf">0.8899</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1342</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.9060</span><span class="p">,</span>  <span class="o">-</span><span class="mf">0.0905</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2814</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.9369</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.7783</span><span class="p">],</span>  <span class="c1"># i = 0</span>
+    <span class="p">[</span> <span class="mf">0.0000</span><span class="p">,</span>  <span class="mf">0.0000</span><span class="p">,</span>  <span class="mf">0.0000</span><span class="p">,</span>   <span class="mf">0.1598</span><span class="p">,</span>  <span class="mf">0.0695</span><span class="p">,</span>  <span class="mf">1.3265</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1011</span><span class="p">],</span>  <span class="c1"># i = 1</span>
+    <span class="p">[</span><span class="o">-</span><span class="mf">0.4256</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.1846</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.1648</span><span class="p">,</span>  <span class="o">-</span><span class="mf">1.0893</span><span class="p">,</span>  <span class="mf">0.3590</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.9784</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.7681</span><span class="p">]],</span>  <span class="c1"># i = 2</span>
     <span class="n">grad_fn</span><span class="o">=&lt;</span><span class="n">CatBackward0</span><span class="o">&gt;</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">pooled_embeddings</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 <span class="p">[</span><span class="s1">&#39;f1&#39;</span><span class="p">,</span> <span class="s1">&#39;f2&#39;</span><span class="p">]</span>
@@ -589,20 +590,19 @@ are intiialized based on the <cite>init_fn</cite> of each EmbeddingBagConfig if 
 <p>EmbeddingCollection is an unsharded module and is not performance optimized.
 For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingCollection.</p>
 </div>
-<p>It processes sparse data in the form of <cite>KeyedJaggedTensor</cite> of the form [F X B X L]
-where:</p>
+<p>It is callable on arguments representing sparse data in the form of <cite>KeyedJaggedTensor</cite> with values of the shape
+<cite>(F, B, L[f][i])</cite> where:</p>
 <ul class="simple">
-<li><p>F: features (keys)</p></li>
-<li><p>B: batch size</p></li>
-<li><p>L: length of sparse features (variable)</p></li>
+<li><p><cite>F</cite>: number of features (keys)</p></li>
+<li><p><cite>B</cite>: batch size</p></li>
+<li><p><cite>L[f][i]</cite>: length of sparse features (potentially distinct for each feature <cite>f</cite> and batch index <cite>i</cite>, that is, jagged)</p></li>
 </ul>
-<p>and outputs <cite>Dict[feature (key), JaggedTensor]</cite>.
-Each <cite>JaggedTensor</cite> contains values of the form (B * L) X D
-where:</p>
+<p>and outputs a <cite>result</cite> of type <cite>Dict[Feature, JaggedTensor]</cite>,
+where <cite>result[f]</cite> is a <cite>JaggedTensor</cite> with shape <cite>(EB[f], D[f])</cite> where:</p>
 <ul class="simple">
-<li><p>B: batch size</p></li>
-<li><p>L: length of sparse features (jagged)</p></li>
-<li><p>D: each feature’s (key’s) embedding dimension and lengths are of the form L</p></li>
+<li><p><cite>EB[f]</cite>: a “expanded batch size” for feature <cite>f</cite> equal to the sum of the lengths of its bag values,
+that is, <cite>sum([len(J[f][i]) for i in range(B)])</cite>.</p></li>
+<li><p><cite>D[f]</cite>: is the embedding dimension of feature <cite>f</cite>.</p></li>
 </ul>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -631,16 +631,29 @@ where:</p>
 
 <span class="n">features</span> <span class="o">=</span> <span class="n">KeyedJaggedTensor</span><span class="o">.</span><span class="n">from_offsets_sync</span><span class="p">(</span>
     <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">,</span> <span class="s2">&quot;f2&quot;</span><span class="p">],</span>
-    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
-    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>
+    <span class="n">values</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span>                  <span class="mi">2</span><span class="p">,</span>    <span class="c1"># feature &#39;f1&#39;</span>
+                            <span class="mi">3</span><span class="p">,</span>      <span class="mi">4</span><span class="p">,</span>    <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>  <span class="c1"># feature &#39;f2&#39;</span>
+                    <span class="c1">#    i = 1    i = 2    i = 3   &lt;--- batch indices</span>
+    <span class="n">offsets</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span>
+            <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span>       <span class="c1"># &#39;f1&#39; bags are values[0:2], values[2:2], and values[2:3]</span>
+            <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">8</span><span class="p">]),</span>  <span class="c1"># &#39;f2&#39; bags are values[3:4], values[4:5], and values[5:8]</span>
 <span class="p">)</span>
+
 <span class="n">feature_embeddings</span> <span class="o">=</span> <span class="n">ec</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">feature_embeddings</span><span class="p">[</span><span class="s1">&#39;f2&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-<span class="n">tensor</span><span class="p">([[</span><span class="o">-</span><span class="mf">0.2050</span><span class="p">,</span>  <span class="mf">0.5478</span><span class="p">,</span>  <span class="mf">0.6054</span><span class="p">],</span>
-<span class="p">[</span> <span class="mf">0.7352</span><span class="p">,</span>  <span class="mf">0.3210</span><span class="p">,</span> <span class="o">-</span><span class="mf">3.0399</span><span class="p">],</span>
-<span class="p">[</span> <span class="mf">0.1279</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1756</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4130</span><span class="p">],</span>
-<span class="p">[</span> <span class="mf">0.7519</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4341</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.0499</span><span class="p">],</span>
-<span class="p">[</span> <span class="mf">0.9329</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0697</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8095</span><span class="p">]],</span> <span class="n">grad_fn</span><span class="o">=&lt;</span><span class="n">EmbeddingBackward</span><span class="o">&gt;</span><span class="p">)</span>
+<span class="n">tensor</span><span class="p">([</span>
+    <span class="c1"># embedding for value 3 in f2 bag values[3:4]:</span>
+    <span class="p">[</span><span class="o">-</span><span class="mf">0.2050</span><span class="p">,</span>  <span class="mf">0.5478</span><span class="p">,</span>  <span class="mf">0.6054</span><span class="p">],</span>
+
+    <span class="c1"># embedding for value 4 in f2 bag values[4:5]:</span>
+    <span class="p">[</span> <span class="mf">0.7352</span><span class="p">,</span>  <span class="mf">0.3210</span><span class="p">,</span> <span class="o">-</span><span class="mf">3.0399</span><span class="p">],</span>
+
+    <span class="c1"># embedding for values 5, 6, 7 in f2 bag values[5:8]:</span>
+    <span class="p">[</span> <span class="mf">0.1279</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1756</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4130</span><span class="p">],</span>
+    <span class="p">[</span> <span class="mf">0.7519</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4341</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.0499</span><span class="p">],</span>
+    <span class="p">[</span> <span class="mf">0.9329</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0697</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.8095</span><span class="p">],</span>
+
+<span class="p">],</span> <span class="n">grad_fn</span><span class="o">=&lt;</span><span class="n">EmbeddingBackward</span><span class="o">&gt;</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py property">
