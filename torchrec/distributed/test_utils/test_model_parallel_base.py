@@ -1153,6 +1153,8 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
         (dense_model, _), batch = self._generate_dmps_and_batch(dense_sharders)
 
         dense_opt = RowWiseAdagrad(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `parameters`.
             dense_model.module.sparse.parameters(),
             lr=learning_rate,
             eps=1e-8,  # TBE has default eps 1e-8

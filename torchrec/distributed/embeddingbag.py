@@ -65,6 +65,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensor,
     ShardingEnv,
+    ShardingEnv2D,
     ShardingType,
     ShardMetadata,
     TensorProperties,
@@ -149,6 +150,7 @@ def create_embedding_bag_sharding(
     EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
 ]:
     sharding_type = sharding_infos[0].param_sharding.sharding_type
+
     if device is not None and device.type == "meta":
         replace_placement_with_meta_device(sharding_infos)
     if sharding_type == ShardingType.TABLE_WISE.value:
@@ -879,6 +881,8 @@ class ShardedEmbeddingBagCollection(
             for (
                 table_name,
                 tbe_slice,
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+                #  `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
                 self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
 
@@ -949,10 +953,14 @@ class ShardedEmbeddingBagCollection(
                 )
 
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
-                    ShardedTensor._init_from_local_shards_and_global_metadata(
-                        local_shards=local_shards,
-                        sharded_tensor_metadata=metadata,
-                        process_group=none_throws(self._env.process_group),
+                    ShardedTensor._init_from_local_shards(
+                        local_shards,
+                        self._name_to_table_size[table_name],
+                        process_group=(
+                            self._env.sharding_pg
+                            if isinstance(self._env, ShardingEnv2D)
+                            else self._env.process_group
+                        ),
                     )
                 )
 
@@ -1000,6 +1008,7 @@ class ShardedEmbeddingBagCollection(
                     # unwrap DDP
                     lookup = lookup.module
                 else:
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     for key, v in lookup.get_named_split_embedding_weights_snapshot():
                         destination_key = f"{prefix}embedding_bags.{key}.weight"
                         assert key in sharded_kvtensors_copy
@@ -1170,6 +1179,8 @@ class ShardedEmbeddingBagCollection(
             if self._has_features_permute:
                 features = features.permute(
                     self._features_order,
+                    # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
+                    #  but got `Union[Module, Tensor]`.
                     self._features_order_tensor,
                 )
             if self._has_mean_pooling_callback:

@@ -58,6 +58,7 @@ class MetricName(MetricNameBase):
     GROUPED_AUPRC = "grouped_auprc"
     GROUPED_RAUC = "grouped_rauc"
     RECALL_SESSION_LEVEL = "recall_session_level"
+    PRECISION_SESSION_LEVEL = "precision_session_level"
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "qps"
@@ -107,6 +108,7 @@ class MetricNamespace(MetricNamespaceBase):
 
     WEIGHTED_AVG = "weighted_avg"
     RECALL_SESSION_LEVEL = "recall_session_level"
+    PRECISION_SESSION_LEVEL = "precision_session_level"
 
     TOWER_QPS = "qps"
     NDCG = "ndcg"

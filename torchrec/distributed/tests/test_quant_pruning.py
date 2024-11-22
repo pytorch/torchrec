@@ -74,6 +74,7 @@ def create_quant_and_sharded_ebc_models(
     pruning_ebc_dict = {"table_0": num_rows_post_pruned}
     quant_model = prune_and_quantize_model(mi.model, pruning_ebc_dict)
 
+    # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
     quant_model = quant_model[0]
     mi.quant_model = quant_model
 
@@ -96,9 +97,12 @@ class QuantPruneTest(unittest.TestCase):
     ) -> None:
         for module in sharded_model.modules():
             if module.__class__.__name__ == "IntNBitTableBatchedEmbeddingBagsCodegen":
+                # pyre-fixme[6]: For 1st argument expected `Iterable[_T]` but got
+                #  `Union[Tensor, Module]`.
                 for i, spec in enumerate(module.embedding_specs):
                     if spec[0] in pruned_dict:
                         self.assertEqual(
+                            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                             module.split_embedding_weights()[i][0].size(0),
                             pruned_dict[spec[0]],
                         )

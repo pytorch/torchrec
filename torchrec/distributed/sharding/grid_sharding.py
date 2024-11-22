@@ -14,7 +14,12 @@ import torch.distributed as dist
 from fbgemm_gpu.permute_pooled_embedding_modules_split import (
     PermutePooledEmbeddingsSplit,
 )
-from torchrec.distributed.comm import get_local_size, intra_and_cross_node_pg
+from torch.distributed._tensor import Replicate, Shard
+from torchrec.distributed.comm import (
+    get_local_size,
+    intra_and_cross_node_pg,
+    intra_and_cross_node_pg_2D,
+)
 from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
@@ -33,6 +38,7 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
+    DTensorMetadata,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
@@ -44,6 +50,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
+    ShardingEnv2D,
     ShardingType,
     ShardMetadata,
 )
@@ -70,8 +77,14 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
-        self._env = env
-        self._pg: Optional[dist.ProcessGroup] = self._env.process_group
+        self._env: ShardingEnv = env
+        self._is_2D_parallel: bool = isinstance(env, ShardingEnv2D)
+        self._pg: Optional[dist.ProcessGroup] = (
+            # pyre-ignore[16]
+            self._env.sharding_pg
+            if self._is_2D_parallel
+            else self._env.process_group
+        )
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
         self._device = device
@@ -82,9 +95,17 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
         self._combined_embedding_names: List[str] = []
         self._combined_embedding_dims: List[int] = []
-        intra_pg, cross_pg = intra_and_cross_node_pg(
-            device, backend=dist.get_backend(self._pg)
-        )
+
+        if self._is_2D_parallel:
+            intra_pg, cross_pg = intra_and_cross_node_pg_2D(
+                # pyre-fixme[6]
+                self._env,
+                device=device,
+            )
+        else:
+            intra_pg, cross_pg = intra_and_cross_node_pg(
+                device, backend=dist.get_backend(self._pg)
+            )
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._local_size: int = (
@@ -193,7 +214,7 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         """
         world_size = self._world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
+            [] for _ in range(world_size)
         ]
         for info in sharding_infos:
             # pyre-fixme [16]
@@ -210,9 +231,32 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 ),
             )
 
+            dtensor_metadata = None
+            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+                placements = (
+                    (Replicate(), Shard(1)) if self._is_2D_parallel else (Shard(1),)
+                )
+                dtensor_metadata = DTensorMetadata(
+                    mesh=self._env.device_mesh,
+                    placements=placements,
+                    size=(
+                        info.embedding_config.num_embeddings,
+                        info.embedding_config.embedding_dim,
+                    ),
+                    stride=info.param.stride(),
+                )
+
+            # to not pass onto TBE
+            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
+
             # Expectation is planner CW shards across a node, so each CW shard will have local_size number of row shards
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):
+                rank = (
+                    rank // self._env.num_sharding_groups()  # pyre-ignore[16]
+                    if self._is_2D_parallel
+                    else rank
+                )
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=info.embedding_config.num_embeddings,
@@ -231,6 +275,7 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         ),
                         local_metadata=shards[i],
                         global_metadata=global_metadata,
+                        dtensor_metadata=dtensor_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,

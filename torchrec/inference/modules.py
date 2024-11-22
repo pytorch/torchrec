@@ -426,6 +426,8 @@ def quantize_inference_model(
         """
 
         quant_prep_enable_register_tbes(model, [FeatureProcessedEmbeddingBagCollection])
+        # pyre-fixme[16]: `FeatureProcessedEmbeddingBagCollection` has no attribute
+        #  `qconfig`.
         fp_module.qconfig = QuantConfig(
             activation=quant.PlaceholderObserver.with_args(dtype=output_dtype),
             weight=quant.PlaceholderObserver.with_args(dtype=weight_dtype),
@@ -532,6 +534,8 @@ def shard_quant_model(
             if type(module) in module_types:
                 # TODO: handle other cases/reduce hardcoding
                 if hasattr(module, "embedding_bags"):
+                    # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Module, Tensor]`
+                    #  is not a function.
                     for table in module.embedding_bags:
                         table_fqns.append(table)
 

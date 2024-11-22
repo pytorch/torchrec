@@ -83,6 +83,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         # test forward
         if not per_table_weight_dtype:
+            # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
             ebc.qconfig = torch.quantization.QConfig(
                 activation=torch.quantization.PlaceholderObserver.with_args(
                     dtype=output_type
@@ -305,6 +306,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ebc = EmbeddingBagCollection(tables=tables)
 
         # test forward
+        # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -404,6 +406,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         ebc = EmbeddingBagCollection(tables=tables)
         # test forward
+        # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -443,6 +446,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -530,6 +534,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         embeddings = ec(features)
 
         # test forward
+        # pyre-fixme[16]: `EmbeddingCollection` has no attribute `qconfig`.
         ec.qconfig = QuantConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -725,6 +730,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
             inplace=True,
             per_table_weight_dtype={"t1": torch.float16},
         )
+        # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
         configs = model.m.embedding_configs()
         self.assertEqual(len(configs), 2)
         self.assertNotEqual(configs[0].name, configs[1].name)
@@ -755,6 +761,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
             inplace=True,
             per_table_weight_dtype={"t1": torch.float16},
         )
+        # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
         configs = model.m.embedding_bag_configs()
         self.assertEqual(len(configs), 2)
         self.assertNotEqual(configs[0].name, configs[1].name)
@@ -786,6 +793,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         )
 
         ec = EmbeddingCollection(tables=[ec1_config, ec2_config])
+        # pyre-fixme[16]: `EmbeddingCollection` has no attribute `qconfig`.
         ec.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -888,6 +896,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         )
 
         ec = EmbeddingCollection(tables=[ec1_config, ec2_config])
+        # pyre-fixme[16]: `EmbeddingCollection` has no attribute `qconfig`.
         ec.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type

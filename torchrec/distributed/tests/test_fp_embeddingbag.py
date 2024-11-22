@@ -104,6 +104,8 @@ def get_unsharded_and_sharded_module(
 
         replicate(
             sharded_sparse_arch,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `_embedding_bag_collection`.
             ignored_modules=[sharded_sparse_arch._fp_ebc._embedding_bag_collection],
             process_group=ctx.pg,
             gradient_as_bucket_view=True,

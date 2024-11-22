@@ -9,16 +9,22 @@
 
 import abc
 import copy
+import logging as logger
 from collections import OrderedDict
 from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
+    SplitTableBatchedEmbeddingBagsCodegen,
+)
 from torch import nn
 from torch.distributed.algorithms.ddp_comm_hooks import (
     default_hooks as ddp_default_hooks,
 )
 from torch.distributed.fsdp import FullyShardedDataParallel
+from torch.distributed.remote_device import _remote_device
+from torch.distributed.tensor import DeviceMesh
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
@@ -26,9 +32,11 @@ from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
+    EnumerableShardingSpec,
     ModuleSharder,
     ShardedModule,
     ShardingEnv,
+    ShardingEnv2D,
     ShardingPlan,
 )
 from torchrec.distributed.utils import (
@@ -120,10 +128,12 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
             ),
         )
         if self._allreduce_comm_precision == "fp16":
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             dmp._dmp_wrapped_module.register_comm_hook(
                 None, ddp_default_hooks.fp16_compress_hook
             )
         elif self._allreduce_comm_precision == "bf16":
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             dmp._dmp_wrapped_module.register_comm_hook(
                 None, ddp_default_hooks.bf16_compress_hook
             )
@@ -404,6 +414,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
             # Init parameters if at least one parameter is over 'meta' device.
             if has_meta_param and hasattr(module, "reset_parameters"):
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 module.reset_parameters()
 
         module.apply(init_parameters)
@@ -599,3 +610,265 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         for _, m in module.named_modules():
             if hasattr(m, "reset_parameters"):
                 m.reset_parameters()
+
+
+class DMPCollection(DistributedModelParallel):
+    """
+    A wrapper around DistributedModelParallel that allows for multiple DMPs to be created and managed together.
+
+    This class implements a 2D parallelism model where a DMP is sharded over a subset of ranks.
+    The current implementation shards the model such that, for a given shard, its replicated shards lie on the ranks within the node.
+    This significantly improves the performance of the all-reduce communication (parameter sync) by utilizing intra-node bandwidth.
+
+    Example Use Case:
+        Consider a setup with 2 nodes, each with 4 GPUs. The sharding groups could be:
+            - Group 0, DMP 0: [0, 2, 4, 6]
+            - Group 1, DMP 1: [1, 3, 5, 7]
+
+        Each group receives an identical sharding plan for their local world size and ranks.
+        If we have one table sharded in each DMP, with one shard on each rank in the group,
+        each shard in DMP0 will have a duplicate shard on its corresponding rank in DMP1.
+        The replication groups would be: [0, 1], [2, 3], [4, 5], [6, 7].
+
+    Notes:
+        - DTensor must be used for state dict for checkpointing to work correctly.
+        - The expected sharding plan should be sharded across sharding_group_size (sharding group world size)
+          and broadcasted to all ranks (`planner.collective_plan(..)`).
+
+    Args:
+            module (nn.Module): The module to be sharded.
+            device (torch.device): The device to use for the sharded module.
+            plan (ShardingPlan): The sharding plan to use, created for sharding group world size.
+            sharding_group_size (int): The number of GPUs to model parallel shard the embedding tables over
+            world_size (int): The total number of GPUs.
+            global_pg (dist.ProcessGroup): The global process group.
+            node_group_size (Optional[int]): Specify a logical group size for a node for TWRW/GRID sharding schemes
+            sharders (Optional[List[ModuleSharder[torch.nn.Module]]]): The sharders to use.
+            init_data_parallel (bool): Whether to initialize data parallelism.
+            init_parameters (bool): Whether to initialize parameters.
+            data_parallel_wrapper (Optional[DataParallelWrapper]): The data parallel wrapper to use.
+
+    Example::
+
+        @torch.no_grad()
+        def init_weights(m):
+            if isinstance(m, nn.Linear):
+                m.weight.fill_(1.0)
+            elif isinstance(m, EmbeddingBagCollection):
+                for param in m.parameters():
+                    init.kaiming_normal_(param)
+
+        m = MyModel(device='meta')
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(
+                world_size=global_world_size,
+                local_world_size=sharding_group_size,
+            ),
+            constraints=constraints,
+        )
+        plan = planner.collective_plan(m, sharders, global_pg)
+        m = DMPCollection(
+            module=m,
+            sharding_group_size=sharding_group_size,
+            world_size=global_world_size,
+            global_pg=global_pg,
+            plan=plan,
+        )
+        m.apply(init_weights)
+    """
+
+    def __init__(
+        self,
+        module: nn.Module,
+        device: torch.device,
+        plan: ShardingPlan,
+        world_size: int,
+        sharding_group_size: int,
+        global_pg: dist.ProcessGroup,
+        node_group_size: Optional[int] = None,
+        sharders: Optional[List[ModuleSharder[torch.nn.Module]]] = None,
+        init_data_parallel: bool = True,
+        init_parameters: bool = True,
+        data_parallel_wrapper: Optional[DataParallelWrapper] = None,
+    ) -> None:
+        assert device.type == "cuda", "DMPCollection only supports CUDA"
+        self._device = device
+        self._pg: dist.ProcessGroup = global_pg
+        self._plan: ShardingPlan = plan
+        self._device_mesh: DeviceMesh = None  # pyre-ignore[8]
+        self._sharding_pg: dist.ProcessGroup = None  # pyre-ignore[8]
+        self._replica_pg: dist.ProcessGroup = None  # pyre-ignore[8]
+        self._global_rank: int = dist.get_rank(global_pg)
+
+        self._device_mesh, self._sharding_pg, self._replica_pg = (
+            self._create_process_groups(
+                global_rank=self._global_rank,
+                world_size=world_size,
+                local_size=sharding_group_size,
+            )
+        )
+
+        self._remap_sharding_plan(
+            plan, self._global_rank, world_size // sharding_group_size
+        )
+        super().__init__(
+            module,
+            ShardingEnv2D(
+                global_pg=self._pg,
+                sharding_pg=self._sharding_pg,
+                device_mesh=self._device_mesh,
+                node_group_size=node_group_size,
+            ),
+            device,
+            plan,
+            sharders,
+            init_data_parallel,
+            init_parameters,
+            data_parallel_wrapper,
+        )
+        # post DMP init, we group sharded modules for parameter sync
+        self._modules_to_sync: List[nn.Module] = self._group_sharded_modules()
+
+    def sync(self, include_optimizer_state: bool = True) -> None:
+        """
+        Syncs the DMP weights across the allreduce (inter) process group
+
+        This method is called after each forward pass to synchronize the weights of the sharded modules.
+        It uses the `dist.AllreduceCoalescedOptions` to perform an all-reduce operation on the weights,
+        which averages the weights across all processes in the inter-process group.
+
+        Args:
+            include_optimizer_state (bool): Flag to include optimizer state syncing upon call
+        """
+        assert self._replica_pg is not None, "replica_pg is not initialized!"
+        opts = dist.AllreduceCoalescedOptions()
+        opts.reduceOp = dist.ReduceOp.AVG
+        all_weights = [
+            w
+            for emb_kernel in self._modules_to_sync
+            for w in emb_kernel.split_embedding_weights()
+        ]
+        handle = self._replica_pg.allreduce_coalesced(all_weights, opts=opts)
+        handle.wait()
+
+        if include_optimizer_state:
+            # Sync accumulated square of grad of local optimizer shards
+            optim_list = []
+            for emb_kernel in self._modules_to_sync:
+                all_optimizer_states = emb_kernel.get_optimizer_state()
+                momentum1 = [optim["sum"] for optim in all_optimizer_states]
+                optim_list.extend(momentum1)
+            # Some optimizers do not have states to sync, we check if states exist before collective call
+            if optim_list:
+                handle = self._replica_pg.allreduce_coalesced(optim_list, opts=opts)
+                handle.wait()
+
+    def _create_process_groups(
+        self, global_rank: int, world_size: int, local_size: int
+    ) -> Tuple[DeviceMesh, dist.ProcessGroup, dist.ProcessGroup]:
+        """
+        Creates process groups for sharding and replication, the process groups
+        are created in the same exact order on all ranks as per `dist.new_group` API.
+
+        Args:
+            global_rank (int): The global rank of the current process.
+            world_size (int): The total number of ranks.
+            local_size (int): The number of ranks per sharding group.
+
+        Returns:
+            Tuple[DeviceMesh, dist.ProcessGroup, dist.ProcessGroup]: A tuple containing the device mesh,
+                replication process group, and allreduce process group.
+        """
+        # TODO - look into local sync - https://github.com/pytorch/pytorch/commit/ad21890f8fab73a15e758c7b893e129e9db1a81a
+        peer_matrix = []
+        sharding_pg, replica_pg = None, None
+        step = world_size // local_size
+
+        my_group_rank = global_rank % step
+        for group_rank in range(world_size // local_size):
+            peers = [step * r + group_rank for r in range(local_size)]
+            backend = dist.get_backend(self._pg)
+            curr_pg = dist.new_group(backend=backend, ranks=peers)
+            peer_matrix.append(peers)
+            if my_group_rank == group_rank:
+                logger.warning(
+                    f"[Connection] 2D sharding_group: [{global_rank}] -> [{peers}]"
+                )
+                sharding_pg = curr_pg
+        assert sharding_pg is not None, "sharding_pg is not initialized!"
+        dist.barrier()
+
+        my_inter_rank = global_rank // step
+        for inter_rank in range(local_size):
+            peers = [inter_rank * step + r for r in range(step)]
+            backend = dist.get_backend(self._pg)
+            curr_pg = dist.new_group(backend=backend, ranks=peers)
+            if my_inter_rank == inter_rank:
+                logger.warning(
+                    f"[Connection] 2D replica_group: [{global_rank}] -> [{peers}]"
+                )
+                replica_pg = curr_pg
+        assert replica_pg is not None, "replica_pg is not initialized!"
+        dist.barrier()
+
+        mesh = DeviceMesh(
+            device_type=self._device.type,
+            mesh=peer_matrix,
+            mesh_dim_names=("replicate", "shard"),
+        )
+        logger.warning(f"[Connection] 2D Device Mesh created: {mesh}")
+
+        return mesh, sharding_pg, replica_pg
+
+    def _remap_sharding_plan(self, plan: ShardingPlan, rank: int, step: int) -> None:
+        """
+        Remaps the sharding plan to the local replica process group ranks
+        ShardingPlan is remapped inplace.
+
+        As an example,
+            ShardingPlan for created for ranks [0, 2, 4, 6] is remapped to ranks [1, 3, 5, 7]
+
+        Args:
+            plan (ShardingPlan): The original sharding plan.
+            global_rank (int): The global rank of the current process.
+            step (int): The number of nodes.
+        """
+
+        group_start = rank % step
+        for key in plan.plan:
+            # pyre-ignore[16]
+            for _, param_sharding in plan.plan[key].items():
+                new_ranks = []
+                for shard_rank in param_sharding.ranks:
+                    new_ranks.append(shard_rank * step + group_start)
+                param_sharding.ranks = new_ranks
+                if isinstance(param_sharding.sharding_spec, EnumerableShardingSpec):
+                    shards = param_sharding.sharding_spec.shards
+                    if shards is not None:
+                        for shard in shards:
+                            shard_rank = shard.placement._rank * step + group_start
+                            shard.placement = _remote_device(
+                                f"rank:{shard_rank}/cuda:{shard_rank % get_local_size()}"
+                            )
+        return
+
+    def _group_sharded_modules(
+        self,
+    ) -> List[nn.Module]:
+        # Post init DMP, save the embedding kernels
+        sharded_modules: List[nn.Module] = []
+
+        def _find_sharded_modules(
+            module: nn.Module,
+        ) -> None:
+            if isinstance(module, SplitTableBatchedEmbeddingBagsCodegen):
+                sharded_modules.append(module)
+            if hasattr(module, "_lookups"):
+                for lookup in module._lookups:
+                    _find_sharded_modules(lookup)
+                return
+            for _, child in module.named_children():
+                _find_sharded_modules(child)
+
+        _find_sharded_modules(self._dmp_wrapped_module)
+        return sharded_modules

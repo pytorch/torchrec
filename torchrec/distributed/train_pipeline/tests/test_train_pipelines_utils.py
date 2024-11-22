@@ -74,10 +74,16 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
             dist_stream=None,
         )
         self.assertNotIsInstance(
-            sharded_model.module.sparse.ebc.forward, PipelinedForward
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
+            sharded_model.module.sparse.ebc.forward,
+            PipelinedForward,
         )
         self.assertNotIsInstance(
-            sharded_model.module.sparse.weighted_ebc.forward, PipelinedForward
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
+            sharded_model.module.sparse.weighted_ebc.forward,
+            PipelinedForward,
         )
 
         # Now provide preproc module explicitly
@@ -89,18 +95,30 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
             pipeline_preproc=True,
         )
 
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `sparse`.
         self.assertIsInstance(sharded_model.module.sparse.ebc.forward, PipelinedForward)
         self.assertIsInstance(
-            sharded_model.module.sparse.weighted_ebc.forward, PipelinedForward
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
+            sharded_model.module.sparse.weighted_ebc.forward,
+            PipelinedForward,
         )
         self.assertEqual(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model.module.sparse.ebc.forward._args[0].preproc_modules[0],
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_module`.
             sharded_model.module.preproc_module,
         )
         self.assertEqual(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model.module.sparse.weighted_ebc.forward._args[0].preproc_modules[
                 0
             ],
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_module`.
             sharded_model.module.preproc_module,
         )
         state_dict = sharded_model.state_dict()

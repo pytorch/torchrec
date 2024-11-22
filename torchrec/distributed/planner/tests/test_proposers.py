@@ -574,6 +574,7 @@ class TestProposers(unittest.TestCase):
         # i.e. doesn't participate in scaleup.
         constraints = {
             "table_0": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
                 cache_params=CacheParams(
                     load_factor=0.1,
@@ -581,6 +582,7 @@ class TestProposers(unittest.TestCase):
                 ),
             ),
             "table_1": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
                 cache_params=CacheParams(
                     load_factor=0.1,
@@ -588,6 +590,7 @@ class TestProposers(unittest.TestCase):
                 ),
             ),
             "table_2": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
                 cache_params=CacheParams(
                     load_factor=0.002,
@@ -595,6 +598,7 @@ class TestProposers(unittest.TestCase):
                 ),
             ),
             "table_3": ParameterConstraints(
+                sharding_types=[ShardingType.COLUMN_WISE.value],
                 compute_kernels=[EmbeddingComputeKernel.FUSED.value],
                 cache_params=CacheParams(),
             ),
@@ -1001,14 +1005,14 @@ class TestProposers(unittest.TestCase):
         self.assertEqual(proposal[1], sharding_options_by_fqn["table-2"][1])
         self.assertRegex(
             mock_logger.warning.call_args_list[0].args[0],
-            r"^EmbeddingOffloadScaleupProposer - ignored .* sharding options for table name: table-2",
+            r"^EmbeddingOffloadScaleupProposer - ignored \d+ sharding options for table table-2",
         )
 
         # Case 3
         self.assertEqual(proposal[2], sharding_options_by_fqn["table-3"][0])
         self.assertRegex(
             mock_logger.warning.call_args_list[1].args[0],
-            r"^EmbeddingOffloadScaleupProposer - ignored .* sharding options for table name: table-3",
+            r"^EmbeddingOffloadScaleupProposer - ignored \d+ sharding options for table table-3",
         )
 
         # Case 4

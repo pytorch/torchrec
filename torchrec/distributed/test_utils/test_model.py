@@ -1371,7 +1371,11 @@ class TestTowerSparseNN(TestSparseNNBase):
 
         self.over = nn.Linear(
             in_features=8
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + self.tower_0.interaction.linear.out_features
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + self.tower_1.interaction.linear.out_features
             + tables[1].embedding_dim * len(tables[1].feature_names)
             + weighted_tables[0].embedding_dim * len(weighted_tables[0].feature_names),
@@ -1463,8 +1467,14 @@ class TestTowerCollectionSparseNN(TestSparseNNBase):
         self.tower_arch = EmbeddingTowerCollection(towers=[tower_0, tower_1, tower_2])
         self.over = nn.Linear(
             in_features=8
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + tower_0.interaction.linear.out_features
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + tower_1.interaction.linear.out_features
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + tower_2.interaction.linear.out_features,
             out_features=16,
             device=dense_device,
@@ -1803,11 +1813,10 @@ class TestModelWithPreproc(nn.Module):
             modified_input = self._preproc_module(modified_input)
         elif self._run_preproc_inline:
             idlist_features = modified_input.idlist_features
-            assert isinstance(idlist_features, KeyedJaggedTensor)
             modified_input.idlist_features = KeyedJaggedTensor.from_lengths_sync(
-                idlist_features.keys(),
-                idlist_features.values(),
-                idlist_features.lengths(),
+                idlist_features.keys(),  # pyre-ignore [6]
+                idlist_features.values(),  # pyre-ignore [6]
+                idlist_features.lengths(),  # pyre-ignore [16]
             )
 
         modified_idlist_features = self.preproc_nonweighted(

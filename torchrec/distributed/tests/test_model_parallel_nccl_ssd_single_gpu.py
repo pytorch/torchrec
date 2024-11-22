@@ -96,7 +96,10 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
         requires both DMP modules to have the same sharding plan.
         """
         for lookup1, lookup2 in zip(
-            m1.module.sparse.ebc._lookups, m2.module.sparse.ebc._lookups
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
+            m1.module.sparse.ebc._lookups,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
+            m2.module.sparse.ebc._lookups,
         ):
             for emb_module1, emb_module2 in zip(
                 lookup1._emb_modules, lookup2._emb_modules
@@ -290,12 +293,17 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
         )
 
         # for this to work, we expect the order of lookups to be the same
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
         assert len(fused_model.module.sparse.ebc._lookups) == len(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
             ssd_model.module.sparse.ebc._lookups
         ), "Expect same number of lookups"
 
         for fused_lookup, ssd_lookup in zip(
-            fused_model.module.sparse.ebc._lookups, ssd_model.module.sparse.ebc._lookups
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
+            fused_model.module.sparse.ebc._lookups,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
+            ssd_model.module.sparse.ebc._lookups,
         ):
             assert len(fused_lookup._emb_modules) == len(
                 ssd_lookup._emb_modules
@@ -639,7 +647,10 @@ class KeyValueSequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
         requires both DMP modules to have the same sharding plan.
         """
         for lookup1, lookup2 in zip(
-            m1.module.sparse.ec._lookups, m2.module.sparse.ec._lookups
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            m1.module.sparse.ec._lookups,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            m2.module.sparse.ec._lookups,
         ):
             for emb_module1, emb_module2 in zip(
                 lookup1._emb_modules, lookup2._emb_modules

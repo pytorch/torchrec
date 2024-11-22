@@ -14,7 +14,7 @@ import torch.distributed as dist  # noqa
 from fbgemm_gpu.permute_pooled_embedding_modules_split import (
     PermutePooledEmbeddingsSplit,
 )
-from torch.distributed._tensor import Shard
+from torch.distributed._tensor import Replicate, Shard
 from torchrec.distributed.dist_data import EmbeddingsAllToOne
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -145,9 +145,9 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         self,
         sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
-        world_size: int = self._env.world_size
+        world_size: int = self._world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
+            [] for _ in range(world_size)
         ]
         for info in sharding_infos:
             # pyre-fixme [16]
@@ -173,7 +173,9 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
             if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
                 dtensor_metadata = DTensorMetadata(
                     mesh=self._env.device_mesh,
-                    placements=(Shard(1),),
+                    placements=(
+                        (Replicate(), Shard(1)) if self._is_2D_parallel else (Shard(1),)
+                    ),
                     size=(
                         (
                             info.embedding_config.num_embeddings_post_pruning
@@ -190,6 +192,12 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
 
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):
+                # Remap rank by number of replica groups if 2D parallelism is enabled
+                rank = (
+                    rank // self._env.num_sharding_groups()  # pyre-ignore[16]
+                    if self._is_2D_parallel
+                    else rank
+                )
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=info.embedding_config.num_embeddings,

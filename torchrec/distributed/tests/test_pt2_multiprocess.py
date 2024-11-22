@@ -392,20 +392,33 @@ def _test_compile_rank_fn(
             tbe = None
             if test_model_type == _ModelType.EBC:
                 tbe = (
-                    dmp._dmp_wrapped_module._ebc._lookups[0]._emb_modules[0]._emb_module
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                    #  attribute `_lookups`.
+                    dmp._dmp_wrapped_module._ebc._lookups[0]
+                    ._emb_modules[0]
+                    ._emb_module
                 )
             elif test_model_type == _ModelType.FPEBC:
                 tbe = (
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                    #  attribute `_lookups`.
                     dmp._dmp_wrapped_module._fpebc._lookups[0]
                     ._emb_modules[0]
                     ._emb_module
                 )
             elif test_model_type == _ModelType.EC:
                 tbe = (
-                    dmp._dmp_wrapped_module._ec._lookups[0]._emb_modules[0]._emb_module
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                    #  attribute `_lookups`.
+                    dmp._dmp_wrapped_module._ec._lookups[0]
+                    ._emb_modules[0]
+                    ._emb_module
                 )
             assert isinstance(tbe, SplitTableBatchedEmbeddingBagsCodegen)
 
+            # pyre-fixme[29]: `Union[(self: TensorBase, memory_format:
+            #  Optional[memory_format] = ...) -> Tensor, Tensor, Module]` is not a
+            #  function.
             return tbe.weights_dev.clone().detach()
 
         original_weights = get_weights(dmp)
@@ -630,8 +643,13 @@ def _test_compile_fake_pg_fn(
     dmp_compile.train(True)
 
     def get_weights(dmp: DistributedModelParallel) -> torch.Tensor:
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_lookups`.
         tbe = dmp._dmp_wrapped_module._ebc._lookups[0]._emb_modules[0]._emb_module
         assert isinstance(tbe, SplitTableBatchedEmbeddingBagsCodegen)
+        # pyre-fixme[29]: `Union[(self: TensorBase, memory_format:
+        #  Optional[memory_format] = ...) -> Tensor, Tensor, Module]` is not a
+        #  function.
         return tbe.weights_dev.clone().detach()
 
     original_weights = get_weights(dmp)
