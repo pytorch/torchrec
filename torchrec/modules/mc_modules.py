@@ -251,6 +251,13 @@ class ManagedCollisionModule(nn.Module):
         pass
 
     @abc.abstractmethod
+    def buckets(self) -> int:
+        """
+        Returns number of uniform buckets, relevant to resharding
+        """
+        pass
+
+    @abc.abstractmethod
     def validate_state(self) -> None:
         """
         Validates that the state of the module after loading from checkpoint
@@ -975,6 +982,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         name: Optional[str] = None,
         output_global_offset: int = 0,  # typically not provided by user
         output_segments: Optional[List[int]] = None,  # typically not provided by user
+        buckets: int = 1,
     ) -> None:
         if output_segments is None:
             output_segments = [output_global_offset, output_global_offset + zch_size]
@@ -1000,6 +1008,7 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
         self._eviction_policy = eviction_policy
 
         self._current_iter: int = -1
+        self._buckets = buckets
         self._init_buffers()
 
         ## ------ history info ------
@@ -1320,6 +1329,9 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
     def output_size(self) -> int:
         return self._zch_size
 
+    def buckets(self) -> int:
+        return self._buckets
+
     def input_size(self) -> int:
         return self._input_hash_size
 
@@ -1376,4 +1388,5 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             input_hash_func=self._input_hash_func,
             output_global_offset=output_id_range[0],
             output_segments=output_segments,
+            buckets=len(output_segments) - 1,
         )
