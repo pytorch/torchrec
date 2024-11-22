@@ -953,9 +953,9 @@ class ShardedEmbeddingBagCollection(
                 )
 
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
-                    ShardedTensor._init_from_local_shards(
-                        local_shards,
-                        self._name_to_table_size[table_name],
+                    ShardedTensor._init_from_local_shards_and_global_metadata(
+                        local_shards=local_shards,
+                        sharded_tensor_metadata=metadata,
                         process_group=(
                             self._env.sharding_pg
                             if isinstance(self._env, ShardingEnv2D)
