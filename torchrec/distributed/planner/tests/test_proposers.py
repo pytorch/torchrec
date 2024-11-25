@@ -505,17 +505,19 @@ class TestProposers(unittest.TestCase):
         got = EmbeddingOffloadScaleupProposer.clf_to_bytes(
             model, torch.tensor([0, 0.5, 1])
         )
-        torch.testing.assert_close(got, torch.tensor([0, 4, 9]))
+        torch.testing.assert_close(got, torch.tensor([0, 4, 9], dtype=torch.float64))
 
         # Scenario 1, enough budget to scale everything to 1.0
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.1, 1])
         budget = 100_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
             model,
-            clfs=torch.tensor(mins),
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
             budget=budget,
             allocation_priority=torch.tensor([2, 2, 2]),
         )
@@ -530,10 +532,15 @@ class TestProposers(unittest.TestCase):
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.1, 1])
         budget = 10_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
-            model, clfs=mins, budget=budget, allocation_priority=torch.tensor([2, 2, 2])
+            model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
+            budget=budget,
+            allocation_priority=torch.tensor([2, 2, 2]),
         )
         torch.testing.assert_close(got, torch.tensor([0.26667, 0.26667, 1.0]))
         increase = (
@@ -546,10 +553,15 @@ class TestProposers(unittest.TestCase):
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.1, 1])
         budget = 10_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
-            model, clfs=mins, budget=budget, allocation_priority=torch.tensor([2, 4, 2])
+            model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
+            budget=budget,
+            allocation_priority=torch.tensor([2, 4, 2]),
         )
         # increase is twice as much for table 2 (started at 0.1)
         torch.testing.assert_close(
@@ -559,16 +571,18 @@ class TestProposers(unittest.TestCase):
             EmbeddingOffloadScaleupProposer.clf_to_bytes(model, got).sum()
             - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
         )
-        self.assertEqual(increase, budget)
+        self.assertEqual(int(increase), budget)
 
         # Scenario 4, multi-pass scale up
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.3, 0.5])
         budget = 50_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
             model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
             clfs=mins,
             budget=budget,
             allocation_priority=torch.tensor([1, 2, 100]),
@@ -579,6 +593,31 @@ class TestProposers(unittest.TestCase):
             - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
         )
         self.assertEqual(increase, budget)
+
+        # Scenario 5, prefetch overhead causing early promotion
+        # like scenario 4, but we set fused size to 80%, which saves enough memory
+        # to promote all 3 to HBM inside the same budget.
+        model = torch.tensor(
+            [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
+        )
+        fused_hbm_ceiling = (
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0) * 0.8
+        )
+        mins = torch.tensor([0.1, 0.3, 0.5])
+        budget = 50_000_000
+        got = EmbeddingOffloadScaleupProposer.allocate_budget(
+            model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
+            budget=budget,
+            allocation_priority=torch.tensor([1, 2, 100]),
+        )
+        torch.testing.assert_close(got, torch.tensor([1.0, 1.0, 1.0]))
+        self.assertLessEqual(
+            fused_hbm_ceiling.sum().item(),
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum().item()
+            + budget,
+        )
 
     @unittest.mock.patch(
         "torchrec.distributed.planner.shard_estimators._calculate_storage_specific_sizes",
