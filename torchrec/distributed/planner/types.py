@@ -23,6 +23,7 @@ from torchrec.distributed.planner.constants import (
     DDR_MEM_BW,
     HBM_CAP,
     HBM_MEM_BW,
+    HBM_TO_DDR_MEM_BW,
     INTRA_NODE_BANDWIDTH,
     POOLING_FACTOR,
     WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER,
@@ -184,6 +185,7 @@ class Topology:
         local_world_size: Optional[int] = None,
         hbm_mem_bw: float = HBM_MEM_BW,
         ddr_mem_bw: float = DDR_MEM_BW,
+        hbm_to_ddr_mem_bw: float = HBM_TO_DDR_MEM_BW,
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
         bwd_compute_multiplier: float = BWD_COMPUTE_MULTIPLIER,
@@ -238,6 +240,7 @@ class Topology:
         )
         self._hbm_mem_bw = hbm_mem_bw
         self._ddr_mem_bw = ddr_mem_bw
+        self._hbm_to_ddr_mem_bw = hbm_to_ddr_mem_bw
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
         self._bwd_compute_multiplier = bwd_compute_multiplier
@@ -270,6 +273,10 @@ class Topology:
     @property
     def ddr_mem_bw(self) -> float:
         return self._ddr_mem_bw
+
+    @property
+    def hbm_to_ddr_mem_bw(self) -> float:
+        return self._hbm_to_ddr_mem_bw
 
     @property
     def intra_host_bw(self) -> float:
