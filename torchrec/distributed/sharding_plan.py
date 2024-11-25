@@ -836,9 +836,10 @@ def construct_module_sharding_plan(
         module, sharder.module_type
     ), f"Incorrect sharder for module type {type(module)}"
     shardable_parameters = sharder.shardable_parameters(module)
-    assert (
-        shardable_parameters.keys() == per_param_sharding.keys()
-    ), "per_param_sharding_config doesn't match the shardable parameters of the module"
+    assert shardable_parameters.keys() == per_param_sharding.keys(), (
+        "per_param_sharding_config doesn't match the shardable parameters of the module,"
+        f"got {list(shardable_parameters.keys())} != {list(per_param_sharding.keys())}"
+    )
 
     local_size = local_size or get_local_size()
     world_size = world_size or dist.get_world_size()
