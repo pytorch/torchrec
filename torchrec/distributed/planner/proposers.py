@@ -476,6 +476,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         self.starting_proposal: List[ShardingOption] = []
         self.proposal: Optional[List[ShardingOption]] = None
         self.search: Optional[LuusJaakolaSearch] = None
+        self.best_perf_rating: float = 1e99
 
     def _build_proposal_from_sharding_options(
         self,
@@ -666,8 +667,13 @@ class EmbeddingOffloadScaleupProposer(Proposer):
                 0, search_budget, max_iterations=16, left_cost=perf_rating
             )
 
+        best = False
+        if perf_rating is not None and perf_rating < self.best_perf_rating:
+            self.best_perf_rating = perf_rating
+            best = True
+
         logger.info(
-            f"EmbeddingOffloadScaleupProposer - proposed size={round(bytes_to_gb(hbm_used_previously), 2)} GB, score={perf_rating}"
+            f"EmbeddingOffloadScaleupProposer - proposed size={bytes_to_gb(hbm_used_previously):.2f} GB, score={perf_rating}{' BEST' if best else ''}"
         )
 
         if not partitionable:
