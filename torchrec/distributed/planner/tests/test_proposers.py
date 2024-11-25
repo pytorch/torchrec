@@ -472,6 +472,34 @@ class TestProposers(unittest.TestCase):
             num_proposals += 1
         self.assertEqual(2, num_proposals)
 
+    def test_get_scalable_sharding_options(self) -> None:
+        def make_so(
+            name: str, clf: Optional[float], stats: Optional[CacheStatistics]
+        ) -> ShardingOption:
+            so = make_sharding_option(name, 1, clf)
+            if clf:
+                assert so.cache_params
+                so.cache_params.stats = stats
+            return so
+
+        proposal = [
+            make_so("fused", None, None),
+            make_so("caching-no-stats", 0.5, None),
+            make_so(
+                "caching-stats",
+                0.5,
+                MockCacheStatistics(expected_lookups=1, cacheability=0.42),
+            ),
+            make_so(
+                "caching-stats-no-data",
+                0,
+                MockCacheStatistics(expected_lookups=0, cacheability=0),
+            ),
+        ]
+        got = EmbeddingOffloadScaleupProposer.get_scalable_sharding_options(proposal)
+        want = [proposal[-2]]
+        self.assertEqual(got, want)
+
     def test_allocate_budget(self) -> None:
         model = torch.tensor([[1.0, 0.0], [2.0, 3.0], [4.0, 5.0]])
         got = EmbeddingOffloadScaleupProposer.clf_to_bytes(
@@ -823,7 +851,7 @@ class TestProposers(unittest.TestCase):
             if initial_mem is None:
                 initial_mem = mem
             # Budget given constraints:
-            #  cache scale up budget=92.53 GB, exploring [7.47, 100.0] GB
+            # unscaled plan=7.47 GB, cache scale up budget=92.53 GB, peak scale up budget need=67.06 GB, exploring plans of size [7.47, 74.53] GB
             #
             # Simple perf model, assume partitioner gives a lowest score at 7.9GB, and
             # anything larger than 8GB fails to partition. This is very hard to hit when
@@ -845,7 +873,7 @@ class TestProposers(unittest.TestCase):
         self.assertEqual(proposals, 16)
         self.assertNotEqual(initial_mem, best_plan, "couldn't find a better plan")
         # goal is 7.9, we get very close
-        self.assertEqual(best_plan, 7.960684550926089 * GB)
+        self.assertEqual(best_plan, 7.9028974287211895 * GB)
 
     def test_proposers_to_proposals_list(self) -> None:
         def make_mock_proposal(name: str) -> List[ShardingOption]:
