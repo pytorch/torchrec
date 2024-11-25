@@ -14,6 +14,7 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import (
     DDR_MEM_BW,
     HBM_MEM_BW,
+    HBM_TO_DDR_MEM_BW,
     kernel_bw_lookup,
 )
 
@@ -27,18 +28,22 @@ class TestKernelBWLookup(unittest.TestCase):
 
         uvm_caching_bw: list[Optional[float]] = [
             kernel_bw_lookup(
-                compute_device, computer_kernel, HBM_MEM_BW, DDR_MEM_BW, caching_ratio
+                compute_device,
+                computer_kernel,
+                HBM_MEM_BW,
+                DDR_MEM_BW,
+                HBM_TO_DDR_MEM_BW,
+                caching_ratio,
             )
             for caching_ratio in caching_ratios
         ]
         expected_uvm_caching_bw: List[float] = [
-            23643794.96448,
-            28185722.880000003,
-            50895362.457600005,
-            73605002.0352,
+            3435973.8368,
+            26655640.7808,
+            49875307.724800006,
+            73094974.6688,
             96314641.6128,
         ]
-
         self.assertEqual(expected_uvm_caching_bw, uvm_caching_bw)
 
     def test_uvm_caching_bw_with_prefetch_pipeline(self) -> None:
@@ -54,6 +59,7 @@ class TestKernelBWLookup(unittest.TestCase):
                 computer_kernel,
                 HBM_MEM_BW,
                 DDR_MEM_BW,
+                HBM_TO_DDR_MEM_BW,
                 caching_ratio,
                 prefetch_pipeline,
             )

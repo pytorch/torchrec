@@ -26,6 +26,9 @@ HBM_CAP: int = 32 * 1024 * 1024 * 1024  # 32 GB
 DDR_CAP: int = 128 * 1024 * 1024 * 1024  # 128 GB
 DDR_MEM_BW: float = 51 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 HBM_MEM_BW: float = 897 * 1024 * 1024 * 1024 / 1000  # bytes/ms
+# This can be smaller than DDR_MEM_BW because the PCI channel maybe shared
+# with other devices such as the FE NIC.
+HBM_TO_DDR_MEM_BW: float = 32 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 UVM_CACHING_RATIO: float = 0.2
 BATCH_SIZE: int = 512
 
@@ -44,6 +47,7 @@ def kernel_bw_lookup(
     compute_kernel: str,
     hbm_mem_bw: float,
     ddr_mem_bw: float,
+    hbm_to_ddr_mem_bw: float,
     caching_ratio: Optional[float] = None,
     prefetch_pipeline: bool = False,
 ) -> Optional[float]:
@@ -56,6 +60,7 @@ def kernel_bw_lookup(
         compute_device (str): compute device.
         hbm_mem_bw (float): the bandwidth of the device HBM.
         ddr_mem_bw (float): the bandwidth of the system DDR memory.
+        hbm_to_ddr_bw (float): the bandwidth between device HBM and system DDR.
         caching_ratio (Optional[float]): caching ratio used to determine device bandwidth
             if UVM caching is enabled.
         prefetch_pipeline (bool): whether prefetch pipeline is enabled.
@@ -63,7 +68,7 @@ def kernel_bw_lookup(
     Returns:
         Optional[float]: the device bandwidth.
     """
-    caching_ratio = caching_ratio if caching_ratio else UVM_CACHING_RATIO
+    caching_ratio = caching_ratio if caching_ratio is not None else UVM_CACHING_RATIO
     lookup = {
         # CPU
         ("cpu", EmbeddingComputeKernel.DENSE.value): 0.5 * ddr_mem_bw,
@@ -77,18 +82,18 @@ def kernel_bw_lookup(
         # CUDA
         ("cuda", EmbeddingComputeKernel.DENSE.value): 0.5 * hbm_mem_bw,
         ("cuda", EmbeddingComputeKernel.FUSED.value): 1 * hbm_mem_bw,
-        ("cuda", EmbeddingComputeKernel.FUSED_UVM.value): ddr_mem_bw / 10,
+        ("cuda", EmbeddingComputeKernel.FUSED_UVM.value): hbm_to_ddr_mem_bw / 10,
         ("cuda", EmbeddingComputeKernel.FUSED_UVM_CACHING.value): (
-            caching_ratio * hbm_mem_bw + (1 - caching_ratio) * ddr_mem_bw
+            caching_ratio * hbm_mem_bw + (1 - caching_ratio) * hbm_to_ddr_mem_bw
         )
         / 10,
         ("cuda", EmbeddingComputeKernel.QUANT.value): 1 * hbm_mem_bw,
-        ("cuda", EmbeddingComputeKernel.QUANT_UVM.value): ddr_mem_bw / 10,
+        ("cuda", EmbeddingComputeKernel.QUANT_UVM.value): hbm_to_ddr_mem_bw / 10,
         ("cuda", EmbeddingComputeKernel.QUANT_UVM_CACHING.value): (
-            caching_ratio * hbm_mem_bw + (1 - caching_ratio) * ddr_mem_bw
+            caching_ratio * hbm_mem_bw + (1 - caching_ratio) * hbm_to_ddr_mem_bw
         )
         / 10,
-        ("cuda", EmbeddingComputeKernel.KEY_VALUE.value): ddr_mem_bw,
+        ("cuda", EmbeddingComputeKernel.KEY_VALUE.value): hbm_to_ddr_mem_bw,
     }
 
     if (
