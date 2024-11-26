@@ -12,7 +12,7 @@ import itertools
 import logging
 from collections import OrderedDict
 from decimal import Decimal
-from typing import cast, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, cast, Dict, List, Optional, Set, Tuple, TypeVar, Union
 
 import torch
 
@@ -460,6 +460,15 @@ class DynamicProgrammingProposer(Proposer):
                 self._current_proposal = -1
 
 
+_T = TypeVar("_T")
+
+
+def _none_throws(x: Optional[_T]) -> _T:
+    if x is None:
+        raise AssertionError("unexpected None")
+    return x
+
+
 class EmbeddingOffloadScaleupProposer(Proposer):
     def __init__(self, use_depth: bool = True) -> None:
         self.use_depth: bool = use_depth
@@ -467,6 +476,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         self.starting_proposal: List[ShardingOption] = []
         self.proposal: Optional[List[ShardingOption]] = None
         self.search: Optional[LuusJaakolaSearch] = None
+        self.best_perf_rating: float = 1e99
 
     def _build_proposal_from_sharding_options(
         self,
@@ -534,6 +544,26 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             self.enumerator, self.starting_proposal
         )
         self.proposal = copy.deepcopy(self.starting_proposal)
+
+    @staticmethod
+    def get_hbm_ceiling(
+        starting_proposal: List[ShardingOption], enumerator: Enumerator
+    ) -> int:
+        """returns total amount of memory scaleup could use."""
+        proposal = copy.deepcopy(starting_proposal)
+        cache_tables = EmbeddingOffloadScaleupProposer.get_scalable_sharding_options(
+            proposal
+        )
+        for sharding_option in cache_tables:
+            if (
+                sharding_option.compute_kernel
+                == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+            ):
+                assert sharding_option.cache_params  # appease pyre
+                sharding_option.cache_params.load_factor = None
+                sharding_option.compute_kernel = EmbeddingComputeKernel.FUSED.value
+        enumerator.populate_estimates(cache_tables)
+        return sum(sharding_option.total_storage.hbm for sharding_option in proposal)
 
     @staticmethod
     def promote_high_prefetch_overheaad_table_to_hbm(
@@ -621,15 +651,29 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             hbm_available = EmbeddingOffloadScaleupProposer.get_budget(
                 plan, storage_constraint
             )
+            # max scale up
+            peak_budget_need = (
+                EmbeddingOffloadScaleupProposer.get_hbm_ceiling(
+                    plan, _none_throws(self.enumerator)
+                )
+                - hbm_used_previously
+            )
+            search_budget = min(hbm_available, peak_budget_need)
+
             logger.info(
-                f"EmbeddingOffloadScaleupProposer - cache scale up budget={round(bytes_to_gb(hbm_available), 2)} GB, exploring [{round(bytes_to_gb(hbm_used_previously), 2)}, {round(bytes_to_gb(hbm_used_previously + hbm_available), 2)}] GB"
+                f"EmbeddingOffloadScaleupProposer - unscaled plan={round(bytes_to_gb(hbm_used_previously),2)} GB, cache scale up budget={round(bytes_to_gb(hbm_available), 2)} GB, peak scale up budget need={round(bytes_to_gb(peak_budget_need),2)} GB, exploring plans of size [{round(bytes_to_gb(hbm_used_previously), 2)}, {round(bytes_to_gb(hbm_used_previously + search_budget), 2)}] GB"
             )
             self.search = LuusJaakolaSearch(
-                0, hbm_available, max_iterations=16, left_cost=perf_rating
+                0, search_budget, max_iterations=16, left_cost=perf_rating
             )
 
+        best = False
+        if perf_rating is not None and perf_rating < self.best_perf_rating:
+            self.best_perf_rating = perf_rating
+            best = True
+
         logger.info(
-            f"EmbeddingOffloadScaleupProposer - proposed size={round(bytes_to_gb(hbm_used_previously), 2)} GB, score={perf_rating}"
+            f"EmbeddingOffloadScaleupProposer - proposed size={bytes_to_gb(hbm_used_previously):.2f} GB, score={perf_rating}{' BEST' if best else ''}"
         )
 
         if not partitionable:
@@ -649,10 +693,6 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         self.proposal = EmbeddingOffloadScaleupProposer.next_plan(
             self.starting_proposal, budget, self.enumerator
         )
-        if self.proposal is not None:
-            self.promote_high_prefetch_overheaad_table_to_hbm(
-                self.enumerator, self.proposal
-            )
 
     @staticmethod
     def get_budget(proposal: List[ShardingOption], storage_constraint: Topology) -> int:
@@ -662,6 +702,30 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             sharding_option.total_storage.hbm for sharding_option in proposal
         )
         return available_hbm - used_hbm
+
+    @staticmethod
+    def get_scalable_sharding_options(
+        proposal: List[ShardingOption],
+    ) -> List[ShardingOption]:
+        """Return the subset of tables that we can scale."""
+
+        def none_to_zero(x: Optional[float]) -> float:
+            return x if x is not None else 0.0
+
+        return [
+            sharding_option
+            for sharding_option in proposal
+            if sharding_option.compute_kernel
+            == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+            and none_to_zero(
+                EmbeddingOffloadScaleupProposer.get_cacheability(sharding_option)
+            )
+            * none_to_zero(
+                EmbeddingOffloadScaleupProposer.get_expected_lookups(sharding_option)
+            )
+            * none_to_zero(sharding_option.cache_load_factor)
+            > 0
+        ]
 
     # Given an available budget of additional memory, and a provisional sharding plan,
     # attempt to use the budget wisely to scale up caches that would most benefit from it.
@@ -679,26 +743,17 @@ class EmbeddingOffloadScaleupProposer(Proposer):
 
         proposal = copy.deepcopy(starting_proposal)
         # This is the subset of tables that we can scale
-        cache_tables = [
-            sharding_option
-            for sharding_option in proposal
-            if sharding_option.compute_kernel
-            == EmbeddingComputeKernel.FUSED_UVM_CACHING.value
-            and none_to_zero(
-                EmbeddingOffloadScaleupProposer.get_cacheability(sharding_option)
-            )
-            * none_to_zero(
-                EmbeddingOffloadScaleupProposer.get_expected_lookups(sharding_option)
-            )
-            * none_to_zero(sharding_option.cache_load_factor)
-            > 0
-        ]
+        cache_tables = EmbeddingOffloadScaleupProposer.get_scalable_sharding_options(
+            proposal
+        )
         # Nothing to scale
         if len(cache_tables) == 0:
             return None
 
-        size_model = EmbeddingOffloadScaleupProposer.build_affine_storage_model(
-            cache_tables, enumerator
+        size_model, fused_hbm_ceiling = (
+            EmbeddingOffloadScaleupProposer.build_affine_storage_model(
+                cache_tables, enumerator
+            )
         )
         clfs = torch.tensor(
             [sharding_option.cache_load_factor for sharding_option in cache_tables]
@@ -721,6 +776,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
         )
         new_clfs = EmbeddingOffloadScaleupProposer.allocate_budget(
             model=size_model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
             clfs=clfs,
             budget=budget,
             allocation_priority=cooked_cacheability,
@@ -737,9 +793,10 @@ class EmbeddingOffloadScaleupProposer(Proposer):
                 sharding_option.cache_params.load_factor = None
                 sharding_option.compute_kernel = EmbeddingComputeKernel.FUSED.value
                 num_promoted += 1
-        logger.info(
-            f"EmbeddingOffloadScaleupProposer - Promoted {num_promoted} tables to HBM because cache size is similar to table size."
-        )
+        if num_promoted > 0:
+            logger.info(
+                f"EmbeddingOffloadScaleupProposer - Promoted {num_promoted} tables to HBM because cache size is similar to table size."
+            )
         # recalculate cost estimates of modified tables
         enumerator.populate_estimates(cache_tables)
         return proposal
@@ -771,32 +828,42 @@ class EmbeddingOffloadScaleupProposer(Proposer):
     @staticmethod
     def build_affine_storage_model(
         uvm_caching_sharding_options: List[ShardingOption], enumerator: Enumerator
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         plan: List[ShardingOption] = copy.deepcopy(uvm_caching_sharding_options)
 
-        def compute_hbm_sizes(clf: float) -> torch.Tensor:
+        def set_clf(sharding_option: ShardingOption, clf: float) -> None:
+            assert sharding_option.cache_params  # appease pyre
+            sharding_option.cache_params.load_factor = clf
+
+        def set_fused(sharding_option: ShardingOption) -> None:
+            assert sharding_option.cache_params  # appease pyre
+            sharding_option.cache_params.load_factor = None
+            sharding_option.compute_kernel = EmbeddingComputeKernel.FUSED.value
+
+        def compute_hbm_sizes(f: Callable[[ShardingOption], None]) -> torch.Tensor:
             for sharding_option in plan:
-                assert sharding_option.cache_params  # appease pyre
-                sharding_option.cache_params.load_factor = clf
+                f(sharding_option)
             enumerator.populate_estimates(plan)
             return torch.tensor(
                 [sharding_option.total_storage.hbm for sharding_option in plan]
             )
 
         low_clf, high_clf = 0.1, 0.9
-        low_hbms = compute_hbm_sizes(low_clf)
-        high_hbms = compute_hbm_sizes(high_clf)
+        low_hbms = compute_hbm_sizes(lambda so: set_clf(so, low_clf))
+        high_hbms = compute_hbm_sizes(lambda so: set_clf(so, high_clf))
+        fused_hbms = compute_hbm_sizes(set_fused)
 
         A = (high_hbms - low_hbms) / (high_clf - low_clf)
         B = low_hbms - A * low_clf
-        return torch.stack((A, B), dim=1)  # Nx2 (a,b)
+        caching_model = torch.stack((A, B), dim=1)  # Nx2 (a,b)
+        return caching_model, fused_hbms
 
     @staticmethod
     def clf_to_bytes(
         model: torch.Tensor, clfs: Union[float, torch.Tensor]
     ) -> torch.Tensor:
         # evaluate affine model AX + B
-        return (model[:, 0] * clfs + model[:, 1]).to(torch.int64)
+        return (model[:, 0] * clfs + model[:, 1]).to(torch.float64)
 
     # Given a model of an affine system, an existing configuration (clfs), available
     # budget, and an allocation policy, return new configuration that best uses the
@@ -805,6 +872,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
     @staticmethod
     def allocate_budget(
         model: torch.Tensor,
+        fused_hbm_ceiling: torch.Tensor,
         clfs: torch.Tensor,
         budget: int,
         allocation_priority: torch.Tensor,
@@ -831,7 +899,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             if mask.sum() == 0:
                 break
 
-            logging.debug(
+            logger.debug(
                 f"[allocate_budget] pass={num_pass}, budget={budget}, #cache_tables={mask.sum()}"
             )
 
@@ -850,6 +918,21 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             # TODO: consider trade off of using remaining budget to push >0.95 tables
             # to HBM vs spending that budget on improving hit rate on other tables in
             # next pass.
+
+            # Is any table over the size we'd get if we promoted to HBM? (promotion can
+            # be smaller if input size is large when using prefetch). If so, mark for
+            # promotion and reclaim budget to use on remaining tables.
+            promotes = mask & (min_size_bytes + cache_size_bytes > fused_hbm_ceiling)
+            if promotes.sum() > 0:
+                budget_reclaimed = torch.sum(
+                    ((min_size_bytes + cache_size_bytes) - fused_hbm_ceiling)[promotes]
+                ).item()
+                logger.debug(
+                    f"[allocate_budget] {promotes.sum()} tables exceeded ceiling, promoting to save {budget_reclaimed} bytes"
+                )
+                budget += budget_reclaimed
+                # force these tables to 1.0 to ensure promotion
+                cache_size_bytes[promotes] = max_cache_size_bytes[promotes]
 
         # cache_size_bytes are the new cache sizes we want to use. We convert them back
         # to clfs by dividing by max_cache_size_bytes, which has isolated the clf

@@ -472,22 +472,52 @@ class TestProposers(unittest.TestCase):
             num_proposals += 1
         self.assertEqual(2, num_proposals)
 
+    def test_get_scalable_sharding_options(self) -> None:
+        def make_so(
+            name: str, clf: Optional[float], stats: Optional[CacheStatistics]
+        ) -> ShardingOption:
+            so = make_sharding_option(name, 1, clf)
+            if clf:
+                assert so.cache_params
+                so.cache_params.stats = stats
+            return so
+
+        proposal = [
+            make_so("fused", None, None),
+            make_so("caching-no-stats", 0.5, None),
+            make_so(
+                "caching-stats",
+                0.5,
+                MockCacheStatistics(expected_lookups=1, cacheability=0.42),
+            ),
+            make_so(
+                "caching-stats-no-data",
+                0,
+                MockCacheStatistics(expected_lookups=0, cacheability=0),
+            ),
+        ]
+        got = EmbeddingOffloadScaleupProposer.get_scalable_sharding_options(proposal)
+        want = [proposal[-2]]
+        self.assertEqual(got, want)
+
     def test_allocate_budget(self) -> None:
         model = torch.tensor([[1.0, 0.0], [2.0, 3.0], [4.0, 5.0]])
         got = EmbeddingOffloadScaleupProposer.clf_to_bytes(
             model, torch.tensor([0, 0.5, 1])
         )
-        torch.testing.assert_close(got, torch.tensor([0, 4, 9]))
+        torch.testing.assert_close(got, torch.tensor([0, 4, 9], dtype=torch.float64))
 
         # Scenario 1, enough budget to scale everything to 1.0
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.1, 1])
         budget = 100_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
             model,
-            clfs=torch.tensor(mins),
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
             budget=budget,
             allocation_priority=torch.tensor([2, 2, 2]),
         )
@@ -502,10 +532,15 @@ class TestProposers(unittest.TestCase):
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.1, 1])
         budget = 10_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
-            model, clfs=mins, budget=budget, allocation_priority=torch.tensor([2, 2, 2])
+            model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
+            budget=budget,
+            allocation_priority=torch.tensor([2, 2, 2]),
         )
         torch.testing.assert_close(got, torch.tensor([0.26667, 0.26667, 1.0]))
         increase = (
@@ -518,10 +553,15 @@ class TestProposers(unittest.TestCase):
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.1, 1])
         budget = 10_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
-            model, clfs=mins, budget=budget, allocation_priority=torch.tensor([2, 4, 2])
+            model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
+            budget=budget,
+            allocation_priority=torch.tensor([2, 4, 2]),
         )
         # increase is twice as much for table 2 (started at 0.1)
         torch.testing.assert_close(
@@ -531,16 +571,18 @@ class TestProposers(unittest.TestCase):
             EmbeddingOffloadScaleupProposer.clf_to_bytes(model, got).sum()
             - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
         )
-        self.assertEqual(increase, budget)
+        self.assertEqual(int(increase), budget)
 
         # Scenario 4, multi-pass scale up
         model = torch.tensor(
             [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
         )
+        fused_hbm_ceiling = EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0)
         mins = torch.tensor([0.1, 0.3, 0.5])
         budget = 50_000_000
         got = EmbeddingOffloadScaleupProposer.allocate_budget(
             model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
             clfs=mins,
             budget=budget,
             allocation_priority=torch.tensor([1, 2, 100]),
@@ -551,6 +593,31 @@ class TestProposers(unittest.TestCase):
             - EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum()
         )
         self.assertEqual(increase, budget)
+
+        # Scenario 5, prefetch overhead causing early promotion
+        # like scenario 4, but we set fused size to 80%, which saves enough memory
+        # to promote all 3 to HBM inside the same budget.
+        model = torch.tensor(
+            [[30_000_000, 2_000_000], [30_000_000, 2_000_000], [30_000_000, 2_000_000]]
+        )
+        fused_hbm_ceiling = (
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, 1.0) * 0.8
+        )
+        mins = torch.tensor([0.1, 0.3, 0.5])
+        budget = 50_000_000
+        got = EmbeddingOffloadScaleupProposer.allocate_budget(
+            model,
+            fused_hbm_ceiling=fused_hbm_ceiling,
+            clfs=mins,
+            budget=budget,
+            allocation_priority=torch.tensor([1, 2, 100]),
+        )
+        torch.testing.assert_close(got, torch.tensor([1.0, 1.0, 1.0]))
+        self.assertLessEqual(
+            fused_hbm_ceiling.sum().item(),
+            EmbeddingOffloadScaleupProposer.clf_to_bytes(model, mins).sum().item()
+            + budget,
+        )
 
     @unittest.mock.patch(
         "torchrec.distributed.planner.shard_estimators._calculate_storage_specific_sizes",
@@ -823,7 +890,7 @@ class TestProposers(unittest.TestCase):
             if initial_mem is None:
                 initial_mem = mem
             # Budget given constraints:
-            #  cache scale up budget=92.53 GB, exploring [7.47, 100.0] GB
+            # unscaled plan=7.47 GB, cache scale up budget=92.53 GB, peak scale up budget need=67.06 GB, exploring plans of size [7.47, 74.53] GB
             #
             # Simple perf model, assume partitioner gives a lowest score at 7.9GB, and
             # anything larger than 8GB fails to partition. This is very hard to hit when
@@ -845,7 +912,7 @@ class TestProposers(unittest.TestCase):
         self.assertEqual(proposals, 16)
         self.assertNotEqual(initial_mem, best_plan, "couldn't find a better plan")
         # goal is 7.9, we get very close
-        self.assertEqual(best_plan, 7.960684550926089 * GB)
+        self.assertEqual(best_plan, 7.9028974287211895 * GB)
 
     def test_proposers_to_proposals_list(self) -> None:
         def make_mock_proposal(name: str) -> List[ShardingOption]:

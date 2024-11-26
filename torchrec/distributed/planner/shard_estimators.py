@@ -230,6 +230,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 num_poolings=num_poolings,
                 hbm_mem_bw=self._topology.hbm_mem_bw,
                 ddr_mem_bw=self._topology.ddr_mem_bw,
+                hbm_to_ddr_mem_bw=self._topology.hbm_to_ddr_mem_bw,
                 intra_host_bw=self._topology.intra_host_bw,
                 inter_host_bw=self._topology.inter_host_bw,
                 bwd_compute_multiplier=self._topology.bwd_compute_multiplier,
@@ -267,6 +268,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         num_poolings: List[float],
         hbm_mem_bw: float,
         ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         intra_host_bw: float,
         inter_host_bw: float,
         bwd_compute_multiplier: float,
@@ -304,6 +306,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             num_poolings (List[float]): number of poolings per sample, typically 1.0.
             hbm_mem_bw (float): the bandwidth of the device HBM.
             ddr_mem_bw (float): the bandwidth of the system DDR memory.
+            hbm_to_ddr_bw (float): the bandwidth between device HBM and system DDR.
             intra_host_bw (float): the bandwidth within a single host like multiple threads.
             inter_host_bw (float): the bandwidth between two hosts like multiple machines.
             is_pooled (bool): True if embedding output is pooled (ie. `EmbeddingBag`), False
@@ -327,6 +330,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             compute_kernel,
             hbm_mem_bw,
             ddr_mem_bw,
+            hbm_to_ddr_mem_bw,
             caching_ratio,
             prefetch_pipeline,
         )
@@ -353,7 +357,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
                     bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                     num_poolings=num_poolings,
-                    ddr_mem_bw=ddr_mem_bw,
+                    hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
                     inter_host_bw=inter_host_bw,
                     intra_host_bw=intra_host_bw,
@@ -379,7 +383,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
                     bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                     num_poolings=num_poolings,
-                    ddr_mem_bw=ddr_mem_bw,
+                    hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
                     inter_host_bw=inter_host_bw,
                     intra_host_bw=intra_host_bw,
@@ -408,7 +412,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
                     bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                     num_poolings=num_poolings,
-                    ddr_mem_bw=ddr_mem_bw,
+                    hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
                     inter_host_bw=inter_host_bw,
                     intra_host_bw=intra_host_bw,
@@ -448,14 +452,14 @@ class EmbeddingPerfEstimator(ShardEstimator):
     @classmethod
     def _get_expected_cache_prefetch_time(
         cls,
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         expected_cache_fetches: float,
         emb_dim: int,
         table_data_type_size: float,
     ) -> float:
         # TODO: validate cost model with empirical test
         prefetch_bytes = expected_cache_fetches * emb_dim * table_data_type_size
-        return prefetch_bytes / ddr_mem_bw
+        return prefetch_bytes / hbm_to_ddr_mem_bw
 
     @classmethod
     def _get_tw_sharding_perf(
@@ -471,7 +475,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         fwd_a2a_comm_data_type_size: float,
         bwd_a2a_comm_data_type_size: float,
         num_poolings: List[float],
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         device_bw: float,
         inter_host_bw: float,
         intra_host_bw: float,
@@ -541,7 +545,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             bwd_compute = bwd_compute * weighted_feature_bwd_compute_multiplier
 
         prefetch_compute = cls._get_expected_cache_prefetch_time(
-            ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
+            hbm_to_ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
         )
 
         # in order of model parallel execution, starting with:
@@ -570,7 +574,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         fwd_sr_comm_data_type_size: float,
         bwd_sr_comm_data_type_size: float,
         num_poolings: List[float],
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         device_bw: float,
         inter_host_bw: float,
         intra_host_bw: float,
@@ -639,7 +643,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
         # for row-wise, expected_cache_fetches per shard is / world_size
         prefetch_compute = cls._get_expected_cache_prefetch_time(
-            ddr_mem_bw,
+            hbm_to_ddr_mem_bw,
             expected_cache_fetches / world_size,
             emb_dim,
             table_data_type_size,
@@ -669,7 +673,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         fwd_sr_comm_data_type_size: float,
         bwd_sr_comm_data_type_size: float,
         num_poolings: List[float],
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         device_bw: float,
         inter_host_bw: float,
         intra_host_bw: float,
@@ -738,7 +742,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
         # for table-wise-row-wise or grid_shard, expected_cache_fetches per shard is / local_world_size
         prefetch_compute = cls._get_expected_cache_prefetch_time(
-            ddr_mem_bw,
+            hbm_to_ddr_mem_bw,
             expected_cache_fetches / local_world_size,
             emb_dim,
             table_data_type_size,

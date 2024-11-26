@@ -74,8 +74,8 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         """
         GRID_SHARD only is available if specified by user in parameter constraints, however,
         adding parameter constraints does not work because of the non deterministic nature of
-        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
-        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the
+        call to _filter_sharding_types to ensure the order of the sharding types list is always
         the same.
         """
         self.enumerator._filter_sharding_types = MagicMock(
@@ -113,17 +113,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "table_wise"): [
                 Perf(
-                    fwd_compute=0.05759444891237746,
+                    fwd_compute=0.09179115295410156,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.11518889782475492,
+                    bwd_compute=0.18358230590820312,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
             ("fused_uvm_caching", "table_wise"): [
                 Perf(
-                    fwd_compute=0.013339313780795867,
+                    fwd_compute=0.01432837509527439,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.026678627561591735,
+                    bwd_compute=0.02865675019054878,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
@@ -137,17 +137,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "column_wise"): [
                 Perf(
-                    fwd_compute=0.05759444891237746,
+                    fwd_compute=0.09179115295410156,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.11518889782475492,
+                    bwd_compute=0.18358230590820312,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
             ("fused_uvm_caching", "column_wise"): [
                 Perf(
-                    fwd_compute=0.013339313780795867,
+                    fwd_compute=0.01432837509527439,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.026678627561591735,
+                    bwd_compute=0.02865675019054878,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
@@ -161,17 +161,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "table_column_wise"): [
                 Perf(
-                    fwd_compute=0.05759444891237746,
+                    fwd_compute=0.09179115295410156,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.11518889782475492,
+                    bwd_compute=0.18358230590820312,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
             ("fused_uvm_caching", "table_column_wise"): [
                 Perf(
-                    fwd_compute=0.013339313780795867,
+                    fwd_compute=0.01432837509527439,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.026678627561591735,
+                    bwd_compute=0.02865675019054878,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
@@ -191,30 +191,30 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "row_wise"): [
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
             ],
             ("fused_uvm_caching", "row_wise"): [
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
             ],
             ("fused", "table_row_wise"): [
@@ -233,30 +233,30 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "table_row_wise"): [
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
             ],
             ("fused_uvm_caching", "table_row_wise"): [
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
             ],
             # grid_shard is the same as table_row_wise
@@ -276,30 +276,30 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "grid_shard"): [
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
             ],
             ("fused_uvm_caching", "grid_shard"): [
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
             ],
         }
@@ -335,8 +335,8 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         """
         GRID_SHARD only is available if specified by user in parameter constraints, however,
         adding parameter constraints does not work because of the non deterministic nature of
-        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
-        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the
+        call to _filter_sharding_types to ensure the order of the sharding types list is always
         the same.
         """
         self.enumerator._filter_sharding_types = MagicMock(
@@ -358,32 +358,31 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         expected_total_perfs = {
             ("dense", "data_parallel"): [0.0005062740117544049, 0.0005062740117544049],
             ("fused", "table_wise"): [0.000846718200207288],
-            ("fused_uvm", "table_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "table_wise"): [0.03322849048472446],
+            ("fused_uvm", "table_wise"): [0.22846659024556476],
+            ("fused_uvm_caching", "table_wise"): [0.03568990443780169],
             ("fused", "column_wise"): [0.000846718200207288],
-            ("fused_uvm", "column_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "column_wise"): [0.03322849048472446],
+            ("fused_uvm", "column_wise"): [0.22846659024556476],
+            ("fused_uvm_caching", "column_wise"): [0.03568990443780169],
             ("fused", "table_column_wise"): [0.000846718200207288],
-            ("fused_uvm", "table_column_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "table_column_wise"): [0.03322849048472446],
+            ("fused_uvm", "table_column_wise"): [0.22846659024556476],
+            ("fused_uvm_caching", "table_column_wise"): [0.03568990443780169],
             ("fused", "row_wise"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "row_wise"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm", "row_wise"): [0.05403558413187663, 0.05403558413187663],
             ("fused_uvm_caching", "row_wise"): [
-                0.007906921553027076,
-                0.007906921553027076,
+                0.008488476760988312,
+                0.008488476760988312,
             ],
             ("fused", "table_row_wise"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "table_row_wise"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm", "table_row_wise"): [0.05403558413187663, 0.05403558413187663],
             ("fused_uvm_caching", "table_row_wise"): [
-                0.007906921553027076,
-                0.007906921553027076,
+                0.008488476760988312,
+                0.008488476760988312,
             ],
-            # grid_shard is the same as table_row_wise
             ("fused", "grid_shard"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "grid_shard"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm", "grid_shard"): [0.05403558413187663, 0.05403558413187663],
             ("fused_uvm_caching", "grid_shard"): [
-                0.007906921553027076,
-                0.007906921553027076,
+                0.008488476760988312,
+                0.008488476760988312,
             ],
         }
 
@@ -423,16 +422,16 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         expected_total_perfs = {
             ("dense", "data_parallel"): [0.0026901057997143255, 0.0026901057997143255],
             ("fused", "table_wise"): [0.001880471390093715],
-            ("fused_uvm", "table_wise"): [0.25958192114736517],
-            ("fused_uvm_caching", "table_wise"): [0.06043381305524807],
+            ("fused_uvm", "table_wise"): [0.41346708933512366],
+            ("fused_uvm_caching", "table_wise"): [0.06488458897040142],
             ("fused", "column_wise"): [0.001880471390093715],
-            ("fused_uvm", "column_wise"): [0.25958192114736517],
-            ("fused_uvm_caching", "column_wise"): [0.06043381305524807],
+            ("fused_uvm", "column_wise"): [0.41346708933512366],
+            ("fused_uvm_caching", "column_wise"): [0.06488458897040142],
             ("fused", "row_wise"): [0.0007915177871551004, 0.0007915177871551004],
-            ("fused_uvm", "row_wise"): [0.10363410500919118, 0.10363410500919118],
+            ("fused_uvm", "row_wise"): [0.16504605611165366, 0.16504605611165366],
             ("fused_uvm_caching", "row_wise"): [
-                0.024158779217047004,
-                0.024158779217047004,
+                0.025934979198424798,
+                0.025934979198424798,
             ],
         }
 
@@ -475,17 +474,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
 
         expected_total_perfs = {
             ("quant", "table_wise"): [0.0001296231579222408],
-            ("quant_uvm", "table_wise"): [0.018350937787224266],
-            ("quant_uvm_caching", "table_wise"): [0.004269758427175579],
-            ("quant", "row_wise"): [0.000055200413052187844, 0.000055200413052187844],
-            ("quant_uvm", "row_wise"): [0.005261290307138481, 0.005261290307138481],
+            ("quant_uvm", "table_wise"): [0.029231707255045574],
+            ("quant_uvm_caching", "table_wise"): [0.004584459754509654],
+            ("quant", "row_wise"): [5.5200413052187844e-05, 5.5200413052187844e-05],
+            ("quant_uvm", "row_wise"): [0.008370081583658854, 0.008370081583658854],
             ("quant_uvm_caching", "row_wise"): [
-                0.0012380962042674274,
-                0.0012380962042674274,
+                0.0013280108692200203,
+                0.0013280108692200203,
             ],
             ("quant", "column_wise"): [0.0001296231579222408],
-            ("quant_uvm", "column_wise"): [0.018350937787224266],
-            ("quant_uvm_caching", "column_wise"): [0.004269758427175579],
+            ("quant_uvm", "column_wise"): [0.029231707255045574],
+            ("quant_uvm_caching", "column_wise"): [0.004584459754509654],
         }
 
         total_perfs = {
@@ -555,8 +554,8 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         """
         GRID_SHARD only is available if specified by user in parameter constraints, however,
         adding parameter constraints does not work because of the non deterministic nature of
-        _filter_sharding_types (set & set) operation when constraints are present, we mock the 
-        call to _filter_sharding_types to ensure the order of the sharding types list is always 
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the
+        call to _filter_sharding_types to ensure the order of the sharding types list is always
         the same.
         """
         enumerator._filter_sharding_types = MagicMock(return_value=self._sharding_types)
@@ -574,23 +573,23 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_prefetch_computes = {
-            ("table_0", "fused_uvm_caching", "column_wise"): [0.014608981562595743],
+            ("table_0", "fused_uvm_caching", "column_wise"): [0.023283064365386963],
             ("table_0", "fused_uvm_caching", "row_wise"): [
-                0.007304490781297871,
-                0.007304490781297871,
+                0.011641532182693481,
+                0.011641532182693481,
             ],
             ("table_0", "fused_uvm_caching", "table_column_wise"): [
-                0.014608981562595743
+                0.023283064365386963
             ],
             ("table_0", "fused_uvm_caching", "table_row_wise"): [
-                0.007304490781297871,
-                0.007304490781297871,
+                0.011641532182693481,
+                0.011641532182693481,
             ],
             ("table_0", "fused_uvm_caching", "grid_shard"): [
-                0.007304490781297871,
-                0.007304490781297871,
+                0.011641532182693481,
+                0.011641532182693481,
             ],
-            ("table_0", "fused_uvm_caching", "table_wise"): [0.014608981562595743],
+            ("table_0", "fused_uvm_caching", "table_wise"): [0.023283064365386963],
             ("table_1", "fused", "column_wise"): [0.0],
             ("table_1", "fused", "row_wise"): [0.0, 0.0],
             ("table_1", "fused", "table_column_wise"): [0.0],

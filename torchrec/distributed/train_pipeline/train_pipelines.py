@@ -1624,7 +1624,7 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
             self.initialized = True
             return contextlib.nullcontext()
 
-        return torch._dynamo.compiled_autograd.enable(
+        return torch._dynamo.compiled_autograd._enable(
             # pyre-ignore
             torch.compile(**self.compiled_autograd_options)
         )
