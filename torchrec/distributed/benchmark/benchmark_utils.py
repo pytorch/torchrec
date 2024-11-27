@@ -134,11 +134,11 @@ class BenchmarkResult:
     rank: int = -1
 
     def __str__(self) -> str:
-        runtime = f"Runtime (P90): {self.runtime_percentile(90):g} ms"
+        runtime = f"Runtime (P90): {self.runtime_percentile(90):.2f} ms"
         mem_alloc = (
-            f"Peak Memory alloc (P90): {self.max_mem_alloc_percentile(90)/1000:.2g} GB"
+            f"Peak Memory alloc (P90): {self.max_mem_alloc_percentile(90)/1000:.2f} GB"
         )
-        mem_reserved = f"Peak Memory reserved (P90): {self.max_mem_reserved_percentile(90)/1000:.2g} GB"
+        mem_reserved = f"Peak Memory reserved (P90): {self.max_mem_reserved_percentile(90)/1000:.2f} GB"
         malloc_retries = f"Malloc retries (P50/P90/P100): {self.mem_retries(50) } / {self.mem_retries(90)} / {self.mem_retries(100)}"
         return f"{self.short_name: <{35}} | {malloc_retries} | {runtime} | {mem_alloc} | {mem_reserved}"
 
