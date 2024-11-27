@@ -27,6 +27,8 @@ import torch
 
 from torch import optim
 from torch.distributed._shard.sharded_tensor import ShardedTensor
+from torch.distributed.tensor import DTensor
+from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 
 
 OptimizerFactory = Callable[[List[Union[torch.Tensor, ShardedTensor]]], optim.Optimizer]
@@ -134,6 +136,24 @@ class KeyedOptimizer(optim.Optimizer):
                     )
                 for shard, new_shard in zip(v.local_shards(), new_v.local_shards()):
                     shard.tensor.detach().copy_(new_shard.tensor)
+            elif isinstance(v, DTensor):
+                assert isinstance(new_v, DTensor)
+                # pyre-ignore[16]
+                if isinstance(v.to_local(), LocalShardsWrapper):
+                    assert isinstance(new_v.to_local(), LocalShardsWrapper)
+                    num_shards = len(v.to_local().local_shards())
+                    num_new_shards = len(new_v.to_local().local_shards())
+                    if num_shards != num_new_shards:
+                        raise ValueError(
+                            f"Different number of shards {num_shards} vs {num_new_shards} for the path of {json.dumps(parent_keys)}"
+                        )
+                    for shard, new_shard in zip(
+                        v.to_local().local_shards(), new_v.to_local().local_shards()
+                    ):
+                        shard.detach().copy_(new_shard)
+                else:
+                    assert isinstance(new_v.to_local(), torch.Tensor)
+                    v.detach().copy_(new_v)
             elif isinstance(v, torch.Tensor):
                 v.detach().copy_(new_v)
             else:
