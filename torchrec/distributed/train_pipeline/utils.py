@@ -1196,6 +1196,7 @@ def _rewrite_model(  # noqa C901
     torch.nn.Module,
     List[Callable[..., Any]],
     List[PipelinedPreproc],
+    List[str],
 ]:
     input_model = model
     # Get underlying nn.Module
@@ -1235,6 +1236,7 @@ def _rewrite_model(  # noqa C901
     original_forwards = []
 
     pipelined_preprocs: Set[PipelinedPreproc] = set()
+    non_pipelined_sharded_modules = []
 
     for node in graph.nodes:
         if node.op == "call_module" and node.target in sharded_modules:
@@ -1265,6 +1267,7 @@ def _rewrite_model(  # noqa C901
                 logger.warning(
                     f"Module '{node.target}'' will not be pipelined, due to input modifications"
                 )
+                non_pipelined_sharded_modules.append(node.target)
 
     # JIT script unsharded modules if applicable.
     if apply_jit:
@@ -1273,7 +1276,20 @@ def _rewrite_model(  # noqa C901
         if isinstance(input_model, DistributedModelParallel):
             input_model.module = graph_model
 
-    return pipelined_forwards, input_model, original_forwards, list(pipelined_preprocs)
+    if non_pipelined_sharded_modules:
+        logger.warn(
+            "Sharded modules were not pipelined: %s. "
+            + "This should be fixed for pipelining to work to the full extent.",
+            ", ".join(non_pipelined_sharded_modules),
+        )
+
+    return (
+        pipelined_forwards,
+        input_model,
+        original_forwards,
+        list(pipelined_preprocs),
+        non_pipelined_sharded_modules,
+    )
 
 
 def _override_input_dist_forwards(
@@ -1559,15 +1575,19 @@ class SparseDataDistUtil(Generic[In]):
         if not self.initialized:
             # Step 1: Pipeline input dist in trec sharded modules
             # TODO (yhshin): support preproc modules for `StagedTrainPipeline`
-            self._pipelined_modules, self.model, self._original_forwards, _ = (
-                _rewrite_model(
-                    model=self.model,
-                    context=self.context,
-                    dist_stream=self.data_dist_stream,
-                    batch=batch,
-                    apply_jit=self.apply_jit,
-                    pipelined_forward=self._pipelined_forward,
-                )
+            (
+                self._pipelined_modules,
+                self.model,
+                self._original_forwards,
+                _,
+                _,
+            ) = _rewrite_model(
+                model=self.model,
+                context=self.context,
+                dist_stream=self.data_dist_stream,
+                batch=batch,
+                apply_jit=self.apply_jit,
+                pipelined_forward=self._pipelined_forward,
             )
             # initializes input dist, so we can override input dist forwards
             _start_data_dist(self._pipelined_modules, batch, self.context)

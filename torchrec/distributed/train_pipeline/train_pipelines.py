@@ -531,6 +531,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._model,
             self._original_forwards,
             self._pipelined_preprocs,
+            _,
         ) = _rewrite_model(
             model=self._model,
             context=context,
