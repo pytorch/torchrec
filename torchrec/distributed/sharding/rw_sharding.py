@@ -117,6 +117,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        independent_emb_key_pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
         super().__init__(
             qcomm_codecs_registry=qcomm_codecs_registry,
@@ -124,6 +125,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
         self._env = env
         self._pg: Optional[dist.ProcessGroup] = self._env.process_group
+        self._independent_emb_key_pg: Optional[dist.ProcessGroup] = independent_emb_key_pg if independent_emb_key_pg else self._pg
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
         if device is None:
@@ -288,7 +290,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             ),
         )
         self._dist = KJTAllToAll(
-            pg=dist.new_group(),
+            pg=pg,
             splits=[self._num_features] * self._world_size,
         )
         self._is_sequence = is_sequence
@@ -473,7 +475,7 @@ class RwPooledEmbeddingSharding(
         return RwSparseFeaturesDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
-            pg=self._pg,
+            pg=self._independent_emb_key_pg,
             num_features=num_features,
             feature_hash_sizes=feature_hash_sizes,
             device=device if device is not None else self._device,
