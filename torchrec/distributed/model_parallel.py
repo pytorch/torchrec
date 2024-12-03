@@ -598,7 +598,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             yield key, param
 
     @property
-    def fused_optimizer(self) -> KeyedOptimizer:
+    def fused_optimizer(self) -> CombinedOptimizer:
         return self._optim
 
     @property
