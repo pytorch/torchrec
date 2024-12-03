@@ -73,9 +73,11 @@ jobs:
         conda info
         python --version
         conda run -n build_binary python --version
-        conda install -n build_binary \
-          --yes \
-          pytorch pytorch-cuda=11.8 -c pytorch-nightly -c nvidia
+        conda run -n build_binary \
+          pip install torch --index-url https://download.pytorch.org/whl/nightly/cu118
+        conda run -n build_binary \
+          python -c "import torch"
+        echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
