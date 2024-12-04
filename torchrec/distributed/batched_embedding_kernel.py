@@ -1166,6 +1166,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
             (
                 SplitTableBatchedEmbeddingBagsCodegen,
                 DenseTableBatchedEmbeddingBagsCodegen,
+                SSDTableBatchedEmbeddingBags,
             ),
         ):
             return self.emb_module(
