@@ -118,6 +118,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        device_type_from_sharding_infos: Optional[str] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
@@ -132,6 +133,9 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         if device is None:
             device = torch.device("cpu")
         self._device: torch.device = device
+        self._device_type_from_sharding_infos: Optional[str] = (
+            device_type_from_sharding_infos
+        )
         sharded_tables_per_rank = self._shard(sharding_infos)
         self._need_pos = need_pos
         self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (

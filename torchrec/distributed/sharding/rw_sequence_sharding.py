@@ -167,16 +167,26 @@ class InferRwSequenceEmbeddingDist(
         self,
         device: torch.device,
         world_size: int,
+        device_type_from_sharding_infos: Optional[str] = None,
     ) -> None:
         super().__init__()
         self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
+        self._device_type_from_sharding_infos: Optional[str] = (
+            device_type_from_sharding_infos
+        )
 
     def forward(
         self,
         local_embs: List[torch.Tensor],
         sharding_ctx: Optional[InferSequenceShardingContext] = None,
     ) -> List[torch.Tensor]:
-        return self._dist(local_embs)
+        # for cpu sharder, output dist should be a no-op
+        return (
+            local_embs
+            if self._device_type_from_sharding_infos is not None
+            and self._device_type_from_sharding_infos == "cpu"
+            else self._dist(local_embs)
+        )
 
 
 class InferRwSequenceEmbeddingSharding(
@@ -202,6 +212,7 @@ class InferRwSequenceEmbeddingSharding(
         (emb_sharding, is_even_sharding) = get_embedding_shard_metadata(
             self._grouped_embedding_configs_per_rank
         )
+
         return InferRwSparseFeaturesDist(
             world_size=self._world_size,
             num_features=num_features,
@@ -235,93 +246,5 @@ class InferRwSequenceEmbeddingSharding(
         return InferRwSequenceEmbeddingDist(
             device if device is not None else self._device,
             self._world_size,
-        )
-
-
-class InferCPURwSequenceEmbeddingDist(
-    BaseEmbeddingDist[
-        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
-    ]
-):
-    def __init__(
-        self,
-        device: torch.device,
-        world_size: int,
-    ) -> None:
-        super().__init__()
-
-    def forward(
-        self,
-        local_embs: List[torch.Tensor],
-        sharding_ctx: Optional[InferSequenceShardingContext] = None,
-    ) -> List[torch.Tensor]:
-        # for cpu sharder, output dist should be a no-op
-        return local_embs
-
-
-class InferCPURwSequenceEmbeddingSharding(
-    BaseRwEmbeddingSharding[
-        InferSequenceShardingContext,
-        InputDistOutputs,
-        List[torch.Tensor],
-        List[torch.Tensor],
-    ]
-):
-    """
-    Shards sequence (unpooled) row-wise, i.e.. a given embedding table is evenly
-    distributed by rows and table slices are placed on all ranks for inference.
-    """
-
-    def create_input_dist(
-        self,
-        device: Optional[torch.device] = None,
-    ) -> BaseSparseFeaturesDist[InputDistOutputs]:
-        num_features = self._get_num_features()
-        feature_hash_sizes = self._get_feature_hash_sizes()
-
-        emb_sharding = []
-        for embedding_table_group in self._grouped_embedding_configs_per_rank[0]:
-            for table in embedding_table_group.embedding_tables:
-                shard_split_offsets = [
-                    shard.shard_offsets[0]
-                    # pyre-fixme[16]: `Optional` has no attribute `shards_metadata`.
-                    for shard in table.global_metadata.shards_metadata
-                ]
-                # pyre-fixme[16]: Optional has no attribute size.
-                shard_split_offsets.append(table.global_metadata.size[0])
-                emb_sharding.extend([shard_split_offsets] * len(table.embedding_names))
-
-        return InferRwSparseFeaturesDist(
-            world_size=self._world_size,
-            num_features=num_features,
-            feature_hash_sizes=feature_hash_sizes,
-            device=device if device is not None else self._device,
-            is_sequence=True,
-            has_feature_processor=self._has_feature_processor,
-            need_pos=False,
-            embedding_shard_metadata=emb_sharding,
-        )
-
-    def create_lookup(
-        self,
-        device: Optional[torch.device] = None,
-        fused_params: Optional[Dict[str, Any]] = None,
-        feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
-    ) -> BaseEmbeddingLookup[InputDistOutputs, List[torch.Tensor]]:
-        return InferCPUGroupedEmbeddingsLookup(
-            grouped_configs_per_rank=self._grouped_embedding_configs_per_rank,
-            world_size=self._world_size,
-            fused_params=fused_params,
-            device=device if device is not None else self._device,
-        )
-
-    def create_output_dist(
-        self,
-        device: Optional[torch.device] = None,
-    ) -> BaseEmbeddingDist[
-        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
-    ]:
-        return InferCPURwSequenceEmbeddingDist(
-            device if device is not None else self._device,
-            self._world_size,
+            self._device_type_from_sharding_infos,
         )
