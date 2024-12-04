@@ -15,6 +15,7 @@ import operator
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+from tensordict import TensorDict
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
 from torch.utils._pytree import GetAttrKey, KeyEntry, register_pytree_node
@@ -49,11 +50,9 @@ except OSError:
 
 # OSS
 try:
-    from tensordict import TensorDict
+    pass
 except ImportError:
-
-    class TensorDict:
-        pass
+    pass
 
 
 logger: logging.Logger = logging.getLogger()
@@ -3025,6 +3024,28 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 stride=sum(stride_per_rank),
             )
             return kjt.sync()
+
+
+def td_to_kjt(td: TensorDict, keys: Optional[List[str]] = None) -> KeyedJaggedTensor:
+    if keys is None:
+        keys = list(td.keys())  # pyre-ignore[6]
+    values = torch.cat([td[key]._values for key in keys], dim=0)
+    lengths = torch.cat(
+        [
+            (
+                (td[key]._lengths)
+                if td[key]._lengths is not None
+                else torch.diff(td[key]._offsets)
+            )
+            for key in keys
+        ],
+        dim=0,
+    )
+    return KeyedJaggedTensor(
+        keys=keys,
+        values=values,
+        lengths=lengths,
+    )
 
 
 def _kjt_flatten(
