@@ -12,21 +12,19 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from tensordict import TensorDict
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
     EmbeddingConfig,
     pooling_type_to_str,
 )
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
-
-
-try:
-    from tensordict import TensorDict
-except ImportError:
-
-    class TensorDict:
-        pass
+from torchrec.sparse.jagged_tensor import (
+    JaggedTensor,
+    KeyedJaggedTensor,
+    KeyedTensor,
+    td_to_kjt,
+)
 
 
 @torch.fx.wrap
@@ -226,7 +224,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._feature_names: List[List[str]] = [table.feature_names for table in tables]
         self.reset_parameters()
 
-    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
+    def forward(self, features: Union[KeyedJaggedTensor, TensorDict]) -> KeyedTensor:
         """
         Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
         and returns a `KeyedTensor`, which is the result of pooling the embeddings for each feature.
@@ -237,6 +235,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             KeyedTensor
         """
         flat_feature_names: List[str] = []
+        if isinstance(features, TensorDict):
+            features = td_to_kjt(features)
         for names in self._feature_names:
             flat_feature_names.extend(names)
         inverse_indices = reorder_inverse_indices(
@@ -456,7 +456,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
 
     def forward(
         self,
-        features: KeyedJaggedTensor,
+        features: Union[KeyedJaggedTensor, TensorDict],
     ) -> Dict[str, JaggedTensor]:
         """
         Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
@@ -470,7 +470,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         """
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
-        jt_dict: Dict[str, JaggedTensor] = features.to_dict()
+        if isinstance(features, KeyedJaggedTensor):
+            jt_dict: Dict[str, JaggedTensor] = features.to_dict()
+        else:
+            jt_dict = features
         for i, emb_module in enumerate(self.embeddings.values()):
             feature_names = self._feature_names[i]
             embedding_names = self._embedding_names_by_table[i]
@@ -483,6 +486,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
                     lengths=f.lengths(),
+                    offsets=f.offsets() if isinstance(features, TensorDict) else None,
                     weights=f.values() if self._need_indices else None,
                 )
         return feature_embeddings
