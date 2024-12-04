@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -17,7 +17,6 @@ from torchrec.distributed.dist_data import (
 )
 from torchrec.distributed.embedding_lookup import (
     GroupedEmbeddingsLookup,
-    InferCPUGroupedEmbeddingsLookup,
     InferGroupedEmbeddingsLookup,
 )
 from torchrec.distributed.embedding_sharding import (
@@ -167,11 +166,11 @@ class InferRwSequenceEmbeddingDist(
         self,
         device: torch.device,
         world_size: int,
-        device_type_from_sharding_infos: Optional[str] = None,
+        device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = None,
     ) -> None:
         super().__init__()
         self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
-        self._device_type_from_sharding_infos: Optional[str] = (
+        self._device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = (
             device_type_from_sharding_infos
         )
 
@@ -180,13 +179,15 @@ class InferRwSequenceEmbeddingDist(
         local_embs: List[torch.Tensor],
         sharding_ctx: Optional[InferSequenceShardingContext] = None,
     ) -> List[torch.Tensor]:
-        # for cpu sharder, output dist should be a no-op
-        return (
-            local_embs
-            if self._device_type_from_sharding_infos is not None
-            and self._device_type_from_sharding_infos == "cpu"
-            else self._dist(local_embs)
-        )
+        if self._device_type_from_sharding_infos is not None:
+            if isinstance(self._device_type_from_sharding_infos, tuple):
+                # TODO: Fix the tagging when tuple has heterogenous device type
+                # Done in next diff stack
+                return local_embs
+            elif self._device_type_from_sharding_infos == "cpu":
+                # for cpu sharder, output dist should be a no-op
+                return local_embs
+        return self._dist(local_embs)
 
 
 class InferRwSequenceEmbeddingSharding(
