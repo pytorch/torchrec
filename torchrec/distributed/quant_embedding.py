@@ -16,7 +16,9 @@ import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
+from libfb.py.pyre import none_throws
 from torch import nn
+from torch.distributed._shard.sharding_spec.api import EnumerableShardingSpec
 from torchrec.distributed.embedding import (
     create_sharding_infos_by_sharding_device_group,
     EmbeddingShardingInfo,
@@ -44,7 +46,6 @@ from torchrec.distributed.sharding.cw_sequence_sharding import (
     InferCwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.sharding.rw_sequence_sharding import (
-    InferCPURwSequenceEmbeddingSharding,
     InferRwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
@@ -84,14 +85,34 @@ class EmbeddingCollectionContext(Multistreamable):
             ctx.record_stream(stream)
 
 
-def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
-    # pyre-ignore
-    return ps.sharding_spec.shards[0].placement.device().type
+def get_device_from_parameter_sharding(
+    ps: ParameterSharding,
+) -> Union[str, Tuple[str, ...]]:
+    """
+    Returns list ofdevice type / shard if table is sharded across different device type
+    else reutrns single device type for the table parameter
+    """
+    if not isinstance(ps.sharding_spec, EnumerableShardingSpec):
+        raise ValueError("Expected EnumerableShardingSpec as input to the function")
+
+    device_type_list: Tuple[str, ...] = tuple(
+        [
+            none_throws(shard.placement).device().type
+            for shard in ps.sharding_spec.shards
+        ]
+    )
+    if len(set(device_type_list)) == 1:
+        return device_type_list[0]
+    else:
+        assert (
+            none_throws(ps.sharding_type) == "row_wise"
+        ), "Only row_wise sharding supports sharding across multiple device types for a table"
+        return device_type_list
 
 
 def get_device_from_sharding_infos(
     emb_shard_infos: List[EmbeddingShardingInfo],
-) -> str:
+) -> Union[str, Tuple[str, ...]]:
     res = list(
         {
             get_device_from_parameter_sharding(ps.param_sharding)
@@ -100,6 +121,13 @@ def get_device_from_sharding_infos(
     )
     assert len(res) == 1, "All shards should be on the same type of device"
     return res[0]
+
+
+def get_device_for_first_shard_from_sharding_infos(
+    emb_shard_infos: List[EmbeddingShardingInfo],
+) -> str:
+    device_type = get_device_from_sharding_infos(emb_shard_infos)
+    return device_type[0] if isinstance(device_type, tuple) else device_type
 
 
 def create_infer_embedding_sharding(
@@ -113,31 +141,45 @@ def create_infer_embedding_sharding(
     List[torch.Tensor],
     List[torch.Tensor],
 ]:
-    device_type = get_device_from_sharding_infos(sharding_infos)
+    device_type_from_sharding_infos: Union[str, Tuple[str, ...]] = (
+        get_device_from_sharding_infos(sharding_infos)
+    )
 
-    if device_type in ["cuda", "mtia"]:
+    if device_type_from_sharding_infos in ["cuda", "mtia"]:
         if sharding_type == ShardingType.TABLE_WISE.value:
             return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
         elif sharding_type == ShardingType.COLUMN_WISE.value:
             return InferCwSequenceEmbeddingSharding(sharding_infos, env, device)
         elif sharding_type == ShardingType.ROW_WISE.value:
-            return InferRwSequenceEmbeddingSharding(sharding_infos, env, device)
+            return InferRwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                device_type_from_sharding_infos=device_type_from_sharding_infos,
+            )
         else:
             raise ValueError(
-                f"Sharding type not supported {sharding_type} for {device_type} sharding"
+                f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
             )
-    elif device_type == "cpu":
+    elif device_type_from_sharding_infos == "cpu" or isinstance(
+        device_type_from_sharding_infos, tuple
+    ):
         if sharding_type == ShardingType.ROW_WISE.value:
-            return InferCPURwSequenceEmbeddingSharding(sharding_infos, env, device)
+            return InferRwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                device_type_from_sharding_infos=device_type_from_sharding_infos,
+            )
         elif sharding_type == ShardingType.TABLE_WISE.value:
             return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
         else:
             raise ValueError(
-                f"Sharding type not supported {sharding_type} for {device_type} sharding"
+                f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
             )
     else:
         raise ValueError(
-            f"Sharding type not supported {sharding_type} for {device_type} sharding"
+            f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
         )
 
 
@@ -426,13 +468,13 @@ class ShardedQuantEmbeddingCollection(
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
 
         self._sharding_type_device_group_to_sharding_infos: Dict[
-            Tuple[str, str], List[EmbeddingShardingInfo]
+            Tuple[str, Union[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]
         ] = create_sharding_infos_by_sharding_device_group(
             module, table_name_to_parameter_sharding, fused_params
         )
 
         self._sharding_type_device_group_to_sharding: Dict[
-            Tuple[str, str],
+            Tuple[str, Union[str, Tuple[str, ...]]],
             EmbeddingSharding[
                 InferSequenceShardingContext,
                 InputDistOutputs,
@@ -446,7 +488,11 @@ class ShardedQuantEmbeddingCollection(
                 (
                     env
                     if not isinstance(env, Dict)
-                    else env[get_device_from_sharding_infos(embedding_configs)]
+                    else env[
+                        get_device_for_first_shard_from_sharding_infos(
+                            embedding_configs
+                        )
+                    ]
                 ),
                 device if get_propogate_device() else None,
             )
@@ -569,7 +615,7 @@ class ShardedQuantEmbeddingCollection(
 
     def sharding_type_device_group_to_sharding_infos(
         self,
-    ) -> Dict[Tuple[str, str], List[EmbeddingShardingInfo]]:
+    ) -> Dict[Tuple[str, Union[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]]:
         return self._sharding_type_device_group_to_sharding_infos
 
     def embedding_configs(self) -> List[EmbeddingConfig]:
@@ -861,7 +907,7 @@ class ShardedQuantEmbeddingCollection(
         return EmbeddingCollectionContext(sharding_contexts=[])
 
     @property
-    def shardings(self) -> Dict[Tuple[str, str], FeatureShardingMixIn]:
+    def shardings(self) -> Dict[Tuple[str, Tuple[str, ...]], FeatureShardingMixIn]:
         # pyre-ignore [7]
         return self._sharding_type_device_group_to_sharding
 
@@ -954,7 +1000,7 @@ class ShardedQuantEcInputDist(torch.nn.Module):
         self,
         input_feature_names: List[str],
         sharding_type_device_group_to_sharding: Dict[
-            Tuple[str, str],
+            Tuple[str, Union[str, Tuple[str, ...]]],
             EmbeddingSharding[
                 InferSequenceShardingContext,
                 InputDistOutputs,
