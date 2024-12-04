@@ -456,7 +456,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
 
     def forward(
         self,
-        features: KeyedJaggedTensor,
+        features: Union[KeyedJaggedTensor, TensorDict],
     ) -> Dict[str, JaggedTensor]:
         """
         Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
@@ -470,7 +470,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         """
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
-        jt_dict: Dict[str, JaggedTensor] = features.to_dict()
+        if isinstance(features, KeyedJaggedTensor):
+            jt_dict: Dict[str, JaggedTensor] = features.to_dict()
+        else:
+            jt_dict = features
         for i, emb_module in enumerate(self.embeddings.values()):
             feature_names = self._feature_names[i]
             embedding_names = self._embedding_names_by_table[i]
@@ -483,6 +486,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
                 feature_embeddings[embedding_name] = JaggedTensor(
                     values=lookup,
                     lengths=f.lengths(),
+                    offsets=f.offsets() if isinstance(features, TensorDict) else None,
                     weights=f.values() if self._need_indices else None,
                 )
         return feature_embeddings
