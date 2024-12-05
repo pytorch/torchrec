@@ -1120,6 +1120,10 @@ class MCHManagedCollisionModule(ManagedCollisionModule):
             )
         return preprocessed_features
 
+    def reset_inference_mode(self) -> None:
+        self._evicted = False
+        self._last_eviction_iter = -1
+
     @torch.no_grad()
     def _match_indices(
         self, sorted_sequence: torch.Tensor, search_values: torch.Tensor
