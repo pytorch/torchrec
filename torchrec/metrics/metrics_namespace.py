@@ -52,7 +52,6 @@ class MetricName(MetricNameBase):
     MAE = "mae"
     RMSE = "rmse"
     AUC = "auc"
-    GAUC = "gauc"
     AUPRC = "auprc"
     RAUC = "rauc"
     GROUPED_AUC = "grouped_auc"
@@ -69,7 +68,6 @@ class MetricName(MetricNameBase):
     SCALAR = "scalar"
     OUTPUT = "output"
 
-    GAUC_NUM_SAMPLES = "gauc_num_samples"
     TOTAL_POSITIVE_EXAMPLES = "total_positive_examples"
     TOTAL_NEGATIVE_EXAMPLES = "total_negative_examples"
     PRECISION = "precision"
@@ -98,7 +96,6 @@ class MetricNamespace(MetricNamespaceBase):
     CALIBRATION = "calibration"
     MSE = "mse"
     AUC = "auc"
-    GAUC = "gauc"
     AUPRC = "auprc"
     RAUC = "rauc"
     MAE = "mae"

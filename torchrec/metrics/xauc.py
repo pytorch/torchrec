@@ -101,13 +101,14 @@ class XAUCMetricComputation(RecMetricComputation):
             persistent=True,
         )
 
+    # pyre-fixme[14]: `update` overrides method defined in `RecMetricComputation`
+    #  inconsistently.
     def update(
         self,
         *,
         predictions: Optional[torch.Tensor],
         labels: torch.Tensor,
         weights: Optional[torch.Tensor],
-        **kwargs: Dict[str, Any],
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(
