@@ -358,9 +358,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
 
 
 class CommOpGradientScaling(torch.autograd.Function):
-    # user override: inline autograd.Function is safe to trace since only tensor mutations / no global state
-    _compiled_autograd_should_lift = False
-
     @staticmethod
     # pyre-ignore
     def forward(
