@@ -44,7 +44,6 @@ from torchrec.distributed.sharding.cw_sequence_sharding import (
     InferCwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.sharding.rw_sequence_sharding import (
-    InferCPURwSequenceEmbeddingSharding,
     InferRwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
@@ -113,31 +112,43 @@ def create_infer_embedding_sharding(
     List[torch.Tensor],
     List[torch.Tensor],
 ]:
-    device_type = get_device_from_sharding_infos(sharding_infos)
+    device_type_from_sharding_infos: str = get_device_from_sharding_infos(
+        sharding_infos
+    )
 
-    if device_type in ["cuda", "mtia"]:
+    if device_type_from_sharding_infos in ["cuda", "mtia"]:
         if sharding_type == ShardingType.TABLE_WISE.value:
             return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
         elif sharding_type == ShardingType.COLUMN_WISE.value:
             return InferCwSequenceEmbeddingSharding(sharding_infos, env, device)
         elif sharding_type == ShardingType.ROW_WISE.value:
-            return InferRwSequenceEmbeddingSharding(sharding_infos, env, device)
+            return InferRwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                device_type_from_sharding_infos=device_type_from_sharding_infos,
+            )
         else:
             raise ValueError(
-                f"Sharding type not supported {sharding_type} for {device_type} sharding"
+                f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
             )
-    elif device_type == "cpu":
+    elif device_type_from_sharding_infos == "cpu":
         if sharding_type == ShardingType.ROW_WISE.value:
-            return InferCPURwSequenceEmbeddingSharding(sharding_infos, env, device)
+            return InferRwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                device_type_from_sharding_infos=device_type_from_sharding_infos,
+            )
         elif sharding_type == ShardingType.TABLE_WISE.value:
             return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
         else:
             raise ValueError(
-                f"Sharding type not supported {sharding_type} for {device_type} sharding"
+                f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
             )
     else:
         raise ValueError(
-            f"Sharding type not supported {sharding_type} for {device_type} sharding"
+            f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
         )
 
 

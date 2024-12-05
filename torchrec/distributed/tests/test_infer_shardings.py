@@ -2195,8 +2195,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         quant_model = mi.quant_model
         assert quant_model.training is False
-        print(f"quant_model:\n{quant_model}")
-        non_sharded_output, _ = mi.quant_model(*inputs[0])
+        non_sharded_output = mi.quant_model(*inputs[0])
 
         topology: Topology = Topology(world_size=world_size, compute_device=device_type)
         mi.planner = EmbeddingShardingPlanner(
@@ -2231,7 +2230,7 @@ class InferShardingsTest(unittest.TestCase):
             print(f"sharded_model.MODULE[{n}]:{type(m)}")
 
         sharded_model.load_state_dict(quant_model.state_dict())
-        sharded_output, _ = sharded_model(*inputs[0])
+        sharded_output = sharded_model(*inputs[0])
 
         assert_close(non_sharded_output, sharded_output)
         gm: torch.fx.GraphModule = symbolic_trace(
@@ -2245,7 +2244,7 @@ class InferShardingsTest(unittest.TestCase):
         print(f"fx.graph:\n{gm.graph}")
         gm_script = torch.jit.script(gm)
         print(f"gm_script:\n{gm_script}")
-        gm_script_output, _ = gm_script(*inputs[0])
+        gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
     @unittest.skipIf(

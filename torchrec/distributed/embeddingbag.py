@@ -65,10 +65,8 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensor,
     ShardingEnv,
-    ShardingEnv2D,
     ShardingType,
     ShardMetadata,
-    TensorProperties,
 )
 from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
@@ -98,13 +96,6 @@ try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:index_select_ops")
 except OSError:
     pass
-
-try:
-    from tensordict import TensorDict
-except ImportError:
-
-    class TensorDict:
-        pass
 
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
@@ -943,31 +934,11 @@ class ShardedEmbeddingBagCollection(
                 # created ShardedTensors once in init, use in post_state_dict_hook
                 # note: at this point kvstore backed tensors don't own valid snapshots, so no read
                 # access is allowed on them.
-                sharding_spec = none_throws(
-                    self.module_sharding_plan[table_name].sharding_spec
-                )
-                metadata = sharding_spec.build_metadata(
-                    tensor_sizes=self._name_to_table_size[table_name],
-                    tensor_properties=(
-                        TensorProperties(
-                            dtype=local_shards[0].tensor.dtype,
-                            layout=local_shards[0].tensor.layout,
-                            requires_grad=local_shards[0].tensor.requires_grad,
-                        )
-                        if local_shards
-                        else TensorProperties()
-                    ),
-                )
-
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
-                    ShardedTensor._init_from_local_shards_and_global_metadata(
-                        local_shards=local_shards,
-                        sharded_tensor_metadata=metadata,
-                        process_group=(
-                            self._env.sharding_pg
-                            if isinstance(self._env, ShardingEnv2D)
-                            else self._env.process_group
-                        ),
+                    ShardedTensor._init_from_local_shards(
+                        local_shards,
+                        self._name_to_table_size[table_name],
+                        process_group=self._env.process_group,
                     )
                 )
 
