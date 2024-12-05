@@ -44,8 +44,10 @@ from torchrec.modules.feature_processor_ import FeatureProcessorsCollection
 from torchrec.modules.fp_embedding_modules import (
     FeatureProcessedEmbeddingBagCollection as OriginalFeatureProcessedEmbeddingBagCollection,
 )
-
-from torchrec.modules.utils import construct_jagged_tensors_inference
+from torchrec.modules.utils import (
+    _get_batching_hinted_output,
+    construct_jagged_tensors_inference,
+)
 from torchrec.sparse.jagged_tensor import (
     ComputeKJTToJTDict,
     JaggedTensor,
@@ -54,6 +56,8 @@ from torchrec.sparse.jagged_tensor import (
 )
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
+
+torch.fx.wrap("_get_batching_hinted_output")
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -88,12 +92,6 @@ MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING: str = (
 MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT: str = "__use_batching_hinted_output"
 
 DEFAULT_ROW_ALIGNMENT = 16
-
-
-@torch.fx.wrap
-def _get_batching_hinted_output(lengths: Tensor, output: Tensor) -> Tensor:
-    # this is a fx rule to help with batching hinting jagged sequence tensor coalescing.
-    return output
 
 
 @torch.fx.wrap
