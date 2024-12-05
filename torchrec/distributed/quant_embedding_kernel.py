@@ -33,6 +33,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.fused_params import (
     fused_param_bounds_check_mode,
+    fused_param_lengths_to_offsets_lookup,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
     tbe_fused_params,
@@ -172,12 +173,45 @@ def _unwrap_kjt_for_cpu(
 
 
 @torch.fx.wrap
+def _unwrap_kjt_lengths(
+    features: KeyedJaggedTensor,
+) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    indices = features.values()
+    lengths = features.lengths()
+    return (
+        indices.int(),
+        lengths.int(),
+        features.weights_or_none(),
+    )
+
+
+@torch.fx.wrap
 def _unwrap_optional_tensor(
     tensor: Optional[torch.Tensor],
 ) -> torch.Tensor:
     # Typing for TorchScript
     assert tensor is not None
     return tensor
+
+
+class IntNBitTableBatchedEmbeddingBagsCodegenWithLength(
+    IntNBitTableBatchedEmbeddingBagsCodegen
+):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+    # pyre-ignore Inconsistent override [14]
+    def forward(
+        self,
+        indices: torch.Tensor,
+        lengths: torch.Tensor,
+        per_sample_weights: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        return self._forward_impl(
+            indices=indices,
+            offsets=(torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)),
+            per_sample_weights=per_sample_weights,
+        )
 
 
 class QuantBatchedEmbeddingBag(
@@ -237,22 +271,27 @@ class QuantBatchedEmbeddingBag(
                 )
             )
 
-        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (
-            IntNBitTableBatchedEmbeddingBagsCodegen(
-                embedding_specs=embedding_specs,
-                device=device,
-                pooling_mode=self._pooling,
-                feature_table_map=self._feature_table_map,
-                row_alignment=self._tbe_row_alignment,
-                uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
-                bounds_check_mode=(
-                    bounds_check_mode if bounds_check_mode else BoundsCheckMode.WARNING
-                ),
-                feature_names_per_table=[
-                    table.feature_names for table in config.embedding_tables
-                ],
-                **(tbe_fused_params(fused_params) or {}),
-            )
+        self.lengths_to_tbe: bool = fused_param_lengths_to_offsets_lookup(fused_params)
+
+        if self.lengths_to_tbe:
+            tbe_clazz = IntNBitTableBatchedEmbeddingBagsCodegenWithLength
+        else:
+            tbe_clazz = IntNBitTableBatchedEmbeddingBagsCodegen
+
+        self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = tbe_clazz(
+            embedding_specs=embedding_specs,
+            device=device,
+            pooling_mode=self._pooling,
+            feature_table_map=self._feature_table_map,
+            row_alignment=self._tbe_row_alignment,
+            uvm_host_mapped=True,  # Use cudaHostAlloc for UVM CACHING to fix imbalance numa memory issue
+            bounds_check_mode=(
+                bounds_check_mode if bounds_check_mode else BoundsCheckMode.WARNING
+            ),
+            feature_names_per_table=[
+                table.feature_names for table in config.embedding_tables
+            ],
+            **(tbe_fused_params(fused_params) or {}),
         )
         if device is not None:
             self._emb_module.initialize_weights()
@@ -271,44 +310,50 @@ class QuantBatchedEmbeddingBag(
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return {self._emb_module: self._config}
 
-    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        # Important: _unwrap_kjt regex for FX tracing TAGing
-        if self._runtime_device.type == "cpu":
-            indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(
-                features, self._config.is_weighted
-            )
+    def _emb_module_forward(
+        self,
+        indices: torch.Tensor,
+        lengths_or_offsets: torch.Tensor,
+        weights: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        kwargs = {"indices": indices}
+
+        if self.lengths_to_tbe:
+            kwargs["lengths"] = lengths_or_offsets
         else:
-            indices, offsets, per_sample_weights = _unwrap_kjt(features)
+            kwargs["offsets"] = lengths_or_offsets
 
         if self._is_weighted:
-            weights = _unwrap_optional_tensor(per_sample_weights)
-            if self._emb_module_registered:
-                # Conditional call of .forward function for FX:
-                # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
-                # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
-                # For some post processing that requires TBE emb_module copied in fx.GraphModule we need to be call_module, as it will copies this module inside fx.GraphModule unchanged.
-                return self.emb_module(
-                    indices=indices,
-                    offsets=offsets,
-                    per_sample_weights=weights,
-                )
+            kwargs["per_sample_weights"] = _unwrap_optional_tensor(weights)
+
+        if self._emb_module_registered:
+            # Conditional call of .forward function for FX:
+            # emb_module() can go through FX only if emb_module is registered in named_modules (FX node call_module)
+            # emb_module.forward() does not require registering emb_module in named_modules (FX node call_function)
+            # For some post processing that requires TBE emb_module copied in fx.GraphModule we need to be call_module, as it will copies this module inside fx.GraphModule unchanged.
+            return self._emb_module(**kwargs)
+        else:
+            return self._emb_module.forward(**kwargs)
+
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        # Important: _unwrap_kjt regex for FX tracing TAGing
+        lengths, offsets = None, None
+        if self._runtime_device.type == "cpu":
+            if self.lengths_to_tbe:
+                indices, lengths, per_sample_weights = _unwrap_kjt_lengths(features)
             else:
-                return self.emb_module.forward(
-                    indices=indices,
-                    offsets=offsets,
-                    per_sample_weights=weights,
+                indices, offsets, per_sample_weights = _unwrap_kjt_for_cpu(
+                    features, self._config.is_weighted
                 )
         else:
-            if self._emb_module_registered:
-                return self.emb_module(
-                    indices=indices,
-                    offsets=offsets,
-                )
+            if self.lengths_to_tbe:
+                indices, lengths, per_sample_weights = _unwrap_kjt_lengths(features)
             else:
-                return self.emb_module.forward(
-                    indices=indices,
-                    offsets=offsets,
-                )
+                indices, offsets, per_sample_weights = _unwrap_kjt(features)
+
+        return self._emb_module_forward(
+            indices, lengths if lengths is not None else offsets, per_sample_weights
+        )
 
     def named_buffers(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
