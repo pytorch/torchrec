@@ -650,6 +650,7 @@ class KeyValueParams:
     stats_reporter_config: Optional[TBEStatsReporterConfig] = None
     use_passed_in_path: bool = True
     l2_cache_size: Optional[int] = None
+    enable_async_update: Optional[bool] = None
 
     # Parameter Server (PS) Attributes
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -672,6 +673,7 @@ class KeyValueParams:
                 self.gather_ssd_cache_stats,
                 self.stats_reporter_config,
                 self.l2_cache_size,
+                self.enable_async_update,
             )
         )
 

@@ -209,8 +209,8 @@ class GAUCMetricComputation(RecMetricComputation):
                 name=MetricName.GAUC_NUM_SAMPLES,
                 metric_prefix=MetricPrefix.LIFETIME,
                 value=compute_window_auc(
-                    self.get_window_state("auc_sum"),
-                    self.get_window_state("num_samples"),
+                    cast(torch.Tensor, self.auc_sum),
+                    cast(torch.Tensor, self.num_samples),
                 )["num_samples"],
             ),
             MetricComputationReport(

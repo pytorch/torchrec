@@ -10,17 +10,22 @@
 
 import unittest
 from argparse import Namespace
+from typing import Any, cast, Dict, List
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
+from torch.fx import symbolic_trace
 from torchrec import PoolingType
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
+from torchrec.distributed.fused_params import FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP
 from torchrec.distributed.global_settings import set_propogate_device
+from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestOverArchRegroupModule,
     TestSparseNN,
 )
+from torchrec.distributed.types import ModuleSharder
 
 from torchrec.inference.dlrm_predict import (
     create_training_batch,
@@ -299,6 +304,62 @@ class InferenceTest(unittest.TestCase):
                             spec[1],
                             expected_num_embeddings[spec[0]],
                         )
+
+    def test_sharded_quantized_lengths_to_tbe(self) -> None:
+        set_propogate_device(True)
+
+        fused_params: Dict[str, Any] = {FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP: True}
+        sharders: List[ModuleSharder[torch.nn.Module]] = [
+            cast(
+                ModuleSharder[torch.nn.Module],
+                QuantEmbeddingBagCollectionSharder(fused_params=fused_params),
+            ),
+        ]
+
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            num_float_features=10,
+            dense_device=torch.device("cpu"),
+            sparse_device=torch.device("cpu"),
+            over_arch_clazz=TestOverArchRegroupModule,
+        )
+
+        model.eval()
+        _, local_batch = ModelInput.generate(
+            batch_size=16,
+            world_size=1,
+            num_float_features=10,
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+        )
+
+        # with torch.inference_mode(): # TODO: Why does inference mode fail when using different quant data types
+        output = model(local_batch[0])
+
+        # Quantize the model and collect quantized weights
+        quantized_model = quantize_inference_model(model)
+        quantized_output = quantized_model(local_batch[0])
+        table_to_weight = get_table_to_weights_from_tbe(quantized_model)
+
+        # Shard the model, all weights are initialized back to 0, so have to reassign weights
+        sharded_quant_model, _ = shard_quant_model(
+            quantized_model,
+            world_size=1,
+            compute_device="cpu",
+            sharding_device="cpu",
+            sharders=sharders,
+        )
+        assign_weights_to_tbe(quantized_model, table_to_weight)
+        sharded_quant_output = sharded_quant_model(local_batch[0])
+
+        # When world_size = 1, we should have 1 TBE per sharded, quantized ebc
+        self.assertTrue(len(sharded_quant_model.sparse.ebc.tbes) == 1)
+        self.assertTrue(len(sharded_quant_model.sparse.weighted_ebc.tbes) == 1)
+
+        # Check the weights are close
+        self.assertTrue(torch.allclose(output, quantized_output, atol=1e-3))
+        self.assertTrue(torch.allclose(output, sharded_quant_output, atol=1e-3))
 
     def test_quantized_tbe_count_different_pooling(self) -> None:
         set_propogate_device(True)

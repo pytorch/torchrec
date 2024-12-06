@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import torch
 
@@ -23,6 +23,10 @@ FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS: str = (
 )
 FUSED_PARAM_TBE_ROW_ALIGNMENT: str = "__register_tbe_row_alignment"
 FUSED_PARAM_BOUNDS_CHECK_MODE: str = "__register_tbe_bounds_check_mode"
+
+# Force lengths to offsets conversion before TBE lookup. Helps with performance
+# with certain ways to split models.
+FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP: str = "__register_lengths_to_offsets_lookup"
 
 
 class TBEToRegisterMixIn:
@@ -68,6 +72,18 @@ def fused_param_bounds_check_mode(
         return fused_params[FUSED_PARAM_BOUNDS_CHECK_MODE]
 
 
+def fused_param_lengths_to_offsets_lookup(
+    fused_params: Optional[Dict[str, Any]]
+) -> bool:
+    if (
+        fused_params is None
+        or FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP not in fused_params
+    ):
+        return False
+    else:
+        return fused_params[FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP]
+
+
 def is_fused_param_quant_state_dict_split_scale_bias(
     fused_params: Optional[Dict[str, Any]]
 ) -> bool:
@@ -93,5 +109,7 @@ def tbe_fused_params(
         fused_params_for_tbe.pop(FUSED_PARAM_TBE_ROW_ALIGNMENT)
     if FUSED_PARAM_BOUNDS_CHECK_MODE in fused_params_for_tbe:
         fused_params_for_tbe.pop(FUSED_PARAM_BOUNDS_CHECK_MODE)
+    if FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP in fused_params_for_tbe:
+        fused_params_for_tbe.pop(FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP)
 
     return fused_params_for_tbe

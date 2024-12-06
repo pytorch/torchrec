@@ -358,9 +358,6 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
 
 
 class CommOpGradientScaling(torch.autograd.Function):
-    # user override: inline autograd.Function is safe to trace since only tensor mutations / no global state
-    _compiled_autograd_should_lift = False
-
     @staticmethod
     # pyre-ignore
     def forward(
@@ -501,23 +498,16 @@ class GroupedPooledEmbeddingsLookup(
                         "If you don't turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
                     )
                 if hasattr(emb_op.emb_module, "prefetch"):
-                    if isinstance(emb_op.emb_module, SSDTableBatchedEmbeddingBags):
-                        emb_op.emb_module.prefetch(
-                            indices=features.values(),
-                            offsets=features.offsets(),
-                            forward_stream=forward_stream,
-                        )
-                    else:
-                        emb_op.emb_module.prefetch(
-                            indices=features.values(),
-                            offsets=features.offsets(),
-                            forward_stream=forward_stream,
-                            batch_size_per_feature_per_rank=(
-                                features.stride_per_key_per_rank()
-                                if features.variable_stride_per_key()
-                                else None
-                            ),
-                        )
+                    emb_op.emb_module.prefetch(
+                        indices=features.values(),
+                        offsets=features.offsets(),
+                        forward_stream=forward_stream,
+                        batch_size_per_feature_per_rank=(
+                            features.stride_per_key_per_rank()
+                            if features.variable_stride_per_key()
+                            else None
+                        ),
+                    )
 
     def _merge_variable_batch_embeddings(
         self, embeddings: List[torch.Tensor], splits: List[List[int]]

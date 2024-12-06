@@ -1172,7 +1172,12 @@ def _maybe_compute_length_per_key(
     values: Optional[torch.Tensor],
 ) -> List[int]:
     if length_per_key is None:
-        if len(keys) and values is not None and values.is_meta:
+        if (
+            len(keys)
+            and values is not None
+            and values.is_meta
+            and not is_non_strict_exporting()
+        ):
             # create dummy lengths per key when on meta device
             total_length = values.numel()
             _length = [total_length // len(keys)] * len(keys)
