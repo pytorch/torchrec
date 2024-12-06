@@ -35,7 +35,7 @@ import torch
 from torch import distributed as dist
 
 if not torch._running_with_deploy():
-    from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
+    from torch.distributed._composable.fsdp import FSDPModule as FSDP2
 else:
 
     class FSDP2:
