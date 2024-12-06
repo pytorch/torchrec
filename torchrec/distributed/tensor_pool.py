@@ -282,6 +282,7 @@ class LocalShardPool(torch.nn.Module):
         Returns:
             torch.Tensor: Tensor of values corresponding to the given rank ids.
         """
+        rank_ids.to(self._shard.device, non_blocking=not self._shard.is_cpu)
         return self._shard[rank_ids]
 
     def update(self, rank_ids: torch.Tensor, values: torch.Tensor) -> None:
