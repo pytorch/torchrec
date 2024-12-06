@@ -333,8 +333,8 @@ class EmbeddingStats(Stats):
                     "Perf (ms)",
                     "Storage (HBM, DDR)",
                     "Cache Load Factor",
-                    "Pooling Factor",
-                    "Num Poolings",
+                    "Sum of Pooling Factors",
+                    "Sum of Num Poolings",
                     "Output",
                     "Weighing",
                     "Sharder",
@@ -396,13 +396,15 @@ class EmbeddingStats(Stats):
 
                 shard_storages = _format_storage_breakdown(so_storage)
 
-                pooling_factor = str(round(sum(so.input_lengths), 3))
                 num_poolings = (
                     cast(List[float], constraints[so.name].num_poolings)
                     if constraints
                     and constraints.get(so.name)
                     and constraints[so.name].num_poolings
                     else [NUM_POOLINGS] * len(so.input_lengths)
+                )
+                pooling_factor = str(
+                    round(sum(x * y for x, y in zip(so.input_lengths, num_poolings)), 3)
                 )
                 num_poolings = str(round(sum(num_poolings), 3))
                 output = "pooled" if so.is_pooled else "sequence"
