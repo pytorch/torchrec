@@ -68,9 +68,14 @@ class LocalShardsWrapper(torch.Tensor):
 
         # we calculate the total tensor size by "concat" on second tensor dimension
         cat_tensor_shape = list(local_shards[0].size())
-        if len(local_shards) > 1:  # column-wise sharding
+        if len(local_shards) > 1 and local_shards[0].ndim == 2:  # column-wise sharding
             for shard in local_shards[1:]:
                 cat_tensor_shape[1] += shard.size()[1]
+
+        # in cases of sharding optimizer rowwise, we calculate total tensor size by "concat" on first tensor dimension
+        if len(local_shards) > 1 and local_shards[0].ndim == 1:  # column-wise sharding
+            for shard in local_shards[1:]:
+                cat_tensor_shape[0] += shard.size()[0]
 
         wrapper_properties = TensorProperties.create_from_tensor(local_shards[0])
         wrapper_shape = torch.Size(cat_tensor_shape)
@@ -110,6 +115,7 @@ class LocalShardsWrapper(torch.Tensor):
             aten.equal.default: cls.handle_equal,
             aten.detach.default: cls.handle_detach,
             aten.clone.default: cls.handle_clone,
+            aten.new_empty.default: cls.handle_new_empty,
         }
 
         if func in dispatcher:
@@ -153,18 +159,28 @@ class LocalShardsWrapper(torch.Tensor):
     def handle_view(args, kwargs):
         view_shape = args[1]
         res_shards_list = []
-        if (
-            len(args[0].local_shards()) > 1
-            and args[0].storage_metadata().size[0] == view_shape[0]
-            and args[0].storage_metadata().size[1] == view_shape[1]
-        ):
-            # This accounts for a DTensor quirk, when multiple shards are present on a rank, DTensor on
-            # init calls view_as() on the global tensor shape
-            # will fail because the view shape is not applicable to individual shards.
-            res_shards_list = [
-                aten.view.default(shard, shard.shape, **kwargs)
-                for shard in args[0].local_shards()
-            ]
+        if len(args[0].local_shards()) > 1:
+            if args[0].local_shards()[0].ndim == 2:
+                assert (
+                    args[0].storage_metadata().size[0] == view_shape[0]
+                    and args[0].storage_metadata().size[1] == view_shape[1]
+                )
+                # This accounts for a DTensor quirk, when multiple shards are present on a rank, DTensor on
+                # init calls view_as() on the global tensor shape
+                # will fail because the view shape is not applicable to individual shards.
+                res_shards_list = [
+                    aten.view.default(shard, shard.shape, **kwargs)
+                    for shard in args[0].local_shards()
+                ]
+            elif args[0].local_shards()[0].ndim == 1:
+                assert args[0].storage_metadata().size[0] == view_shape[0]
+                # This case is for optimizer sharding as regardles of sharding type, optimizer state is row wise sharded
+                res_shards_list = [
+                    aten.view.default(shard, shard.shape, **kwargs)
+                    for shard in args[0].local_shards()
+                ]
+            else:
+                raise NotImplementedError("No support for view on tensors ndim > 2")
         else:
             # view is called per shard
             res_shards_list = [
@@ -219,6 +235,16 @@ class LocalShardsWrapper(torch.Tensor):
             for shard in self_ls._local_shards
         ]
         return LocalShardsWrapper(cloned_local_shards, self_ls.local_offsets())
+
+    @staticmethod
+    # pyre-fixme[3]: Return type must be annotated.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def handle_new_empty(args, kwargs):
+        self_ls = args[0]
+        return LocalShardsWrapper(
+            [torch.empty_like(shard) for shard in self_ls._local_shards],
+            self_ls.local_offsets(),
+        )
 
     @property
     def device(self) -> torch._C.device:  # type: ignore[override]
