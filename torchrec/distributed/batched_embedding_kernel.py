@@ -46,6 +46,7 @@ from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
     PartiallyMaterializedTensor,
 )
 from torch import nn
+from torch.distributed._tensor import DTensor, Replicate, Shard as DTensorShard
 from torchrec.distributed.comm import get_local_rank, get_node_group_size
 from torchrec.distributed.composable.table_batched_embedding_slice import (
     TableBatchedEmbeddingSlice,
@@ -53,8 +54,10 @@ from torchrec.distributed.composable.table_batched_embedding_slice import (
 from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
 from torchrec.distributed.embedding_types import (
     compute_kernel_to_embedding_location,
+    DTensorMetadata,
     GroupedEmbeddingConfig,
 )
+from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 from torchrec.distributed.types import (
     Shard,
     ShardedTensor,
@@ -213,6 +216,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             optimizer_states: List[Optional[Tuple[torch.Tensor]]]
             local_metadata: List[ShardMetadata]
             embedding_weights: List[torch.Tensor]
+            dtensor_metadata: List[DTensorMetadata]
 
         def get_optimizer_single_value_shard_metadata_and_global_metadata(
             table_global_metadata: ShardedTensorMetadata,
@@ -389,7 +393,10 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 continue
             if table_config.name not in table_to_shard_params:
                 table_to_shard_params[table_config.name] = ShardParams(
-                    optimizer_states=[], local_metadata=[], embedding_weights=[]
+                    optimizer_states=[],
+                    local_metadata=[],
+                    embedding_weights=[],
+                    dtensor_metadata=[],
                 )
             optimizer_state_values = None
             if optimizer_states:
@@ -409,6 +416,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             )
             table_to_shard_params[table_config.name].local_metadata.append(
                 local_metadata
+            )
+            table_to_shard_params[table_config.name].dtensor_metadata.append(
+                table_config.dtensor_metadata
             )
             table_to_shard_params[table_config.name].embedding_weights.append(weight)
 
@@ -474,7 +484,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 # pyre-ignore
                 def get_sharded_optim_state(
                     momentum_idx: int, state_key: str
-                ) -> ShardedTensor:
+                ) -> Union[ShardedTensor, DTensor]:
                     assert momentum_idx > 0
                     momentum_local_shards: List[Shard] = []
                     optimizer_sharded_tensor_metadata: ShardedTensorMetadata
@@ -528,12 +538,41 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                             )
                         )
 
-                    # TODO we should be creating this in SPMD fashion (e.g. init_from_local_shards), and let it derive global metadata.
-                    return ShardedTensor._init_from_local_shards_and_global_metadata(
-                        local_shards=momentum_local_shards,
-                        sharded_tensor_metadata=optimizer_sharded_tensor_metadata,
-                        process_group=self._pg,
-                    )
+                    # Convert optimizer state to DTensor if enabled
+                    if table_config.dtensor_metadata:
+                        # if rowwise state we do Shard(0), regardless of how the table is sharded
+                        if optim_state.dim() == 1:
+                            stride = (1,)
+                            placements = (
+                                (Replicate(), DTensorShard(0))
+                                if table_config.dtensor_metadata.mesh.ndim == 2
+                                else (DTensorShard(0),)
+                            )
+                        else:
+                            stride = table_config.dtensor_metadata.stride
+                            placements = table_config.dtensor_metadata.placements
+
+                        return DTensor.from_local(
+                            local_tensor=LocalShardsWrapper(
+                                local_shards=[x.tensor for x in momentum_local_shards],
+                                local_offsets=[  # pyre-ignore[6]
+                                    x.metadata.shard_offsets
+                                    for x in momentum_local_shards
+                                ],
+                            ),
+                            device_mesh=table_config.dtensor_metadata.mesh,
+                            placements=placements,
+                            shape=optimizer_sharded_tensor_metadata.size,
+                            stride=stride,
+                            run_check=False,
+                        )
+                    else:
+                        # TODO we should be creating this in SPMD fashion (e.g. init_from_local_shards), and let it derive global metadata.
+                        return ShardedTensor._init_from_local_shards_and_global_metadata(
+                            local_shards=momentum_local_shards,
+                            sharded_tensor_metadata=optimizer_sharded_tensor_metadata,
+                            process_group=self._pg,
+                        )
 
                 num_states: int = min(
                     # pyre-ignore
