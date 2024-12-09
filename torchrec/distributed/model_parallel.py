@@ -746,6 +746,7 @@ class DMPCollection(DistributedModelParallel):
         all_weights = [
             w
             for emb_kernel in self._modules_to_sync
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             for w in emb_kernel.split_embedding_weights()
         ]
         handle = self._replica_pg.allreduce_coalesced(all_weights, opts=opts)
@@ -755,6 +756,7 @@ class DMPCollection(DistributedModelParallel):
             # Sync accumulated square of grad of local optimizer shards
             optim_list = []
             for emb_kernel in self._modules_to_sync:
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 all_optimizer_states = emb_kernel.get_optimizer_state()
                 momentum1 = [optim["sum"] for optim in all_optimizer_states]
                 optim_list.extend(momentum1)
@@ -864,6 +866,8 @@ class DMPCollection(DistributedModelParallel):
             if isinstance(module, SplitTableBatchedEmbeddingBagsCodegen):
                 sharded_modules.append(module)
             if hasattr(module, "_lookups"):
+                # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Module, Tensor]` is
+                #  not a function.
                 for lookup in module._lookups:
                     _find_sharded_modules(lookup)
                 return
