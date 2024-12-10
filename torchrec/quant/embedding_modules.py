@@ -10,7 +10,7 @@
 import copy
 import itertools
 from collections import defaultdict
-from typing import Callable, cast, Dict, List, Optional, Tuple, Type, Union
+from typing import Callable, cast, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
@@ -251,7 +251,7 @@ def _get_device(module: nn.Module) -> torch.device:
 
 
 def _update_embedding_configs(
-    embedding_configs: List[BaseEmbeddingConfig],
+    embedding_configs: Sequence[BaseEmbeddingConfig],
     quant_config: Union[QuantConfig, torch.quantization.QConfig],
     tables_to_rows_post_pruning: Optional[Dict[str, int]] = None,
 ) -> None:

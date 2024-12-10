@@ -11,7 +11,7 @@
 
 import abc
 from logging import getLogger, Logger
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import torch
 
@@ -300,7 +300,7 @@ class ManagedCollisionCollection(nn.Module):
     def __init__(
         self,
         managed_collision_modules: Dict[str, ManagedCollisionModule],
-        embedding_configs: List[BaseEmbeddingConfig],
+        embedding_configs: Sequence[BaseEmbeddingConfig],
         need_preprocess: bool = True,
     ) -> None:
         super().__init__()
@@ -351,7 +351,7 @@ class ManagedCollisionCollection(nn.Module):
         if features_order != list(range(len(features_order))):
             self._features_order = features_order
 
-    def embedding_configs(self) -> List[BaseEmbeddingConfig]:
+    def embedding_configs(self) -> Sequence[BaseEmbeddingConfig]:
         return self._embedding_configs
 
     def forward(
