@@ -2158,7 +2158,6 @@ class InferShardingsTest(unittest.TestCase):
                                 eviction_policy=DistanceLFU_EvictionPolicy(),
                             )
                         },
-                        # pyre-ignore [6] Incompatible parameter type
                         embedding_configs=mi.tables,
                     ),
                 )

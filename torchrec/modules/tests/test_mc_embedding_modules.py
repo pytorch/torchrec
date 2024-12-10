@@ -81,13 +81,11 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
         }
         mcc_ebc = ManagedCollisionCollection(
             managed_collision_modules=mc_modules,
-            # pyre-ignore[6]
             embedding_configs=embedding_bag_configs,
         )
 
         mcc_ec = ManagedCollisionCollection(
             managed_collision_modules=deepcopy(mc_modules),
-            # pyre-ignore[6]
             embedding_configs=embedding_configs,
         )
         mc_ebc = ManagedCollisionEmbeddingBagCollection(
@@ -282,13 +280,11 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
         }
         mcc_ebc = ManagedCollisionCollection(
             managed_collision_modules=mc_modules,
-            # pyre-ignore[6]
             embedding_configs=embedding_bag_configs,
         )
 
         mcc_ec = ManagedCollisionCollection(
             managed_collision_modules=deepcopy(mc_modules),
-            # pyre-ignore[6]
             embedding_configs=embedding_configs,
         )
         mc_ebc = ManagedCollisionEmbeddingBagCollection(
@@ -409,7 +405,6 @@ class MCHManagedCollisionEmbeddingBagCollectionTest(unittest.TestCase):
         }
         mcc = ManagedCollisionCollection(
             managed_collision_modules=mc_modules,
-            # pyre-ignore[6]
             embedding_configs=embedding_configs,
         )
         mcc.train(False)
