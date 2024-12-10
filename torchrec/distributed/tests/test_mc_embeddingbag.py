@@ -78,7 +78,6 @@ class SparseArch(nn.Module):
                 ),
                 ManagedCollisionCollection(
                     managed_collision_modules=mc_modules,
-                    # pyre-ignore
                     embedding_configs=tables,
                 ),
                 return_remapped_features=self._return_remapped,
