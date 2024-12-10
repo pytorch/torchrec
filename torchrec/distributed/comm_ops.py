@@ -119,6 +119,7 @@ class Request(Awaitable[W]):
         """
 
         ret = self.wait_function.apply(self.pg, self, self.dummy_tensor)
+        ret.record_stream(torch.get_device_module(ret.device).current_stream())
         self.req = None
         self.tensor = None
         return ret
