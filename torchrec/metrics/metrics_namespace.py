@@ -82,6 +82,10 @@ class MetricName(MetricNameBase):
     CALI_FREE_NE = "cali_free_ne"
     UNWEIGHTED_NE = "unweighted_ne"
 
+    HINDSIGHT_TARGET_PR = "hindsight_target_pr"
+    HINDSIGHT_TARGET_PRECISION = "hindsight_target_precision"
+    HINDSIGHT_TARGET_RECALL = "hindsight_target_recall"
+
 
 class MetricNamespaceBase(StrValueMixin, Enum):
     pass
@@ -130,6 +134,8 @@ class MetricNamespace(MetricNamespaceBase):
 
     CALI_FREE_NE = "cali_free_ne"
     UNWEIGHTED_NE = "unweighted_ne"
+
+    HINDSIGHT_TARGET_PR = "hindsight_target_pr"
 
 
 class MetricPrefix(StrValueMixin, Enum):
