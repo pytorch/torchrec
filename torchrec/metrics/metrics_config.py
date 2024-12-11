@@ -47,6 +47,7 @@ class RecMetricEnum(RecMetricEnumBase):
     TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
     CALI_FREE_NE = "cali_free_ne"
     UNWEIGHTED_NE = "unweighted_ne"
+    HINDSIGHT_TARGET_PR = "hindsight_target_pr"
 
 
 @dataclass(unsafe_hash=True, eq=True)
