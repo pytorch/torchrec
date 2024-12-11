@@ -24,6 +24,7 @@ from torchrec.metrics.auprc import AUPRCMetric
 from torchrec.metrics.cali_free_ne import CaliFreeNEMetric
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
+from torchrec.metrics.hindsight_target_pr import HindsightTargetPRMetric
 from torchrec.metrics.mae import MAEMetric
 from torchrec.metrics.metrics_config import (
     BatchSizeStage,
@@ -94,6 +95,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.TENSOR_WEIGHTED_AVG: TensorWeightedAvgMetric,
     RecMetricEnum.CALI_FREE_NE: CaliFreeNEMetric,
     RecMetricEnum.UNWEIGHTED_NE: UnweightedNEMetric,
+    RecMetricEnum.HINDSIGHT_TARGET_PR: HindsightTargetPRMetric,
 }
 
 
