@@ -43,6 +43,7 @@ def get_index(
         res = faiss.StandardGpuResources()
         # pyre-fixme[16]
         config = faiss.GpuIndexIVFPQConfig()
+        # pyre-ignore[16]
         index = faiss.GpuIndexIVFPQ(
             res,
             embedding_dim,
