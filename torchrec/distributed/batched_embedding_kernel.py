@@ -94,6 +94,7 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
         SSDTableBatchedEmbeddingBags.__init__
     ).parameters.keys()
     invalid_keys: List[str] = []
+
     for key, value in fused_params.items():
         if key not in ssd_tbe_signature:
             invalid_keys.append(key)
@@ -150,6 +151,21 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
     if "weights_precision" not in ssd_tbe_params:
         weights_precision = data_type_to_sparse_type(config.data_type)
         ssd_tbe_params["weights_precision"] = weights_precision
+
+    if "max_l1_cache_size" in fused_params:
+        l1_cache_size = fused_params.get("max_l1_cache_size") * 1024 * 1024
+        max_dim: int = max(table.local_cols for table in config.embedding_tables)
+        weight_precision_bytes = ssd_tbe_params["weights_precision"].bit_rate() / 8
+        max_cache_sets = (
+            l1_cache_size / ASSOC / weight_precision_bytes / max_dim
+        )  # 100MB
+
+        if ssd_tbe_params["cache_sets"] > int(max_cache_sets):
+            logger.warning(
+                f"cache_sets {ssd_tbe_params['cache_sets']} is larger than max_cache_sets {max_cache_sets} calculated "
+                "by max_l1_cache_size, cap at max_cache_sets instead"
+            )
+            ssd_tbe_params["cache_sets"] = int(max_cache_sets)
 
     return ssd_tbe_params
 

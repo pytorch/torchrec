@@ -649,7 +649,8 @@ class KeyValueParams:
     gather_ssd_cache_stats: Optional[bool] = None
     stats_reporter_config: Optional[TBEStatsReporterConfig] = None
     use_passed_in_path: bool = True
-    l2_cache_size: Optional[int] = None
+    l2_cache_size: Optional[int] = None  # size in GB
+    max_l1_cache_size: Optional[int] = None  # size in MB
     enable_async_update: Optional[bool] = None
 
     # Parameter Server (PS) Attributes
@@ -673,6 +674,7 @@ class KeyValueParams:
                 self.gather_ssd_cache_stats,
                 self.stats_reporter_config,
                 self.l2_cache_size,
+                self.max_l1_cache_size,
                 self.enable_async_update,
             )
         )
