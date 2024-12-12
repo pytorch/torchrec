@@ -17,7 +17,10 @@ from fbgemm_gpu.split_embedding_configs import SparseType
 from torch.fx import symbolic_trace
 from torchrec import PoolingType
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
-from torchrec.distributed.fused_params import FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP
+from torchrec.distributed.fused_params import (
+    FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP,
+    FUSED_PARAM_REGISTER_TBE_BOOL,
+)
 from torchrec.distributed.global_settings import set_propogate_device
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.test_utils.test_model import (
@@ -34,6 +37,8 @@ from torchrec.inference.dlrm_predict import (
 )
 from torchrec.inference.modules import (
     assign_weights_to_tbe,
+    DEFAULT_FUSED_PARAMS,
+    DEFAULT_SHARDERS,
     get_table_to_weights_from_tbe,
     quantize_inference_model,
     set_pruning_data,
@@ -392,3 +397,17 @@ class InferenceTest(unittest.TestCase):
         self.assertTrue(len(quantized_model.sparse.weighted_ebc.tbes) == 1)
         # Changing this back
         self.tables[0].pooling = PoolingType.SUM
+
+    def test_fused_params_overwrite(self) -> None:
+        orig_value = DEFAULT_FUSED_PARAMS[FUSED_PARAM_REGISTER_TBE_BOOL]
+
+        sharders = DEFAULT_SHARDERS
+        ebc_sharder = sharders[0]
+        ebc_fused_params = ebc_sharder.fused_params
+        ebc_fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = -1
+
+        ec_sharder = sharders[1]
+        ec_fused_params = ec_sharder.fused_params
+
+        # Make sure that overwrite of ebc_fused_params is not reflected in ec_fused_params
+        self.assertEqual(ec_fused_params[FUSED_PARAM_REGISTER_TBE_BOOL], orig_value)
