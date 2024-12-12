@@ -65,6 +65,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensor,
     ShardingEnv,
+    ShardingEnv2D,
     ShardingType,
     ShardMetadata,
 )
@@ -938,7 +939,11 @@ class ShardedEmbeddingBagCollection(
                     ShardedTensor._init_from_local_shards(
                         local_shards,
                         self._name_to_table_size[table_name],
-                        process_group=self._env.process_group,
+                        process_group=(
+                            self._env.sharding_pg
+                            if isinstance(self._env, ShardingEnv2D)
+                            else self._env.process_group
+                        ),
                     )
                 )
 
