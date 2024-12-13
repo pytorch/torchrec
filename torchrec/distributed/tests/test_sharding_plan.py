@@ -119,10 +119,6 @@ def _test_sharding(
 
 @skip_if_asan_class
 class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
-    )
     # pyre-fixme[56]
     @given(
         per_param_sharding=st.sampled_from(
