@@ -333,10 +333,11 @@ class EmbeddingStats(Stats):
                     "Perf (ms)",
                     "Storage (HBM, DDR)",
                     "Cache Load Factor",
-                    "Pooling Factor",
-                    "Num Poolings",
+                    "Sum Pooling Factor",
+                    "Sum Num Poolings",
+                    "Num Indices",
                     "Output",
-                    "Weighing",
+                    "Weighted",
                     "Sharder",
                     "Features",
                     "Emb Dim (CW Dim)",
@@ -344,21 +345,22 @@ class EmbeddingStats(Stats):
                     "Ranks",
                 ],
                 [
-                    "-----",
-                    "----------",
-                    "----------------",
-                    "-----------",
-                    "--------------------",
-                    "-------------------",
-                    "----------------",
-                    "--------------",
-                    "--------",
-                    "----------",
-                    "---------",
-                    "----------",
-                    "------------------",
-                    "-----------",
-                    "-------",
+                    "-----",  # FQN
+                    "----------",  # Sharding
+                    "----------------",  # Compute Kernel
+                    "-----------",  # Perf (ms)
+                    "--------------------",  # Storage (HBM, DDR)
+                    "-------------------",  # Cache Load Factor
+                    "--------------------",  # Sum Pooling Factor
+                    "------------------",  # Sum Num Poolings
+                    "-------------",  # Num Indices
+                    "--------",  # Output
+                    "----------",  # Weighted
+                    "---------",  # Sharder
+                    "----------",  # Features
+                    "------------------",  # Emb Dim (CW Dim)
+                    "-----------",  # Hash Size
+                    "-------",  # Ranks
                 ],
             ]
             feat_batch_sizes = [
@@ -404,9 +406,12 @@ class EmbeddingStats(Stats):
                     and constraints[so.name].num_poolings
                     else [NUM_POOLINGS] * len(so.input_lengths)
                 )
+                num_indices = str(
+                    round(sum(x * y for x, y in zip(so.input_lengths, num_poolings)), 3)
+                )
                 num_poolings = str(round(sum(num_poolings), 3))
                 output = "pooled" if so.is_pooled else "sequence"
-                weighing = "weighted" if so.is_weighted else "unweighted"
+                weighted = "weighted" if so.is_weighted else "unweighted"
                 sharder = sharder_map.get(get_sharder_name(type(so.module[1])), None)
                 sharder_name = type(sharder).__name__
                 num_features = len(so.input_lengths)
@@ -441,8 +446,9 @@ class EmbeddingStats(Stats):
                         cache_load_factor,
                         pooling_factor,
                         num_poolings,
+                        num_indices,
                         output,
-                        weighing,
+                        weighted,
                         sharder_name,
                         num_features,
                         embedding_dim,
