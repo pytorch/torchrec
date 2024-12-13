@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+import copy
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Dict, Generic, Iterator, List, Optional, Tuple, TypeVar, Union
@@ -499,7 +500,9 @@ class BaseQuantEmbeddingSharder(ModuleSharder[M]):
         shardable_params: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
-        self._fused_params = fused_params
+        self._fused_params: Optional[Dict[str, Any]] = (
+            copy.deepcopy(fused_params) if fused_params is not None else fused_params
+        )
         if not shardable_params:
             shardable_params = []
         self._shardable_params: List[str] = shardable_params
