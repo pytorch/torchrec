@@ -119,6 +119,8 @@ class Request(Awaitable[W]):
         """
 
         ret = self.wait_function.apply(self.pg, self, self.dummy_tensor)
+        if isinstance(ret, torch.Tensor) and ret.device.type == "cuda":
+            ret.record_stream(torch.get_device_module(ret.device).current_stream())
         self.req = None
         self.tensor = None
         return ret

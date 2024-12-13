@@ -767,3 +767,30 @@ class TestAllToAll(unittest.TestCase):
             specify_pg=specify_pg,
             gradient_division=gradient_division,
         )
+
+    @classmethod
+    def _test_all_gather_base_pooled_cpu(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
+        device = torch.device(f"cpu")
+        input_tensor = torch.randn([4, 4], requires_grad=True).to(device)
+        comm_ops.all_gather_base_pooled(input_tensor, pg).wait()
+        dist.destroy_process_group()
+
+    def test_all_gather_base_pooled_cpu(
+        self,
+    ) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="gloo",
+            # pyre-ignore [6]
+            callable=self._test_all_gather_base_pooled_cpu,
+        )

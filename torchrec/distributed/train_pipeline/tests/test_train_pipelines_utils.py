@@ -152,6 +152,8 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
             fqn="test_module",
             args=[],
             context=TrainPipelineContext(),
+            default_stream=MagicMock(),
+            dist_stream=MagicMock(),
         )
         # self-check - we want the state dict be the same between vanilla model and "rewritten model"
         self.assertDictEqual(model.state_dict(), rewritten_model.state_dict())
