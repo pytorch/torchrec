@@ -11,7 +11,7 @@
 
 import math
 import warnings
-from typing import Callable, cast, Dict, List, Optional, Tuple, Type
+from typing import Callable, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 from torch import distributed as dist, nn
@@ -70,11 +70,12 @@ def placement(
 
 
 # TODO: Consolidate placement and placement_helper into one function.
-def placement_helper(device_type: str, index: int = 0) -> str:
+def placement_helper(device_type: str, index: int = 0, rank: int = 0) -> str:
     if device_type == "cpu":
         return f"rank:0/{device_type}"  # cpu only use rank 0
 
-    return f"rank:{index}/{device_type}:{index}"
+    result = f"rank:{rank}/{device_type}:{index}"
+    return result
 
 
 def calculate_shard_sizes_and_offsets(
@@ -123,10 +124,38 @@ def calculate_shard_sizes_and_offsets(
         or sharding_type == ShardingType.TABLE_COLUMN_WISE.value
     ):
         return _calculate_cw_shard_sizes_and_offsets(columns, rows, col_wise_shard_dim)
+    elif sharding_type == ShardingType.GRID_SHARD.value:
+        return _calculate_grid_shard_sizes_and_offsets(
+            rows, local_world_size, columns, col_wise_shard_dim
+        )
 
     raise ValueError(
         f"Unrecognized or unsupported sharding type provided: {sharding_type}"
     )
+
+
+def _calculate_grid_shard_sizes_and_offsets(
+    hash_size: int,
+    num_device: int,
+    columns: int,
+    col_wise_shard_dim: Optional[int] = None,
+) -> Tuple[List[List[int]], List[List[int]]]:
+    """
+    Similar to row-wise case, but also splits columns into blocks of size `col_wise_shard_dim`.
+    """
+    row_shard_sizes, row_shard_offsets = _calculate_rw_shard_sizes_and_offsets(
+        hash_size, num_device, columns
+    )
+    block_size = _get_block_size_for_cw_shard(columns, col_wise_shard_dim)
+    num_col_wise_nodes, _residual = divmod(columns, block_size)
+    shard_sizes: List[List[int]] = []
+    shard_offsets: List[List[int]] = []
+
+    for node in range(num_col_wise_nodes):
+        for row_shard_size, row_shard_offset in zip(row_shard_sizes, row_shard_offsets):
+            shard_sizes.append([row_shard_size[0], block_size])
+            shard_offsets.append([row_shard_offset[0], block_size * node])
+    return shard_sizes, shard_offsets
 
 
 def _calculate_rw_shard_sizes_and_offsets(
@@ -198,6 +227,28 @@ def _find_base_dim(lower_bound: int, dim: int) -> int:
         if dim % i == 0 and i % 4 == 0:
             return i
     return dim
+
+
+def _get_block_size_for_cw_shard(
+    columns: int, column_wise_shard_dim: Optional[int]
+) -> int:
+    block_size: int = min(
+        (
+            _find_base_dim(column_wise_shard_dim, columns)
+            if column_wise_shard_dim
+            else _find_base_dim(MIN_CW_DIM, columns)
+        ),
+        columns,
+    )
+
+    if columns % block_size != 0:
+        warnings.warn(
+            f"Dim of {columns} cannot be evenly divided with column wise shard"
+            "dim {column_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
+            UserWarning,
+        )
+        block_size = columns
+    return block_size
 
 
 def _calculate_cw_shard_sizes_and_offsets(
@@ -442,7 +493,7 @@ def table_wise(
             local_size,
             device_type,
             sharder,
-            placements=([placement_helper(device, rank)] if device else None),
+            placements=([placement_helper(device, rank, rank)] if device else None),
             compute_kernel=compute_kernel,
         )
 
@@ -450,7 +501,7 @@ def table_wise(
 
 
 def row_wise(
-    sizes_placement: Optional[Tuple[List[int], str]] = None
+    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::ROW_WISE` for construct_module_sharding_plan.
@@ -469,6 +520,12 @@ def row_wise(
             },
         )
     """
+
+    if sizes_placement is not None and isinstance(sizes_placement[1], list):
+        assert len(sizes_placement[0]) == len(
+            sizes_placement[1]
+        ), "sizes_placement and device per placement (in case of sharding "
+        "across HBM and CPU host) must have the same length"
 
     def _parameter_sharding_generator(
         param: nn.Parameter,
@@ -507,6 +564,21 @@ def row_wise(
                     f"Cannot fit tensor of {rows, cols} into sizes_ranks_placements = {sizes_placement}"
                 )
 
+        index: int = 0
+        placements: List[str] = []
+        if sizes_placement is not None:
+            device_type = ""
+            for i in range(len(sizes_placement[0])):
+                if isinstance(sizes_placement[1], list):
+                    device_type = sizes_placement[1][i]
+                    placements.append(placement_helper(device_type, index, i))
+                else:
+                    device_type = str(sizes_placement[1])
+                    placements.append(placement_helper(device_type, index, i))
+
+                if device_type == "cuda":
+                    index += 1
+
         return _get_parameter_sharding(
             param,
             ShardingType.ROW_WISE.value,
@@ -514,14 +586,7 @@ def row_wise(
             local_size,
             device_type,
             sharder,
-            placements=(
-                [
-                    placement_helper(sizes_placement[1], i)
-                    for i in range(len(sizes_placement[0]))
-                ]
-                if sizes_placement
-                else None
-            ),
+            placements=placements if sizes_placement else None,
             compute_kernel=(
                 EmbeddingComputeKernel.QUANT.value if sizes_placement else None
             ),
@@ -639,6 +704,58 @@ def table_row_wise(
     return _parameter_sharding_generator
 
 
+def grid_shard(
+    host_indexes: List[int],
+) -> ParameterShardingGenerator:
+    """
+    Returns a generator of ParameterShardingPlan for `ShardingType::GRID_SHARD` for construct_module_sharding_plan.
+
+    Args:
+    host_indexes (List[int]): index of hosts (nodes) to do row wise
+
+    Example::
+
+        ebc = EmbeddingBagCollection(...)
+        plan = construct_module_sharding_plan(
+            ebc,
+            {
+                "table_4": grid_shard(host_indexes=[1,2]),
+            },
+        )
+    """
+
+    def _parameter_sharding_generator(
+        param: nn.Parameter,
+        local_size: int,
+        world_size: int,
+        device_type: str,
+        sharder: ModuleSharder[nn.Module],
+    ) -> ParameterSharding:
+        size_and_offsets = _get_parameter_size_offsets(
+            param,
+            ShardingType.GRID_SHARD,
+            local_size,
+            world_size,
+        )
+        size_offset_ranks = []
+        for host_count, host_index in enumerate(host_indexes):
+            for rank in range(local_size):
+                (size, offset) = size_and_offsets[host_count * local_size + rank]
+                rank_offset = host_index * local_size
+                size_offset_ranks.append((size, offset, rank_offset + rank))
+
+        return _get_parameter_sharding(
+            param,
+            ShardingType.GRID_SHARD.value,
+            size_offset_ranks,
+            local_size,
+            device_type,
+            sharder,
+        )
+
+    return _parameter_sharding_generator
+
+
 def apply_to_all(
     module: nn.Module,
     parameter_sharding_generator: ParameterShardingGenerator,
@@ -719,9 +836,10 @@ def construct_module_sharding_plan(
         module, sharder.module_type
     ), f"Incorrect sharder for module type {type(module)}"
     shardable_parameters = sharder.shardable_parameters(module)
-    assert (
-        shardable_parameters.keys() == per_param_sharding.keys()
-    ), "per_param_sharding_config doesn't match the shardable parameters of the module"
+    assert shardable_parameters.keys() == per_param_sharding.keys(), (
+        "per_param_sharding_config doesn't match the shardable parameters of the module,"
+        f"got {list(shardable_parameters.keys())} != {list(per_param_sharding.keys())}"
+    )
 
     local_size = local_size or get_local_size()
     world_size = world_size or dist.get_world_size()

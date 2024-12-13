@@ -27,7 +27,7 @@ import torch
 
 from torch import optim
 from torch.distributed._shard.sharded_tensor import ShardedTensor
-
+from torch.distributed.tensor import DTensor
 
 OptimizerFactory = Callable[[List[Union[torch.Tensor, ShardedTensor]]], optim.Optimizer]
 
@@ -111,6 +111,8 @@ class KeyedOptimizer(optim.Optimizer):
         param_state_dict_to_load: Dict[str, Any],
         parent_keys: List[Union[str, int, float, bool, None]],
     ) -> None:
+        # Import at function level to avoid circular dependency.
+        from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 
         for k, v in current_param_state_dict.items():
             new_v = param_state_dict_to_load[k]
@@ -134,6 +136,23 @@ class KeyedOptimizer(optim.Optimizer):
                     )
                 for shard, new_shard in zip(v.local_shards(), new_v.local_shards()):
                     shard.tensor.detach().copy_(new_shard.tensor)
+            elif isinstance(v, DTensor):
+                assert isinstance(new_v, DTensor)
+                if isinstance(v.to_local(), LocalShardsWrapper):
+                    assert isinstance(new_v.to_local(), LocalShardsWrapper)
+                    num_shards = len(v.to_local().local_shards())  # pyre-ignore[16]
+                    num_new_shards = len(new_v.to_local().local_shards())
+                    if num_shards != num_new_shards:
+                        raise ValueError(
+                            f"Different number of shards {num_shards} vs {num_new_shards} for the path of {json.dumps(parent_keys)}"
+                        )
+                    for shard, new_shard in zip(
+                        v.to_local().local_shards(), new_v.to_local().local_shards()
+                    ):
+                        shard.detach().copy_(new_shard)
+                else:
+                    assert isinstance(new_v.to_local(), torch.Tensor)
+                    v.detach().copy_(new_v)
             elif isinstance(v, torch.Tensor):
                 v.detach().copy_(new_v)
             else:
@@ -417,6 +436,11 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
     def step(self, closure: Any = None) -> None:
         self._optimizer.step(closure=closure)
 
+    def set_optimizer_step(self, step: int) -> None:
+        if hasattr(self._optimizer, "set_optimizer_step"):
+            # pyre-ignore [16].
+            self._optimizer.set_optimizer_step(step)
+
 
 class OptimizerWrapper(KeyedOptimizer):
     """
@@ -464,3 +488,8 @@ class OptimizerWrapper(KeyedOptimizer):
 
     def save_param_groups(self, save: bool) -> None:
         self._optimizer.save_param_groups(save)
+
+    def set_optimizer_step(self, step: int) -> None:
+        if hasattr(self._optimizer, "set_optimizer_step"):
+            # pyre-ignore [16].
+            self._optimizer.set_optimizer_step(step)

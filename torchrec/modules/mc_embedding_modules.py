@@ -8,7 +8,7 @@
 # pyre-strict
 
 
-from typing import Dict, Optional, Tuple, Union
+from typing import cast, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -23,7 +23,7 @@ from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, Keyed
 
 def evict(
     evictions: Dict[str, Optional[torch.Tensor]],
-    ebc: Union[EmbeddingBagCollection, EmbeddingCollection],
+    ebc: nn.Module,
 ) -> None:
     # TODO: write function
     return
@@ -57,12 +57,16 @@ class BaseManagedCollisionEmbeddingCollection(nn.Module):
 
         if isinstance(embedding_module, EmbeddingBagCollection):
             assert (
+                # pyre-fixme[29]: `Union[(self: EmbeddingBagCollection) ->
+                #  list[EmbeddingBagConfig], Module, Tensor]` is not a function.
                 self._embedding_module.embedding_bag_configs()
                 == self._managed_collision_collection.embedding_configs()
             ), "Embedding Bag Collection and Managed Collision Collection must contain the Embedding Configs"
 
         else:
             assert (
+                # pyre-fixme[29]: `Union[(self: EmbeddingCollection) ->
+                #  list[EmbeddingConfig], Module, Tensor]` is not a function.
                 self._embedding_module.embedding_configs()
                 == self._managed_collision_collection.embedding_configs()
             ), "Embedding Collection and Managed Collision Collection must contain the Embedding Configs"
@@ -110,8 +114,10 @@ class ManagedCollisionEmbeddingCollection(BaseManagedCollisionEmbeddingCollectio
             embedding_collection, managed_collision_collection, return_remapped_features
         )
 
-        # For consistency with embedding bag collection
-        self._embedding_collection: EmbeddingCollection = embedding_collection
+    # For consistency with embedding bag collection
+    @property
+    def _embedding_collection(self) -> EmbeddingCollection:
+        return cast(EmbeddingCollection, self._embedding_module)
 
 
 class ManagedCollisionEmbeddingBagCollection(BaseManagedCollisionEmbeddingCollection):
@@ -141,7 +147,7 @@ class ManagedCollisionEmbeddingBagCollection(BaseManagedCollisionEmbeddingCollec
             return_remapped_features,
         )
 
-        # For backwards compat, as references existed in tests
-        self._embedding_bag_collection: EmbeddingBagCollection = (
-            embedding_bag_collection
-        )
+    # For backwards compat, as references existed in tests
+    @property
+    def _embedding_bag_collection(self) -> EmbeddingBagCollection:
+        return cast(EmbeddingBagCollection, self._embedding_module)

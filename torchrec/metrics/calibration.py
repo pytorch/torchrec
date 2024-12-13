@@ -18,6 +18,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
 )
 
+
 CALIBRATION_NUM = "calibration_num"
 CALIBRATION_DENOM = "calibration_denom"
 

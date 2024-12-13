@@ -23,6 +23,7 @@ from torchrec.metrics.rec_metric import (
     RecModelOutput,
 )
 
+
 WARMUP_STEPS = 100
 
 NUM_EXAMPLES = "num_examples"

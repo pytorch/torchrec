@@ -10,6 +10,7 @@
 from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
+
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 from torchrec.metrics.rec_metric import (
     MetricComputationReport,

@@ -13,7 +13,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
 import torch.distributed as dist
-from torch.distributed._tensor.placement_types import Shard
+from torch.distributed._tensor.placement_types import Replicate, Shard
 from torchrec.distributed.dist_data import (
     EmbeddingsAllToOneReduce,
     KJTAllToAll,
@@ -51,6 +51,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
+    ShardingEnv2D,
     ShardingType,
     ShardMetadata,
 )
@@ -117,20 +118,26 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        device_type_from_sharding_infos: Optional[str] = None,
         independent_emb_key_pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
-        super().__init__(
-            qcomm_codecs_registry=qcomm_codecs_registry,
-        )
-
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
-        self._pg: Optional[dist.ProcessGroup] = self._env.process_group
         self._independent_emb_key_pg: Optional[dist.ProcessGroup] = independent_emb_key_pg if independent_emb_key_pg else self._pg
+        self._is_2D_parallel: bool = isinstance(env, ShardingEnv2D)
+        self._pg: Optional[dist.ProcessGroup] = (
+            self._env.sharding_pg  # pyre-ignore[16]
+            if self._is_2D_parallel
+            else self._env.process_group
+        )
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
         if device is None:
             device = torch.device("cpu")
         self._device: torch.device = device
+        self._device_type_from_sharding_infos: Optional[str] = (
+            device_type_from_sharding_infos
+        )
         sharded_tables_per_rank = self._shard(sharding_infos)
         self._need_pos = need_pos
         self._grouped_embedding_configs_per_rank: List[List[GroupedEmbeddingConfig]] = (
@@ -151,7 +158,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(self._world_size)
+            [] for _ in range(self._world_size)
         ]
         for info in sharding_infos:
             # pyre-fixme [16]
@@ -162,11 +169,38 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                 shards_metadata=shards,
                 size=torch.Size(
                     [
-                        info.embedding_config.num_embeddings,
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         info.embedding_config.embedding_dim,
                     ]
                 ),
             )
+
+            dtensor_metadata = None
+            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+                placements = (
+                    (Replicate(), Shard(0)) if self._is_2D_parallel else (Shard(0),)
+                )
+                dtensor_metadata = DTensorMetadata(
+                    mesh=self._env.device_mesh,
+                    placements=placements,
+                    size=(
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
+                        info.embedding_config.embedding_dim,
+                    ),
+                    stride=info.param.stride(),
+                )
+            # to not pass onto TBE
+            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(
@@ -187,9 +221,11 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         ),
                         local_metadata=shards[rank],
                         global_metadata=global_metadata,
+                        dtensor_metadata=dtensor_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,
+                        num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
                     )
                 )
         return tables_per_rank
@@ -257,6 +293,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             communication.
         num_features (int): total number of features.
         feature_hash_sizes (List[int]): hash sizes of features.
+        feature_total_num_buckets (Optional[List[int]]): total number of buckets, if provided will be >= world size.
         device (Optional[torch.device]): device on which buffers will be allocated.
         is_sequence (bool): if this is for a sequence embedding.
         has_feature_processor (bool): existence of feature processor (ie. position
@@ -269,18 +306,26 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
         pg: dist.ProcessGroup,
         num_features: int,
         feature_hash_sizes: List[int],
+        feature_total_num_buckets: Optional[List[int]] = None,
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
         has_feature_processor: bool = False,
         need_pos: bool = False,
+        keep_original_indices: bool = False,
     ) -> None:
         super().__init__()
         self._world_size: int = pg.size()
         self._num_features = num_features
-        feature_block_sizes = [
-            (hash_size + self._world_size - 1) // self._world_size
-            for hash_size in feature_hash_sizes
-        ]
+
+        feature_block_sizes: List[int] = []
+
+        for i, hash_size in enumerate(feature_hash_sizes):
+            block_divisor = self._world_size
+            if feature_total_num_buckets is not None:
+                assert feature_total_num_buckets[i] % self._world_size == 0
+                block_divisor = feature_total_num_buckets[i]
+            feature_block_sizes.append((hash_size + block_divisor - 1) // block_divisor)
+
         self.register_buffer(
             "_feature_block_sizes_tensor",
             torch.tensor(
@@ -288,7 +333,22 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
                 device=device,
                 dtype=torch.int64,
             ),
+            persistent=False,
         )
+        self._has_multiple_blocks_per_shard: bool = (
+            feature_total_num_buckets is not None
+        )
+        if self._has_multiple_blocks_per_shard:
+            self.register_buffer(
+                "_feature_total_num_blocks_tensor",
+                torch.tensor(
+                    [feature_total_num_buckets],
+                    device=device,
+                    dtype=torch.int64,
+                ),
+                persistent=False,
+            )
+
         self._dist = KJTAllToAll(
             pg=pg,
             splits=[self._num_features] * self._world_size,
@@ -297,6 +357,7 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
         self._has_feature_processor = has_feature_processor
         self._need_pos = need_pos
         self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
+        self._keep_original_indices = keep_original_indices
 
     def forward(
         self,
@@ -321,12 +382,18 @@ class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
             sparse_features,
             num_buckets=self._world_size,
             block_sizes=self._feature_block_sizes_tensor,
+            total_num_blocks=(
+                self._feature_total_num_blocks_tensor
+                if self._has_multiple_blocks_per_shard
+                else None
+            ),
             output_permute=self._is_sequence,
             bucketize_pos=(
                 self._has_feature_processor
                 if sparse_features.weights_or_none() is None
                 else self._need_pos
             ),
+            keep_original_indices=self._keep_original_indices,
         )
 
         return self._dist(bucketized_features)

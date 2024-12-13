@@ -46,6 +46,7 @@ from torchrec.metrics.metrics_namespace import (
     MetricNamespaceBase,
     MetricPrefix,
 )
+from torchrec.pt2.utils import pt2_compile_callable
 
 
 RecModelOutput = Union[torch.Tensor, Dict[str, torch.Tensor]]
@@ -363,6 +364,13 @@ class RecMetric(nn.Module, abc.ABC):
             self.LABELS: [],
             self.WEIGHTS: [],
         }
+        # pyre-fixme[8]: Attribute has type `bool`; used as `Union[bool,
+        #  Dict[str, Any]]`.
+        self.enable_pt2_compile: bool = kwargs.get("enable_pt2_compile", False)
+        # we need to remove the enable_pt2_compile from kwargs to avoid Metric object being initialized with it
+        if "enable_pt2_compile" in kwargs:
+            del kwargs["enable_pt2_compile"]
+
         if self._window_size < self._batch_size:
             raise ValueError(
                 f"Local window size must be larger than batch size. Got local window size {self._window_size} and batch size {self._batch_size}."
@@ -520,23 +528,39 @@ class RecMetric(nn.Module, abc.ABC):
     ) -> None:
         with torch.no_grad():
             if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
+                task_names = [task.name for task in self._tasks]
+
+                if not isinstance(predictions, torch.Tensor):
+                    predictions = torch.stack(
+                        [predictions[task_name] for task_name in task_names]
+                    )
+
+                if not isinstance(labels, torch.Tensor):
+                    labels = torch.stack(
+                        [labels[task_name] for task_name in task_names]
+                    )
+                if weights is not None and not isinstance(weights, torch.Tensor):
+                    weights = torch.stack(
+                        [weights[task_name] for task_name in task_names]
+                    )
+
                 assert isinstance(predictions, torch.Tensor) and isinstance(
                     labels, torch.Tensor
                 )
 
                 predictions = (
                     # Reshape the predictions to size([len(self._tasks), self._batch_size])
-                    predictions.view(-1, self._batch_size)
+                    predictions.view(len(self._tasks), -1)
                     if predictions.dim() == labels.dim()
                     # predictions.dim() == labels.dim() + 1 for multiclass models
-                    else predictions.view(-1, self._batch_size, predictions.size()[-1])
+                    else predictions.view(len(self._tasks), -1, predictions.size()[-1])
                 )
-                labels = labels.view(-1, self._batch_size)
+                labels = labels.view(len(self._tasks), -1)
                 if weights is None:
                     weights = self._create_default_weights(predictions)
                 else:
                     assert isinstance(weights, torch.Tensor)
-                    weights = weights.view(-1, self._batch_size)
+                    weights = weights.view(len(self._tasks), -1)
                 if self._should_validate_update:
                     # has_valid_weights is a tensor of bool whose length equals to the number
                     # of tasks. Each value in it is corresponding to whether the weights
@@ -623,8 +647,13 @@ class RecMetric(nn.Module, abc.ABC):
                         else:
                             continue
                     if "required_inputs" in kwargs:
+                        # Expand scalars to match the shape of the predictions
                         kwargs["required_inputs"] = {
-                            k: v.view(task_labels.size())
+                            k: (
+                                v.view(task_labels.size())
+                                if v.numel() > 1
+                                else v.expand(task_labels.size())
+                            )
                             for k, v in kwargs["required_inputs"].items()
                         }
                     metric_.update(
@@ -634,6 +663,7 @@ class RecMetric(nn.Module, abc.ABC):
                         **kwargs,
                     )
 
+    @pt2_compile_callable
     def update(
         self,
         *,
@@ -656,6 +686,7 @@ class RecMetric(nn.Module, abc.ABC):
 
     # The implementation of compute is very similar to local_compute, but compute overwrites
     # the abstract method compute in torchmetrics.Metric, which is wrapped by _wrap_compute
+    @pt2_compile_callable
     def compute(self) -> Dict[str, torch.Tensor]:
         self._check_fused_update(force=True)
         ret = {}

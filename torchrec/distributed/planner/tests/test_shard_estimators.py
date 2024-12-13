@@ -7,10 +7,11 @@
 
 # pyre-strict
 
+import math
 import unittest
 from typing import cast, Dict, List, Tuple
 
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import torch
 import torchrec.optim as trec_optim
@@ -58,6 +59,7 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(
             topology=self.topology, batch_size=BATCH_SIZE, estimator=self.estimator
         )
+        self._sharding_types = [x.value for x in ShardingType]
 
     def test_1_table_perf(self) -> None:
         tables = [
@@ -69,6 +71,16 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             )
         ]
         model = TestSparseNN(tables=tables, weighted_tables=[])
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the
+        call to _filter_sharding_types to ensure the order of the sharding types list is always
+        the same.
+        """
+        self.enumerator._filter_sharding_types = MagicMock(
+            return_value=self._sharding_types
+        )
         sharding_options = self.enumerator.enumerate(
             module=model,
             sharders=[
@@ -101,17 +113,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "table_wise"): [
                 Perf(
-                    fwd_compute=0.05759444891237746,
+                    fwd_compute=0.09179115295410156,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.11518889782475492,
+                    bwd_compute=0.18358230590820312,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
             ("fused_uvm_caching", "table_wise"): [
                 Perf(
-                    fwd_compute=0.013339313780795867,
+                    fwd_compute=0.01432837509527439,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.026678627561591735,
+                    bwd_compute=0.02865675019054878,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
@@ -125,17 +137,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "column_wise"): [
                 Perf(
-                    fwd_compute=0.05759444891237746,
+                    fwd_compute=0.09179115295410156,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.11518889782475492,
+                    bwd_compute=0.18358230590820312,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
             ("fused_uvm_caching", "column_wise"): [
                 Perf(
-                    fwd_compute=0.013339313780795867,
+                    fwd_compute=0.01432837509527439,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.026678627561591735,
+                    bwd_compute=0.02865675019054878,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
@@ -149,17 +161,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "table_column_wise"): [
                 Perf(
-                    fwd_compute=0.05759444891237746,
+                    fwd_compute=0.09179115295410156,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.11518889782475492,
+                    bwd_compute=0.18358230590820312,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
             ("fused_uvm_caching", "table_column_wise"): [
                 Perf(
-                    fwd_compute=0.013339313780795867,
+                    fwd_compute=0.01432837509527439,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.026678627561591735,
+                    bwd_compute=0.02865675019054878,
                     bwd_comms=6.357828776041667e-05,
                 )
             ],
@@ -179,30 +191,30 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "row_wise"): [
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
             ],
             ("fused_uvm_caching", "row_wise"): [
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
             ],
             ("fused", "table_row_wise"): [
@@ -221,30 +233,73 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             ],
             ("fused_uvm", "table_row_wise"): [
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
                 Perf(
-                    fwd_compute=0.011967677696078432,
+                    fwd_compute=0.019073486328125,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.023935355392156864,
-                    bwd_comms=0.018426483752680762,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
                 ),
             ],
             ("fused_uvm_caching", "table_row_wise"): [
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
                 Perf(
-                    fwd_compute=0.0027718054609445954,
+                    fwd_compute=0.0029773246951219513,
                     fwd_comms=6.357828776041667e-05,
-                    bwd_compute=0.005543610921889191,
-                    bwd_comms=0.004316567291897281,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
+                ),
+            ],
+            # grid_shard is the same as table_row_wise
+            ("fused", "grid_shard"): [
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
+                Perf(
+                    fwd_compute=6.804365245261984e-05,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0001360873049052397,
+                    bwd_comms=0.00016798276699240525,
+                ),
+            ],
+            ("fused_uvm", "grid_shard"): [
+                Perf(
+                    fwd_compute=0.019073486328125,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
+                ),
+                Perf(
+                    fwd_compute=0.019073486328125,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.03814697265625,
+                    bwd_comms=0.029329458872477215,
+                ),
+            ],
+            ("fused_uvm_caching", "grid_shard"): [
+                Perf(
+                    fwd_compute=0.0029773246951219513,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
+                ),
+                Perf(
+                    fwd_compute=0.0029773246951219513,
+                    fwd_comms=6.357828776041667e-05,
+                    bwd_compute=0.0059546493902439025,
+                    bwd_comms=0.004631910866838161,
                 ),
             ],
         }
@@ -277,6 +332,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             )
         )
 
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the
+        call to _filter_sharding_types to ensure the order of the sharding types list is always
+        the same.
+        """
+        self.enumerator._filter_sharding_types = MagicMock(
+            return_value=self._sharding_types
+        )
+
         sharding_options = self.enumerator.enumerate(
             module=model,
             sharders=[
@@ -292,25 +358,31 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         expected_total_perfs = {
             ("dense", "data_parallel"): [0.0005062740117544049, 0.0005062740117544049],
             ("fused", "table_wise"): [0.000846718200207288],
-            ("fused_uvm", "table_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "table_wise"): [0.03322849048472446],
+            ("fused_uvm", "table_wise"): [0.22846659024556476],
+            ("fused_uvm_caching", "table_wise"): [0.03568990443780169],
             ("fused", "column_wise"): [0.000846718200207288],
-            ("fused_uvm", "column_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "column_wise"): [0.03322849048472446],
+            ("fused_uvm", "column_wise"): [0.22846659024556476],
+            ("fused_uvm_caching", "column_wise"): [0.03568990443780169],
             ("fused", "table_column_wise"): [0.000846718200207288],
-            ("fused_uvm", "table_column_wise"): [0.14336342905081956],
-            ("fused_uvm_caching", "table_column_wise"): [0.03322849048472446],
+            ("fused_uvm", "table_column_wise"): [0.22846659024556476],
+            ("fused_uvm_caching", "table_column_wise"): [0.03568990443780169],
             ("fused", "row_wise"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "row_wise"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm", "row_wise"): [0.05403558413187663, 0.05403558413187663],
             ("fused_uvm_caching", "row_wise"): [
-                0.007906921553027076,
-                0.007906921553027076,
+                0.008488476760988312,
+                0.008488476760988312,
             ],
             ("fused", "table_row_wise"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "table_row_wise"): [0.03392836626838235, 0.03392836626838235],
+            ("fused_uvm", "table_row_wise"): [0.05403558413187663, 0.05403558413187663],
             ("fused_uvm_caching", "table_row_wise"): [
-                0.007906921553027076,
-                0.007906921553027076,
+                0.008488476760988312,
+                0.008488476760988312,
+            ],
+            ("fused", "grid_shard"): [0.0002561205605599394, 0.0002561205605599394],
+            ("fused_uvm", "grid_shard"): [0.05403558413187663, 0.05403558413187663],
+            ("fused_uvm_caching", "grid_shard"): [
+                0.008488476760988312,
+                0.008488476760988312,
             ],
         }
 
@@ -350,16 +422,16 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         expected_total_perfs = {
             ("dense", "data_parallel"): [0.0026901057997143255, 0.0026901057997143255],
             ("fused", "table_wise"): [0.001880471390093715],
-            ("fused_uvm", "table_wise"): [0.25958192114736517],
-            ("fused_uvm_caching", "table_wise"): [0.06043381305524807],
+            ("fused_uvm", "table_wise"): [0.41346708933512366],
+            ("fused_uvm_caching", "table_wise"): [0.06488458897040142],
             ("fused", "column_wise"): [0.001880471390093715],
-            ("fused_uvm", "column_wise"): [0.25958192114736517],
-            ("fused_uvm_caching", "column_wise"): [0.06043381305524807],
+            ("fused_uvm", "column_wise"): [0.41346708933512366],
+            ("fused_uvm_caching", "column_wise"): [0.06488458897040142],
             ("fused", "row_wise"): [0.0007915177871551004, 0.0007915177871551004],
-            ("fused_uvm", "row_wise"): [0.10363410500919118, 0.10363410500919118],
+            ("fused_uvm", "row_wise"): [0.16504605611165366, 0.16504605611165366],
             ("fused_uvm_caching", "row_wise"): [
-                0.024158779217047004,
-                0.024158779217047004,
+                0.025934979198424798,
+                0.025934979198424798,
             ],
         }
 
@@ -402,17 +474,17 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
 
         expected_total_perfs = {
             ("quant", "table_wise"): [0.0001296231579222408],
-            ("quant_uvm", "table_wise"): [0.018350937787224266],
-            ("quant_uvm_caching", "table_wise"): [0.004269758427175579],
-            ("quant", "row_wise"): [0.000055200413052187844, 0.000055200413052187844],
-            ("quant_uvm", "row_wise"): [0.005261290307138481, 0.005261290307138481],
+            ("quant_uvm", "table_wise"): [0.029231707255045574],
+            ("quant_uvm_caching", "table_wise"): [0.004584459754509654],
+            ("quant", "row_wise"): [5.5200413052187844e-05, 5.5200413052187844e-05],
+            ("quant_uvm", "row_wise"): [0.008370081583658854, 0.008370081583658854],
             ("quant_uvm_caching", "row_wise"): [
-                0.0012380962042674274,
-                0.0012380962042674274,
+                0.0013280108692200203,
+                0.0013280108692200203,
             ],
             ("quant", "column_wise"): [0.0001296231579222408],
-            ("quant_uvm", "column_wise"): [0.018350937787224266],
-            ("quant_uvm_caching", "column_wise"): [0.004269758427175579],
+            ("quant_uvm", "column_wise"): [0.029231707255045574],
+            ("quant_uvm_caching", "column_wise"): [0.004584459754509654],
         }
 
         total_perfs = {
@@ -479,6 +551,14 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
             estimator=self.estimator,
             constraints=constraints,
         )
+        """
+        GRID_SHARD only is available if specified by user in parameter constraints, however,
+        adding parameter constraints does not work because of the non deterministic nature of
+        _filter_sharding_types (set & set) operation when constraints are present, we mock the
+        call to _filter_sharding_types to ensure the order of the sharding types list is always
+        the same.
+        """
+        enumerator._filter_sharding_types = MagicMock(return_value=self._sharding_types)
         model = TestSparseNN(tables=tables, weighted_tables=[])
         sharding_options = enumerator.enumerate(
             module=model,
@@ -493,24 +573,29 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_prefetch_computes = {
-            ("table_0", "fused_uvm_caching", "column_wise"): [0.014608981562595743],
+            ("table_0", "fused_uvm_caching", "column_wise"): [0.023283064365386963],
             ("table_0", "fused_uvm_caching", "row_wise"): [
-                0.007304490781297871,
-                0.007304490781297871,
+                0.011641532182693481,
+                0.011641532182693481,
             ],
             ("table_0", "fused_uvm_caching", "table_column_wise"): [
-                0.014608981562595743
+                0.023283064365386963
             ],
             ("table_0", "fused_uvm_caching", "table_row_wise"): [
-                0.007304490781297871,
-                0.007304490781297871,
+                0.011641532182693481,
+                0.011641532182693481,
             ],
-            ("table_0", "fused_uvm_caching", "table_wise"): [0.014608981562595743],
+            ("table_0", "fused_uvm_caching", "grid_shard"): [
+                0.011641532182693481,
+                0.011641532182693481,
+            ],
+            ("table_0", "fused_uvm_caching", "table_wise"): [0.023283064365386963],
             ("table_1", "fused", "column_wise"): [0.0],
             ("table_1", "fused", "row_wise"): [0.0, 0.0],
             ("table_1", "fused", "table_column_wise"): [0.0],
             ("table_1", "fused", "table_row_wise"): [0.0, 0.0],
             ("table_1", "fused", "table_wise"): [0.0],
+            ("table_1", "fused", "grid_shard"): [0.0, 0.0],
         }
 
         prefetch_computes = {
@@ -623,21 +708,34 @@ def calculate_storage_specific_size_data_provider():
             "sharding_type": ShardingType.TABLE_ROW_WISE,
             "optimizer_class": torch.optim.SGD,
             "expected_storage": [50, 50],
+            "clf": None,
         },
         {
             "sharding_type": ShardingType.COLUMN_WISE,
             "optimizer_class": torch.optim.Adam,
-            "expected_storage": [150, 150],
+            "expected_storage": [
+                150 + math.ceil(5 * (4 + 0.5 * 16)),
+                150 + math.ceil(5 * (4 + 0.5 * 16)),
+            ],
+            "clf": 0.5,
         },
         {
             "sharding_type": ShardingType.TABLE_ROW_WISE,
             "optimizer_class": None,
-            "expected_storage": [50, 50],
+            "expected_storage": [
+                50 + math.ceil(5 * (4 + 0.0 * 16)),
+                50 + math.ceil(5 * (4 + 0.0 * 16)),
+            ],
+            "clf": 0.0,
         },
         {
             "sharding_type": ShardingType.DATA_PARALLEL,
             "optimizer_class": trec_optim.RowWiseAdagrad,
-            "expected_storage": [134, 134],
+            "expected_storage": [
+                134 + math.ceil(5 * (4 + 1.0 * 16)),
+                134 + math.ceil(5 * (4 + 1.0 * 16)),
+            ],
+            "clf": 1.0,
         },
     )
 
@@ -645,13 +743,14 @@ def calculate_storage_specific_size_data_provider():
 class TestEmbeddingStorageEstimator(unittest.TestCase):
     def test_calculate_storage_specific_sizes(self) -> None:
         for inputs in calculate_storage_specific_size_data_provider():
-            sharding_type, optimizer_class, expected_storage = inputs.values()
+            sharding_type, optimizer_class, expected_storage, clf = inputs.values()
             estimates = _calculate_storage_specific_sizes(
                 storage=100,
                 shape=torch.Size((10, 5, 3)),
                 shard_sizes=[[5, 5, 3], [5, 5, 3]],
                 sharding_type=sharding_type.value,
                 optimizer_class=optimizer_class,
+                clf=clf,
             )
 
             self.assertEqual(estimates, expected_storage)
@@ -666,119 +765,136 @@ class TestEmbeddingStorageEstimator(unittest.TestCase):
     )
     def test_pipelined_storage(self, p1: Mock, p2: Mock) -> None:
         for pipeline_type in list(PipelineType):
-            topology = Topology(world_size=2, compute_device="cuda")
-            estimator = EmbeddingStorageEstimator(
-                topology=topology, pipeline_type=pipeline_type
-            )
-            tables = [
-                EmbeddingBagConfig(
-                    num_embeddings=100,
-                    embedding_dim=10,
-                    name="table_0",
-                    feature_names=["feature_0"],
-                ),
-                EmbeddingBagConfig(
-                    num_embeddings=100,
-                    embedding_dim=10,
-                    name="table_1",
-                    feature_names=["feature_1"],
-                ),
-                EmbeddingBagConfig(
-                    num_embeddings=100,
-                    embedding_dim=10,
-                    name="table_2",
-                    feature_names=["feature_2"],
-                ),
-            ]
-            constraints = {
-                "table_0": ParameterConstraints(
-                    compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
-                    sharding_types=[ShardingType.TABLE_WISE.value],
-                    cache_params=CacheParams(
-                        load_factor=0.1,
+            for run_embedding_at_peak_memory in [False, True]:
+                topology = Topology(world_size=2, compute_device="cuda")
+                estimator = EmbeddingStorageEstimator(
+                    topology=topology,
+                    pipeline_type=pipeline_type,
+                    run_embedding_at_peak_memory=run_embedding_at_peak_memory,
+                )
+                tables = [
+                    EmbeddingBagConfig(
+                        num_embeddings=100,
+                        embedding_dim=10,
+                        name="table_0",
+                        feature_names=["feature_0"],
                     ),
-                ),
-                # simulate promoting a uvm caching table to HBM during scaleup.
-                "table_1": ParameterConstraints(
-                    compute_kernels=[EmbeddingComputeKernel.FUSED.value],
-                    sharding_types=[ShardingType.TABLE_WISE.value],
-                    cache_params=CacheParams(
-                        load_factor=None,
+                    EmbeddingBagConfig(
+                        num_embeddings=100,
+                        embedding_dim=10,
+                        name="table_1",
+                        feature_names=["feature_1"],
                     ),
-                ),
-                "table_2": ParameterConstraints(
-                    compute_kernels=[EmbeddingComputeKernel.FUSED_UVM_CACHING.value],
-                    sharding_types=[ShardingType.TABLE_WISE.value],
-                    cache_params=CacheParams(
-                        load_factor=0.1,
-                        multipass_prefetch_config=MultiPassPrefetchConfig(
-                            num_passes=10,
-                        ),
+                    EmbeddingBagConfig(
+                        num_embeddings=100,
+                        embedding_dim=10,
+                        name="table_2",
+                        feature_names=["feature_2"],
                     ),
-                ),
-            }
-            enumerator = EmbeddingEnumerator(
-                topology=topology,
-                batch_size=BATCH_SIZE,
-                estimator=estimator,
-                constraints=constraints,
-            )
-
-            model = TestSparseNN(tables=tables, weighted_tables=[])
-            sharding_options = enumerator.enumerate(
-                module=model,
-                sharders=[
-                    cast(
-                        ModuleSharder[torch.nn.Module],
-                        EmbeddingBagCollectionSharder(
-                            fused_params={
-                                "cache_load_factor": 0.2,
-                            }
-                        ),
-                    )
-                ],
-            )
-
-            if pipeline_type == PipelineType.TRAIN_SPARSE_DIST:
-                expected_storage = {
-                    ("table_0", "fused_uvm_caching", "table_wise"): [(100 + 3333, 100)],
-                    ("table_1", "fused", "table_wise"): [(100 + 3333, 100)],
-                    ("table_2", "fused_uvm_caching", "table_wise"): [(100 + 3333, 100)],
-                }
-            elif pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
-                expected_storage = {
-                    ("table_0", "fused_uvm_caching", "table_wise"): [
-                        (100 + 1024 * 10, 100)
-                    ],
-                    # 1024 * 3 < 3333
-                    ("table_1", "fused", "table_wise"): [(100 + 3333, 100)],
-                    ("table_2", "fused_uvm_caching", "table_wise"): [
-                        (100 + 1024 * 3 + int(1024 * 1.6), 100)
-                    ],
-                }
-            else:
-                expected_storage = {
-                    ("table_0", "fused_uvm_caching", "table_wise"): [
-                        (100 + 3333 + 1024, 100)
-                    ],
-                    ("table_1", "fused", "table_wise"): [(100 + 3333 + 1024, 100)],
-                    ("table_2", "fused_uvm_caching", "table_wise"): [
-                        (100 + 3333 + 1024, 100)
-                    ],
-                }
-            actual_storage = {
-                (
-                    sharding_option.name,
-                    sharding_option.compute_kernel,
-                    sharding_option.sharding_type,
-                ): [
-                    (shard.storage.hbm, shard.storage.ddr)
-                    for shard in sharding_option.shards
-                    if shard.storage is not None
                 ]
-                for sharding_option in sharding_options
-            }
-            self.assertEqual(expected_storage, actual_storage)
+                constraints = {
+                    "table_0": ParameterConstraints(
+                        compute_kernels=[
+                            EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+                        ],
+                        sharding_types=[ShardingType.TABLE_WISE.value],
+                        cache_params=CacheParams(
+                            load_factor=0.1,
+                        ),
+                    ),
+                    # simulate promoting a uvm caching table to HBM during scaleup.
+                    "table_1": ParameterConstraints(
+                        compute_kernels=[EmbeddingComputeKernel.FUSED.value],
+                        sharding_types=[ShardingType.TABLE_WISE.value],
+                        cache_params=CacheParams(
+                            load_factor=None,
+                        ),
+                    ),
+                    "table_2": ParameterConstraints(
+                        compute_kernels=[
+                            EmbeddingComputeKernel.FUSED_UVM_CACHING.value
+                        ],
+                        sharding_types=[ShardingType.TABLE_WISE.value],
+                        cache_params=CacheParams(
+                            load_factor=0.1,
+                            multipass_prefetch_config=MultiPassPrefetchConfig(
+                                num_passes=10,
+                            ),
+                        ),
+                    ),
+                }
+                enumerator = EmbeddingEnumerator(
+                    topology=topology,
+                    batch_size=BATCH_SIZE,
+                    estimator=estimator,
+                    constraints=constraints,
+                )
+
+                model = TestSparseNN(tables=tables, weighted_tables=[])
+                sharding_options = enumerator.enumerate(
+                    module=model,
+                    sharders=[
+                        cast(
+                            ModuleSharder[torch.nn.Module],
+                            EmbeddingBagCollectionSharder(
+                                fused_params={
+                                    "cache_load_factor": 0.2,
+                                }
+                            ),
+                        )
+                    ],
+                )
+
+                output_on_pipeline = 3333 if run_embedding_at_peak_memory else 0
+                if pipeline_type == PipelineType.TRAIN_SPARSE_DIST:
+                    expected_storage = {
+                        ("table_0", "fused_uvm_caching", "table_wise"): [
+                            (100 + 2048 + output_on_pipeline, 100)
+                        ],
+                        ("table_1", "fused", "table_wise"): [
+                            (100 + 2048 + output_on_pipeline, 100)
+                        ],
+                        ("table_2", "fused_uvm_caching", "table_wise"): [
+                            (100 + 2048 + output_on_pipeline, 100)
+                        ],
+                    }
+                elif pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
+                    expected_storage = {
+                        ("table_0", "fused_uvm_caching", "table_wise"): [
+                            (100 + 1024 * 10 + output_on_pipeline, 100)
+                        ],
+                        ("table_1", "fused", "table_wise"): [
+                            (100 + 3072 + output_on_pipeline, 100)
+                        ],
+                        ("table_2", "fused_uvm_caching", "table_wise"): [
+                            (100 + 1024 * 3 + int(1024 * 1.6) + output_on_pipeline, 100)
+                        ],
+                    }
+                else:
+                    # Backward compatible path, using old formula when pipeline
+                    # type is None or unrecognized.
+                    expected_storage = {
+                        ("table_0", "fused_uvm_caching", "table_wise"): [
+                            (100 + 3333 + 1024, 100)
+                        ],
+                        ("table_1", "fused", "table_wise"): [(100 + 3333 + 1024, 100)],
+                        ("table_2", "fused_uvm_caching", "table_wise"): [
+                            (100 + 3333 + 1024, 100)
+                        ],
+                    }
+                actual_storage = {
+                    (
+                        sharding_option.name,
+                        sharding_option.compute_kernel,
+                        sharding_option.sharding_type,
+                    ): [
+                        (shard.storage.hbm, shard.storage.ddr)
+                        for shard in sharding_option.shards
+                        if shard.storage is not None
+                    ]
+                    for sharding_option in sharding_options
+                }
+                self.assertEqual(expected_storage, actual_storage)
 
     def test_default_output_sizes(self) -> None:
         topology = Topology(world_size=2, compute_device="cuda")

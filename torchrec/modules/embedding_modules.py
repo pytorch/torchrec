@@ -102,18 +102,25 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingBagCollection.
 
 
-    It processes sparse data in the form of `KeyedJaggedTensor` with values of the form
-    [F X B X L] where:
+    It is callable on arguments representing sparse data in the form of `KeyedJaggedTensor` with values of the shape
+    `(F, B, L[f][i])` where:
 
-    * F: features (keys)
-    * B: batch size
-    * L: length of sparse features (jagged)
+    * `F`: number of features (keys)
+    * `B`: batch size
+    * `L[f][i]`: length of sparse features (potentially distinct for each feature `f` and batch index `i`, that is, jagged)
 
-    and outputs a `KeyedTensor` with values of the form [B * (F * D)] where:
+    and outputs a `KeyedTensor` with values with shape `(B, D)` where:
 
-    * F: features (keys)
-    * D: each feature's (key's) embedding dimension
-    * B: batch size
+    * `B`: batch size
+    * `D`: sum of embedding dimensions of all embedding tables, that is, `sum([config.embedding_dim for config in tables])`
+
+    Assuming the argument is a `KeyedJaggedTensor` `J` with `F` features, batch size `B` and `L[f][i]` sparse lengths
+    such that `J[f][i]` is the bag for feature `f` and batch index `i`, the output `KeyedTensor` `KT` is defined as follows:
+    `KT[i]` = `torch.cat([emb[f](J[f][i]) for f in J.keys()])` where `emb[f]` is the `EmbeddingBag` corresponding to the feature `f`.
+
+    Note that `J[f][i]` is a variable-length list of integer values (a bag), and `emb[f](J[f][i])` is pooled embedding
+    produced by reducing the embeddings of each of the values in `J[f][i]`
+    using the `EmbeddingBag` `emb[f]`'s mode (default is the mean).
 
     Args:
         tables (List[EmbeddingBagConfig]): list of embedding tables.
@@ -131,28 +138,35 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
         ebc = EmbeddingBagCollection(tables=[table_0, table_1])
 
-        #        0       1        2  <-- batch
-        # "f1"   [0,1] None    [2]
-        # "f2"   [3]    [4]    [5,6,7]
+        #        i = 0     i = 1    i = 2  <-- batch indices
+        # "f1"   [0,1]     None      [2]
+        # "f2"   [3]       [4]     [5,6,7]
         #  ^
-        # feature
+        # features
 
         features = KeyedJaggedTensor(
             keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+            values=torch.tensor([0, 1,                  2,    # feature 'f1'
+                                    3,      4,    5, 6, 7]),  # feature 'f2'
+                            #    i = 1    i = 2    i = 3   <--- batch indices
+            offsets=torch.tensor([
+                    0, 2, 2,       # 'f1' bags are values[0:2], values[2:2], and values[2:3]
+                    3, 4, 5, 8]),  # 'f2' bags are values[3:4], values[4:5], and values[5:8]
         )
 
         pooled_embeddings = ebc(features)
         print(pooled_embeddings.values())
-        tensor([[-0.8899, -0.1342, -1.9060, -0.0905, -0.2814, -0.9369, -0.7783],
-            [ 0.0000,  0.0000,  0.0000,  0.1598,  0.0695,  1.3265, -0.1011],
-            [-0.4256, -1.1846, -2.1648, -1.0893,  0.3590, -1.9784, -0.7681]],
+        tensor([
+            #  f1 pooled embeddings              f2 pooled embeddings
+            #     from bags (dim. 3)                from bags (dim. 4)
+            [-0.8899, -0.1342, -1.9060,  -0.0905, -0.2814, -0.9369, -0.7783],  # i = 0
+            [ 0.0000,  0.0000,  0.0000,   0.1598,  0.0695,  1.3265, -0.1011],  # i = 1
+            [-0.4256, -1.1846, -2.1648,  -1.0893,  0.3590, -1.9784, -0.7681]],  # i = 2
             grad_fn=<CatBackward0>)
         print(pooled_embeddings.keys())
         ['f1', 'f2']
         print(pooled_embeddings.offset_per_key())
-        tensor([0, 3, 7])
+        tensor([0, 3, 7])  # embeddings have dimensions 3 and 4, so embeddings are at [0, 3) and [3, 7).
     """
 
     def __init__(
@@ -206,9 +220,11 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
-        Args:
-            features (KeyedJaggedTensor): KJT of form [F X B X L].
+        Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
+        and returns a `KeyedTensor`, which is the result of pooling the embeddings for each feature.
 
+        Args:
+            features (KeyedJaggedTensor): Input KJT
         Returns:
             KeyedTensor
         """
@@ -240,16 +256,32 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         )
 
     def is_weighted(self) -> bool:
+        """
+        Returns:
+            bool: Whether the EmbeddingBagCollection is weighted.
+        """
         return self._is_weighted
 
     def embedding_bag_configs(self) -> List[EmbeddingBagConfig]:
+        """
+        Returns:
+            List[EmbeddingBagConfig]: The embedding bag configs.
+        """
         return self._embedding_bag_configs
 
     @property
     def device(self) -> torch.device:
+        """
+        Returns:
+            torch.device: The compute device.
+        """
         return self._device
 
     def reset_parameters(self) -> None:
+        """
+        Reset the parameters of the EmbeddingBagCollection. Parameter values
+        are intiialized based on the `init_fn` of each EmbeddingBagConfig if it exists.
+        """
         if (isinstance(self.device, torch.device) and self.device.type == "meta") or (
             isinstance(self.device, str) and self.device == "meta"
         ):
@@ -301,20 +333,19 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         EmbeddingCollection is an unsharded module and is not performance optimized.
         For performance-sensitive scenarios, consider using the sharded version ShardedEmbeddingCollection.
 
-    It processes sparse data in the form of `KeyedJaggedTensor` of the form [F X B X L]
-    where:
+    It is callable on arguments representing sparse data in the form of `KeyedJaggedTensor` with values of the shape
+    `(F, B, L[f][i])` where:
 
-    * F: features (keys)
-    * B: batch size
-    * L: length of sparse features (variable)
+    * `F`: number of features (keys)
+    * `B`: batch size
+    * `L[f][i]`: length of sparse features (potentially distinct for each feature `f` and batch index `i`, that is, jagged)
 
-    and outputs `Dict[feature (key), JaggedTensor]`.
-    Each `JaggedTensor` contains values of the form (B * L) X D
-    where:
+    and outputs a `result` of type `Dict[Feature, JaggedTensor]`,
+    where `result[f]` is a `JaggedTensor` with shape `(EB[f], D[f])` where:
 
-    * B: batch size
-    * L: length of sparse features (jagged)
-    * D: each feature's (key's) embedding dimension and lengths are of the form L
+    * `EB[f]`: a "expanded batch size" for feature `f` equal to the sum of the lengths of its bag values,
+      that is, `sum([len(J[f][i]) for i in range(B)])`.
+    * `D[f]`: is the embedding dimension of feature `f`.
 
     Args:
         tables (List[EmbeddingConfig]): list of embedding tables.
@@ -340,16 +371,29 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
 
         features = KeyedJaggedTensor.from_offsets_sync(
             keys=["f1", "f2"],
-            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 8]),
+            values=torch.tensor([0, 1,                  2,    # feature 'f1'
+                                    3,      4,    5, 6, 7]),  # feature 'f2'
+                            #    i = 1    i = 2    i = 3   <--- batch indices
+            offsets=torch.tensor([
+                    0, 2, 2,       # 'f1' bags are values[0:2], values[2:2], and values[2:3]
+                    3, 4, 5, 8]),  # 'f2' bags are values[3:4], values[4:5], and values[5:8]
         )
+
         feature_embeddings = ec(features)
         print(feature_embeddings['f2'].values())
-        tensor([[-0.2050,  0.5478,  0.6054],
-        [ 0.7352,  0.3210, -3.0399],
-        [ 0.1279, -0.1756, -0.4130],
-        [ 0.7519, -0.4341, -0.0499],
-        [ 0.9329, -1.0697, -0.8095]], grad_fn=<EmbeddingBackward>)
+        tensor([
+            # embedding for value 3 in f2 bag values[3:4]:
+            [-0.2050,  0.5478,  0.6054],
+
+            # embedding for value 4 in f2 bag values[4:5]:
+            [ 0.7352,  0.3210, -3.0399],
+
+            # embedding for values 5, 6, 7 in f2 bag values[5:8]:
+            [ 0.1279, -0.1756, -0.4130],
+            [ 0.7519, -0.4341, -0.0499],
+            [ 0.9329, -1.0697, -0.8095],
+
+        ], grad_fn=<EmbeddingBackward>)
     """
 
     def __init__(  # noqa C901
@@ -407,6 +451,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         features: KeyedJaggedTensor,
     ) -> Dict[str, JaggedTensor]:
         """
+        Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
+        and returns a `Dict[str, JaggedTensor]`, which is the result of the individual embeddings for each feature.
+
         Args:
             features (KeyedJaggedTensor): KJT of form [F X B X L].
 
@@ -433,22 +480,47 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
         return feature_embeddings
 
     def need_indices(self) -> bool:
+        """
+        Returns:
+            bool: Whether the EmbeddingCollection needs indices.
+        """
         return self._need_indices
 
     def embedding_dim(self) -> int:
+        """
+        Returns:
+            int: The embedding dimension.
+        """
         return self._embedding_dim
 
     def embedding_configs(self) -> List[EmbeddingConfig]:
+        """
+        Returns:
+            List[EmbeddingConfig]: The embedding configs.
+        """
         return self._embedding_configs
 
     def embedding_names_by_table(self) -> List[List[str]]:
+        """
+        Returns:
+            List[List[str]]: The embedding names by table.
+        """
         return self._embedding_names_by_table
 
     @property
     def device(self) -> torch.device:
+        """
+        Returns:
+            torch.device: The compute device.
+        """
         return self._device
 
     def reset_parameters(self) -> None:
+        """
+        Reset the parameters of the EmbeddingCollection. Parameter values
+        are intiialized based on the `init_fn` of each EmbeddingConfig if it exists.
+        """
+
         if (isinstance(self.device, torch.device) and self.device.type == "meta") or (
             isinstance(self.device, str) and self.device == "meta"
         ):

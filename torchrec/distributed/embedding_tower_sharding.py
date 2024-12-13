@@ -168,13 +168,15 @@ class ShardedEmbeddingTower(
             # Hierarchical DDP
             self.interaction = DistributedDataParallel(
                 module=module.interaction.to(self._device),
-                device_ids=[self._device],
+                device_ids=[self._device] if self._device is not None else None,
                 process_group=self._intra_pg,
                 gradient_as_bucket_view=True,
                 broadcast_buffers=False,
             )
 
         # Setup output dists for quantized comms
+        # pyre-fixme[8]: Attribute has type `ModuleList`; used as `Union[Module,
+        #  Tensor]`.
         self._output_dists: nn.ModuleList = (
             self.embedding._output_dists if self.embedding else nn.ModuleList()
         )
@@ -377,6 +379,7 @@ class ShardedEmbeddingTower(
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
         if self.embedding:
+            # pyre-fixme[7]: Expected `KeyedOptimizer` but got `Union[Module, Tensor]`.
             return self.embedding.fused_optimizer
         else:
             return CombinedOptimizer([])
@@ -560,10 +563,29 @@ class ShardedEmbeddingTowerCollection(
                 pg=self._intra_pg,
             )
             for i, tower in local_towers:
+                table_names = {}
+                if isinstance(tower.embedding, EmbeddingBagCollection):
+                    table_names = {
+                        table.name for table in tower.embedding.embedding_bag_configs()
+                    }
+                elif isinstance(tower.embedding, EmbeddingCollection):
+                    table_names = {
+                        table.name for table in tower.embedding.embedding_configs()
+                    }
+                elif hasattr(tower.embedding, "tables"):
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
+                    table_names = {table.name for table in tower.embedding.tables()}
+                else:
+                    # Use all tables if unable to determine from tower.embedding
+                    table_names = set(table_name_to_parameter_sharding.keys())
                 # pyre-ignore [16]
                 self.embeddings[i] = tower_sharder.embedding_sharder(tower).shard(
                     tower.embedding,
-                    table_name_to_parameter_sharding,
+                    {
+                        table: param
+                        for table, param in table_name_to_parameter_sharding.items()
+                        if table in table_names
+                    },
                     intra_env,
                     device,
                 )
@@ -571,7 +593,7 @@ class ShardedEmbeddingTowerCollection(
                 # Hierarchical DDP
                 self.interactions[i] = DistributedDataParallel(
                     module=tower.interaction.to(self._device),
-                    device_ids=[self._device],
+                    device_ids=[self._device] if self._device is not None else None,
                     process_group=self._intra_pg,
                     gradient_as_bucket_view=True,
                     broadcast_buffers=False,
@@ -839,6 +861,7 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingTower:
         kjt_features, wkjt_features = self.embedding_feature_names(module)
 
@@ -939,6 +962,7 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingTowerCollection:
 
         return ShardedEmbeddingTowerCollection(

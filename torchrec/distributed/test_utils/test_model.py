@@ -14,6 +14,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
 import torch.nn as nn
+from tensordict import TensorDict
 from torchrec.distributed.embedding_tower_sharding import (
     EmbeddingTowerCollectionSharder,
     EmbeddingTowerSharder,
@@ -36,6 +37,9 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerCollection
 from torchrec.modules.feature_processor import PositionWeightedProcessor
+from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
 
@@ -43,8 +47,8 @@ from torchrec.streamable import Pipelineable
 @dataclass
 class ModelInput(Pipelineable):
     float_features: torch.Tensor
-    idlist_features: KeyedJaggedTensor
-    idscore_features: Optional[KeyedJaggedTensor]
+    idlist_features: Union[KeyedJaggedTensor, TensorDict]
+    idscore_features: Optional[Union[KeyedJaggedTensor, TensorDict]]
     label: torch.Tensor
 
     @staticmethod
@@ -73,11 +77,13 @@ class ModelInput(Pipelineable):
         randomize_indices: bool = True,
         device: Optional[torch.device] = None,
         max_feature_lengths: Optional[List[int]] = None,
+        input_type: str = "kjt",
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
         and a list of local (multi-rank training) batches of world_size.
         """
+
         batch_size_by_rank = [batch_size] * world_size
         if variable_batch_size:
             batch_size_by_rank = [
@@ -108,7 +114,12 @@ class ModelInput(Pipelineable):
         feature_idx = 0
         for idx in range(len(tables)):
             for feature in tables[idx].feature_names:
-                idlist_features_to_num_embeddings[feature] = tables[idx].num_embeddings
+                idlist_features_to_num_embeddings[feature] = (
+                    tables[idx].num_embeddings_post_pruning
+                    if tables[idx].num_embeddings_post_pruning is not None
+                    else tables[idx].num_embeddings
+                )
+
                 idlist_features_to_max_length[feature] = (
                     max_feature_lengths[feature_idx] if max_feature_lengths else None
                 )
@@ -122,7 +133,14 @@ class ModelInput(Pipelineable):
         ]
 
         idlist_ind_ranges = list(idlist_features_to_num_embeddings.values())
-        idscore_ind_ranges = [table.num_embeddings for table in weighted_tables]
+        idscore_ind_ranges = [
+            (
+                table.num_embeddings_post_pruning
+                if table.num_embeddings_post_pruning is not None
+                else table.num_embeddings
+            )
+            for table in weighted_tables
+        ]
 
         idlist_pooling_factor = list(idlist_features_to_pooling_factor.values())
         idscore_pooling_factor = weighted_tables_pooling
@@ -184,11 +202,26 @@ class ModelInput(Pipelineable):
                 )
             global_idlist_lengths.append(lengths)
             global_idlist_indices.append(indices)
-        global_idlist_kjt = KeyedJaggedTensor(
-            keys=idlist_features,
-            values=torch.cat(global_idlist_indices),
-            lengths=torch.cat(global_idlist_lengths),
-        )
+
+        if input_type == "kjt":
+            global_idlist_input = KeyedJaggedTensor(
+                keys=idlist_features,
+                values=torch.cat(global_idlist_indices),
+                lengths=torch.cat(global_idlist_lengths),
+            )
+        elif input_type == "td":
+            dict_of_nt = {
+                k: torch.nested.nested_tensor_from_jagged(
+                    values=values,
+                    lengths=lengths,
+                )
+                for k, values, lengths in zip(
+                    idlist_features, global_idlist_indices, global_idlist_lengths
+                )
+            }
+            global_idlist_input = TensorDict(source=dict_of_nt)
+        else:
+            raise ValueError(f"For IdList features, unknown input type {input_type}")
 
         for idx in range(len(idscore_ind_ranges)):
             ind_range = idscore_ind_ranges[idx]
@@ -214,6 +247,7 @@ class ModelInput(Pipelineable):
             if randomize_indices:
                 indices = torch.randint(
                     0,
+                    # pyre-ignore [6]
                     ind_range,
                     (num_indices,),
                     dtype=torch.long if long_indices else torch.int32,
@@ -229,16 +263,25 @@ class ModelInput(Pipelineable):
             global_idscore_lengths.append(lengths)
             global_idscore_indices.append(indices)
             global_idscore_weights.append(weights)
-        global_idscore_kjt = (
-            KeyedJaggedTensor(
-                keys=idscore_features,
-                values=torch.cat(global_idscore_indices),
-                lengths=torch.cat(global_idscore_lengths),
-                weights=torch.cat(global_idscore_weights),
+
+        if input_type == "kjt":
+            global_idscore_input = (
+                KeyedJaggedTensor(
+                    keys=idscore_features,
+                    values=torch.cat(global_idscore_indices),
+                    lengths=torch.cat(global_idscore_lengths),
+                    weights=torch.cat(global_idscore_weights),
+                )
+                if global_idscore_indices
+                else None
             )
-            if global_idscore_indices
-            else None
-        )
+        elif input_type == "td":
+            assert (
+                len(idscore_features) == 0
+            ), "TensorDict does not support weighted features"
+            global_idscore_input = None
+        else:
+            raise ValueError(f"For weighted features, unknown input type {input_type}")
 
         if randomize_indices:
             global_float = torch.rand(
@@ -287,27 +330,48 @@ class ModelInput(Pipelineable):
                     weights[lengths_cumsum[r] : lengths_cumsum[r + 1]]
                 )
 
-            local_idlist_kjt = KeyedJaggedTensor(
-                keys=idlist_features,
-                values=torch.cat(local_idlist_indices),
-                lengths=torch.cat(local_idlist_lengths),
-            )
-
-            local_idscore_kjt = (
-                KeyedJaggedTensor(
-                    keys=idscore_features,
-                    values=torch.cat(local_idscore_indices),
-                    lengths=torch.cat(local_idscore_lengths),
-                    weights=torch.cat(local_idscore_weights),
+            if input_type == "kjt":
+                local_idlist_input = KeyedJaggedTensor(
+                    keys=idlist_features,
+                    values=torch.cat(local_idlist_indices),
+                    lengths=torch.cat(local_idlist_lengths),
                 )
-                if local_idscore_indices
-                else None
-            )
+
+                local_idscore_input = (
+                    KeyedJaggedTensor(
+                        keys=idscore_features,
+                        values=torch.cat(local_idscore_indices),
+                        lengths=torch.cat(local_idscore_lengths),
+                        weights=torch.cat(local_idscore_weights),
+                    )
+                    if local_idscore_indices
+                    else None
+                )
+            elif input_type == "td":
+                dict_of_nt = {
+                    k: torch.nested.nested_tensor_from_jagged(
+                        values=values,
+                        lengths=lengths,
+                    )
+                    for k, values, lengths in zip(
+                        idlist_features, local_idlist_indices, local_idlist_lengths
+                    )
+                }
+                local_idlist_input = TensorDict(source=dict_of_nt)
+                assert (
+                    len(idscore_features) == 0
+                ), "TensorDict does not support weighted features"
+                local_idscore_input = None
+
+            else:
+                raise ValueError(
+                    f"For weighted features, unknown input type {input_type}"
+                )
 
             local_input = ModelInput(
                 float_features=global_float[r * batch_size : (r + 1) * batch_size],
-                idlist_features=local_idlist_kjt,
-                idscore_features=local_idscore_kjt,
+                idlist_features=local_idlist_input,
+                idscore_features=local_idscore_input,
                 label=global_label[r * batch_size : (r + 1) * batch_size],
             )
             local_inputs.append(local_input)
@@ -315,107 +379,108 @@ class ModelInput(Pipelineable):
         return (
             ModelInput(
                 float_features=global_float,
-                idlist_features=global_idlist_kjt,
-                idscore_features=global_idscore_kjt,
+                idlist_features=global_idlist_input,
+                idscore_features=global_idscore_input,
                 label=global_label,
             ),
             local_inputs,
         )
 
     @staticmethod
-    def generate_variable_batch_input(
+    def _generate_variable_batch_local_features(
+        feature_num_embeddings: Dict[str, int],
         average_batch_size: int,
         world_size: int,
-        num_float_features: int,
-        tables: List[EmbeddingTableConfig],
-        pooling_avg: int = 10,
-        global_constant_batch: bool = False,
-    ) -> Tuple["ModelInput", List["ModelInput"]]:
-        torch.manual_seed(100)
-        random.seed(100)
-        keys = {}
-        for table in tables:
-            for feature_name in table.feature_names:
-                keys[feature_name] = table.num_embeddings
-        dedup_factor = 2
-        global_float = torch.rand(
-            (dedup_factor * average_batch_size * world_size, num_float_features)
-        )
-        local_model_input = []
-        values_per_rank_per_feature = {}
-        lengths_per_rank_per_feature = {}
-        strides_per_rank_per_feature = {}
-        inverse_indices_per_rank_per_feature = {}
-        label_per_rank = []
-
+        dedup_factor: int,
+        values_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
+        lengths_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
+        strides_per_rank_per_feature: Dict[int, Dict[str, int]],
+        inverse_indices_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
+        weights_per_rank_per_feature: Optional[Dict[int, Dict[str, torch.Tensor]]],
+    ) -> List[KeyedJaggedTensor]:
+        local_kjts = []
+        keys = list(feature_num_embeddings.keys())
         for rank in range(world_size):
-            # keys, values, lengths, strides
             lengths_per_rank_per_feature[rank] = {}
             values_per_rank_per_feature[rank] = {}
             strides_per_rank_per_feature[rank] = {}
             inverse_indices_per_rank_per_feature[rank] = {}
-            for key in keys:
+            if weights_per_rank_per_feature is not None:
+                weights_per_rank_per_feature[rank] = {}
+
+            for key, num_embeddings in feature_num_embeddings.items():
                 batch_size = random.randint(1, average_batch_size * dedup_factor - 1)
                 lengths = torch.randint(low=0, high=5, size=(batch_size,))
                 lengths_per_rank_per_feature[rank][key] = lengths
                 lengths_sum = sum(lengths.tolist())
-                values = torch.randint(0, keys[key], (lengths_sum,))
+                values = torch.randint(0, num_embeddings, (lengths_sum,))
                 values_per_rank_per_feature[rank][key] = values
+                if weights_per_rank_per_feature is not None:
+                    weights_per_rank_per_feature[rank][key] = torch.rand(lengths_sum)
                 strides_per_rank_per_feature[rank][key] = batch_size
                 inverse_indices_per_rank_per_feature[rank][key] = torch.randint(
                     0, batch_size, (dedup_factor * average_batch_size,)
                 )
-            label_per_rank.append(torch.rand(dedup_factor * average_batch_size))
-            local_float = global_float[
-                rank
-                * dedup_factor
-                * average_batch_size : (rank + 1)
-                * dedup_factor
-                * average_batch_size
+
+            values = torch.cat(list(values_per_rank_per_feature[rank].values()))
+            lengths = torch.cat(list(lengths_per_rank_per_feature[rank].values()))
+            weights = (
+                torch.cat(list(weights_per_rank_per_feature[rank].values()))
+                if weights_per_rank_per_feature is not None
+                else None
+            )
+            stride_per_key_per_rank = [
+                [stride] for stride in strides_per_rank_per_feature[rank].values()
             ]
             inverse_indices = (
-                list(keys.keys()),
+                keys,
                 torch.stack(list(inverse_indices_per_rank_per_feature[rank].values())),
             )
-            local_model_input.append(
-                ModelInput(
-                    idlist_features=KeyedJaggedTensor(
-                        keys=list(keys.keys()),
-                        values=torch.cat(
-                            list(values_per_rank_per_feature[rank].values())
-                        ),
-                        lengths=torch.cat(
-                            list(lengths_per_rank_per_feature[rank].values())
-                        ),
-                        stride_per_key_per_rank=[
-                            [stride]
-                            for stride in strides_per_rank_per_feature[rank].values()
-                        ],
-                        inverse_indices=inverse_indices,
-                    ),
-                    label=label_per_rank[rank],
-                    float_features=local_float,
-                    idscore_features=None,
-                ),
+            local_kjts.append(
+                KeyedJaggedTensor(
+                    keys=keys,
+                    values=values,
+                    lengths=lengths,
+                    weights=weights,
+                    stride_per_key_per_rank=stride_per_key_per_rank,
+                    inverse_indices=inverse_indices,
+                )
             )
+        return local_kjts
 
-        # global input
+    @staticmethod
+    def _generate_variable_batch_global_features(
+        keys: List[str],
+        world_size: int,
+        global_constant_batch: bool,
+        values_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
+        lengths_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
+        strides_per_rank_per_feature: Dict[int, Dict[str, int]],
+        inverse_indices_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
+        weights_per_rank_per_feature: Optional[Dict[int, Dict[str, torch.Tensor]]],
+    ) -> KeyedJaggedTensor:
         global_values = []
         global_lengths = []
         global_stride_per_key_per_rank = []
         inverse_indices_per_feature_per_rank = []
+        global_weights = [] if weights_per_rank_per_feature is not None else None
+
         for key in keys:
             sum_stride = 0
             for rank in range(world_size):
                 global_values.append(values_per_rank_per_feature[rank][key])
                 global_lengths.append(lengths_per_rank_per_feature[rank][key])
+                if weights_per_rank_per_feature is not None:
+                    assert global_weights is not None
+                    global_weights.append(weights_per_rank_per_feature[rank][key])
                 sum_stride += strides_per_rank_per_feature[rank][key]
                 inverse_indices_per_feature_per_rank.append(
                     inverse_indices_per_rank_per_feature[rank][key]
                 )
             global_stride_per_key_per_rank.append([sum_stride])
+
         inverse_indices_list: List[torch.Tensor] = []
-        for key in keys.keys():
+        for key in keys:
             accum_batch_size = 0
             inverse_indices = []
             for rank in range(world_size):
@@ -424,7 +489,8 @@ class ModelInput(Pipelineable):
                 )
                 accum_batch_size += strides_per_rank_per_feature[rank][key]
             inverse_indices_list.append(torch.cat(inverse_indices))
-        global_inverse_indices = (list(keys.keys()), torch.stack(inverse_indices_list))
+        global_inverse_indices = (keys, torch.stack(inverse_indices_list))
+
         if global_constant_batch:
             global_offsets = []
             for length in global_lengths:
@@ -435,29 +501,155 @@ class ModelInput(Pipelineable):
             ):
                 reindexed_lengths.append(torch.index_select(length, 0, indices))
             lengths = torch.cat(reindexed_lengths)
-            reindexed_values = []
-            for values, offsets, indices in zip(
-                global_values, global_offsets, inverse_indices_per_feature_per_rank
+            reindexed_values, reindexed_weights = [], []
+            for i, (values, offsets, indices) in enumerate(
+                zip(global_values, global_offsets, inverse_indices_per_feature_per_rank)
             ):
                 for idx in indices:
                     reindexed_values.append(values[offsets[idx] : offsets[idx + 1]])
+                    if global_weights is not None:
+                        reindexed_weights.append(
+                            global_weights[i][offsets[idx] : offsets[idx + 1]]
+                        )
             values = torch.cat(reindexed_values)
+            weights = (
+                torch.cat(reindexed_weights) if global_weights is not None else None
+            )
             global_stride_per_key_per_rank = None
             global_inverse_indices = None
         else:
             values = torch.cat(global_values)
             lengths = torch.cat(global_lengths)
+            weights = torch.cat(global_weights) if global_weights is not None else None
+
+        return KeyedJaggedTensor(
+            keys=keys,
+            values=values,
+            lengths=lengths,
+            weights=weights,
+            stride_per_key_per_rank=global_stride_per_key_per_rank,
+            inverse_indices=global_inverse_indices,
+        )
+
+    @staticmethod
+    def _generate_variable_batch_features(
+        tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
+        average_batch_size: int,
+        world_size: int,
+        dedup_factor: int,
+        global_constant_batch: bool,
+    ) -> Tuple[KeyedJaggedTensor, List[KeyedJaggedTensor]]:
+        is_weighted = (
+            True if tables and getattr(tables[0], "is_weighted", False) else False
+        )
+        feature_num_embeddings = {}
+        for table in tables:
+            for feature_name in table.feature_names:
+                feature_num_embeddings[feature_name] = (
+                    table.num_embeddings_post_pruning
+                    if table.num_embeddings_post_pruning
+                    else table.num_embeddings
+                )
+
+        local_kjts = []
+        values_per_rank_per_feature = {}
+        lengths_per_rank_per_feature = {}
+        strides_per_rank_per_feature = {}
+        inverse_indices_per_rank_per_feature = {}
+        weights_per_rank_per_feature = {} if is_weighted else None
+
+        local_kjts = ModelInput._generate_variable_batch_local_features(
+            feature_num_embeddings,
+            average_batch_size,
+            world_size,
+            dedup_factor,
+            values_per_rank_per_feature,
+            lengths_per_rank_per_feature,
+            strides_per_rank_per_feature,
+            inverse_indices_per_rank_per_feature,
+            weights_per_rank_per_feature,
+        )
+
+        global_kjt = ModelInput._generate_variable_batch_global_features(
+            list(feature_num_embeddings.keys()),
+            world_size,
+            global_constant_batch,
+            values_per_rank_per_feature,
+            lengths_per_rank_per_feature,
+            strides_per_rank_per_feature,
+            inverse_indices_per_rank_per_feature,
+            weights_per_rank_per_feature,
+        )
+
+        return (global_kjt, local_kjts)
+
+    @staticmethod
+    def generate_variable_batch_input(
+        average_batch_size: int,
+        world_size: int,
+        num_float_features: int,
+        tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
+        weighted_tables: Optional[
+            Union[
+                List[EmbeddingTableConfig],
+                List[EmbeddingBagConfig],
+                List[EmbeddingConfig],
+            ]
+        ] = None,
+        pooling_avg: int = 10,
+        global_constant_batch: bool = False,
+    ) -> Tuple["ModelInput", List["ModelInput"]]:
+        torch.manual_seed(100)
+        random.seed(100)
+        dedup_factor = 2
+        global_kjt, local_kjts = ModelInput._generate_variable_batch_features(
+            tables, average_batch_size, world_size, dedup_factor, global_constant_batch
+        )
+        if weighted_tables:
+            global_score_kjt, local_score_kjts = (
+                ModelInput._generate_variable_batch_features(
+                    weighted_tables,
+                    average_batch_size,
+                    world_size,
+                    dedup_factor,
+                    global_constant_batch,
+                )
+            )
+        else:
+            global_score_kjt, local_score_kjts = None, []
+        global_float = torch.rand(
+            (dedup_factor * average_batch_size * world_size, num_float_features)
+        )
+        local_model_input = []
+        label_per_rank = []
+        for rank in range(world_size):
+            label_per_rank.append(torch.rand(dedup_factor * average_batch_size))
+            local_float = global_float[
+                rank
+                * dedup_factor
+                * average_batch_size : (rank + 1)
+                * dedup_factor
+                * average_batch_size
+            ]
+            local_model_input.append(
+                ModelInput(
+                    idlist_features=local_kjts[rank],
+                    idscore_features=(
+                        local_score_kjts[rank] if local_score_kjts else None
+                    ),
+                    label=label_per_rank[rank],
+                    float_features=local_float,
+                ),
+            )
         global_model_input = ModelInput(
-            idlist_features=KeyedJaggedTensor(
-                keys=list(keys.keys()),
-                values=values,
-                lengths=lengths,
-                stride_per_key_per_rank=global_stride_per_key_per_rank,
-                inverse_indices=global_inverse_indices,
-            ),
+            idlist_features=global_kjt,
+            idscore_features=global_score_kjt,
             label=torch.cat(label_per_rank),
             float_features=global_float,
-            idscore_features=None,
         )
         return (global_model_input, local_model_input)
 
@@ -479,8 +671,9 @@ class ModelInput(Pipelineable):
 
     def record_stream(self, stream: torch.Stream) -> None:
         self.float_features.record_stream(stream)
-        self.idlist_features.record_stream(stream)
-        if self.idscore_features is not None:
+        if isinstance(self.idlist_features, KeyedJaggedTensor):
+            self.idlist_features.record_stream(stream)
+        if isinstance(self.idscore_features, KeyedJaggedTensor):
             self.idscore_features.record_stream(stream)
         self.label.record_stream(stream)
 
@@ -573,6 +766,69 @@ def _concat(
     sparse_embeddings: List[torch.Tensor],
 ) -> torch.Tensor:
     return torch.cat([dense] + sparse_embeddings, dim=1)
+
+
+class TestOverArchRegroupModule(nn.Module):
+    """
+    Basic nn.Module for testing
+
+    Args:
+        device
+
+    Call Args:
+        dense: torch.Tensor,
+        sparse: KeyedTensor,
+
+    Returns:
+        torch.Tensor
+
+    Example::
+
+        TestOverArch()
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        embedding_names: Optional[List[str]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+        self._embedding_names: List[str] = (
+            embedding_names
+            if embedding_names
+            else [feature for table in tables for feature in table.feature_names]
+        )
+        self._weighted_features: List[str] = [
+            feature for table in weighted_tables for feature in table.feature_names
+        ]
+        in_features = (
+            8
+            + sum([table.embedding_dim * len(table.feature_names) for table in tables])
+            + sum(
+                [
+                    table.embedding_dim * len(table.feature_names)
+                    for table in weighted_tables
+                ]
+            )
+        )
+        self.dhn_arch: nn.Module = TestDHNArch(in_features, device)
+        self.regroup_module = KTRegroupAsDict(
+            [self._embedding_names, self._weighted_features],
+            ["unweighted", "weighted"],
+        )
+
+    def forward(
+        self,
+        dense: torch.Tensor,
+        sparse: KeyedTensor,
+    ) -> torch.Tensor:
+        pooled_emb = self.regroup_module([sparse])
+        values = list(pooled_emb.values())
+        return self.dhn_arch(_concat(dense, values))
 
 
 class TestOverArch(nn.Module):
@@ -804,52 +1060,43 @@ class TestSparseArch(nn.Module):
         tables: List[EmbeddingBagConfig],
         weighted_tables: List[EmbeddingBagConfig],
         device: Optional[torch.device] = None,
-        max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
+        max_feature_lengths: Optional[Dict[str, int]] = None,
     ) -> None:
         super().__init__()
         if device is None:
             device = torch.device("cpu")
         self.fps: Optional[nn.ModuleList] = None
-        self.fp_ebc: Optional[EmbeddingBagCollection] = None
-        if max_feature_lengths_list is not None:
-            self.fps = nn.ModuleList(
-                [
-                    PositionWeightedProcessor(
-                        max_feature_lengths=max_feature_lengths,
-                        device=(
-                            device
-                            if device != torch.device("meta")
-                            else torch.device("cpu")
-                        ),
-                    )
-                    for max_feature_lengths in max_feature_lengths_list
-                ]
-            )
-            normal_id_list_tables = []
-            fp_id_list_tables = []
-            for table in tables:
-                # the key set of feature_processor is either subset or none in the feature_names
-                if set(table.feature_names).issubset(
-                    set(max_feature_lengths_list[0].keys())
-                ):
-                    fp_id_list_tables.append(table)
-                else:
-                    normal_id_list_tables.append(table)
+        self.fp_ebc: Optional[FeatureProcessedEmbeddingBagCollection] = None
+
+        if max_feature_lengths is not None:
+            fp_tables_names = set(max_feature_lengths.keys())
+            normal_tables_names = {table.name for table in tables} - fp_tables_names
 
             self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
-                tables=normal_id_list_tables,
+                tables=[table for table in tables if table.name in normal_tables_names],
                 device=device,
             )
-            self.fp_ebc: EmbeddingBagCollection = EmbeddingBagCollection(
-                tables=fp_id_list_tables,
-                device=device,
-                is_weighted=True,
+
+            fp = PositionWeightedModuleCollection(
+                max_feature_lengths=max_feature_lengths,
+                device=(
+                    device if device != torch.device("meta") else torch.device("cpu")
+                ),
+            )
+            self.fp_ebc = FeatureProcessedEmbeddingBagCollection(
+                embedding_bag_collection=EmbeddingBagCollection(
+                    tables=[table for table in tables if table.name in fp_tables_names],
+                    device=device,
+                    is_weighted=True,
+                ),
+                feature_processors=fp,
             )
         else:
             self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
                 tables=tables,
                 device=device,
             )
+
         self.weighted_ebc: Optional[EmbeddingBagCollection] = (
             EmbeddingBagCollection(
                 tables=weighted_tables,
@@ -904,7 +1151,6 @@ class TestSparseNNBase(nn.Module):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
-        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     ) -> None:
         super().__init__()
         if dense_device is None:
@@ -943,7 +1189,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         embedding_groups: Optional[Dict[str, List[str]]] = None,
         dense_device: Optional[torch.device] = None,
         sparse_device: Optional[torch.device] = None,
-        max_feature_lengths_list: Optional[List[Dict[str, int]]] = None,
+        max_feature_lengths: Optional[Dict[str, int]] = None,
         feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
         over_arch_clazz: Type[nn.Module] = TestOverArch,
         preproc_module: Optional[nn.Module] = None,
@@ -962,7 +1208,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
             tables,
             weighted_tables,
             sparse_device,
-            max_feature_lengths_list if max_feature_lengths_list is not None else None,
+            max_feature_lengths,
         )
 
         embedding_names = (
@@ -1125,7 +1371,11 @@ class TestTowerSparseNN(TestSparseNNBase):
 
         self.over = nn.Linear(
             in_features=8
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + self.tower_0.interaction.linear.out_features
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + self.tower_1.interaction.linear.out_features
             + tables[1].embedding_dim * len(tables[1].feature_names)
             + weighted_tables[0].embedding_dim * len(weighted_tables[0].feature_names),
@@ -1217,8 +1467,14 @@ class TestTowerCollectionSparseNN(TestSparseNNBase):
         self.tower_arch = EmbeddingTowerCollection(towers=[tower_0, tower_1, tower_2])
         self.over = nn.Linear(
             in_features=8
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + tower_0.interaction.linear.out_features
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + tower_1.interaction.linear.out_features
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `out_features`.
             + tower_2.interaction.linear.out_features,
             out_features=16,
             device=dense_device,
@@ -1556,10 +1812,11 @@ class TestModelWithPreproc(nn.Module):
         if self._preproc_module is not None:
             modified_input = self._preproc_module(modified_input)
         elif self._run_preproc_inline:
+            idlist_features = modified_input.idlist_features
             modified_input.idlist_features = KeyedJaggedTensor.from_lengths_sync(
-                modified_input.idlist_features.keys(),
-                modified_input.idlist_features.values(),
-                modified_input.idlist_features.lengths(),
+                idlist_features.keys(),  # pyre-ignore [6]
+                idlist_features.values(),  # pyre-ignore [6]
+                idlist_features.lengths(),  # pyre-ignore [16]
             )
 
         modified_idlist_features = self.preproc_nonweighted(
@@ -1591,6 +1848,8 @@ class TestNegSamplingModule(torch.nn.Module):
         ModelInput
     """
 
+    TEST_BUFFER_NAME = "test_buffer"
+
     def __init__(
         self,
         extra_input: ModelInput,
@@ -1598,6 +1857,7 @@ class TestNegSamplingModule(torch.nn.Module):
     ) -> None:
         super().__init__()
         self._extra_input = extra_input
+        self.register_buffer(self.TEST_BUFFER_NAME, torch.zeros(1))
         if has_params:
             self._linear: nn.Module = nn.Linear(30, 30)
 
@@ -1620,6 +1880,8 @@ class TestNegSamplingModule(torch.nn.Module):
         )
 
         # stride will be same but features will be joined
+        assert isinstance(modified_input.idlist_features, KeyedJaggedTensor)
+        assert isinstance(self._extra_input.idlist_features, KeyedJaggedTensor)
         modified_input.idlist_features = KeyedJaggedTensor.concat(
             [modified_input.idlist_features, self._extra_input.idlist_features]
         )

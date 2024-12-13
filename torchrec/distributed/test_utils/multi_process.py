@@ -24,6 +24,11 @@ from torchrec.test_utils import (
 )
 
 
+# AMD's HIP runtime doesn't seem to work with forkserver; hipMalloc will fail
+# Therefore we use spawn for HIP runtime until AMD fixes the issue
+_MP_INIT_MODE = "forkserver" if torch.version.hip is None else "spawn"
+
+
 class MultiProcessContext:
     def __init__(
         self,
@@ -126,7 +131,7 @@ class MultiProcessTestBase(unittest.TestCase):
         # pyre-ignore
         **kwargs,
     ) -> None:
-        ctx = multiprocessing.get_context("forkserver")
+        ctx = multiprocessing.get_context(_MP_INIT_MODE)
         processes = []
         for rank in range(world_size):
             kwargs["rank"] = rank
@@ -152,7 +157,7 @@ class MultiProcessTestBase(unittest.TestCase):
         world_size: int,
         kwargs_per_rank: List[Dict[str, Any]],
     ) -> None:
-        ctx = multiprocessing.get_context("forkserver")
+        ctx = multiprocessing.get_context(_MP_INIT_MODE)
         processes = []
         for rank in range(world_size):
             kwargs = {}

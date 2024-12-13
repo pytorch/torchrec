@@ -22,6 +22,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
 )
 
+
 logger: logging.Logger = logging.getLogger(__name__)
 
 NUM_TRUE_POS = "num_true_pos"
@@ -204,9 +205,13 @@ class RecallSessionMetricComputation(RecMetricComputation):
     ) -> Dict[str, torch.Tensor]:
 
         predictions_ranked = ranking_within_session(predictions, session)
+        # pyre-fixme[58]: `<` is not supported for operand types `Tensor` and
+        #  `Optional[int]`.
         predictions_labels = (predictions_ranked < self.top_threshold).to(torch.int32)
         if self.run_ranking_of_labels:
             labels_ranked = ranking_within_session(labels, session)
+            # pyre-fixme[58]: `<` is not supported for operand types `Tensor` and
+            #  `Optional[int]`.
             labels = (labels_ranked < self.top_threshold).to(torch.int32)
         num_true_pos = _calc_num_true_pos(labels, predictions_labels, weights)
         num_false_neg = _calc_num_false_neg(labels, predictions_labels, weights)

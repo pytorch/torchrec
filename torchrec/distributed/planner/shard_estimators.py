@@ -70,7 +70,13 @@ def _is_prefetch_pipelined(
 
 class EmbeddingPerfEstimator(ShardEstimator):
     """
-    Embedding Wall Time Perf Estimator
+    Embedding Wall Time Perf Estimator. This estimator estimates the wall time
+    of a given sharding option.
+
+    Args:
+        topology (Topology): device topology.
+        constraints (Optional[Dict[str, ParameterConstraints]]): parameter constraints.
+        is_inference (bool): whether or not the estimator is used for inference.
     """
 
     def __init__(
@@ -88,6 +94,13 @@ class EmbeddingPerfEstimator(ShardEstimator):
         sharding_options: List[ShardingOption],
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
+        """
+        Estimates the wall time of a given sharding option.
+
+        Args:
+            sharding_options (List[ShardingOption]): list of sharding options.
+            sharder_map (Optional[Dict[str, ModuleSharder[nn.Module]]]): sharder map.
+        """
         if not sharder_map:
             assert not sharding_options, "sharder_map not provided for sharding_options"
             return
@@ -134,10 +147,14 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 hasattr(module, "_feature_processor")
                 and hasattr(module._feature_processor, "feature_processor_modules")
                 and isinstance(
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                    #  attribute `feature_processor_modules`.
                     module._feature_processor.feature_processor_modules,
                     nn.ModuleDict,
                 )
                 and sharding_option.name
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `feature_processor_modules`.
                 in module._feature_processor.feature_processor_modules.keys()
             ):
                 has_feature_processor = True
@@ -213,6 +230,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 num_poolings=num_poolings,
                 hbm_mem_bw=self._topology.hbm_mem_bw,
                 ddr_mem_bw=self._topology.ddr_mem_bw,
+                hbm_to_ddr_mem_bw=self._topology.hbm_to_ddr_mem_bw,
                 intra_host_bw=self._topology.intra_host_bw,
                 inter_host_bw=self._topology.inter_host_bw,
                 bwd_compute_multiplier=self._topology.bwd_compute_multiplier,
@@ -250,6 +268,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         num_poolings: List[float],
         hbm_mem_bw: float,
         ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         intra_host_bw: float,
         inter_host_bw: float,
         bwd_compute_multiplier: float,
@@ -287,6 +306,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             num_poolings (List[float]): number of poolings per sample, typically 1.0.
             hbm_mem_bw (float): the bandwidth of the device HBM.
             ddr_mem_bw (float): the bandwidth of the system DDR memory.
+            hbm_to_ddr_bw (float): the bandwidth between device HBM and system DDR.
             intra_host_bw (float): the bandwidth within a single host like multiple threads.
             inter_host_bw (float): the bandwidth between two hosts like multiple machines.
             is_pooled (bool): True if embedding output is pooled (ie. `EmbeddingBag`), False
@@ -298,6 +318,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 of device.
             prefetch_pipeline (bool = False): whether prefetch pipeline is enabled.
             expected_cache_fetches (float): number of expected cache fetches across global batch
+            uneven_sharding_perf_multiplier (float = 1.0): multiplier to account for uneven sharding perf
 
         Returns:
             List[float]: the list of perf for each shard.
@@ -309,6 +330,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             compute_kernel,
             hbm_mem_bw,
             ddr_mem_bw,
+            hbm_to_ddr_mem_bw,
             caching_ratio,
             prefetch_pipeline,
         )
@@ -335,7 +357,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     fwd_a2a_comm_data_type_size=fwd_a2a_comm_data_type_size,
                     bwd_a2a_comm_data_type_size=bwd_a2a_comm_data_type_size,
                     num_poolings=num_poolings,
-                    ddr_mem_bw=ddr_mem_bw,
+                    hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
                     inter_host_bw=inter_host_bw,
                     intra_host_bw=intra_host_bw,
@@ -361,7 +383,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
                     bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                     num_poolings=num_poolings,
-                    ddr_mem_bw=ddr_mem_bw,
+                    hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
                     inter_host_bw=inter_host_bw,
                     intra_host_bw=intra_host_bw,
@@ -372,7 +394,10 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     expected_cache_fetches=expected_cache_fetches,
                     is_inference=is_inference,
                 )
-            elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+            elif (
+                sharding_type == ShardingType.TABLE_ROW_WISE.value
+                or sharding_type == ShardingType.GRID_SHARD.value
+            ):
                 shard_perf = cls._get_twrw_sharding_perf(
                     batch_sizes=batch_sizes,
                     world_size=world_size,
@@ -387,7 +412,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     fwd_sr_comm_data_type_size=fwd_sr_comm_data_type_size,
                     bwd_sr_comm_data_type_size=bwd_sr_comm_data_type_size,
                     num_poolings=num_poolings,
-                    ddr_mem_bw=ddr_mem_bw,
+                    hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
                     inter_host_bw=inter_host_bw,
                     intra_host_bw=intra_host_bw,
@@ -427,14 +452,14 @@ class EmbeddingPerfEstimator(ShardEstimator):
     @classmethod
     def _get_expected_cache_prefetch_time(
         cls,
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         expected_cache_fetches: float,
         emb_dim: int,
         table_data_type_size: float,
     ) -> float:
         # TODO: validate cost model with empirical test
         prefetch_bytes = expected_cache_fetches * emb_dim * table_data_type_size
-        return prefetch_bytes / ddr_mem_bw
+        return prefetch_bytes / hbm_to_ddr_mem_bw
 
     @classmethod
     def _get_tw_sharding_perf(
@@ -450,7 +475,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         fwd_a2a_comm_data_type_size: float,
         bwd_a2a_comm_data_type_size: float,
         num_poolings: List[float],
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         device_bw: float,
         inter_host_bw: float,
         intra_host_bw: float,
@@ -520,7 +545,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
             bwd_compute = bwd_compute * weighted_feature_bwd_compute_multiplier
 
         prefetch_compute = cls._get_expected_cache_prefetch_time(
-            ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
+            hbm_to_ddr_mem_bw, expected_cache_fetches, emb_dim, table_data_type_size
         )
 
         # in order of model parallel execution, starting with:
@@ -549,7 +574,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         fwd_sr_comm_data_type_size: float,
         bwd_sr_comm_data_type_size: float,
         num_poolings: List[float],
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         device_bw: float,
         inter_host_bw: float,
         intra_host_bw: float,
@@ -618,7 +643,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
         # for row-wise, expected_cache_fetches per shard is / world_size
         prefetch_compute = cls._get_expected_cache_prefetch_time(
-            ddr_mem_bw,
+            hbm_to_ddr_mem_bw,
             expected_cache_fetches / world_size,
             emb_dim,
             table_data_type_size,
@@ -648,7 +673,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         fwd_sr_comm_data_type_size: float,
         bwd_sr_comm_data_type_size: float,
         num_poolings: List[float],
-        ddr_mem_bw: float,
+        hbm_to_ddr_mem_bw: float,
         device_bw: float,
         inter_host_bw: float,
         intra_host_bw: float,
@@ -715,9 +740,9 @@ class EmbeddingPerfEstimator(ShardEstimator):
         if is_weighted:
             bwd_compute = bwd_compute * weighted_feature_bwd_compute_multiplier
 
-        # for table-wise-row-wise, expected_cache_fetches per shard is / local_world_size
+        # for table-wise-row-wise or grid_shard, expected_cache_fetches per shard is / local_world_size
         prefetch_compute = cls._get_expected_cache_prefetch_time(
-            ddr_mem_bw,
+            hbm_to_ddr_mem_bw,
             expected_cache_fetches / local_world_size,
             emb_dim,
             table_data_type_size,
@@ -868,6 +893,24 @@ def _extract_comm_data_type_size(
 class EmbeddingStorageEstimator(ShardEstimator):
     """
     Embedding Storage Usage Estimator
+
+    Args:
+        topology (Topology): device topology.
+        constraints (Optional[Dict[str, ParameterConstraints]]): parameter constraints.
+        pipeline_type (PipelineType): The type of pipeline, if any. Will determine the
+            input replication factor during memory estimation.
+        run_embedding_at_peak_memory (bool): If the embedding fwd/bwd will be execute when HBM
+            usage is at peak. When set to TRUE, any temporary memory allocation during
+            embedding forward/backward, as long as output sizes before output_dist will
+            be counted towards HBM storage cost. Otherwise they won't since they'll be
+            "hidden" by the real memory peak.
+
+            Only take effect if pipeline_type is set for backward compatibility (not affecting
+            models using old pipeline-agnostic formula)
+
+            Default to false because this is typically false for RecSys since memory
+            peak happens at the end of dense forwrad / beginning of dense backward instead.
+        is_inference (bool): If the model is inference model. Default to False.
     """
 
     def __init__(
@@ -875,11 +918,13 @@ class EmbeddingStorageEstimator(ShardEstimator):
         topology: Topology,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         pipeline_type: PipelineType = PipelineType.NONE,
+        run_embedding_at_peak_memory: bool = False,
         is_inference: bool = False,
     ) -> None:
         self._topology = topology
         self._constraints = constraints
         self._pipeline_type = pipeline_type
+        self._run_embedding_at_peak_memory = run_embedding_at_peak_memory
         self._is_inference = is_inference
 
     def estimate(
@@ -887,6 +932,14 @@ class EmbeddingStorageEstimator(ShardEstimator):
         sharding_options: List[ShardingOption],
         sharder_map: Optional[Dict[str, ModuleSharder[nn.Module]]] = None,
     ) -> None:
+        """
+        Estimate the storage cost of each sharding option.
+
+        Args:
+            sharding_options (List[ShardingOption]): list of sharding options.
+            sharder_map (Optional[Dict[str, ModuleSharder[nn.Module]]]): map from module
+                type to sharder.
+        """
         if not sharder_map:
             assert not sharding_options, "sharder_map not provided for sharding_options"
             return
@@ -942,7 +995,6 @@ class EmbeddingStorageEstimator(ShardEstimator):
                     if hasattr(sharder, "fused_params") and sharder.fused_params
                     else None
                 )
-
             shard_storages = calculate_shard_storages(
                 sharder=sharder,
                 sharding_type=sharding_option.sharding_type,
@@ -960,10 +1012,10 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 input_data_type_size=input_data_type_size,
                 output_data_type_size=output_data_type_size,
                 pipeline_type=self._pipeline_type,
+                count_ephemeral_storage_cost=self._run_embedding_at_peak_memory,
                 is_inference=self._is_inference,
                 multipass_prefetch_max_pass=mpp_conf.num_passes if mpp_conf else None,
             )
-
             for shard, storage in zip(sharding_option.shards, shard_storages):
                 shard.storage = storage
 
@@ -974,6 +1026,7 @@ def calculate_pipeline_io_cost(
     prefetch_size: int,
     pipeline_type: PipelineType,
     multipass_prefetch_max_pass: Optional[int],
+    count_ephemeral_storage_cost: bool = False,
     is_inference: bool = False,
 ) -> int:
     # These magical number comes from heuristical analysis of memory snapshot during
@@ -983,17 +1036,27 @@ def calculate_pipeline_io_cost(
     # we need to make this estimation more blackbox-based.
     if is_inference:
         return 0
+
+    # Output size is considered ephemeral storage cost since they are temporarily
+    # only during all2all and won't last long (e.g. from fwd to bwd)
+    output_contribition_to_peak_memory = (
+        output_size if count_ephemeral_storage_cost else 0
+    )
+
     if pipeline_type == PipelineType.TRAIN_SPARSE_DIST:
         pipelining_hbm_input_factor = 2
-        return max(pipelining_hbm_input_factor * input_size, output_size)
+        return (
+            pipelining_hbm_input_factor * input_size
+            + output_contribition_to_peak_memory
+        )
     if pipeline_type == PipelineType.TRAIN_PREFETCH_SPARSE_DIST:
         multipass_prefetch_max_pass = multipass_prefetch_max_pass or 1
         pipelining_hbm_input_factor = 3
         prefetch_bursty_hbm_input_factor = 1 + 6 / multipass_prefetch_max_pass
-        return max(
+        return (
             pipelining_hbm_input_factor * input_size
-            + int(prefetch_bursty_hbm_input_factor * prefetch_size),
-            output_size,
+            + int(prefetch_bursty_hbm_input_factor * prefetch_size)
+            + output_contribition_to_peak_memory
         )
 
     # Catch all case, for backward compatibility
@@ -1017,6 +1080,7 @@ def calculate_shard_storages(
     input_data_type_size: float,
     output_data_type_size: float,
     pipeline_type: PipelineType = PipelineType.NONE,
+    count_ephemeral_storage_cost: bool = False,
     is_inference: bool = False,
     multipass_prefetch_max_pass: Optional[int] = None,
 ) -> List[Storage]:
@@ -1087,6 +1151,7 @@ def calculate_shard_storages(
         sharding_type=sharding_type,
         optimizer_class=optimizer_class,
         is_inference=is_inference,
+        clf=caching_ratio if table_cached else None,
     )
     ddr_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=ddr_storage,
@@ -1106,6 +1171,7 @@ def calculate_shard_storages(
                 prefetch_size=input_size if table_cached else 0,
                 pipeline_type=pipeline_type,
                 multipass_prefetch_max_pass=multipass_prefetch_max_pass,
+                count_ephemeral_storage_cost=count_ephemeral_storage_cost,
                 is_inference=is_inference,
             )
             if compute_device == "cuda"
@@ -1199,7 +1265,10 @@ def _calculate_shard_io_sizes(
             num_poolings=num_poolings,
             is_pooled=is_pooled,
         )
-    elif sharding_type == ShardingType.TABLE_ROW_WISE.value:
+    elif (
+        sharding_type == ShardingType.TABLE_ROW_WISE.value
+        or sharding_type == ShardingType.GRID_SHARD.value  # same as table row wise
+    ):
         return _calculate_twrw_shard_io_sizes(
             batch_sizes=batch_sizes,
             world_size=world_size,
@@ -1395,6 +1464,7 @@ def _calculate_storage_specific_sizes(
     sharding_type: str,
     optimizer_class: Optional[Type[torch.optim.Optimizer]] = None,
     is_inference: bool = False,
+    clf: Optional[float] = None,
 ) -> List[int]:
     tensor_sizes: List[int] = [
         (
@@ -1410,9 +1480,24 @@ def _calculate_storage_specific_sizes(
         math.ceil(tensor_size * optimizer_multipler) for tensor_size in tensor_sizes
     ]
 
+    # If a table has turned on UVM caching (meaning clf is not None), there'll be
+    # 4x of table hash size and 16x of cache slot size HBM storage cost dedicated to
+    # cache aux state (note that this is not the cache content itself)
+    cache_aux_state_sizes: List[int] = (
+        [0] * len(shard_sizes)
+        if clf is None
+        else [math.ceil(size[0] * (4 + clf * 16)) for size in shard_sizes]
+    )
+
     return [
-        tensor_size + optimizer_size if not is_inference else tensor_size
-        for tensor_size, optimizer_size in zip(tensor_sizes, optimizer_sizes)
+        (
+            cache_state_size + tensor_size + optimizer_size
+            if not is_inference
+            else tensor_size
+        )
+        for cache_state_size, tensor_size, optimizer_size in zip(
+            cache_aux_state_sizes, tensor_sizes, optimizer_sizes
+        )
     ]
 
 

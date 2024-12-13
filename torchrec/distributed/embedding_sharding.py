@@ -36,10 +36,12 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.types import (
     Awaitable,
+    EmbeddingEvent,
     ParameterSharding,
     QuantizedCommCodecs,
     ShardMetadata,
 )
+from torchrec.distributed.utils import maybe_annotate_embedding_event
 from torchrec.fx.utils import assert_fx_safe
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -202,9 +204,11 @@ def bucketize_kjt_before_all2all(
     kjt: KeyedJaggedTensor,
     num_buckets: int,
     block_sizes: torch.Tensor,
+    total_num_blocks: Optional[torch.Tensor] = None,
     output_permute: bool = False,
     bucketize_pos: bool = False,
     block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
+    keep_original_indices: bool = False,
 ) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]:
     """
     Bucketizes the `values` in KeyedJaggedTensor into `num_buckets` buckets,
@@ -216,11 +220,13 @@ def bucketize_kjt_before_all2all(
     Args:
         num_buckets (int): number of buckets to bucketize the values into.
         block_sizes: (torch.Tensor): bucket sizes for the keyed dimension.
+        total_num_blocks: (Optional[torch.Tensor]): number of blocks per feature, useful for two-level bucketization
         output_permute (bool): output the memory location mapping from the unbucketized
             values to bucketized values or not.
         bucketize_pos (bool): output the changed position of the bucketized values or
             not.
         block_bucketize_row_pos (Optional[List[torch.Tensor]]): The offsets of shard size for each feature.
+        keep_original_indices (bool): whether to keep the original indices or not.
 
     Returns:
         Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]: the bucketized `KeyedJaggedTensor` and the optional permute mapping from the unbucketized values to bucketized value.
@@ -231,7 +237,7 @@ def bucketize_kjt_before_all2all(
         block_sizes.numel() == num_features,
         f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received.",
     )
-    block_sizes_new_type = _fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values())
+
     (
         bucketized_lengths,
         bucketized_indices,
@@ -243,12 +249,22 @@ def bucketize_kjt_before_all2all(
         kjt.values(),
         bucketize_pos=bucketize_pos,
         sequence=output_permute,
-        block_sizes=block_sizes_new_type,
+        block_sizes=_fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values()),
+        total_num_blocks=(
+            _fx_wrap_tensor_to_device_dtype(total_num_blocks, kjt.values())
+            if total_num_blocks is not None
+            else None
+        ),
         my_size=num_buckets,
         weights=kjt.weights_or_none(),
         batch_size_per_feature=_fx_wrap_batch_size_per_feature(kjt),
         max_B=_fx_wrap_max_B(kjt),
-        block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
+        block_bucketize_pos=(
+            _fx_wrap_tensor_to_device_dtype(block_bucketize_row_pos, kjt.lengths())
+            if block_bucketize_row_pos is not None
+            else None
+        ),
+        keep_orig_idx=keep_original_indices,
     )
 
     return (
@@ -317,7 +333,7 @@ def bucketize_kjt_inference(
             num_buckets=num_buckets,
             block_sizes=block_sizes_new_type,
             bucketize_pos=bucketize_pos,
-            block_bucketize_pos=block_bucketize_row_pos,  # each tensor should have the same dtype as kjt.lengths()
+            block_bucketize_pos=block_bucketize_row_pos,
         )
     else:
         (
@@ -442,6 +458,15 @@ def _prefetch_and_cached(
     )
 
 
+def _all_tables_are_quant_kernel(
+    tables: List[ShardedEmbeddingTable],
+) -> bool:
+    """
+    Return if all tables have quant compute kernel.
+    """
+    return all(table.compute_kernel == EmbeddingComputeKernel.QUANT for table in tables)
+
+
 # group tables by `DataType`, `PoolingType`, and `EmbeddingComputeKernel`.
 def group_tables(
     tables_per_rank: List[List[ShardedEmbeddingTable]],
@@ -485,6 +510,8 @@ def group_tables(
         # Collect groups
         groups = defaultdict(list)
         grouping_keys = []
+        # Assumes all compute kernels within tables are the same
+        is_inference = _all_tables_are_quant_kernel(embedding_tables)
         for table in embedding_tables:
             bucketer = (
                 prefetch_cached_dim_bucketer
@@ -495,12 +522,16 @@ def group_tables(
                 _get_grouping_fused_params(table.fused_params, table.name) or {}
             )
             grouping_key = (
-                table.data_type,
+                table.data_type if not is_inference else None,
                 table.pooling,
                 table.has_feature_processor,
                 tuple(sorted(group_fused_params.items())),
                 _get_compute_kernel_type(table.compute_kernel),
-                bucketer.get_bucket(table.local_cols, table.data_type),
+                # TODO: Unit test to check if table.data_type affects table grouping
+                bucketer.get_bucket(
+                    table.local_cols,
+                    table.data_type,
+                ),
                 _prefetch_and_cached(table),
             )
             # micromanage the order of we traverse the groups to ensure backwards compatibility
@@ -658,10 +689,14 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
         self,
         awaitables: List[Awaitable[Awaitable[KeyedJaggedTensor]]],
         ctx: C,
+        module_fqn: Optional[str] = None,
+        sharding_types: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
         self.awaitables = awaitables
         self.ctx = ctx
+        self._module_fqn = module_fqn
+        self._sharding_types = sharding_types
 
     def _wait_impl(self) -> KJTListAwaitable:
         """
@@ -674,7 +709,16 @@ class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
         Returns:
             KJTListAwaitable: awaitables for tensors of the sparse features.
         """
-        tensors_awaitables = [w.wait() for w in self.awaitables]
+        tensors_awaitables = []
+
+        for i, w in enumerate(self.awaitables):
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.OUTPUT_DIST_WAIT,
+                self._module_fqn,
+                self._sharding_types[i] if self._sharding_types else None,
+            ):
+                tensors_awaitables.append(w.wait())
+
         _set_sharding_context_intra_a2a(tensors_awaitables, self.ctx)
         return KJTListAwaitable(tensors_awaitables, self.ctx)
 
@@ -901,9 +945,9 @@ class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
     """
 
     def __init__(
-        self, qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None
+        self,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
     @property

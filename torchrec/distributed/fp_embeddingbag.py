@@ -57,6 +57,7 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
         ebc_sharder: EmbeddingBagCollectionSharder,
         env: ShardingEnv,
         device: torch.device,
+        module_fqn: Optional[str] = None,
     ) -> None:
         super().__init__()
 
@@ -69,6 +70,7 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
                 table_name_to_parameter_sharding,
                 env=env,
                 device=device,
+                module_fqn=module_fqn,
             )
         )
 
@@ -170,7 +172,10 @@ class FeatureProcessedEmbeddingBagCollectionSharder(
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._ebc_sharder: EmbeddingBagCollectionSharder = (
-            ebc_sharder or EmbeddingBagCollectionSharder(self.qcomm_codecs_registry)
+            ebc_sharder
+            or EmbeddingBagCollectionSharder(
+                qcomm_codecs_registry=self.qcomm_codecs_registry
+            )
         )
 
     def shard(
@@ -179,6 +184,7 @@ class FeatureProcessedEmbeddingBagCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedFeatureProcessedEmbeddingBagCollection:
 
         if device is None:
@@ -190,6 +196,7 @@ class FeatureProcessedEmbeddingBagCollectionSharder(
             ebc_sharder=self._ebc_sharder,
             env=env,
             device=device,
+            module_fqn=module_fqn,
         )
 
     @property

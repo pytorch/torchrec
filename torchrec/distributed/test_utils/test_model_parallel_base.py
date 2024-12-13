@@ -19,6 +19,7 @@ from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import distributed as dist
 from torch.distributed._shard.sharded_tensor import ShardedTensor
+from torch.distributed._tensor import DTensor
 from torchrec import distributed as trec_dist
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
@@ -408,6 +409,22 @@ class ModelParallelSingleRankBase(unittest.TestCase):
                         torch.testing.assert_close(
                             src.tensor, dst.tensor, rtol=rtol, atol=atol
                         )
+            elif isinstance(value, DTensor):
+                assert isinstance(v2, DTensor)
+                self.assertEqual(
+                    len(value._local_tensor.local_shards()),  # pyre-ignore[16]
+                    len(v2._local_tensor.local_shards()),
+                )
+                for dst, src in zip(
+                    value._local_tensor.local_shards(), v2._local_tensor.local_shards()
+                ):
+                    if is_deterministic:
+                        self.assertTrue(torch.equal(src, dst))
+                    else:
+                        rtol, atol = _get_default_rtol_and_atol(src, dst)
+                        torch.testing.assert_close(
+                            src._local_tensor, dst._local_tensor, rtol=rtol, atol=atol
+                        )
             else:
                 dst = value
                 src = v2
@@ -527,11 +544,18 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
                 self.assertTrue(isinstance(v1, ShardedTensor))
                 assert len(v2.local_shards()) == 1
                 dst = v2.local_shards()[0].tensor
+            elif isinstance(v2, DTensor):
+                self.assertTrue(isinstance(v1, DTensor))
+                assert len(v2._local_tensor.local_shards()) == 1  # pyre-ignore[16]
+                dst = v2._local_tensor.local_shards()[0]
             else:
                 dst = v2
             if isinstance(v1, ShardedTensor):
                 assert len(v1.local_shards()) == 1
                 src = v1.local_shards()[0].tensor
+            elif isinstance(v1, DTensor):
+                assert len(v1._local_tensor.local_shards()) == 1
+                src = v1._local_tensor.local_shards()[0]
             else:
                 src = v1
             self.assertEqual(src.size(), dst.size())
@@ -901,6 +925,12 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
                         len(value.local_shards()), num_cw_shards_per_table[table_name]
                     )
                     dst = value.local_shards()[0].tensor
+                elif isinstance(value, DTensor):
+                    self.assertEqual(
+                        len(value._local_tensor.local_shards()),  # pyre-ignore[16]
+                        num_cw_shards_per_table[table_name],
+                    )
+                    dst = value._local_tensor.local_shards()[0]
                 else:
                     dst = value
 
@@ -915,6 +945,17 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
                         self.assertTrue(
                             torch.equal(src_local_shard.tensor, dst_local_shard.tensor)
                         )
+                elif isinstance(v2, DTensor):
+                    self.assertEqual(
+                        len(value._local_tensor.local_shards()),
+                        num_cw_shards_per_table[table_name],
+                    )
+
+                    for src_local_shard, dst_local_shard in zip(
+                        value._local_tensor.local_shards(),
+                        v2._local_tensor.local_shards(),
+                    ):
+                        self.assertTrue(torch.equal(src_local_shard, dst_local_shard))
                 else:
                     src = v2
                     self.assertTrue(torch.equal(src, dst))
@@ -944,6 +985,24 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
                         self.assertTrue(
                             torch.equal(src_local_shard.tensor, dst_local_shard.tensor)
                         )
+                elif isinstance(dst_opt_state, DTensor):
+                    self.assertIsInstance(src_opt_state, DTensor)
+
+                    self.assertEqual(
+                        len(dst_opt_state._local_tensor.local_shards()),
+                        num_cw_shards_per_table[table_name],
+                    )
+
+                    self.assertEqual(
+                        len(src_opt_state._local_tensor.local_shards()),
+                        num_cw_shards_per_table[table_name],
+                    )
+
+                    for src_local_shard, dst_local_shard in zip(
+                        src_opt_state._local_tensor.local_shards(),
+                        dst_opt_state._local_tensor.local_shards(),
+                    ):
+                        self.assertTrue(torch.equal(src_local_shard, dst_local_shard))
                 elif isinstance(dst_opt_state, torch.Tensor):
                     self.assertIsInstance(src_opt_state, torch.Tensor)
 
@@ -1094,6 +1153,8 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
         (dense_model, _), batch = self._generate_dmps_and_batch(dense_sharders)
 
         dense_opt = RowWiseAdagrad(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `parameters`.
             dense_model.module.sparse.parameters(),
             lr=learning_rate,
             eps=1e-8,  # TBE has default eps 1e-8

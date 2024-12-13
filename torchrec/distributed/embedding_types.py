@@ -52,6 +52,8 @@ class OptimType(Enum):
     SHAMPOO_V2 = "SHAMPOO_V2"
     LION = "LION"
     ADAMW = "ADAMW"
+    SHAMPOO_V2_MRS = "SHAMPOO_V2_MRS"
+    SHAMPOO_MRS = "SHAMPOO_MRS"
 
 
 @unique
@@ -377,6 +379,16 @@ class ShardedEmbeddingModule(
 
         return "\n ".join(rep)
 
+    def train(self, mode: bool = True):  # pyre-ignore[3]
+        r"""Set the module in training mode."""
+        super().train(mode)
+
+        # adding additional handling for lookups
+        for lookup in self._lookups:
+            lookup.train(mode)
+
+        return self
+
 
 M = TypeVar("M", bound=nn.Module)
 
@@ -407,6 +419,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             types += [
                 ShardingType.ROW_WISE.value,
                 ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.GRID_SHARD.value,
             ]
 
         return types

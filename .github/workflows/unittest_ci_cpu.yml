@@ -24,9 +24,6 @@ jobs:
         matrix:
           include:
             - os: linux.2xlarge
-              python-version: 3.8
-              python-tag: "py38"
-            - os: linux.2xlarge
               python-version: 3.9
               python-tag: "py39"
             - os: linux.2xlarge
@@ -35,6 +32,9 @@ jobs:
             - os: linux.2xlarge
               python-version: '3.11'
               python-tag: "py311"
+            - os: linux.2xlarge
+              python-version: '3.12'
+              python-tag: "py312"
     uses: pytorch/test-infra/.github/workflows/linux_job.yml@main
     with:
       runner: ${{ matrix.os }}
@@ -45,9 +45,11 @@ jobs:
         conda info
         python --version
         conda run -n build_binary python --version
-        conda install -n build_binary \
-          --yes \
-          pytorch cpuonly -c pytorch-nightly
+        conda run -n build_binary \
+          pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary \
+          python -c "import torch"
+        echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \

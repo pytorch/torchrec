@@ -27,7 +27,7 @@ from torch.distributed.checkpoint.planner import (
 aten = torch.ops.aten  # pyre-ignore[5]
 
 
-class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new__
+class LocalShardsWrapper(torch.Tensor):
     """
     A wrapper class to hold local shards of a DTensor.
     This class is used largely for checkpointing purposes and implicity subtypes
@@ -35,24 +35,47 @@ class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new
     """
 
     __slots__ = ["_local_shards", "_storage_meta"]
+    # pyre-fixme[13]: Attribute `_local_shards` is never initialized.
     _local_shards: List[torch.Tensor]
+    # pyre-fixme[13]: Attribute `_storage_meta` is never initialized.
     _storage_meta: TensorStorageMetadata
 
     @staticmethod
     def __new__(
         cls, local_shards: List[torch.Tensor], local_offsets: List[Tuple[int, ...]]
     ) -> "LocalShardsWrapper":
-        assert len(local_shards) > 0
-        assert len(local_shards) == len(local_offsets)
         assert all(
             tensor.device == local_shards[0].device for tensor in local_shards[1:]
         )
 
+        # if empty shard, we create a empty tensor
+        if len(local_shards) == 0:
+            r = torch.Tensor._make_wrapper_subclass(  # type: ignore[attr-defined])
+                cls,
+                torch.Size([0, 0]),
+            )
+            r._local_shards = []
+            r._storage_meta = TensorStorageMetadata(
+                properties=TensorProperties(),
+                size=torch.Size([0, 0]),
+                chunks=[
+                    ChunkStorageMetadata(
+                        offsets=torch.Size([0, 0]), sizes=torch.Size([0, 0])
+                    )
+                ],
+            )
+            return r
+
         # we calculate the total tensor size by "concat" on second tensor dimension
         cat_tensor_shape = list(local_shards[0].size())
-        if len(local_shards) > 1:  # column-wise sharding
+        if len(local_shards) > 1 and local_shards[0].ndim == 2:  # column-wise sharding
             for shard in local_shards[1:]:
                 cat_tensor_shape[1] += shard.size()[1]
+
+        # in cases of sharding optimizer rowwise, we calculate total tensor size by "concat" on first tensor dimension
+        if len(local_shards) > 1 and local_shards[0].ndim == 1:  # column-wise sharding
+            for shard in local_shards[1:]:
+                cat_tensor_shape[0] += shard.size()[0]
 
         wrapper_properties = TensorProperties.create_from_tensor(local_shards[0])
         wrapper_shape = torch.Size(cat_tensor_shape)
@@ -92,6 +115,7 @@ class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new
             aten.equal.default: cls.handle_equal,
             aten.detach.default: cls.handle_detach,
             aten.clone.default: cls.handle_clone,
+            aten.new_empty.default: cls.handle_new_empty,
         }
 
         if func in dispatcher:
@@ -133,11 +157,36 @@ class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new
     # pyre-fixme[3]: Return type must be annotated.
     # pyre-fixme[2]: Parameter must be annotated.
     def handle_view(args, kwargs):
-        # TODO, do we need to change the shape of associated offsets?
-        res_shards_list = [
-            aten.view.default(shard, args[1], **kwargs)
-            for shard in args[0].local_shards()
-        ]
+        view_shape = args[1]
+        res_shards_list = []
+        if len(args[0].local_shards()) > 1:
+            if args[0].local_shards()[0].ndim == 2:
+                assert (
+                    args[0].storage_metadata().size[0] == view_shape[0]
+                    and args[0].storage_metadata().size[1] == view_shape[1]
+                )
+                # This accounts for a DTensor quirk, when multiple shards are present on a rank, DTensor on
+                # init calls view_as() on the global tensor shape
+                # will fail because the view shape is not applicable to individual shards.
+                res_shards_list = [
+                    aten.view.default(shard, shard.shape, **kwargs)
+                    for shard in args[0].local_shards()
+                ]
+            elif args[0].local_shards()[0].ndim == 1:
+                assert args[0].storage_metadata().size[0] == view_shape[0]
+                # This case is for optimizer sharding as regardles of sharding type, optimizer state is row wise sharded
+                res_shards_list = [
+                    aten.view.default(shard, shard.shape, **kwargs)
+                    for shard in args[0].local_shards()
+                ]
+            else:
+                raise NotImplementedError("No support for view on tensors ndim > 2")
+        else:
+            # view is called per shard
+            res_shards_list = [
+                aten.view.default(shard, args[1], **kwargs)
+                for shard in args[0].local_shards()
+            ]
         return LocalShardsWrapper(res_shards_list, args[0].local_offsets())
 
     @staticmethod
@@ -187,13 +236,25 @@ class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new
         ]
         return LocalShardsWrapper(cloned_local_shards, self_ls.local_offsets())
 
+    @staticmethod
+    # pyre-fixme[3]: Return type must be annotated.
+    # pyre-fixme[2]: Parameter must be annotated.
+    def handle_new_empty(args, kwargs):
+        self_ls = args[0]
+        return LocalShardsWrapper(
+            [torch.empty_like(shard) for shard in self_ls._local_shards],
+            self_ls.local_offsets(),
+        )
+
     @property
     def device(self) -> torch._C.device:  # type: ignore[override]
-        return self._local_shards[0].device
+        return (
+            self._local_shards[0].device if self._local_shards else torch.device("meta")
+        )
 
     @property
     def is_meta(self) -> bool:  # type: ignore[override]
-        return self._local_shards[0].is_meta
+        return self._local_shards[0].is_meta if self._local_shards else True
 
     # pyre-ignore[14]
     def is_pinned(self) -> bool:  # type: ignore[override]
@@ -244,6 +305,13 @@ class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new
         """
         return self._storage_meta
 
+    def is_empty_shard(self) -> bool:
+        """
+        Returns a :class:`bool` object indicating if the local tensor on current rank
+        is an empty tensor
+        """
+        return self._storage_meta.size[0] == 0 and self._storage_meta.size[1] == 0
+
     def __create_write_items__(
         self, fqn: str, object: Any  # pyre-ignore[2]
     ) -> List[WriteItem]:
@@ -291,6 +359,12 @@ class LocalShardsWrapper(torch.Tensor):  # pyre-ignore[13]: pyre is bad at __new
             for shard, chunk in zip(self._local_shards, self._storage_meta.chunks):
                 if chunk.offsets == index.offset:
                     return shard
+
+        # Empty shard case
+        if len(self._local_shards) == 0 and self._storage_meta.chunks[
+            0
+        ].sizes == torch.Size([0, 0]):
+            return torch.empty(0)
 
         raise ValueError(
             f"Could not find shard at '{index.offset}' for FQN: '{index.fqn}'"

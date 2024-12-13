@@ -14,6 +14,7 @@ import torch.distributed as dist  # noqa
 from fbgemm_gpu.permute_pooled_embedding_modules_split import (
     PermutePooledEmbeddingsSplit,
 )
+from torch.distributed._tensor import Replicate, Shard
 from torchrec.distributed.dist_data import EmbeddingsAllToOne
 from torchrec.distributed.embedding_lookup import (
     GroupedPooledEmbeddingsLookup,
@@ -28,6 +29,7 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
+    DTensorMetadata,
     EmbeddingComputeKernel,
     InputDistOutputs,
     KJTList,
@@ -46,6 +48,7 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -142,9 +145,9 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         self,
         sharding_infos: List[EmbeddingShardingInfo],
     ) -> List[List[ShardedEmbeddingTable]]:
-        world_size: int = self._env.world_size
+        world_size: int = self._world_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
+            [] for _ in range(world_size)
         ]
         for info in sharding_infos:
             # pyre-fixme [16]
@@ -155,14 +158,46 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                 shards_metadata=shards,
                 size=torch.Size(
                     [
-                        info.embedding_config.num_embeddings,
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         info.embedding_config.embedding_dim,
                     ]
                 ),
             )
 
+            dtensor_metadata = None
+            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+                dtensor_metadata = DTensorMetadata(
+                    mesh=self._env.device_mesh,
+                    placements=(
+                        (Replicate(), Shard(1)) if self._is_2D_parallel else (Shard(1),)
+                    ),
+                    size=(
+                        (
+                            info.embedding_config.num_embeddings_post_pruning
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
+                        info.embedding_config.embedding_dim,
+                    ),
+                    stride=info.param.stride(),
+                )
+            # to not pass onto TBE
+            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
+
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):
+                # Remap rank by number of replica groups if 2D parallelism is enabled
+                rank = (
+                    rank // self._env.num_sharding_groups()  # pyre-ignore[16]
+                    if self._is_2D_parallel
+                    else rank
+                )
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=info.embedding_config.num_embeddings,
@@ -174,17 +209,25 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                         pooling=info.embedding_config.pooling,
                         is_weighted=info.embedding_config.is_weighted,
                         has_feature_processor=info.embedding_config.has_feature_processor,
-                        local_rows=info.embedding_config.num_embeddings,
+                        local_rows=(
+                            none_throws(
+                                info.embedding_config.num_embeddings_post_pruning
+                            )
+                            if info.embedding_config.num_embeddings_post_pruning
+                            is not None
+                            else info.embedding_config.num_embeddings
+                        ),
                         local_cols=shards[i].shard_sizes[1],
                         compute_kernel=EmbeddingComputeKernel(
                             info.param_sharding.compute_kernel
                         ),
                         local_metadata=shards[i],
                         global_metadata=global_metadata,
+                        dtensor_metadata=dtensor_metadata,
                         fused_params=info.fused_params,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
-                        pruning_indices_remapping=info.embedding_config.pruning_indices_remapping,
+                        num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
                     )
                 )
 

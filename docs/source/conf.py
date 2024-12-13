@@ -21,7 +21,6 @@ import os
 import sys
 
 import pytorch_sphinx_theme
-import torchrec
 
 current_dir = os.path.dirname(__file__)
 target_dir = os.path.abspath(os.path.join(current_dir, "../.."))
@@ -31,12 +30,12 @@ print(target_dir)
 # -- Project information -----------------------------------------------------
 
 project = "TorchRec"
-copyright = "2022, Meta"
+copyright = "2024, Meta"
 author = "Meta"
 
 try:
     # pyre-ignore
-    version = torchrec.__version__
+    version = "1.0.0"  # TODO: Hardcode stable version for now
 except Exception:
     # when run internally, we don't have a version yet
     version = "0.0.0"
@@ -49,7 +48,16 @@ release = ".".join(version.split(".")[:3])
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.napoleon", "sphinx.ext.autodoc"]
+extensions = [
+    "sphinx.ext.napoleon",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
+    "sphinx.ext.intersphinx",
+    "sphinx_copybutton",
+    "sphinx.ext.mathjax",
+    "sphinx_design",
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -69,7 +77,21 @@ exclude_patterns = []
 html_theme = "pytorch_sphinx_theme"
 html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
 
+# Theme options are theme-specific and customize the look and feel of a theme
+# further.  For a list of options available for each theme, see the
+# documentation.
+#
+html_theme_options = {
+    "pytorch_project": "torchrec",
+    "display_version": True,
+    "logo_only": True,
+    "collapse_navigation": False,
+    "includehidden": True,
+}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+
+html_css_files = ["css/custom.css"]

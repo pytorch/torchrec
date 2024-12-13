@@ -9,7 +9,7 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Type
+from typing import Any, cast, Dict, Optional, Type
 
 import torch
 from torchrec.distributed.embedding_types import KJTList
@@ -72,11 +72,10 @@ class ShardedManagedCollisionEmbeddingBagCollection(
             device,
         )
 
-        # For backwards compat, some references still to self._embedding_bag_collection
-        # pyre-ignore [8]
-        self._embedding_bag_collection: ShardedEmbeddingBagCollection = (
-            self._embedding_module
-        )
+    # For backwards compat, some references still to self._embedding_bag_collection
+    @property
+    def _embedding_bag_collection(self) -> ShardedEmbeddingBagCollection:
+        return cast(ShardedEmbeddingBagCollection, self._embedding_module)
 
     def create_context(
         self,
@@ -111,6 +110,7 @@ class ManagedCollisionEmbeddingBagCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedManagedCollisionEmbeddingBagCollection:
 
         if device is None:

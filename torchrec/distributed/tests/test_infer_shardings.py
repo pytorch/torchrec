@@ -77,6 +77,12 @@ from torchrec.modules.feature_processor_ import (
     PositionWeightedModuleCollection,
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
+from torchrec.modules.mc_modules import (
+    DistanceLFU_EvictionPolicy,
+    ManagedCollisionCollection,
+    MCHManagedCollisionModule,
+)
 
 torch.fx.wrap("len")
 
@@ -135,6 +141,10 @@ def placement_helper(device_type: str, index: int = 0) -> str:
 
 
 class InferShardingsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        set_propogate_device(True)
+
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
@@ -146,7 +156,6 @@ class InferShardingsTest(unittest.TestCase):
     )
     @settings(max_examples=4, deadline=None)
     def test_tw(self, weight_dtype: torch.dtype, device_type: str) -> None:
-        set_propogate_device(True)
         num_embeddings = 256
         emb_dim = 16
         world_size = 2
@@ -210,12 +219,87 @@ class InferShardingsTest(unittest.TestCase):
     )
     # pyre-ignore
     @given(
+        weight_dtype=st.sampled_from([torch.qint8]),
+        device_type=st.sampled_from(["cuda"]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_tw_ebc_full_rank_weighted_ebc_with_empty_rank(
+        self, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
+        num_embeddings = 256
+        emb_dim = 16
+        world_size = 2
+        batch_size = 4
+        local_device = torch.device(f"{device_type}:0")
+        mi = create_test_model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+            num_features=6,  # 6 sparse features on ebc
+            num_weighted_features=1,  # only 1 weighted sparse feature on weighted_ebc
+        )
+
+        non_sharded_model = mi.quant_model
+
+        sharded_model = shard_qebc(
+            mi,
+            sharding_type=ShardingType.TABLE_WISE,
+            device=local_device,
+            expected_shards=None,
+            shard_score_ebc=True,
+        )
+
+        self.assertEqual(
+            len(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse`.
+                sharded_model._module.sparse.ebc._lookups[0]._embedding_lookups_per_rank
+            ),
+            2,
+        )
+        self.assertEqual(
+            len(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse`.
+                sharded_model._module.sparse.weighted_ebc._lookups[
+                    0
+                ]._embedding_lookups_per_rank
+            ),
+            1,
+        )
+
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(sharded_output, non_sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
         device_type=st.sampled_from(["cuda", "cpu"]),
     )
     @settings(max_examples=4, deadline=None)
     def test_rw(self, weight_dtype: torch.dtype, device_type: str) -> None:
-        set_propogate_device(True)
         num_embeddings = 256
         emb_dim = 16
         world_size = 2
@@ -289,7 +373,6 @@ class InferShardingsTest(unittest.TestCase):
     def test_cw(
         self, test_permute: bool, weight_dtype: torch.dtype, device_type: str
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 64
         emb_dim = 512
         emb_dim_4 = emb_dim // 4
@@ -340,6 +423,8 @@ class InferShardingsTest(unittest.TestCase):
             )
 
             module_plan = construct_module_sharding_plan(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse`.
                 non_sharded_model._module.sparse.ebc,
                 per_param_sharding={
                     "table_0": column_wise(ranks=[1, 0, 1, 0]),
@@ -406,7 +491,6 @@ class InferShardingsTest(unittest.TestCase):
         weight_dtype: torch.dtype,
         device_type: str,
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 64
         emb_dim_4 = emb_dim // 4
         world_size = 2
@@ -493,7 +577,6 @@ class InferShardingsTest(unittest.TestCase):
     def test_cw_multiple_tables_with_permute(
         self, weight_dtype: torch.dtype, device_type: str
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 64
         emb_dim = 512
         emb_dim_2 = 512 // 2
@@ -544,6 +627,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": column_wise(ranks=[1, 0]),
@@ -605,7 +690,6 @@ class InferShardingsTest(unittest.TestCase):
     def test_cw_irregular_shard_placement(
         self, weight_dtype: torch.dtype, device_type: str
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 64
         emb_dim = 384
         emb_dim_2 = emb_dim // 2
@@ -671,6 +755,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": column_wise(ranks=[2, 1]),
@@ -729,7 +815,6 @@ class InferShardingsTest(unittest.TestCase):
     def test_cw_sequence(
         self, device_type_weight_dtype: Tuple[str, torch.dtype]
     ) -> None:
-        set_propogate_device(True)
         device_type, weight_dtype = device_type_weight_dtype
         num_embeddings = 4
         emb_dim = 512
@@ -820,6 +905,7 @@ class InferShardingsTest(unittest.TestCase):
         ]
 
         sharded_model.load_state_dict(non_sharded_model.state_dict())
+
         sharded_output = sharded_model(*inputs[0])
         non_sharded_output = non_sharded_model(*inputs[0])
         assert_close(sharded_output, non_sharded_output)
@@ -845,7 +931,6 @@ class InferShardingsTest(unittest.TestCase):
     )
     @settings(max_examples=4, deadline=None)
     def test_tw_sequence(self, weight_dtype: torch.dtype, device_type: str) -> None:
-        set_propogate_device(True)
         num_embeddings = 10
         emb_dim = 16
         world_size = 2
@@ -967,7 +1052,6 @@ class InferShardingsTest(unittest.TestCase):
     def test_rw_sequence(
         self, device_type_weight_dtype: Tuple[str, torch.dtype]
     ) -> None:
-        set_propogate_device(True)
         device_type, weight_dtype = device_type_weight_dtype
         num_embeddings = 10
         emb_dim = 16
@@ -1078,7 +1162,6 @@ class InferShardingsTest(unittest.TestCase):
     )
     @settings(max_examples=4, deadline=None)
     def test_rw_sequence_uneven(self, weight_dtype: torch.dtype, device: str) -> None:
-        set_propogate_device(True)
         num_embeddings = 512
         emb_dim = 64
         world_size = 4
@@ -1217,6 +1300,7 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(
@@ -1258,6 +1342,7 @@ class InferShardingsTest(unittest.TestCase):
         gm_script_output = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
+        # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedSeque...
         tbes = get_tbes_from_sharded_module(sharded_model._module_kjt_input[0])
         for tbe in tbes:
             self.assertTrue(tbe.weight_initialized)
@@ -1280,7 +1365,6 @@ class InferShardingsTest(unittest.TestCase):
     def test_mix_tw_rw_sequence(
         self, weight_dtype: torch.dtype, device_type: str
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 10
         emb_dim = 16
         world_size = 2
@@ -1342,6 +1426,7 @@ class InferShardingsTest(unittest.TestCase):
         sharder = QuantEmbeddingCollectionSharder()
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(),
@@ -1392,7 +1477,6 @@ class InferShardingsTest(unittest.TestCase):
     def test_mix_tw_rw_sequence_missing_feature_on_rank(
         self, weight_dtype: torch.dtype, device_type: str
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 10
         emb_dim = 16
         world_size = 2
@@ -1454,6 +1538,7 @@ class InferShardingsTest(unittest.TestCase):
         sharder = QuantEmbeddingCollectionSharder()
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             non_sharded_model._module_kjt_input[0],
             per_param_sharding={
                 "table_0": row_wise(),
@@ -1512,7 +1597,6 @@ class InferShardingsTest(unittest.TestCase):
         uneven_shard_pattern: Tuple[int, int, int, int],
         device: str,
     ) -> None:
-        set_propogate_device(True)
         num_embeddings, size0, size1, size2 = uneven_shard_pattern
         size2 = min(size2, num_embeddings - size0 - size1)
         emb_dim = 64
@@ -1557,6 +1641,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": row_wise(([size0, size1, size2], device)),
@@ -1607,7 +1693,6 @@ class InferShardingsTest(unittest.TestCase):
         weight_dtype: torch.dtype,
         device: str,
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 512
         emb_dim = 64
         local_size = 4
@@ -1709,6 +1794,8 @@ class InferShardingsTest(unittest.TestCase):
         )
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": row_wise(
@@ -1764,7 +1851,6 @@ class InferShardingsTest(unittest.TestCase):
         weight_dtype: torch.dtype,
         device: str,
     ) -> None:
-        set_propogate_device(True)
         num_embeddings = 512
         emb_dim = 64
         local_size = 4
@@ -1788,6 +1874,8 @@ class InferShardingsTest(unittest.TestCase):
         sharder = QuantEmbeddingBagCollectionSharder()
 
         module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             non_sharded_model._module.sparse.ebc,
             per_param_sharding={
                 "table_0": row_wise(
@@ -1846,8 +1934,7 @@ class InferShardingsTest(unittest.TestCase):
         world_size = 2
         batch_size = 2
         local_device = torch.device(f"{device_type}:0")
-
-        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
         mi = TestModelInfo(
             dense_device=local_device,
             sparse_device=local_device,
@@ -1902,6 +1989,7 @@ class InferShardingsTest(unittest.TestCase):
         inputs = []
         for model_input in model_inputs:
             kjt = model_input.idlist_features
+            assert isinstance(kjt, KeyedJaggedTensor)
             kjt = kjt.to(local_device)
             weights = torch.rand(
                 kjt._values.size(0), dtype=torch.float, device=local_device
@@ -1930,7 +2018,7 @@ class InferShardingsTest(unittest.TestCase):
         print(f"quant_model:\n{quant_model}")
         non_sharded_output = mi.quant_model(*inputs[0])
 
-        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
         mi.planner = EmbeddingShardingPlanner(
             topology=topology,
             batch_size=batch_size,
@@ -1952,7 +2040,9 @@ class InferShardingsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model,
-            # pyre-ignore
+            # pyre-fixme[6]: For 2nd argument expected
+            #  `Optional[List[ModuleSharder[Module]]]` but got
+            #  `List[QuantFeatureProcessedEmbeddingBagCollectionSharder]`.
             sharders=[sharder],
             device=local_device,
             plan=plan,
@@ -1995,6 +2085,162 @@ class InferShardingsTest(unittest.TestCase):
         assert fp_call_module == world_size
         print(f"fx.graph:\n{gm.graph}")
 
+        gm_script = torch.jit.script(gm)
+        print(f"gm_script:\n{gm_script}")
+        gm_script_output = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8]),
+        device_type=st.sampled_from(["cpu", "cuda"]),
+    )
+    @settings(max_examples=2, deadline=None)
+    def test_sharded_quant_mc_ec_rw(
+        self, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        world_size = 2
+        batch_size = 2
+        local_device = torch.device(f"{device_type}:0")
+
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
+        mi = TestModelInfo(
+            dense_device=local_device,
+            sparse_device=local_device,
+            num_features=1,
+            num_float_features=10,
+            num_weighted_features=0,
+            topology=topology,
+        )
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+
+        mi.tables = [
+            EmbeddingConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(mi.num_features)
+        ]
+
+        mi.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                ManagedCollisionEmbeddingCollection(
+                    EmbeddingCollection(
+                        tables=mi.tables,
+                        device=mi.sparse_device,
+                    ),
+                    ManagedCollisionCollection(
+                        managed_collision_modules={
+                            "table_0": MCHManagedCollisionModule(
+                                zch_size=num_embeddings,
+                                input_hash_size=4000,
+                                device=mi.sparse_device,
+                                eviction_interval=2,
+                                eviction_policy=DistanceLFU_EvictionPolicy(),
+                            )
+                        },
+                        embedding_configs=mi.tables,
+                    ),
+                )
+            )
+        )
+        model_inputs: List[ModelInput] = prep_inputs(
+            mi, world_size, batch_size, long_indices=True
+        )
+        inputs = []
+        for model_input in model_inputs:
+            kjt = model_input.idlist_features
+            assert isinstance(kjt, KeyedJaggedTensor)
+            kjt = kjt.to(local_device)
+            weights = None
+            inputs.append(
+                (
+                    kjt._keys,
+                    kjt._values,
+                    weights,
+                    kjt._lengths,
+                    kjt._offsets,
+                )
+            )
+
+        mi.model(*inputs[0])
+        print(f"model:\n{mi.model}")
+        assert mi.model.training is True
+        mi.quant_model = quantize(
+            module=mi.model,
+            inplace=False,
+            register_tbes=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+        )
+        quant_model = mi.quant_model
+        assert quant_model.training is False
+        non_sharded_output = mi.quant_model(*inputs[0])
+
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+        sharder = QuantEmbeddingCollectionSharder()
+        # pyre-ignore
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+        sharded_model = shard_qec(
+            mi,
+            sharding_type=ShardingType.ROW_WISE,
+            device=local_device,
+            expected_shards=None,
+            plan=plan,
+        )
+
+        print(f"sharded_model:\n{sharded_model}")
+        for n, m in sharded_model.named_modules():
+            print(f"sharded_model.MODULE[{n}]:{type(m)}")
+
+        sharded_model.load_state_dict(quant_model.state_dict())
+        sharded_output = sharded_model(*inputs[0])
+
+        assert_close(non_sharded_output, sharded_output)
+        gm: torch.fx.GraphModule = symbolic_trace(
+            sharded_model,
+            leaf_modules=[
+                "IntNBitTableBatchedEmbeddingBagsCodegen",
+                "ComputeJTDictToKJT",
+            ],
+        )
+
+        print(f"fx.graph:\n{gm.graph}")
         gm_script = torch.jit.script(gm)
         print(f"gm_script:\n{gm_script}")
         gm_script_output = gm_script(*inputs[0])
@@ -2059,6 +2305,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = []
         kjt = model_inputs[0].idlist_features
+        assert isinstance(kjt, KeyedJaggedTensor)
         kjt = kjt.to(local_device)
         weights = torch.rand(
             kjt._values.size(0), dtype=torch.float, device=local_device
@@ -2085,7 +2332,9 @@ class InferShardingsTest(unittest.TestCase):
         quant_model = mi.quant_model
         print(f"quant_model:\n{quant_model}")
 
-        topology: Topology = Topology(world_size=world_size, compute_device="cuda")
+        topology: Topology = Topology(
+            world_size=world_size, compute_device=compute_device
+        )
         mi.planner = EmbeddingShardingPlanner(
             topology=topology,
             batch_size=batch_size,
@@ -2107,7 +2356,9 @@ class InferShardingsTest(unittest.TestCase):
 
         sharded_model = _shard_modules(
             module=quant_model,
-            # pyre-ignore
+            # pyre-fixme[6]: For 2nd argument expected
+            #  `Optional[List[ModuleSharder[Module]]]` but got
+            #  `List[QuantFeatureProcessedEmbeddingBagCollectionSharder]`.
             sharders=[sharder],
             # shard on meta to simulate device movement from cpu -> meta QFPEBC
             device=torch.device("meta"),

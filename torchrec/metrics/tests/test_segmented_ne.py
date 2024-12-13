@@ -17,7 +17,8 @@ from torchrec.metrics.segmented_ne import SegmentedNEMetric
 
 
 class SegementedNEValueTest(unittest.TestCase):
-    r"""This set of tests verify the computation logic of AUC in several
+    """
+    This set of tests verify the computation logic of AUC in several
     corner cases that we know the computation results. The goal is to
     provide some confidence of the correctness of the math formula.
     """
@@ -64,7 +65,6 @@ class SegementedNEValueTest(unittest.TestCase):
             # pyre-ignore
             num_groups=max(2, torch.unique(grouping_keys)[-1].item() + 1),
         )
-        # pyre-ignore
         ne.update(**inputs)
         actual_ne = ne.compute()
 

@@ -70,6 +70,11 @@ class GroupedPositionWeightedModule(BaseGroupedFeatureProcessor):
             offsets=features.offsets(),
             stride=features.stride(),
             length_per_key=features.length_per_key(),
+            stride_per_key_per_rank=(
+                features.stride_per_key_per_rank()
+                if features.variable_stride_per_key()
+                else None
+            ),
         )
 
     def named_parameters(

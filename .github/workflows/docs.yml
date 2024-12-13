@@ -5,6 +5,8 @@ on:
     branches:
       - main
   workflow_dispatch:
+  pull_request:
+
 jobs:
   build_docs_job:
     runs-on: ${{ matrix.os }}
@@ -15,7 +17,8 @@ jobs:
       matrix:
         include:
          - os: linux.20_04.4x
-           python-version: 3.8
+           python-version: 3.9
+           python-tag: "py39"
     steps:
     - name: Check ldd --version
       run: ldd --version
@@ -64,7 +67,8 @@ jobs:
         conda run -n build_binary pip install torchmetrics==1.0.3
     - name: Install TorchRec
       run: |
-        conda run -n build_binary pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary pip install -r requirements.txt
+        conda run -n build_binary python setup.py bdist_wheel --python-tag=${{ matrix.python-tag }}
     - name: Test fbgemm_gpu and torchrec installation
       shell: bash
       run: |
@@ -78,11 +82,42 @@ jobs:
         cd ./docs
         conda run -n build_binary make html
         cd ..
+    - name: Upload Built-Docs
+      uses: actions/upload-artifact@v3
+      with:
+        name: Built-Docs
+        path: docs/build/html/
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
+      if: github.ref == 'refs/heads/main'
       uses: JamesIves/github-pages-deploy-action@releases/v3
       with:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages # The branch the action should deploy to.
           FOLDER: docs/build/html # The folder the action should deploy.
+
+  doc-preview:
+    runs-on: [linux.2xlarge]
+    needs: build_docs_job
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: Built-Docs
+          path: docs
+      - name: Add no-index tag
+        run: |
+          find docs -name "*.html" -print0 | xargs -0 sed -i '/<head>/a \ \ <meta name="robots" content="noindex">';
+      - name: Upload docs preview
+        uses: seemethere/upload-artifact-s3@v5
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          retention-days: 14
+          s3-bucket: doc-previews
+          if-no-files-found: error
+          path: docs
+          s3-prefix: pytorch/torchrec/${{ github.event.pull_request.number }}

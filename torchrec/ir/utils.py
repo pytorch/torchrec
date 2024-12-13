@@ -10,6 +10,7 @@
 #!/usr/bin/env python3
 
 import logging
+import operator
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Type
 
@@ -18,7 +19,12 @@ import torch
 from torch import nn
 from torch.export import Dim, ShapesCollection
 from torch.export.dynamic_shapes import _Dim as DIM
+from torch.export.unflatten import InterpreterModule
+from torch.fx import Node
 from torchrec.ir.types import SerializerInterface
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -38,42 +44,60 @@ def get_device(tensors: List[Optional[torch.Tensor]]) -> Optional[torch.device]:
     return None
 
 
-@torch.library.custom_op("torchrec::ir_custom_op", mutates_args={})
-def ir_custom_op_impl(
+@torch.library.custom_op("torchrec::ir_emb_lookup", mutates_args={})
+def ir_emb_lookup_impl(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
-    logger.info(f"torch.ops.torchrec.ir_custom_op -> ({batch_size}, {dims}) {device}")
+    logger.info(f"torch.ops.torchrec.ir_emb_lookup -> ({batch_size}, {dims}) {device}")
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
-@torch.library.register_fake("torchrec::ir_custom_op")
-def ir_custom_op_fake(
+@torch.library.register_fake("torchrec::ir_emb_lookup")
+def ir_emb_lookup_fake(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
-    logger.info(f"ir_custom_op_fake -> ({batch_size}, {dims}) {device}")
+    logger.info(f"ir_emb_lookup_fake -> ({batch_size}, {dims}) {device}")
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
-@torch.library.custom_op("torchrec::ir_dynamic_batch_op", mutates_args={})
-def ir_dynamic_batch_op_impl(
+@torch.library.custom_op("torchrec::ir_kt_regroup", mutates_args={})
+def ir_kt_regroup_impl(
+    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    logger.info(f"torch.ops.torchrec.ir_kt_regroup -> ({batch_size}, {dims}) {device}")
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+
+
+@torch.library.register_fake("torchrec::ir_kt_regroup")
+def ir_kt_regroup_fake(
+    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+) -> List[torch.Tensor]:
+    device = get_device(tensors)
+    logger.info(f"ir_kt_regroup_fake -> ({batch_size}, {dims}) {device}")
+    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+
+
+@torch.library.custom_op("torchrec::ir_dynamic_batch_emb_lookup", mutates_args={})
+def ir_dynamic_batch_emb_lookup_impl(
     tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
     logger.info(
-        f"torch.ops.torchrec.ir_dynamic_batch_op -> ({batch_size}, {dims}) {device}"
+        f"torch.ops.torchrec.ir_dynamic_batch_emb_lookup -> ({batch_size}, {dims}) {device}"
     )
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
-@torch.library.register_fake("torchrec::ir_dynamic_batch_op")
-def ir_dynamic_batch_op_fake(
+@torch.library.register_fake("torchrec::ir_dynamic_batch_emb_lookup")
+def ir_dynamic_batch_emb_lookup_fake(
     tensors: List[Optional[torch.Tensor]], batch_dize: int, dims: List[int]
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
     batch_size = torch.library.get_ctx().new_dynamic_size()
-    logger.info(f"ir_dynamic_batch_op_fake -> ({batch_size}, {dims}) {device}")
+    logger.info(f"ir_dynamic_batch_emb_lookup_fake -> ({batch_size}, {dims}) {device}")
     return [torch.empty(batch_size, dim, device=device) for dim in dims]
 
 
@@ -111,6 +135,8 @@ def decapsulate_ir_modules(
     module: nn.Module,
     serializer: Type[SerializerInterface] = DEFAULT_SERIALIZER_CLS,
     device: Optional[torch.device] = None,
+    finalize_interpreter_modules: bool = False,
+    short_circuit_pytree_ebc_regroup: bool = False,
 ) -> nn.Module:
     """
     Takes a module and decapsulate its embedding modules by retrieving the buffer.
@@ -129,6 +155,17 @@ def decapsulate_ir_modules(
     # we use "ir_metadata" as a convention to identify the deserializable module
     if "ir_metadata" in dict(module.named_buffers()):
         module = serializer.decapsulate_module(module, device)
+
+    if short_circuit_pytree_ebc_regroup:
+        module = _short_circuit_pytree_ebc_regroup(module)
+        assert finalize_interpreter_modules, "need finalize_interpreter_modules=True"
+
+    if finalize_interpreter_modules:
+        for mod in module.modules():
+            if isinstance(mod, InterpreterModule):
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
+                mod.finalize()
+
     return module
 
 
@@ -205,6 +242,7 @@ def move_to_copy_nodes_to_device(
     """
     Moves all the copy nodes to the given device.
     """
+    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `nodes`.
     for nodes in unflattened_module.graph.nodes:
         if "_to_copy" in nodes.name:
             new_kwargs = {}
@@ -215,3 +253,108 @@ def move_to_copy_nodes_to_device(
             nodes.kwargs = new_kwargs
 
     return unflattened_module
+
+
+def _short_circuit_pytree_ebc_regroup(module: nn.Module) -> nn.Module:
+    """
+    Bypass pytree flatten and unflatten function between EBC and KTRegroupAsDict to avoid key-order issue.
+    https://fb.workplace.com/groups/1028545332188949/permalink/1042204770823005/
+    EBC ==> (out-going) pytree.flatten ==> tensors and specs ==> (in-coming) pytree.unflatten ==> KTRegroupAsDict
+    """
+    ebc_fqns: List[str] = []
+    regroup_fqns: List[str] = []
+    for fqn, m in module.named_modules():
+        if isinstance(m, FeatureProcessedEmbeddingBagCollection):
+            ebc_fqns.append(fqn)
+        elif isinstance(m, EmbeddingBagCollection):
+            if len(ebc_fqns) > 0 and fqn.startswith(ebc_fqns[-1]):
+                continue
+            ebc_fqns.append(fqn)
+        elif isinstance(m, KTRegroupAsDict):
+            regroup_fqns.append(fqn)
+    if len(ebc_fqns) == len(regroup_fqns) == 0:
+        # nothing happens if there is no EBC or KTRegroupAsDict (e.g., the PEA case)
+        return module
+    elif len(regroup_fqns) == 0:
+        # model only contains EBCs, KT (from EBC) pytree.flatten has performance impact
+        logger.warning(
+            "Expect perf impact if KTRegroupAsDict is not used together with EBCs."
+        )
+        return module
+    elif len(ebc_fqns) == 0:
+        # model only contains KTRegroupAsDict, KTs are not from EBC, need to be careful
+        logger.warning("KTRegroupAsDict is not from EBC, need to be careful.")
+        return module
+    else:
+        return prune_pytree_flatten_unflatten(
+            module, in_fqns=regroup_fqns, out_fqns=ebc_fqns
+        )
+
+
+def prune_pytree_flatten_unflatten(
+    module: nn.Module, in_fqns: List[str], out_fqns: List[str]
+) -> nn.Module:
+    """
+    Remove pytree flatten and unflatten function between the given in_fqns and out_fqns.
+    "preserved module" ==> (out-going) pytree.flatten ==> [tensors and specs]
+        [tensors and specs] ==> (in-coming) pytree.unflatten ==> "preserved module"
+    """
+
+    def _get_graph_node(mod: nn.Module, fqn: str) -> Tuple[nn.Module, Node]:
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `nodes`.
+        for node in mod.graph.nodes:
+            if node.op == "call_module" and node.target == fqn:
+                return mod, node
+        assert "." in fqn, f"can't find {fqn} in the graph of {mod}"
+        curr, fqn = fqn.split(".", maxsplit=1)
+        mod = getattr(mod, curr)
+        return _get_graph_node(mod, fqn)
+
+    # remove tree_unflatten from the in_fqns (in-coming nodes)
+    for fqn in in_fqns:
+        submodule, node = _get_graph_node(module, fqn)
+        assert len(node.args) == 1
+        getitem_getitem: Node = node.args[0]  # pyre-ignore[9]
+        assert (
+            getitem_getitem.op == "call_function"
+            and getitem_getitem.target == operator.getitem
+        )
+        tree_unflatten_getitem = node.args[0].args[0]  # pyre-ignore[16]
+        assert (
+            tree_unflatten_getitem.op == "call_function"
+            and tree_unflatten_getitem.target == operator.getitem
+        )
+        tree_unflatten = tree_unflatten_getitem.args[0]
+        assert (
+            tree_unflatten.op == "call_function"
+            and tree_unflatten.target == torch.utils._pytree.tree_unflatten
+        )
+        logger.info(f"Removing tree_unflatten from {fqn}")
+        input_nodes = tree_unflatten.args[0]
+        node.args = (input_nodes,)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `eliminate_dead_code`.
+        submodule.graph.eliminate_dead_code()
+
+    # remove tree_flatten_spec from the out_fqns (out-going nodes)
+    for fqn in out_fqns:
+        submodule, node = _get_graph_node(module, fqn)
+        users = list(node.users.keys())
+        assert (
+            len(users) == 1
+            and users[0].op == "call_function"
+            and users[0].target == torch.fx._pytree.tree_flatten_spec
+        )
+        tree_flatten_users = list(users[0].users.keys())
+        assert (
+            len(tree_flatten_users) == 1
+            and tree_flatten_users[0].op == "call_function"
+            and tree_flatten_users[0].target == operator.getitem
+        )
+        logger.info(f"Removing tree_flatten_spec from {fqn}")
+        getitem_node = tree_flatten_users[0]
+        getitem_node.replace_all_uses_with(node)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `eliminate_dead_code`.
+        submodule.graph.eliminate_dead_code()
+    return module

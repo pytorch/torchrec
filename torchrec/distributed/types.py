@@ -44,7 +44,7 @@ try:
     # other metaclasses (i.e. AwaitableMeta) for customized
     # behaviors, as Generic is non-trival metaclass in
     # python 3.6 and below
-    from typing import GenericMeta  # pyre-ignore: python 3.6
+    from typing import GenericMeta
 except ImportError:
     # In python 3.7+, GenericMeta doesn't exist as it's no
     # longer a non-trival metaclass,
@@ -134,6 +134,22 @@ class ShardingType(Enum):
     TABLE_ROW_WISE = "table_row_wise"
     # Column-wise on the same node and table-wise across nodes
     TABLE_COLUMN_WISE = "table_column_wise"
+    # Grid sharding, where each rank gets a subset of columns and rows in a CW and TWRW style
+    GRID_SHARD = "grid_shard"
+
+
+class EmbeddingEvent(Enum):
+    """
+    Events in sharded embedding module's forward, used for trace annotations
+    """
+
+    KJT_SPLITS_DIST = "splits_dist"
+    KJT_TENSORS_DIST = "tensors_dist"
+    LOOKUP = "lookup"
+    OUTPUT_DIST = "output_dist"
+    # When .wait() is called on output_dist awaitable
+    # Useful for linking backward comms event in trace to forward event
+    OUTPUT_DIST_WAIT = "output_dist_wait"
 
 
 class PipelineType(Enum):
@@ -223,6 +239,18 @@ class QuantizedCommCodec(Generic[QuantizationContext]):
         """
         ...
 
+    def padded_size(
+        self,
+        input_tensor: torch.Tensor,
+        dim_per_rank: List[int],
+        my_rank: int,
+        qcomm_ctx: QuantizationContext,
+    ) -> Tuple[int, int]:
+        """
+        Return (padded_dim_sum, padding_size) of the input tensor for quantization.
+        """
+        ...
+
 
 class NoOpQuantizedCommCodec(Generic[QuantizationContext]):
     """
@@ -255,6 +283,18 @@ class NoOpQuantizedCommCodec(Generic[QuantizationContext]):
 
     def create_context(self) -> Optional[QuantizationContext]:
         return None
+
+    def padded_size(
+        self,
+        input_tensor: torch.Tensor,
+        dim_per_rank: List[int],
+        my_rank: int,
+        qcomm_ctx: QuantizationContext,
+    ) -> Tuple[int, int]:
+        dim_sum = (
+            input_tensor.shape[0] if input_tensor.dim() == 1 else input_tensor.shape[1]
+        )
+        return dim_sum, 0
 
 
 @dataclass
@@ -342,7 +382,7 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
     Some caveats:
 
     * This works with Pytorch functions, but not any generic method, if
-      you would like to do arbitary python operations, you need to
+      you would like to do arbitrary python operations, you need to
       implement the corresponding magic methods
 
     * In the case that one function have two or more arguments are LazyAwaitable,
@@ -371,8 +411,9 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
         else:
             return obj
 
+    @classmethod
     # pyre-ignore [2, 3]
-    def __torch_function__(self, func, types, args=(), kwargs=None):
+    def __torch_function__(cls, func, types, args=(), kwargs=None):
         """
         The LazyAwaitable type has a `__torch_function__` implementation.
         This means when this type is seens as an argument to a PyTorch
@@ -586,34 +627,53 @@ class KeyValueParams:
     Attributes:
         ssd_storage_directory (Optional[str]): Directory for SSD. If we want directory
             to be f"data00_nvidia{local_rank}", pass in "data00_nvidia@local_rank".
-        ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
-            and ports. Example: (("::1", 2000), ("::1", 2001), ("::1", 2002)).
-            Reason for using tuple is we want it hashable.
         ssd_rocksdb_write_buffer_size: Optional[int]: rocksdb write buffer size per tbe,
             relavant to rocksdb compaction frequency
         ssd_rocksdb_shards: Optional[int]: rocksdb shards number
         gather_ssd_cache_stats: bool: whether enable ssd stats collection, std reporter and ods reporter
         report_interval: int: report interval in train iteration if gather_ssd_cache_stats is enabled
         ods_prefix: str: ods prefix for ods reporting
+
+        # Parameter Server (PS) Attributes
+        ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
+            and ports. Example: (("::1", 2000), ("::1", 2001), ("::1", 2002)).
+            Reason for using tuple is we want it hashable.
+        ps_client_thread_num (int): Number of threads to use for PS client
+        ps_max_key_per_request (int): Maximum number of keys to send per request
+        ps_max_local_index_length(int): Maximum local index length
     """
 
     ssd_storage_directory: Optional[str] = None
-    ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
     ssd_rocksdb_write_buffer_size: Optional[int] = None
     ssd_rocksdb_shards: Optional[int] = None
     gather_ssd_cache_stats: Optional[bool] = None
     stats_reporter_config: Optional[TBEStatsReporterConfig] = None
     use_passed_in_path: bool = True
+    l2_cache_size: Optional[int] = None
+    enable_async_update: Optional[bool] = None
+
+    # Parameter Server (PS) Attributes
+    ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
+    ps_client_thread_num: Optional[int] = None
+    ps_max_key_per_request: Optional[int] = None
+    ps_max_local_index_length: Optional[int] = None
 
     def __hash__(self) -> int:
         return hash(
             (
                 self.ssd_storage_directory,
-                self.ps_hosts,
                 self.ssd_rocksdb_write_buffer_size,
                 self.ssd_rocksdb_shards,
+                # Parameter Server (PS) Attributes
+                self.ps_hosts,
+                self.ps_client_thread_num,
+                self.ps_max_key_per_request,
+                self.ps_max_local_index_length,
+                # tbe attributes
                 self.gather_ssd_cache_stats,
                 self.stats_reporter_config,
+                self.l2_cache_size,
+                self.enable_async_update,
             )
         )
 
@@ -785,6 +845,53 @@ class ShardingEnv:
         return cls(world_size, rank, None)
 
 
+class ShardingEnv2D(ShardingEnv):
+    """
+    Creates a sharding environment for 2D parallelism, enables usage of 2D parallelism in sharding
+    by seamlessly switching to the sub process group (sharding_pg) for a rank. This class is used
+    as source of truth for TorchRec to understand if we're in a 2D parallel environment.
+
+    NOTE:
+        - global pg is part of `process_group` attribute to keep the same API as ShardingEnv,
+        some parts of TorchRec require the global pg to work appropriately (ie: `DDPWrapper` in `DistributedModelParallel`)
+        - `world_size` and `rank` attributes return values relative to `sharding_pg`, this is different
+        from default ShardingEnv returning values relative to `global_pg`
+
+    Attributes:
+        sharding_pg: The process group containing the ranks to shard on.
+        global_pg: The process group representing global ranks.
+        device_mesh: A 2D device mesh representing the topology of the global world size
+            on "replicate" and "shard" dimensions.
+        node_group_size (Optional[int]): The size of each node group. If not provided, it will be inferred
+            from env var `LOCAL_WORLD_SIZE`.
+    """
+
+    def __init__(
+        self,
+        sharding_pg: dist.ProcessGroup,
+        global_pg: dist.ProcessGroup,
+        device_mesh: DeviceMesh,
+        node_group_size: Optional[int] = None,
+    ) -> None:
+        assert device_mesh.ndim == 2, "DeviceMesh must be two dimensional!"
+        self.world_size: int = dist.get_world_size(sharding_pg)
+        self.global_world_size: int = dist.get_world_size(global_pg)
+        self.rank: int = dist.get_rank(sharding_pg)
+        self.global_rank: int = dist.get_rank(global_pg)
+        self.process_group: dist.ProcessGroup = (
+            global_pg  # to keep consistent naming between ShardingEnv and ShardingEnv2D
+        )
+        self.sharding_pg: dist.ProcessGroup = sharding_pg
+        self.device_mesh: DeviceMesh = device_mesh
+        self.node_group_size: Optional[int] = node_group_size
+
+    def num_sharding_groups(self) -> int:
+        """
+        Return number of sharding groups, also known as the number of times model parallel is replicated
+        """
+        return self.global_world_size // self.world_size
+
+
 class NullShardingContext(Multistreamable):
     def record_stream(self, stream: torch.Stream) -> None:
         pass
@@ -813,6 +920,8 @@ class ShardedModule(
         'input_dist' / 'output_dist' are responsible of transforming inputs / outputs
         from data-parallel to model parallel and vise-versa.
     """
+
+    _FORCE_STATE_DICT_LOAD = True
 
     @abc.abstractmethod
     def __init__(
@@ -916,6 +1025,9 @@ class ModuleSharder(abc.ABC, Generic[M]):
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
         self._qcomm_codecs_registry = qcomm_codecs_registry
 
+    # pyre-fixme[56]: Pyre doesn't yet support decorators with ParamSpec applied to
+    #  generic functions. Consider using a context manager instead of a decorator, if
+    #  possible.
     @abc.abstractclassmethod
     # pyre-ignore [3]
     def shard(
@@ -924,6 +1036,7 @@ class ModuleSharder(abc.ABC, Generic[M]):
         params: EmbeddingModuleShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedModule[Any, Any, Any, Any]:
         """
         Does the actual sharding. It will allocate parameters on the requested locations
@@ -936,7 +1049,8 @@ class ModuleSharder(abc.ABC, Generic[M]):
             params (EmbeddingModuleShardingPlan): dict of fully qualified parameter names
                 (module path + parameter name, '.'-separated) to its sharding spec.
             env (ShardingEnv): sharding environment that has the process group.
-            device (torch.device): compute device.
+            device (Optional[torch.device]): compute device.
+            path (Optional[str]): fully qualified name of the module. used for trace annotations in embedding modules
 
         Returns:
             ShardedModule[Any, Any, Any]: sharded module implementation.

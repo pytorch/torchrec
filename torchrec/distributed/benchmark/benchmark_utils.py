@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
+# pyre-ignore-all-errors[16]
 
 #!/usr/bin/env python3
 
@@ -101,12 +102,45 @@ class CompileMode(Enum):
 
 
 @dataclass
+class MemoryStats:
+    rank: int
+    malloc_retries: int
+    max_mem_allocated_mbs: int
+    max_mem_reserved_mbs: int
+
+    @classmethod
+    def for_device(cls, rank: int) -> "MemoryStats":
+        stats = torch.cuda.memory_stats(rank)
+        alloc_retries = stats.get("num_alloc_retries", 0)
+        max_allocated = stats.get("allocated_bytes.all.peak", 0)
+        max_reserved = stats.get("reserved_bytes.all.peak", 0)
+        return cls(
+            rank,
+            alloc_retries,
+            max_allocated // 1024 // 1024,
+            max_reserved // 1024 // 1024,
+        )
+
+    def __str__(self) -> str:
+        return f"Rank {self.rank}: retries={self.malloc_retries}, allocated={self.max_mem_allocated_mbs:7}mb, reserved={self.max_mem_reserved_mbs:7}mb"
+
+
+@dataclass
 class BenchmarkResult:
     "Class for holding results of benchmark runs"
     short_name: str
     elapsed_time: torch.Tensor  # milliseconds
-    max_mem_allocated: List[int]  # megabytes
+    mem_stats: List[MemoryStats]  # memory stats per rank
     rank: int = -1
+
+    def __str__(self) -> str:
+        runtime = f"Runtime (P90): {self.runtime_percentile(90):.2f} ms"
+        mem_alloc = (
+            f"Peak Memory alloc (P90): {self.max_mem_alloc_percentile(90)/1000:.2f} GB"
+        )
+        mem_reserved = f"Peak Memory reserved (P90): {self.max_mem_reserved_percentile(90)/1000:.2f} GB"
+        malloc_retries = f"Malloc retries (P50/P90/P100): {self.mem_retries(50) } / {self.mem_retries(90)} / {self.mem_retries(100)}"
+        return f"{self.short_name: <{35}} | {malloc_retries} | {runtime} | {mem_alloc} | {mem_reserved}"
 
     def runtime_percentile(
         self, percentile: int = 50, interpolation: str = "nearest"
@@ -117,11 +151,37 @@ class BenchmarkResult:
             interpolation=interpolation,
         )
 
-    def max_mem_percentile(
+    def max_mem_alloc_percentile(
         self, percentile: int = 50, interpolation: str = "nearest"
     ) -> torch.Tensor:
-        max_mem = torch.tensor(self.max_mem_allocated, dtype=torch.float)
-        return torch.quantile(max_mem, percentile / 100.0, interpolation=interpolation)
+        return self._mem_percentile(
+            lambda m: m.max_mem_allocated_mbs, percentile, interpolation
+        )
+
+    def max_mem_reserved_percentile(
+        self, percentile: int = 50, interpolation: str = "nearest"
+    ) -> torch.Tensor:
+        return self._mem_percentile(
+            lambda m: m.max_mem_reserved_mbs, percentile, interpolation
+        )
+
+    def mem_retries(
+        self, percentile: int = 50, interpolation: str = "nearest"
+    ) -> torch.Tensor:
+        return self._mem_percentile(
+            lambda m: m.malloc_retries, percentile, interpolation
+        )
+
+    def _mem_percentile(
+        self,
+        mem_selector: Callable[[MemoryStats], int],
+        percentile: int = 50,
+        interpolation: str = "nearest",
+    ) -> torch.Tensor:
+        mem_data = torch.tensor(
+            [mem_selector(mem_stat) for mem_stat in self.mem_stats], dtype=torch.float
+        )
+        return torch.quantile(mem_data, percentile / 100.0, interpolation=interpolation)
 
 
 class ECWrapper(torch.nn.Module):
@@ -299,7 +359,6 @@ def get_inputs(
                 average_batch_size=batch_size,
                 world_size=world_size,
                 num_float_features=0,
-                # pyre-ignore
                 tables=tables,
             )
         else:
@@ -315,11 +374,14 @@ def get_inputs(
 
         if train:
             sparse_features_by_rank = [
-                model_input.idlist_features for model_input in model_input_by_rank
+                model_input.idlist_features
+                for model_input in model_input_by_rank
+                if isinstance(model_input.idlist_features, KeyedJaggedTensor)
             ]
             inputs_batch.append(sparse_features_by_rank)
         else:
             sparse_features = model_input_by_rank[0].idlist_features
+            assert isinstance(sparse_features, KeyedJaggedTensor)
             inputs_batch.append([sparse_features])
 
     # Transpose if train, as inputs_by_rank is currently in  [B X R] format
@@ -343,11 +405,9 @@ def write_report(
 
         qps = int(num_requests / avg_dur_s)
 
-        mem_allocated_by_rank = benchmark_res.max_mem_allocated
-
         mem_str = ""
-        for i, mem_mb in enumerate(mem_allocated_by_rank):
-            mem_str += f"Rank {i}: {mem_mb:7}mb  "
+        for memory_stats in benchmark_res.mem_stats:
+            mem_str += f"{memory_stats}\n"
 
         report_str += f"{benchmark_res.short_name:40} Avg QPS:{qps:10} Avg Duration: {int(1000*avg_dur_s):5}"
         report_str += f"ms Standard Dev Duration: {(1000*std_dur_s):.2f}ms\n"
@@ -429,6 +489,7 @@ def transform_module(
     compile_mode: CompileMode,
     world_size: int,
     batch_size: int,
+    # pyre-fixme[24]: Generic type `ContextManager` expects 1 type parameter.
     ctx: ContextManager,
     benchmark_unsharded_module: bool = False,
 ) -> torch.nn.Module:
@@ -480,7 +541,9 @@ def transform_module(
 
             sharded_module = _shard_modules(
                 module=copied_module,
-                # pyre-ignore [6]
+                # pyre-fixme[6]: For 2nd argument expected
+                #  `Optional[List[ModuleSharder[Module]]]` but got
+                #  `List[ModuleSharder[Variable[T (bound to Module)]]]`.
                 sharders=[sharder],
                 device=device,
                 plan=plan,
@@ -489,13 +552,14 @@ def transform_module(
 
     if compile_mode == CompileMode.FX_SCRIPT:
         return fx_script_module(
-            # pyre-ignore [6]
+            # pyre-fixme[6]: For 1st argument expected `Module` but got
+            #  `Optional[Module]`.
             sharded_module
             if not benchmark_unsharded_module
             else module
         )
     else:
-        # pyre-ignore [7]
+        # pyre-fixme[7]: Expected `Module` but got `Optional[Module]`.
         return sharded_module if not benchmark_unsharded_module else module
 
 
@@ -516,7 +580,7 @@ def benchmark(
     device_type: str = "cuda",
     benchmark_unsharded_module: bool = False,
 ) -> BenchmarkResult:
-    max_mem_allocated: List[int] = []
+    memory_stats: List[MemoryStats] = []
     if enable_logging:
         logger.info(f" BENCHMARK_MODEL[{name}]:\n{model}")
 
@@ -575,12 +639,10 @@ def benchmark(
         if rank == -1:
             # Add up all memory allocated in inference mode
             for di in range(world_size):
-                b = torch.cuda.max_memory_allocated(di)
-                max_mem_allocated.append(b // 1024 // 1024)
+                memory_stats.append(MemoryStats.for_device(di))
         else:
             # Only add up memory allocated for current rank in training mode
-            b = torch.cuda.max_memory_allocated(rank)
-            max_mem_allocated.append(b // 1024 // 1024)
+            memory_stats.append(MemoryStats.for_device(rank))
 
     if output_dir != "":
         # Only do profiling if output_dir is set
@@ -635,7 +697,135 @@ def benchmark(
     return BenchmarkResult(
         short_name=name,
         elapsed_time=elapsed_time,
-        max_mem_allocated=max_mem_allocated,
+        mem_stats=memory_stats,
+        rank=rank,
+    )
+
+
+def benchmark_func(
+    name: str,
+    bench_inputs: List[Dict[str, Any]],
+    prof_inputs: List[Dict[str, Any]],
+    world_size: int,
+    profile_dir: str,
+    num_benchmarks: int,
+    num_profiles: int,
+    # pyre-ignore[2]
+    func_to_benchmark: Any,
+    benchmark_func_kwargs: Optional[Dict[str, Any]],
+    rank: int,
+    device_type: str = "cuda",
+    pre_gpu_load: int = 0,
+) -> BenchmarkResult:
+    memory_stats: List[MemoryStats] = []
+    if device_type == "cuda":
+        if rank == -1:
+            # Reset memory for measurement, no process per rank so do all
+            for di in range(world_size):
+                torch.cuda.reset_peak_memory_stats(di)
+                torch.cuda.reset_accumulated_memory_stats(di)
+        else:
+            torch.cuda.reset_peak_memory_stats(rank)
+            torch.cuda.reset_accumulated_memory_stats(rank)
+
+    start = []
+    end = []
+    if device_type == "cuda":
+        # Measure time taken for batches in bench_inputs
+        start = [torch.cuda.Event(enable_timing=True) for _ in range(num_benchmarks)]
+        end = [torch.cuda.Event(enable_timing=True) for _ in range(num_benchmarks)]
+
+    if benchmark_func_kwargs is None:
+        # Need this to unwrap
+        benchmark_func_kwargs = {}
+
+    times = []
+    if device_type == "cuda":
+        a = torch.rand(16384, 16384, device="cuda")
+        for _ in range(pre_gpu_load):
+            a = a * torch.rand(16384, 16384, device="cuda")
+        for i in range(num_benchmarks):
+            start[i].record()
+            func_to_benchmark(bench_inputs, **benchmark_func_kwargs)
+            end[i].record()
+    elif device_type == "cpu":
+        times = timeit.repeat(
+            lambda: func_to_benchmark(bench_inputs, **benchmark_func_kwargs),
+            number=1,
+            repeat=num_benchmarks,
+        )
+
+    if device_type == "cuda":
+        if rank == -1:
+            for di in range(world_size):
+                torch.cuda.synchronize(di)
+        else:
+            torch.cuda.synchronize(rank)
+
+    # TODO: First Benchmark Run for Eager Mode produces outlier
+    # Start counting after first as workaround for standard deviation
+    if device_type == "cuda":
+        elapsed_time = torch.tensor(
+            [si.elapsed_time(ei) for si, ei in zip(start[1:], end[1:])]
+        )
+    else:
+        elapsed_time = torch.tensor(times) * 1e3
+
+    if device_type == "cuda":
+        if rank == -1:
+            # Add up all memory allocated in inference mode
+            for di in range(world_size):
+                memory_stats.append(MemoryStats.for_device(di))
+        else:
+            # Only add up memory allocated for current rank in training mode
+            memory_stats.append(MemoryStats.for_device(rank))
+
+    if profile_dir != "":
+        # Only do profiling if output_dir is set
+
+        # pyre-ignore[2]
+        def trace_handler(prof) -> None:
+            total_average = prof.profiler.total_average()
+            logger.info(f" TOTAL_AVERAGE:\n{name}\n{total_average}")
+            dir_path: str = profile_dir
+            if rank == 0:
+                trace_file: str = f"{dir_path}/trace-{name}.json"
+            else:
+                trace_file: str = f"{dir_path}/trace-{name}-{rank}.json"
+                return  # only 1 rank should output in pg case, rank = 0
+            logger.info(f" PROFILE[{name}].chrome_trace:{trace_file}")
+            prof.export_chrome_trace(trace_file)
+
+        if device_type == "cuda":
+            a = torch.rand(16384, 16384, device="cuda")
+            for _ in range(pre_gpu_load):
+                a = a * torch.rand(16384, 16384, device="cuda")
+            with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ],
+                record_shapes=True,
+                profile_memory=True,
+                with_flops=True,
+                with_modules=True,
+                on_trace_ready=trace_handler,
+            ) as p:
+                for i in range(num_profiles):
+                    with record_function(f"## profile {i} ##"):
+                        func_to_benchmark(prof_inputs, **benchmark_func_kwargs)
+                        p.step()
+
+            if rank == -1:
+                for di in range(torch.cuda.device_count()):
+                    torch.cuda.synchronize(torch.device(f"cuda:{di}"))
+            else:
+                torch.cuda.synchronize()
+
+    return BenchmarkResult(
+        short_name=name,
+        elapsed_time=elapsed_time,
+        mem_stats=memory_stats,
         rank=rank,
     )
 
@@ -809,7 +999,7 @@ def multi_process_benchmark(
         res = qq.get()
 
         benchmark_res_per_rank.append(res)
-        assert len(res.max_mem_allocated) == 1
+        assert len(res.mem_stats) == 1
 
     for p in processes:
         p.join()
@@ -818,13 +1008,13 @@ def multi_process_benchmark(
     total_benchmark_res = BenchmarkResult(
         benchmark_res_per_rank[0].short_name,
         benchmark_res_per_rank[0].elapsed_time,
-        [0] * world_size,
+        [MemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
         0,
     )
 
     for res in benchmark_res_per_rank:
         # Each rank's BenchmarkResult contains 1 memory measurement
-        total_benchmark_res.max_mem_allocated[res.rank] = res.max_mem_allocated[0]
+        total_benchmark_res.mem_stats[res.rank] = res.mem_stats[0]
 
     return total_benchmark_res
 
@@ -918,7 +1108,6 @@ def benchmark_module(
         for compile_mode in compile_modes:
             if not benchmark_unsharded:
                 # Test sharders should have a singular sharding_type
-                # pyre-ignore [16]
                 sharder._sharding_type = sharding_type.value
                 # pyre-ignore [6]
                 benchmark_type = benchmark_type_name(compile_mode, sharding_type)

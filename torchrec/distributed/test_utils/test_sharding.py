@@ -24,7 +24,7 @@ from torchrec.distributed.fbgemm_qcomm_codec import (
     get_qcomm_codecs_registry,
     QCommsConfig,
 )
-from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.model_parallel import DistributedModelParallel, DMPCollection
 from torchrec.distributed.planner import (
     EmbeddingShardingPlanner,
     ParameterConstraints,
@@ -41,6 +41,7 @@ from torchrec.distributed.test_utils.test_model import (
 )
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
+    EnumerableShardingSpec,
     ModuleSharder,
     ShardedTensor,
     ShardingEnv,
@@ -121,6 +122,7 @@ class VariableBatchModelInputCallable(Protocol):
         world_size: int,
         num_float_features: int,
         tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
+        weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         pooling_avg: int = 10,
         global_constant_batch: bool = False,
     ) -> Tuple["ModelInput", List["ModelInput"]]: ...
@@ -145,6 +147,7 @@ def gen_model_and_input(
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     long_indices: bool = True,
     global_constant_batch: bool = False,
+    num_inputs: int = 1,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -174,28 +177,31 @@ def gen_model_and_input(
             sparse_device=sparse_device,
             feature_processor_modules=feature_processor_modules,
         )
-    inputs = [
-        (
-            cast(VariableBatchModelInputCallable, generate)(
-                average_batch_size=batch_size,
-                world_size=world_size,
-                num_float_features=num_float_features,
-                tables=tables,
-                global_constant_batch=global_constant_batch,
-            )
-            if generate == ModelInput.generate_variable_batch_input
-            else cast(ModelInputCallable, generate)(
-                world_size=world_size,
-                tables=tables,
-                dedup_tables=dedup_tables,
-                weighted_tables=weighted_tables or [],
-                num_float_features=num_float_features,
-                variable_batch_size=variable_batch_size,
-                batch_size=batch_size,
-                long_indices=long_indices,
+    inputs = []
+    for _ in range(num_inputs):
+        inputs.append(
+            (
+                cast(VariableBatchModelInputCallable, generate)(
+                    average_batch_size=batch_size,
+                    world_size=world_size,
+                    num_float_features=num_float_features,
+                    tables=tables,
+                    weighted_tables=weighted_tables or [],
+                    global_constant_batch=global_constant_batch,
+                )
+                if generate == ModelInput.generate_variable_batch_input
+                else cast(ModelInputCallable, generate)(
+                    world_size=world_size,
+                    tables=tables,
+                    dedup_tables=dedup_tables,
+                    weighted_tables=weighted_tables or [],
+                    num_float_features=num_float_features,
+                    variable_batch_size=variable_batch_size,
+                    batch_size=batch_size,
+                    long_indices=long_indices,
+                )
             )
         )
-    ]
     return (model, inputs)
 
 
@@ -237,12 +243,13 @@ def copy_state_dict(
                     raise ValueError("Tensors with ndim > 2 are not supported")
                 local_shard.tensor.copy_(t)
         elif isinstance(tensor, DTensor):
-            shard_offsets = tensor.to_local().local_offsets()  # pyre-ignore[16]
-            for i, local_shard in enumerate(tensor.to_local().local_shards()):
+            for local_shard, global_offset in zip(
+                tensor.to_local().local_shards(),
+                tensor.to_local().local_offsets(),  # pyre-ignore[16]
+            ):
                 assert global_tensor.ndim == local_shard.ndim
                 t = global_tensor.detach()
                 local_shape = local_shard.shape
-                global_offset = shard_offsets[i]
                 if t.ndim == 1:
                     t = t[global_offset[0] : global_offset[0] + local_shape[0]]
                 elif t.ndim == 2:
@@ -273,11 +280,13 @@ def sharding_single_rank_test(
     apply_optimizer_in_backward_config: Optional[
         Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
     ] = None,
-    variable_batch_size: bool = False,
+    variable_batch_size: bool = False,  # variable batch per rank
     batch_size: int = 4,
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
-    variable_batch_per_feature: bool = False,
+    variable_batch_per_feature: bool = False,  # VBE
     global_constant_batch: bool = False,
+    world_size_2D: Optional[int] = None,
+    node_group_size: Optional[int] = None,
 ) -> None:
 
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -326,20 +335,25 @@ def sharding_single_rank_test(
                 optimizer_kwargs,
             ) in apply_optimizer_in_backward_config.items():
                 for name, param in global_model_named_params_as_dict.items():
-                    if name not in apply_optim_name:
+                    if apply_optim_name not in name:
                         continue
                     assert name in local_model_named_params_as_dict
                     local_param = local_model_named_params_as_dict[name]
                     apply_optimizer_in_backward(
-                        optimizer_type, [param], optimizer_kwargs
+                        optimizer_type,
+                        [param],
+                        optimizer_kwargs,
                     )
                     apply_optimizer_in_backward(
                         optimizer_type, [local_param], optimizer_kwargs
                     )
 
+        # For 2D parallelism, we use single group world size and local world size
         planner = EmbeddingShardingPlanner(
             topology=Topology(
-                world_size, ctx.device.type, local_world_size=ctx.local_size
+                world_size=world_size_2D if world_size_2D else world_size,
+                compute_device=ctx.device.type,
+                local_world_size=node_group_size if node_group_size else ctx.local_size,
             ),
             constraints=constraints,
         )
@@ -354,7 +368,6 @@ def sharding_single_rank_test(
         TODO: may need to add some checks that only does this if we're running on a
         single GPU (which should be most cases).
         """
-
         for group in plan.plan:
             for _, parameter_sharding in cast(
                 EmbeddingModuleShardingPlan, plan.plan[group]
@@ -364,6 +377,7 @@ def sharding_single_rank_test(
                     in {
                         ShardingType.TABLE_ROW_WISE.value,
                         ShardingType.TABLE_COLUMN_WISE.value,
+                        ShardingType.GRID_SHARD.value,
                     }
                     and ctx.device.type != "cpu"
                 ):
@@ -378,15 +392,26 @@ def sharding_single_rank_test(
                                 f"rank:{rank}/cuda:{rank}"
                             )
 
-        local_model = DistributedModelParallel(
-            local_model,
-            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
-            env=ShardingEnv.from_process_group(ctx.pg),
-            plan=plan,
-            sharders=sharders,
-            device=ctx.device,
-        )
+        assert ctx.pg is not None
+        if world_size_2D is not None:
+            local_model = DMPCollection(
+                module=local_model,
+                sharding_group_size=world_size_2D,
+                world_size=ctx.world_size,
+                global_pg=ctx.pg,
+                node_group_size=node_group_size,
+                plan=plan,
+                sharders=sharders,
+                device=ctx.device,
+            )
+        else:
+            local_model = DistributedModelParallel(
+                local_model,
+                env=ShardingEnv.from_process_group(ctx.pg),
+                plan=plan,
+                sharders=sharders,
+                device=ctx.device,
+            )
 
         dense_optim = KeyedOptimizerWrapper(
             dict(in_backward_optimizer_filter(local_model.named_parameters())),
@@ -395,10 +420,18 @@ def sharding_single_rank_test(
         local_opt = CombinedOptimizer([local_model.fused_optimizer, dense_optim])
 
         # Load model state from the global model.
-        copy_state_dict(local_model.state_dict(), global_model.state_dict())
+        copy_state_dict(
+            local_model.state_dict(),
+            global_model.state_dict(),
+            exclude_predfix="sparse.pooled_embedding_arch.embedding_modules._itp_iter",
+        )
 
         # Run a single training step of the sharded model.
-        local_pred = gen_full_pred_after_one_step(local_model, local_opt, local_input)
+        local_pred = gen_full_pred_after_one_step(
+            local_model,
+            local_opt,
+            local_input,
+        )
 
         all_local_pred = []
         for _ in range(world_size):
@@ -441,6 +474,10 @@ def gen_full_pred_after_one_step(
     loss, _ = model(input)
     loss.backward()
     opt.step()
+
+    # Sync embedding weights if 2D paralleism is used.
+    if isinstance(model, DMPCollection):
+        model.sync()
 
     # Run a forward pass of the global model.
     with torch.no_grad():

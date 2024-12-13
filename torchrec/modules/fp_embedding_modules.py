@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -53,6 +53,15 @@ def apply_feature_processors_to_kjt(
         offset_per_key=features._offset_per_key,
         index_per_key=features._index_per_key,
     )
+
+
+class FeatureProcessorDictWrapper(FeatureProcessorsCollection):
+    def __init__(self, feature_processors: nn.ModuleDict) -> None:
+        super().__init__()
+        self._feature_processors = feature_processors
+
+    def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
+        return apply_feature_processors_to_kjt(features, self._feature_processors)
 
 
 class FeatureProcessedEmbeddingBagCollection(nn.Module):
@@ -125,6 +134,18 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
             feature_names_set.update(table_config.feature_names)
         self._feature_names: List[str] = list(feature_names_set)
 
+    def split(
+        self,
+    ) -> Tuple[FeatureProcessorsCollection, EmbeddingBagCollection]:
+        if isinstance(self._feature_processors, nn.ModuleDict):
+            return (
+                FeatureProcessorDictWrapper(self._feature_processors),
+                self._embedding_bag_collection,
+            )
+        else:
+            assert isinstance(self._feature_processors, FeatureProcessorsCollection)
+            return self._feature_processors, self._embedding_bag_collection
+
     def forward(
         self,
         features: KeyedJaggedTensor,
@@ -136,14 +157,25 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
         Returns:
             KeyedTensor
         """
+        values = []
+        lengths = []
+        weights = []
 
         if isinstance(self._feature_processors, FeatureProcessorsCollection):
             fp_features = self._feature_processors(features)
         else:
-            # TODO: This path isn't currently scriptable. May be hard to support Dict[nn.Module]. Workaround is to always use FP-Collections
-            fp_features = apply_feature_processors_to_kjt(
-                features,
-                self._feature_processors,
+            features_dict = features.to_dict()
+            for key in self._feature_names:
+                jt = self._feature_processors[key](features_dict[key])
+                values.append(jt.values())
+                lengths.append(jt.lengths())
+                weights.append(jt.weights())
+
+            fp_features = KeyedJaggedTensor(
+                keys=self._feature_names,
+                values=torch.cat(values),
+                lengths=torch.cat(lengths),
+                weights=torch.cat(weights),
             )
 
         return self._embedding_bag_collection(fp_features)

@@ -10,12 +10,15 @@
 import unittest
 
 import torch
-from torchrec.metrics.metrics_config import DefaultTaskInfo
+from torchrec.metrics.metrics_config import DefaultTaskInfo, RecTaskInfo
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import gen_test_batch, gen_test_tasks
+
+
+_CUDA_UNAVAILABLE: bool = not torch.cuda.is_available()
 
 
 class RecMetricTest(unittest.TestCase):
@@ -108,11 +111,7 @@ class RecMetricTest(unittest.TestCase):
         self.assertGreater(mse_computation.weighted_num_samples, torch.tensor(0.0))
 
         res = mse.compute()
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["mse-DefaultTask|lifetime_mse"], torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["mse-DefaultTask|lifetime_rmse"], torch.tensor(0.0))
 
         # Test if weights = 0 for one task of an update
@@ -162,8 +161,6 @@ class RecMetricTest(unittest.TestCase):
 
         res = ne.compute()
         self.assertEqual(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["ne-t2|lifetime_ne"], torch.tensor(0.0))
 
         ne.update(
@@ -179,8 +176,6 @@ class RecMetricTest(unittest.TestCase):
         self.assertGreater(ne_computation[0].weighted_num_samples, torch.tensor(0.0))
 
         res = ne.compute()
-        # pyre-fixme[6]: For 2nd param expected `SupportsDunderLT[Variable[_T]]` but
-        #  got `Tensor`.
         self.assertGreater(res["ne-t1|lifetime_ne"], torch.tensor(0.0))
 
     def test_compute(self) -> None:
@@ -272,3 +267,29 @@ class RecMetricTest(unittest.TestCase):
         ne.reset()
         window_buffer = ne._batch_window_buffers["window_cross_entropy_sum"].buffers
         self.assertEqual(len(window_buffer), 0)
+
+    @unittest.skipIf(_CUDA_UNAVAILABLE, "Test needs to run on GPU")
+    def test_parse_task_model_outputs_ndcg(self) -> None:
+        _, _, _, required_inputs = parse_task_model_outputs(
+            tasks=[
+                RecTaskInfo(
+                    name="ndcg_example",
+                ),
+            ],
+            # pyre-fixme[6]: for argument model_out, expected Dict[str, Tensor] but
+            # got Dict[str, Union[List[str], Tensor]]
+            model_out={
+                "label": torch.tensor(
+                    [0.0, 1.0, 0.0, 1.0], device=torch.device("cuda:0")
+                ),
+                "weight": torch.tensor(
+                    [1.0, 1.0, 1.0, 1.0], device=torch.device("cuda:0")
+                ),
+                "prediction": torch.tensor(
+                    [0.0, 1.0, 0.0, 1.0], device=torch.device("cuda:0")
+                ),
+                "session_id": ["1", "1", "2", "2"],
+            },
+            required_inputs_list=["session_id"],
+        )
+        self.assertEqual(required_inputs["session_id"].device, torch.device("cuda:0"))

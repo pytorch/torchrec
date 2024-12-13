@@ -30,6 +30,7 @@ from torchrec.modules.feature_processor_ import (
     PositionWeightedModuleCollection,
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
@@ -88,6 +89,10 @@ class CompoundModuleSerializer(JsonSerializer):
         while hasattr(unflatten_ep.list, str(i)):
             mlist.append(getattr(unflatten_ep.list, str(i)))
             i += 1
+        # pyre-fixme[6]: For 1st argument expected `EmbeddingBagCollection` but got
+        #  `Union[Module, Tensor]`.
+        # pyre-fixme[6]: For 2nd argument expected `Optional[CompoundModule]` but
+        #  got `Union[Module, Tensor]`.
         return CompoundModule(ebc, comp, mlist)
 
 
@@ -295,9 +300,11 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(eager_out[i].shape, tensor.shape)
             assert torch.allclose(eager_out[i], tensor)
 
-    def test_ir_custom_op_device(self) -> None:
+    def test_ir_emb_lookup_device(self) -> None:
         model = self.generate_model()
+        # pyre-fixme[16]: `Module` has no attribute `fpebc1`.
         model.fpebc1 = copy.deepcopy(model.ebc1)
+        # pyre-fixme[16]: `Module` has no attribute `fpebc2`.
         model.fpebc2 = copy.deepcopy(model.ebc1)
         feature1 = KeyedJaggedTensor.from_offsets_sync(
             keys=["f1", "f2", "f3"],
@@ -422,9 +429,13 @@ class TestJsonSerializer(unittest.TestCase):
         deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
         # Check if Compound Module is deserialized correctly
         self.assertIsInstance(deserialized_model.comp, CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `comp`.
         self.assertIsInstance(deserialized_model.comp.comp, CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `comp`.
         self.assertIsInstance(deserialized_model.comp.comp.comp, CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `list`.
         self.assertIsInstance(deserialized_model.comp.list[1], CompoundModule)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `list`.
         self.assertIsInstance(deserialized_model.comp.list[1].comp, CompoundModule)
 
         deserialized_model.load_state_dict(model.state_dict())
@@ -433,3 +444,187 @@ class TestJsonSerializer(unittest.TestCase):
         self.assertEqual(len(deserialized_out), len(eager_out))
         for x, y in zip(deserialized_out, eager_out):
             self.assertTrue(torch.allclose(x, y))
+
+    def test_regroup_as_dict_module(self) -> None:
+        class Model(nn.Module):
+            def __init__(self, ebc, fpebc, regroup):
+                super().__init__()
+                self.ebc = ebc
+                self.fpebc = fpebc
+                self.regroup = regroup
+
+            def forward(
+                self,
+                features: KeyedJaggedTensor,
+            ) -> Dict[str, torch.Tensor]:
+                kt1 = self.ebc(features)
+                kt2 = self.fpebc(features)
+                return self.regroup([kt1, kt2])
+
+        tb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1", "f2"],
+        )
+        tb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f3", "f4"],
+        )
+        tb3_config = EmbeddingBagConfig(
+            name="t3",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f5"],
+        )
+
+        ebc = EmbeddingBagCollection(
+            tables=[tb1_config, tb3_config],
+            is_weighted=False,
+        )
+        max_feature_lengths = {"f3": 100, "f4": 100}
+        fpebc = FeatureProcessedEmbeddingBagCollection(
+            EmbeddingBagCollection(
+                tables=[tb2_config],
+                is_weighted=True,
+            ),
+            PositionWeightedModuleCollection(
+                max_feature_lengths=max_feature_lengths,
+            ),
+        )
+        regroup = KTRegroupAsDict([["f1", "f3", "f5"], ["f2", "f4"]], ["odd", "even"])
+        model = Model(ebc, fpebc, regroup)
+
+        id_list_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3", "f4", "f5"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]),
+        )
+        self.assertFalse(model.regroup._is_inited)
+
+        # Serialize EBC
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+        ep = torch.export.export(
+            model,
+            (id_list_features,),
+            {},
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=(tuple(sparse_fqns)),
+        )
+
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
+        self.assertFalse(model.regroup._is_inited)
+        eager_out = model(id_list_features)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
+        self.assertFalse(model.regroup._is_inited)
+
+        # Run forward on ExportedProgram
+        ep_output = ep.module()(id_list_features)
+        for key in eager_out.keys():
+            self.assertEqual(ep_output[key].shape, eager_out[key].shape)
+        # Deserialize EBC
+        unflatten_ep = torch.export.unflatten(ep)
+        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
+        self.assertFalse(deserialized_model.regroup._is_inited)
+        deserialized_out = deserialized_model(id_list_features)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_is_inited`.
+        self.assertTrue(deserialized_model.regroup._is_inited)
+        for key in eager_out.keys():
+            self.assertEqual(deserialized_out[key].shape, eager_out[key].shape)
+
+    def test_key_order_with_ebc_and_regroup(self) -> None:
+        tb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1"],
+        )
+        tb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f2"],
+        )
+        tb3_config = EmbeddingBagConfig(
+            name="t3",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f3"],
+        )
+        id_list_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3", "f4", "f5"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]),
+        )
+        ebc1 = EmbeddingBagCollection(
+            tables=[tb1_config, tb2_config, tb3_config],
+            is_weighted=False,
+        )
+        ebc2 = EmbeddingBagCollection(
+            tables=[tb1_config, tb3_config, tb2_config],
+            is_weighted=False,
+        )
+        ebc2.load_state_dict(ebc1.state_dict())
+        regroup = KTRegroupAsDict([["f1", "f3"], ["f2"]], ["odd", "even"])
+
+        class mySparse(nn.Module):
+            def __init__(self, ebc, regroup):
+                super().__init__()
+                self.ebc = ebc
+                self.regroup = regroup
+
+            def forward(
+                self,
+                features: KeyedJaggedTensor,
+            ) -> Dict[str, torch.Tensor]:
+                return self.regroup([self.ebc(features)])
+
+        class myModel(nn.Module):
+            def __init__(self, ebc, regroup):
+                super().__init__()
+                self.sparse = mySparse(ebc, regroup)
+
+            def forward(
+                self,
+                features: KeyedJaggedTensor,
+            ) -> Dict[str, torch.Tensor]:
+                return self.sparse(features)
+
+        model = myModel(ebc1, regroup)
+        eager_out = model(id_list_features)
+
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+        ep = torch.export.export(
+            model,
+            (id_list_features,),
+            {},
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=(tuple(sparse_fqns)),
+        )
+        unflatten_ep = torch.export.unflatten(ep)
+        deserialized_model = decapsulate_ir_modules(
+            unflatten_ep,
+            JsonSerializer,
+            short_circuit_pytree_ebc_regroup=True,
+            finalize_interpreter_modules=True,
+        )
+
+        #  we export the model with ebc1 and unflatten the model,
+        #  and then swap with ebc2 (you can think this as the the sharding process
+        #  resulting a shardedEBC), so that we can mimic the key-order change
+        # pyre-fixme[16]: `Module` has no attribute `ebc`.
+        # pyre-fixme[16]: `Tensor` has no attribute `ebc`.
+        deserialized_model.sparse.ebc = ebc2
+
+        deserialized_out = deserialized_model(id_list_features)
+        for key in eager_out.keys():
+            torch.testing.assert_close(deserialized_out[key], eager_out[key])

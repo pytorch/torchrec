@@ -10,8 +10,6 @@
 #!/usr/bin/env python3
 
 import copy
-import re
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
@@ -28,7 +26,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn, quantization as quant, Tensor
-from torch._dynamo import trace_rules
 from torch.distributed._shard.sharding_spec import ShardingSpec
 from torch.utils import _pytree as pytree
 from torchrec import (
@@ -74,6 +71,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
 )
 from torchrec.distributed.utils import CopyableMixin
+from torchrec.inference.modules import set_pruning_data
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
@@ -83,6 +81,7 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
     FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
@@ -90,8 +89,8 @@ from torchrec.quant.embedding_modules import (
     MODULE_ATTR_REGISTER_TBES_BOOL,
     quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
     quant_prep_enable_register_tbes,
+    QuantManagedCollisionEmbeddingCollection,
 )
-from torchrec.sparse.jagged_tensor import is_non_strict_exporting
 
 
 @dataclass
@@ -199,6 +198,7 @@ def prep_inputs(
                 long_indices=long_indices,
             )[1][0],
         )
+
     return inputs
 
 
@@ -264,6 +264,7 @@ def model_input_to_forward_args_kjt(
     Optional[torch.Tensor],
 ]:
     kjt = mi.idlist_features
+    assert isinstance(kjt, KeyedJaggedTensor)
     return (
         kjt._keys,
         kjt._values,
@@ -291,7 +292,8 @@ def model_input_to_forward_args(
 ]:
     idlist_kjt = mi.idlist_features
     idscore_kjt = mi.idscore_features
-    assert idscore_kjt is not None
+    assert isinstance(idlist_kjt, KeyedJaggedTensor)
+    assert isinstance(idscore_kjt, KeyedJaggedTensor)
     return (
         mi.float_features,
         idlist_kjt._keys,
@@ -331,6 +333,7 @@ def quantize(
     module_types: List[Type[torch.nn.Module]] = [
         torchrec.modules.embedding_modules.EmbeddingBagCollection,
         torchrec.modules.embedding_modules.EmbeddingCollection,
+        torchrec.modules.mc_embedding_modules.ManagedCollisionEmbeddingCollection,
     ]
     if register_tbes:
         quant_prep_enable_register_tbes(module, module_types)
@@ -356,10 +359,12 @@ def quantize(
         qconfig_spec={
             EmbeddingBagCollection: qconfig,
             EmbeddingCollection: qconfig,
+            ManagedCollisionEmbeddingCollection: qconfig,
         },
         mapping={
             EmbeddingBagCollection: QuantEmbeddingBagCollection,
             EmbeddingCollection: QuantEmbeddingCollection,
+            ManagedCollisionEmbeddingCollection: QuantManagedCollisionEmbeddingCollection,
         },
         inplace=inplace,
     )
@@ -434,6 +439,7 @@ class TestQuantFPEBCSharder(QuantFeatureProcessedEmbeddingBagCollectionSharder):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantFeatureProcessedEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
@@ -481,6 +487,7 @@ class TestQuantEBCSharder(QuantEmbeddingBagCollectionSharder):
         params: Dict[str, ParameterSharding],
         env: Union[ShardingEnv, Dict[str, ShardingEnv]],
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
@@ -527,6 +534,7 @@ class TestQuantECSharder(QuantEmbeddingCollectionSharder):
         params: Dict[str, ParameterSharding],
         env: Union[Dict[str, ShardingEnv], ShardingEnv],
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantEmbeddingCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
@@ -626,6 +634,7 @@ def create_test_model(
     num_weighted_features: int = 1,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     weight_dtype: torch.dtype = torch.qint8,
+    pruning_dict: Optional[Dict[str, int]] = None,
 ) -> TestModelInfo:
     topology: Topology = Topology(
         world_size=world_size, compute_device=sparse_device.type
@@ -673,8 +682,14 @@ def create_test_model(
         for i in range(mi.num_weighted_features)
     ]
 
+    if pruning_dict:
+        for config in mi.tables + mi.weighted_tables:
+            if config.name in pruning_dict:
+                config.num_embeddings_post_pruning = pruning_dict[config.name]
+
     mi.model = TorchTypesModelInputWrapper(
         TestSparseNN(
+            # pyre-ignore [6]
             tables=mi.tables,
             weighted_tables=mi.weighted_tables,
             num_float_features=mi.num_float_features,
@@ -683,6 +698,10 @@ def create_test_model(
         )
     )
     mi.model.training = False
+
+    if pruning_dict:
+        set_pruning_data(mi.model, pruning_dict)
+
     mi.quant_model = quantize(
         module=mi.model,
         inplace=False,
@@ -825,12 +844,31 @@ def shard_qebc(
     expected_shards: Optional[List[List[Tuple[Tuple[int, int, int, int], str]]]] = None,
     plan: Optional[ShardingPlan] = None,
     ebc_fqn: str = "_module.sparse.ebc",
+    shard_score_ebc: bool = False,
+    feature_processor: bool = False,
 ) -> torch.nn.Module:
-    sharder = TestQuantEBCSharder(
-        sharding_type=sharding_type.value,
-        kernel_type=EmbeddingComputeKernel.QUANT.value,
-        shardable_params=[table.name for table in mi.tables],
-    )
+    if feature_processor:
+        sharder = TestQuantFPEBCSharder(
+            sharding_type=sharding_type.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=(
+                [table.name for table in mi.tables]
+                + ([table.name for table in mi.weighted_tables])
+            ),
+        )
+    else:
+        sharder = TestQuantEBCSharder(
+            sharding_type=sharding_type.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=(
+                [table.name for table in mi.tables]
+                + (
+                    [table.name for table in mi.weighted_tables]
+                    if shard_score_ebc
+                    else []
+                )
+            ),
+        )
     if not plan:
         # pyre-ignore
         plan = mi.planner.plan(
@@ -858,7 +896,8 @@ def shard_qebc(
     quant_model_copy = copy.deepcopy(mi.quant_model)
     sharded_model = _shard_modules(
         module=quant_model_copy,
-        # pyre-ignore
+        # pyre-fixme[6]: For 2nd argument expected
+        #  `Optional[List[ModuleSharder[Module]]]` but got `List[TestQuantEBCSharder]`.
         sharders=[sharder],
         device=device,
         plan=plan,
@@ -908,7 +947,8 @@ def shard_qec(
     quant_model_copy = copy.deepcopy(mi.quant_model)
     sharded_model = _shard_modules(
         module=quant_model_copy,
-        # pyre-ignore
+        # pyre-fixme[6]: For 2nd argument expected
+        #  `Optional[List[ModuleSharder[Module]]]` but got `List[TestQuantECSharder]`.
         sharders=[sharder],
         device=device,
         plan=plan,
@@ -929,9 +969,14 @@ def assert_close(expected, actual) -> None:
         assert sorted(expected.keys()) == sorted(actual.keys())
         for feature, jt_e in expected.items():
             jt_got = actual[feature]
-            assert_close(jt_e.lengths(), jt_got.lengths())
-            assert_close(jt_e.values(), jt_got.values())
-            assert_close(jt_e.offsets(), jt_got.offsets())
+            if isinstance(jt_e, torch.Tensor) and isinstance(jt_got, torch.Tensor):
+                if jt_got.device != jt_e.device:
+                    jt_got = actual.to(jt_e.device)
+                assert_close(jt_e, jt_got)
+            else:
+                assert_close(jt_e.lengths(), jt_got.lengths())
+                assert_close(jt_e.values(), jt_got.values())
+                assert_close(jt_e.offsets(), jt_got.offsets())
     else:
         if isinstance(expected, torch.Tensor) and isinstance(actual, torch.Tensor):
             if actual.device != expected.device:
@@ -1055,5 +1100,7 @@ def replace_sharded_quant_modules_tbes_with_mock_tbes(M: torch.nn.Module) -> Non
     for m in M.modules():
         if isinstance(m, ShardedQuantEmbeddingBagCollection):
             for lookup in m._lookups:
+                # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Module, Tensor]` is
+                #  not a function.
                 for lookup_per_rank in lookup._embedding_lookups_per_rank:
                     replace_registered_tbes_with_mock_tbes(lookup_per_rank)

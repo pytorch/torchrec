@@ -37,6 +37,7 @@ from torchrec.pt2.utils import (
     kjt_for_pt2_tracing,
     register_fake_classes,
 )
+from torchrec.sparse.jagged_tensor import _kt_regroup_arguments
 
 try:
     # pyre-ignore
@@ -318,7 +319,10 @@ class TestPt2(unittest.TestCase):
                 # Need to set as size in order to run a proper forward
                 em_inputs[0][0] = kjt.values().size(0)
                 em_inputs[2][0] = kjt.weights().size(0)
-                eager_output = symint_wrapper(*em_inputs)
+
+                if not kjt.values().is_meta:
+                    eager_output = symint_wrapper(*em_inputs)
+
                 pt2_ir = torch.export.export(
                     symint_wrapper, em_inputs, {}, strict=False
                 )
@@ -503,6 +507,28 @@ class TestPt2(unittest.TestCase):
             test_pt2_ir_export=True,
         )
 
+    def test_kjt_length_per_key_meta(self) -> None:
+        class M(torch.nn.Module):
+            def forward(self, kjt: KeyedJaggedTensor):
+                return kjt.length_per_key()
+
+        kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
+        kjt = kjt.to("meta")
+
+        # calling forward on meta inputs once traced should error out
+        # as calculating length_per_key requires a .tolist() call of lengths
+        self.assertRaisesRegex(
+            RuntimeError,
+            r".*Tensor\.item\(\) cannot be called on meta tensors.*",
+            lambda: self._test_kjt_input_module(
+                M(),
+                kjt,
+                (),
+                test_aot_inductor=False,
+                test_pt2_ir_export=True,
+            ),
+        )
+
     def test_kjt_offset_per_key(self) -> None:
         class M(torch.nn.Module):
             def forward(self, kjt: KeyedJaggedTensor):
@@ -628,7 +654,6 @@ class TestPt2(unittest.TestCase):
             local_device="cpu", compute_device="cpu"
         )
         kjt = input_kjts[0]
-        kjt = kjt.to("meta")
         sharded_model(kjt.values(), kjt.lengths())
 
         from torch.export import _trace
@@ -650,9 +675,6 @@ class TestPt2(unittest.TestCase):
         # ensure such node isn't present, as it causes issues with IR
         for n in ep.graph_module.graph.nodes:
             self.assertFalse("auto_functionalized" in str(n.name))
-
-        # TODO: Fix Unflatten
-        # torch.export.unflatten(ep)
 
     # pyre-ignore
     @unittest.skipIf(
@@ -664,9 +686,6 @@ class TestPt2(unittest.TestCase):
             local_device="cpu", compute_device="cpu", feature_processor=True
         )
         kjt = input_kjts[0]
-        kjt = kjt.to("meta")
-        # Move FP parameters
-        sharded_model.to("meta")
 
         sharded_model(kjt.values(), kjt.lengths())
 
@@ -688,11 +707,6 @@ class TestPt2(unittest.TestCase):
         # ensure such node isn't present, as it causes issues with IR
         for n in ep.graph_module.graph.nodes:
             self.assertFalse("auto_functionalized" in str(n.name))
-
-        # The nn_module_stack for this model forms a skip connection that looks like:
-        # a -> a.b -> a.b.c -> a.d
-        # This is currently not supported by unflatten.
-        # torch.export.unflatten(ep)
 
     def test_maybe_compute_kjt_to_jt_dict(self) -> None:
         kjt: KeyedJaggedTensor = make_kjt([2, 3, 4, 5, 6], [1, 2, 1, 1])
@@ -841,6 +855,33 @@ class TestPt2(unittest.TestCase):
         )
         inp = torch.randn(12, 3)
         _test_compile_fwd_bwd(m, inp, device)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_permute_multi_embedding(self) -> None:
+        device = "cuda"
+        batch_size = 16
+
+        def func(values, permutes, in_shapes, out_shapes, out_lengths):
+            return torch.ops.fbgemm.permute_multi_embedding(
+                values, permutes, in_shapes, out_shapes, out_lengths.tolist()
+            )
+
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [torch.randn(batch_size, sum(L), device=device) for L in lengths]
+        for embs in values:
+            torch._dynamo.mark_dynamic(embs, 0)
+            torch._dynamo.mark_dynamic(embs, 1)
+        permutes, in_shapes, out_shapes, out_lengths = _kt_regroup_arguments(
+            values[0], keys, lengths, groups
+        )
+        out_lengths = torch.tensor(out_lengths, device=device, dtype=torch.int32)
+        inp = (values, permutes, in_shapes, out_shapes, out_lengths)
+        _test_compile_fwd_bwd(func, inp, device, unpack_inp=True)
 
     @unittest.skipIf(
         torch.cuda.device_count() < 1,

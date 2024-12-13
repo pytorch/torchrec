@@ -21,7 +21,9 @@ from torchrec.metrics.ne import (
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -157,32 +159,6 @@ class NEMetricTest(unittest.TestCase):
             batch_window_size=10,
         )
 
-        # TODO(stellaya): support the usage of fused_tasks_computation and
-        # fused_update for the same RecMetric
-        # rec_metric_value_test_launcher(
-        #     target_clazz=NEMetric,
-        #     target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-        #     test_clazz=TestNEMetric,
-        #     task_names=["t1", "t2", "t3"],
-        #     fused_update_limit=5,
-        #     compute_on_all_ranks=False,
-        #     should_validate_update=False,
-        #     world_size=WORLD_SIZE,
-        #     entry_point=self._test_ne,
-        # )
-
-        # rec_metric_value_test_launcher(
-        #     target_clazz=NEMetric,
-        #     target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-        #     test_clazz=TestNEMetric,
-        #     task_names=["t1", "t2", "t3"],
-        #     fused_update_limit=100,
-        #     compute_on_all_ranks=False,
-        #     should_validate_update=False,
-        #     world_size=WORLD_SIZE,
-        #     entry_point=self._test_ne_large_window_size,
-        # )
-
     def test_ne_zero_weights(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=NEMetric,
@@ -257,4 +233,25 @@ class NEMetricTest(unittest.TestCase):
             world_size=WORLD_SIZE,
             entry_point=self._logloss_metric_test_helper,
             batch_window_size=10,
+        )
+
+
+class NEGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = NEMetric
+    task_name: str = "ne"
+
+    def test_sync_ne(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=NEMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestNEMetric,
+            metric_name=NEGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
         )

@@ -23,6 +23,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestEBCSharder,
     TestSparseNN,
 )
+from torchrec.distributed.train_pipeline.train_pipelines import TrainPipelineSparseDist
 from torchrec.distributed.types import ModuleSharder, ShardingEnv
 from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig
 from torchrec.test_utils import get_free_port, init_distributed_single_host
@@ -59,6 +60,7 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
         ]
 
         self.device = torch.device("cuda:0")
+        self.pipeline_class = TrainPipelineSparseDist
 
     def tearDown(self) -> None:
         super().tearDown()
@@ -104,11 +106,19 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
         )
         if enable_fsdp:
             unsharded_model.over.dhn_arch.linear0 = FSDP(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `dhn_arch`.
                 unsharded_model.over.dhn_arch.linear0
             )
             unsharded_model.over.dhn_arch.linear1 = FSDP(
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `dhn_arch`.
                 unsharded_model.over.dhn_arch.linear1
             )
+            # pyre-fixme[16]: `Module` has no attribute `dhn_arch`.
+            # pyre-fixme[16]: `Tensor` has no attribute `dhn_arch`.
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `dhn_arch`.
             unsharded_model.over.dhn_arch = FSDP(unsharded_model.over.dhn_arch)
 
         return unsharded_model

@@ -15,7 +15,9 @@ from torchrec.metrics.mae import compute_mae, MAEMetric
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -73,4 +75,25 @@ class MAEMetricTest(unittest.TestCase):
             should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=metric_test_helper,
+        )
+
+
+class MAEGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = MAEMetric
+    task_name: str = "mae"
+
+    def test_sync_mae(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=MAEMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestMAEMetric,
+            metric_name=MAEGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
         )

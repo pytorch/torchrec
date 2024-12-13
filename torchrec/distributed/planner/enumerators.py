@@ -235,17 +235,21 @@ class EmbeddingEnumerator(Enumerator):
     def _filter_sharding_types(
         self, name: str, allowed_sharding_types: List[str]
     ) -> List[str]:
+        # GRID_SHARD is only supported if specified by user in parameter constraints
         if not self._constraints or not self._constraints.get(name):
-            return allowed_sharding_types
+            return [
+                t for t in allowed_sharding_types if t != ShardingType.GRID_SHARD.value
+            ]
         constraints: ParameterConstraints = self._constraints[name]
         if not constraints.sharding_types:
-            return allowed_sharding_types
+            return [
+                t for t in allowed_sharding_types if t != ShardingType.GRID_SHARD.value
+            ]
         constrained_sharding_types: List[str] = constraints.sharding_types
 
         filtered_sharding_types = list(
             set(constrained_sharding_types) & set(allowed_sharding_types)
         )
-
         if not filtered_sharding_types:
             logger.warn(
                 "No available sharding types after applying user provided "
@@ -380,6 +384,7 @@ def get_partition_by_type(sharding_type: str) -> str:
         ShardingType.ROW_WISE.value,
         ShardingType.DATA_PARALLEL.value,
     }
+    multi_host_sharding_types = {ShardingType.GRID_SHARD.value}
 
     if sharding_type in device_sharding_types:
         return PartitionByType.DEVICE.value
@@ -387,6 +392,8 @@ def get_partition_by_type(sharding_type: str) -> str:
         return PartitionByType.HOST.value
     elif sharding_type in uniform_sharding_types:
         return PartitionByType.UNIFORM.value
+    elif sharding_type in multi_host_sharding_types:
+        return PartitionByType.MULTI_HOST.value
 
     raise ValueError(
         f"Unrecognized or unsupported sharding type provided: {sharding_type}"

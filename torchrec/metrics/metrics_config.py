@@ -20,6 +20,7 @@ class RecMetricEnumBase(StrValueMixin, Enum):
 
 class RecMetricEnum(RecMetricEnumBase):
     NE = "ne"
+    NE_POSITIVE = "ne_positive"
     SEGMENTED_NE = "segmented_ne"
     LOG_LOSS = "log_loss"
     CTR = "ctr"
@@ -31,6 +32,7 @@ class RecMetricEnum(RecMetricEnumBase):
     MAE = "mae"
     MULTICLASS_RECALL = "multiclass_recall"
     RECALL_SESSION_LEVEL = "recall_session_level"
+    PRECISION_SESSION_LEVEL = "precision_session_level"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "tower_qps"
     ACCURACY = "accuracy"
@@ -41,6 +43,11 @@ class RecMetricEnum(RecMetricEnumBase):
     RECALL = "recall"
     SERVING_NE = "serving_ne"
     SERVING_CALIBRATION = "serving_calibration"
+    OUTPUT = "output"
+    TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
+    CALI_FREE_NE = "cali_free_ne"
+    UNWEIGHTED_NE = "unweighted_ne"
+    HINDSIGHT_TARGET_PR = "hindsight_target_pr"
 
 
 @dataclass(unsafe_hash=True, eq=True)
@@ -64,6 +71,8 @@ class RecTaskInfo:
         None  # used for session level metrics
     )
     is_negative_task: bool = False
+    tensor_name: Optional[str] = None
+    weighted: bool = True
 
 
 class RecComputeMode(Enum):
@@ -153,6 +162,7 @@ class MetricsConfig:
         should_validate_update (bool): whether to check the inputs of update() and skip
             update if the inputs are invalid. Invalid inputs include the case where all
             examples have 0 weights for a batch.
+        enable_pt2_compile (bool): whether to enable PT2 compilation for metrics.
     """
 
     rec_tasks: List[RecTaskInfo] = field(default_factory=list)
@@ -166,6 +176,7 @@ class MetricsConfig:
     max_compute_interval: float = float("inf")
     compute_on_all_ranks: bool = False
     should_validate_update: bool = False
+    enable_pt2_compile: bool = False
 
 
 DefaultTaskInfo = RecTaskInfo(
@@ -195,3 +206,40 @@ EmptyMetricsConfig = MetricsConfig(
     throughput_metric=None,
     state_metrics=[],
 )
+
+
+@dataclass
+class BatchSizeStage:
+    """
+    BatchSizeStage class for defining the variable batch size stage.
+    For a List[BatchSizeStage], the max_iter should be in ascending order, and the last one should have max_iter=None
+    Attributes
+    ----------
+        batch_size(int): A multiple of base_batch_size
+        max_iter(int): The maximum number of iterations for the stage.
+                       When previous BatchSizeStage.max_iters < iter <= max_iters, the stage is effective.
+                       Max_iter is the absolute train iteration count, not the relative count within each stage
+    """
+
+    batch_size: int = 0
+    max_iters: Optional[int] = 0
+
+
+def validate_batch_size_stages(
+    batch_size_stages: Optional[List[BatchSizeStage]],
+) -> None:
+    if not batch_size_stages:
+        return
+
+    if len(batch_size_stages) == 0:
+        raise ValueError("Batch size stages should not be empty")
+
+    for i in range(len(batch_size_stages) - 1):
+        if batch_size_stages[i].batch_size >= batch_size_stages[i + 1].batch_size:
+            raise ValueError(
+                f"Batch size should be in ascending order. Got {batch_size_stages}"
+            )
+    if batch_size_stages[-1].max_iters is not None:
+        raise ValueError(
+            f"Batch size stages last stage should have max_iters = None, but get {batch_size_stages[-1].max_iters}"
+        )

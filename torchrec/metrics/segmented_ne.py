@@ -20,6 +20,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
 )
 
+
 PREDICTIONS = "predictions"
 LABELS = "labels"
 WEIGHTS = "weights"
@@ -247,9 +248,13 @@ class SegmentedNEMetricComputation(RecMetricComputation):
     def _compute(self) -> List[MetricComputationReport]:
         reports = []
         computed_ne = compute_ne(
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             self.cross_entropy_sum[0],
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             self.weighted_num_samples[0],
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             self.pos_labels[0],
+            # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedS...
             self.neg_labels[0],
             num_groups=self._num_groups,
             eta=self.eta,
@@ -267,8 +272,11 @@ class SegmentedNEMetricComputation(RecMetricComputation):
 
         if self._include_logloss:
             log_loss_groups = compute_logloss(
+                # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _Nes...
                 self.cross_entropy_sum[0],
+                # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _Nes...
                 self.pos_labels[0],
+                # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _Nes...
                 self.neg_labels[0],
                 eta=self.eta,
             )

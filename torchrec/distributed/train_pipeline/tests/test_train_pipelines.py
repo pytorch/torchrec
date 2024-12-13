@@ -10,15 +10,17 @@
 import copy
 
 import unittest
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, List, Optional, Tuple, Type
+from typing import cast, List, Optional, Tuple, Type, Union
 from unittest.mock import MagicMock
 
 import torch
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
 from torch._dynamo.testing import reduce_to_scalar_loss
+from torch._dynamo.utils import counters
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -53,6 +55,7 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     TrainPipelinePT2,
     TrainPipelineSemiSync,
     TrainPipelineSparseDist,
+    TrainPipelineSparseDistCompAutograd,
 )
 from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
@@ -261,6 +264,7 @@ class TrainPipelinePT2Test(unittest.TestCase):
         ]
 
         def pre_compile_fn(model: nn.Module) -> None:
+            # pyre-fixme[16]: `Module` has no attribute `_dummy_setting`.
             model._dummy_setting = "dummy modified"
 
         dataloader = iter(data)
@@ -295,10 +299,18 @@ class TrainPipelinePT2Test(unittest.TestCase):
         )
 
         model_gpu.load_state_dict(model_cpu.state_dict())
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `parameters`.
         optimizer_cpu = optim.SGD(model_cpu.model.parameters(), lr=0.01)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `parameters`.
         optimizer_gpu = optim.SGD(model_gpu.model.parameters(), lr=0.01)
 
-        data = [i.idlist_features for i in local_model_inputs]
+        data = [
+            i.idlist_features
+            for i in local_model_inputs
+            if isinstance(i.idlist_features, KeyedJaggedTensor)
+        ]
         dataloader = iter(data)
         pipeline = TrainPipelinePT2(
             model_gpu, optimizer_gpu, self.device, input_transformer=kjt_for_pt2_tracing
@@ -393,7 +405,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_sparse_arch_pipeline.parameters(), lr=0.1
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             sharded_sparse_arch_pipeline,
             optimizer_pipeline,
             self.device,
@@ -441,7 +453,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             dict(in_backward_optimizer_filter(distributed_model.named_parameters())),
             lambda params: optim.SGD(params, lr=0.1),
         )
-        return TrainPipelineSparseDist(
+        return self.pipeline_class(
             model=distributed_model,
             optimizer=optimizer_distributed,
             device=self.device,
@@ -508,7 +520,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -621,7 +633,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -642,7 +654,11 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
 
         # Check internal states
         ebcs = [
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model_pipelined.module.sparse.ebc,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model_pipelined.module.sparse.weighted_ebc,
         ]
         for ebc in ebcs:
@@ -719,7 +735,7 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -745,7 +761,11 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
 
         # Check internal states
         ebcs = [
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model_pipelined.module.sparse.ebc,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model_pipelined.module.sparse.weighted_ebc,
         ]
         for ebc in ebcs:
@@ -825,6 +845,54 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             )
         )
 
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_custom_fwd(
+        self,
+    ) -> None:
+        data = self._generate_data(
+            num_batches=4,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        fused_params_pipelined = {}
+        sharding_type = ShardingType.ROW_WISE.value
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+        sharded_model_pipelined: torch.nn.Module
+
+        model = self._setup_model()
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+
+        def custom_model_fwd(
+            input: Optional[ModelInput],
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
+            loss, pred = sharded_model_pipelined(input)
+            batch_size = pred.size(0)
+            return loss, pred.expand(batch_size * 2, -1)
+
+        pipeline = self.pipeline_class(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            custom_model_fwd=custom_model_fwd,
+        )
+
+        for _ in data:
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+            self.assertEqual(pred_pipeline.size(0), 64)
+
 
 class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
     def setUp(self) -> None:
@@ -862,7 +930,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             sharded_model.state_dict(), sharded_model_pipelined.state_dict()
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -964,19 +1032,29 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         self.assertEqual(
             pipelined_ebc.forward._args[0].preproc_modules[0],
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_nonweighted`.
             pipelined_model.module.preproc_nonweighted,
         )
         self.assertEqual(
             pipelined_weighted_ebc.forward._args[0].preproc_modules[0],
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_weighted`.
             pipelined_model.module.preproc_weighted,
         )
 
         # preproc args
         self.assertEqual(len(pipeline._pipelined_preprocs), 2)
-        for i, input_attr_name in [(0, "idlist_features"), (1, "idscore_features")]:
+        input_attr_names = {"idlist_features", "idscore_features"}
+        for i in range(len(pipeline._pipelined_preprocs)):
             preproc_mod = pipeline._pipelined_preprocs[i]
             self.assertEqual(len(preproc_mod._args), 1)
+
+            input_attr_name = preproc_mod._args[0].input_attrs[1]
+            self.assertTrue(input_attr_name in input_attr_names)
             self.assertEqual(preproc_mod._args[0].input_attrs, ["", input_attr_name])
+            input_attr_names.remove(input_attr_name)
+
             self.assertEqual(preproc_mod._args[0].is_getitems, [False, False])
             # no parent preproc module in FX graph
             self.assertEqual(preproc_mod._args[0].preproc_modules, [None, None])
@@ -1037,19 +1115,27 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         self.assertEqual(
             pipelined_ebc.forward._args[0].preproc_modules[0],
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_nonweighted`.
             pipelined_model.module.preproc_nonweighted,
         )
         self.assertEqual(
             pipelined_weighted_ebc.forward._args[0].preproc_modules[0],
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_weighted`.
             pipelined_model.module.preproc_weighted,
         )
 
         # preproc args
         self.assertEqual(len(pipeline._pipelined_preprocs), 3)
 
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `_preproc_module`.
         parent_preproc_mod = pipelined_model.module._preproc_module
 
         for preproc_mod in pipeline._pipelined_preprocs:
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_nonweighted`.
             if preproc_mod == pipelined_model.module.preproc_nonweighted:
                 self.assertEqual(len(preproc_mod._args), 1)
                 args = preproc_mod._args[0]
@@ -1061,6 +1147,8 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
                     parent_preproc_mod,
                 )
                 self.assertEqual(args.preproc_modules[1], None)
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_weighted`.
             elif preproc_mod == pipelined_model.module.preproc_weighted:
                 self.assertEqual(len(preproc_mod._args), 1)
                 args = preproc_mod._args[0]
@@ -1110,7 +1198,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1165,7 +1253,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1211,7 +1299,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1232,6 +1320,8 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(pipeline._pipelined_modules[0]._is_weighted, True)
         self.assertEqual(
             pipeline._pipelined_preprocs[0],
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `preproc_weighted`.
             sharded_model_pipelined.module.preproc_weighted,
         )
 
@@ -1274,7 +1364,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             model, self.sharding_type, self.kernel_type, self.fused_params
         )
 
-        pipeline = TrainPipelineSparseDist(
+        pipeline = self.pipeline_class(
             model=sharded_model_pipelined,
             optimizer=optim_pipelined,
             device=self.device,
@@ -1309,6 +1399,54 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             list(next_cached_results.keys()),
             ["_preproc_module", "preproc_nonweighted", "preproc_weighted"],
         )
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_nested_preproc(self) -> None:
+        """
+        If preproc module is nested, we should still be able to pipeline it
+        """
+        extra_input = ModelInput.generate(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            batch_size=self.batch_size,
+            world_size=1,
+            num_float_features=10,
+            randomize_indices=False,
+        )[0].to(self.device)
+
+        preproc_module = TestNegSamplingModule(
+            extra_input=extra_input,
+        )
+        model = self._setup_model(preproc_module=preproc_module)
+
+        class ParentModule(nn.Module):
+            def __init__(
+                self,
+                nested_model: nn.Module,
+            ) -> None:
+                super().__init__()
+                self.nested_model = nested_model
+
+            def forward(
+                self,
+                input: ModelInput,
+            ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+                return self.nested_model(input)
+
+        model = ParentModule(model)
+
+        pipelined_model, pipeline = self._check_output_equal(
+            model,
+            self.sharding_type,
+        )
+
+        # Check that both EC and EBC pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+        self.assertEqual(len(pipeline._pipelined_preprocs), 1)
 
 
 class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
@@ -1381,6 +1519,8 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
             stash_gradients=stash_gradients,
         )
 
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `sparse_forward`.
         prior_sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(
             data[0].to(self.device)
         )
@@ -1393,10 +1533,14 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
             # Forward + backward w/o pipelining
             batch = batch.to(self.device)
 
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `dense_forward`.
             loss, pred = sharded_model._dmp_wrapped_module.dense_forward(
                 prior_batch, prior_sparse_out
             )
             if batch_index - 1 >= start_batch:
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse_forward`.
                 sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
 
             loss.backward()
@@ -1419,6 +1563,8 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
             optim.zero_grad()
 
             if batch_index - 1 < start_batch:
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse_forward`.
                 sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
 
             prior_stashed_grads = stashed_grads
@@ -1908,7 +2054,11 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
 
         # Check internal states
         ebcs = [
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model_pipelined.module.sparse.ebc,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `sparse`.
             sharded_model_pipelined.module.sparse.weighted_ebc,
         ]
         for ebc in ebcs:
@@ -2094,3 +2244,42 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(len(pipelined_out), len(non_pipelined_outputs))
         for out, ref_out in zip(pipelined_out, non_pipelined_outputs):
             torch.testing.assert_close(out, ref_out)
+
+
+class TrainPipelineSparseDistCompAutogradTest(TrainPipelineSparseDistTest):
+    def setUp(self) -> None:
+        super().setUp()
+        torch.manual_seed(42)
+        self.pipeline_class = TrainPipelineSparseDistCompAutograd
+        torch._dynamo.reset()
+        counters["compiled_autograd"].clear()
+        # Compiled Autograd don't work with Anomaly Mode
+        torch.autograd.set_detect_anomaly(False)
+        self._exit_stack = ExitStack()
+        self._exit_stack.enter_context(
+            torch._dynamo.config.patch(
+                optimize_ddp="python_reducer_without_compiled_forward"
+            ),
+        )
+
+    def tearDown(self) -> None:
+        self._exit_stack.close()
+        self.assertEqual(counters["compiled_autograd"]["captures"], 3)
+        return super().tearDown()
+
+    @unittest.skip("Dynamo only supports FSDP with use_orig_params=True")
+    # pyre-ignore[56]
+    @given(execute_all_batches=st.booleans())
+    def test_pipelining_fsdp_pre_trace(self, execute_all_batches: bool) -> None:
+        super().test_pipelining_fsdp_pre_trace()
+
+    @unittest.skip(
+        "TrainPipelineSparseDistTest.test_equal_to_non_pipelined was called from multiple different executors, which fails hypothesis HealthChek, so we skip it here"
+    )
+    def test_equal_to_non_pipelined(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        execute_all_batches: bool,
+    ) -> None:
+        super().test_equal_to_non_pipelined()

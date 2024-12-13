@@ -212,6 +212,7 @@ class KeyedJaggedTensorPool(ObjectPool[KeyedJaggedTensor]):
             error_msgs,
         )
 
+        # pyre-fixme[16]: `KeyedJaggedTensorPoolLookup` has no attribute `_values`.
         self._lookup._values = state_dict[prefix + "values"]
         self._lookup._key_lengths = state_dict[prefix + "key_lengths"]
 

@@ -353,6 +353,7 @@ class QuantEmbeddingBagCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: Union[ShardingEnv, Dict[str, ShardingEnv]],
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
         fused_params = self.fused_params if self.fused_params else {}
         fused_params["output_dtype"] = data_type_to_sparse_type(
@@ -475,6 +476,7 @@ class QuantFeatureProcessedEmbeddingBagCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedQuantEmbeddingBagCollection:
         qebc = module
         assert isinstance(qebc, QuantEmbeddingBagCollection)
@@ -621,6 +623,8 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
             if self._has_features_permute:
                 features = features.permute(
                     self._features_order,
+                    # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
+                    #  but got `Union[Module, Tensor]`.
                     self._features_order_tensor,
                 )
             else:

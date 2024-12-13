@@ -13,16 +13,19 @@ import pdb  # noqa
 import sys
 
 from collections import OrderedDict
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch import nn
+from torch.autograd.profiler import record_function
 from torchrec import optim as trec_optim
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.types import (
     DataType,
+    EmbeddingEvent,
     ParameterSharding,
     ShardedModule,
     ShardingType,
@@ -467,9 +470,24 @@ def init_parameters(module: nn.Module, device: torch.device) -> None:
 
             def maybe_reset_parameters(m: nn.Module) -> None:
                 if hasattr(m, "reset_parameters"):
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     m.reset_parameters()
 
             module.apply(maybe_reset_parameters)
+
+
+def maybe_annotate_embedding_event(
+    event: EmbeddingEvent,
+    module_fqn: Optional[str],
+    sharding_type: Optional[str],
+    # pyre-fixme[24]: Generic type `AbstractContextManager` expects 2 type parameters,
+    #  received 1.
+) -> AbstractContextManager[None]:
+    if module_fqn and sharding_type:
+        annotation = f"[{event.value}]_[{module_fqn}]_[{sharding_type}]"
+        return record_function(annotation)
+    else:
+        return nullcontext()
 
 
 class ForkedPdb(pdb.Pdb):

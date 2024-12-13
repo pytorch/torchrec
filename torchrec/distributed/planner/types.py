@@ -23,6 +23,7 @@ from torchrec.distributed.planner.constants import (
     DDR_MEM_BW,
     HBM_CAP,
     HBM_MEM_BW,
+    HBM_TO_DDR_MEM_BW,
     INTRA_NODE_BANDWIDTH,
     POOLING_FACTOR,
     WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER,
@@ -184,6 +185,7 @@ class Topology:
         local_world_size: Optional[int] = None,
         hbm_mem_bw: float = HBM_MEM_BW,
         ddr_mem_bw: float = DDR_MEM_BW,
+        hbm_to_ddr_mem_bw: float = HBM_TO_DDR_MEM_BW,
         intra_host_bw: float = INTRA_NODE_BANDWIDTH,
         inter_host_bw: float = CROSS_NODE_BANDWIDTH,
         bwd_compute_multiplier: float = BWD_COMPUTE_MULTIPLIER,
@@ -238,6 +240,7 @@ class Topology:
         )
         self._hbm_mem_bw = hbm_mem_bw
         self._ddr_mem_bw = ddr_mem_bw
+        self._hbm_to_ddr_mem_bw = hbm_to_ddr_mem_bw
         self._intra_host_bw = intra_host_bw
         self._inter_host_bw = inter_host_bw
         self._bwd_compute_multiplier = bwd_compute_multiplier
@@ -270,6 +273,10 @@ class Topology:
     @property
     def ddr_mem_bw(self) -> float:
         return self._ddr_mem_bw
+
+    @property
+    def hbm_to_ddr_mem_bw(self) -> float:
+        return self._hbm_to_ddr_mem_bw
 
     @property
     def intra_host_bw(self) -> float:
@@ -537,6 +544,8 @@ class PartitionByType(Enum):
     HOST = "host"
     # Uniform, (ie. fixed layout)
     UNIFORM = "uniform"
+    # Partitioning based on multiple hosts
+    MULTI_HOST = "multi_host"
 
 
 @dataclass
@@ -720,7 +729,15 @@ class Proposer(abc.ABC):
         self,
         search_space: List[ShardingOption],
         enumerator: Optional[Enumerator] = None,
-    ) -> None: ...
+    ) -> None:
+        """
+        Load search space into proposer.
+
+        Args:
+            search_space (List[ShardingOption]): search space to load.
+            enumerator (Enumerator): enumerator used to generate search space.
+        """
+        ...
 
     @abc.abstractmethod
     def feedback(
@@ -729,10 +746,27 @@ class Proposer(abc.ABC):
         plan: Optional[List[ShardingOption]] = None,
         perf_rating: Optional[float] = None,
         storage_constraint: Optional[Topology] = None,
-    ) -> None: ...
+    ) -> None:
+        """
+        Provide feedback to proposer.
+
+        Args:
+            partitionable (bool): whether the plan is partitionable.
+            plan (Optional[List[ShardingOption]]): plan to provide feedback on.
+            perf_rating (Optional[float]): performance rating of the plan.
+            storage_constraint (Optional[Topology]): storage constraint of the plan.
+        """
+        ...
 
     @abc.abstractmethod
-    def propose(self) -> Optional[List[ShardingOption]]: ...
+    def propose(self) -> Optional[List[ShardingOption]]:
+        """
+        Propose a sharding plan.
+
+        Returns:
+            Optional[List[ShardingOption]]: proposed plan.
+        """
+        ...
 
 
 class Partitioner(abc.ABC):

@@ -42,16 +42,22 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from fbgemm_gpu.tbe.ssd import ASSOC, SSDTableBatchedEmbeddingBags
+from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
+    PartiallyMaterializedTensor,
+)
 from torch import nn
-from torchrec.distributed.comm import get_local_rank
+from torch.distributed._tensor import DTensor, Replicate, Shard as DTensorShard
+from torchrec.distributed.comm import get_local_rank, get_node_group_size
 from torchrec.distributed.composable.table_batched_embedding_slice import (
     TableBatchedEmbeddingSlice,
 )
 from torchrec.distributed.embedding_kernel import BaseEmbedding, get_state_dict
 from torchrec.distributed.embedding_types import (
     compute_kernel_to_embedding_location,
+    DTensorMetadata,
     GroupedEmbeddingConfig,
 )
+from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 from torchrec.distributed.types import (
     Shard,
     ShardedTensor,
@@ -210,34 +216,75 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             optimizer_states: List[Optional[Tuple[torch.Tensor]]]
             local_metadata: List[ShardMetadata]
             embedding_weights: List[torch.Tensor]
+            dtensor_metadata: List[DTensorMetadata]
+
+        def get_optimizer_single_value_shard_metadata_and_global_metadata(
+            table_global_metadata: ShardedTensorMetadata,
+            optimizer_state: torch.Tensor,
+        ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
+            table_global_shards_metadata: List[ShardMetadata] = (
+                table_global_metadata.shards_metadata
+            )
+
+            table_shard_metadata_to_optimizer_shard_metadata = {}
+            for offset, table_shard_metadata in enumerate(table_global_shards_metadata):
+                table_shard_metadata_to_optimizer_shard_metadata[
+                    table_shard_metadata
+                ] = ShardMetadata(
+                    shard_sizes=[1],  # single value optimizer state
+                    shard_offsets=[offset],  # offset increases by 1 for each shard
+                    placement=table_shard_metadata.placement,
+                )
+
+            tensor_properties = TensorProperties(
+                dtype=optimizer_state.dtype,
+                layout=optimizer_state.layout,
+                requires_grad=False,
+            )
+            single_value_optimizer_st_metadata = ShardedTensorMetadata(
+                shards_metadata=list(
+                    table_shard_metadata_to_optimizer_shard_metadata.values()
+                ),
+                size=torch.Size([len(table_global_shards_metadata)]),
+                tensor_properties=tensor_properties,
+            )
+
+            return (
+                table_shard_metadata_to_optimizer_shard_metadata,
+                single_value_optimizer_st_metadata,
+            )
 
         def get_optimizer_rowwise_shard_metadata_and_global_metadata(
             table_global_metadata: ShardedTensorMetadata,
             optimizer_state: torch.Tensor,
             sharding_dim: int,
+            is_grid_sharded: bool = False,
         ) -> Tuple[Dict[ShardMetadata, ShardMetadata], ShardedTensorMetadata]:
-
             table_global_shards_metadata: List[ShardMetadata] = (
                 table_global_metadata.shards_metadata
             )
 
-            # column-wise sharding
-            # sort the metadata based on column offset and
-            # we construct the momentum tensor in row-wise sharded way
             if sharding_dim == 1:
+                # column-wise sharding
+                # sort the metadata based on column offset and
+                # we construct the momentum tensor in row-wise sharded way
                 table_global_shards_metadata = sorted(
                     table_global_shards_metadata,
                     key=lambda shard: shard.shard_offsets[1],
                 )
 
             table_shard_metadata_to_optimizer_shard_metadata = {}
-
+            rolling_offset = 0
             for idx, table_shard_metadata in enumerate(table_global_shards_metadata):
                 offset = table_shard_metadata.shard_offsets[0]
-                # for column-wise sharding, we still create row-wise sharded metadata for optimizer
-                # manually create a row-wise offset
 
-                if sharding_dim == 1:
+                if is_grid_sharded:
+                    # we use a rolling offset to calculate the current offset for shard to account for uneven row wise case for our shards
+                    offset = rolling_offset
+                    rolling_offset += table_shard_metadata.shard_sizes[0]
+                elif sharding_dim == 1:
+                    # for column-wise sharding, we still create row-wise sharded metadata for optimizer
+                    # manually create a row-wise offset
                     offset = idx * table_shard_metadata.shard_sizes[0]
 
                 table_shard_metadata_to_optimizer_shard_metadata[
@@ -255,14 +302,22 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             )
             len_rw_shards = (
                 len(table_shard_metadata_to_optimizer_shard_metadata)
-                if sharding_dim == 1
+                if sharding_dim == 1 and not is_grid_sharded
+                else 1
+            )
+            # for grid sharding, the row dimension is replicated CW shard times
+            grid_shard_nodes = (
+                len(table_global_shards_metadata) // get_node_group_size()
+                if is_grid_sharded
                 else 1
             )
             rowwise_optimizer_st_metadata = ShardedTensorMetadata(
                 shards_metadata=list(
                     table_shard_metadata_to_optimizer_shard_metadata.values()
                 ),
-                size=torch.Size([table_global_metadata.size[0] * len_rw_shards]),
+                size=torch.Size(
+                    [table_global_metadata.size[0] * len_rw_shards * grid_shard_nodes]
+                ),
                 tensor_properties=tensor_properties,
             )
 
@@ -324,7 +379,6 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
 
         all_optimizer_states = emb_module.get_optimizer_state()
         optimizer_states_keys_by_table: Dict[str, List[torch.Tensor]] = {}
-
         for (
             table_config,
             optimizer_states,
@@ -339,13 +393,19 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 continue
             if table_config.name not in table_to_shard_params:
                 table_to_shard_params[table_config.name] = ShardParams(
-                    optimizer_states=[], local_metadata=[], embedding_weights=[]
+                    optimizer_states=[],
+                    local_metadata=[],
+                    embedding_weights=[],
+                    dtensor_metadata=[],
                 )
             optimizer_state_values = None
             if optimizer_states:
                 optimizer_state_values = tuple(optimizer_states.values())
                 for optimizer_state_value in optimizer_state_values:
-                    assert table_config.local_rows == optimizer_state_value.size(0)
+                    assert (
+                        table_config.local_rows == optimizer_state_value.size(0)
+                        or optimizer_state_value.nelement() == 1  # single value state
+                    )
                 optimizer_states_keys_by_table[table_config.name] = list(
                     optimizer_states.keys()
                 )
@@ -356,6 +416,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             )
             table_to_shard_params[table_config.name].local_metadata.append(
                 local_metadata
+            )
+            table_to_shard_params[table_config.name].dtensor_metadata.append(
+                table_config.dtensor_metadata
             )
             table_to_shard_params[table_config.name].embedding_weights.append(weight)
 
@@ -408,37 +471,56 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                 1 if table_config.local_cols != table_config.embedding_dim else 0
             )
 
+            is_grid_sharded: bool = (
+                True
+                if table_config.local_cols != table_config.embedding_dim
+                and table_config.local_rows != table_config.num_embeddings
+                else False
+            )
+
             if all(
                 opt_state is not None for opt_state in shard_params.optimizer_states
             ):
                 # pyre-ignore
-                def get_sharded_optim_state(momentum_idx: int) -> ShardedTensor:
+                def get_sharded_optim_state(
+                    momentum_idx: int, state_key: str
+                ) -> Union[ShardedTensor, DTensor]:
                     assert momentum_idx > 0
                     momentum_local_shards: List[Shard] = []
                     optimizer_sharded_tensor_metadata: ShardedTensorMetadata
 
-                    is_rowwise_optimizer_state: bool = (
-                        # pyre-ignore
-                        shard_params.optimizer_states[0][momentum_idx - 1].dim()
-                        == 1
-                    )
-
-                    if is_rowwise_optimizer_state:
+                    # pyre-ignore [16]
+                    optim_state = shard_params.optimizer_states[0][momentum_idx - 1]
+                    if (
+                        optim_state.nelement() == 1 and state_key != "momentum1"
+                    ):  # special handling for backward compatibility, momentum1 is rowwise state for rowwise_adagrad
+                        # single value state: one value per table
+                        (
+                            table_shard_metadata_to_optimizer_shard_metadata,
+                            optimizer_sharded_tensor_metadata,
+                        ) = get_optimizer_single_value_shard_metadata_and_global_metadata(
+                            table_config.global_metadata,
+                            optim_state,
+                        )
+                    elif optim_state.dim() == 1:
+                        # rowwise state: param.shape[0] == state.shape[0], state.shape[1] == 1
                         (
                             table_shard_metadata_to_optimizer_shard_metadata,
                             optimizer_sharded_tensor_metadata,
                         ) = get_optimizer_rowwise_shard_metadata_and_global_metadata(
                             table_config.global_metadata,
-                            shard_params.optimizer_states[0][momentum_idx - 1],
+                            optim_state,
                             sharding_dim,
+                            is_grid_sharded,
                         )
                     else:
+                        # pointwise state: param.shape == state.shape
                         (
                             table_shard_metadata_to_optimizer_shard_metadata,
                             optimizer_sharded_tensor_metadata,
                         ) = get_optimizer_pointwise_shard_metadata_and_global_metadata(
                             table_config.global_metadata,
-                            shard_params.optimizer_states[0][momentum_idx - 1],
+                            optim_state,
                         )
 
                     for optimizer_state, table_shard_local_metadata in zip(
@@ -456,12 +538,41 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                             )
                         )
 
-                    # TODO we should be creating this in SPMD fashion (e.g. init_from_local_shards), and let it derive global metadata.
-                    return ShardedTensor._init_from_local_shards_and_global_metadata(
-                        local_shards=momentum_local_shards,
-                        sharded_tensor_metadata=optimizer_sharded_tensor_metadata,
-                        process_group=self._pg,
-                    )
+                    # Convert optimizer state to DTensor if enabled
+                    if table_config.dtensor_metadata:
+                        # if rowwise state we do Shard(0), regardless of how the table is sharded
+                        if optim_state.dim() == 1:
+                            stride = (1,)
+                            placements = (
+                                (Replicate(), DTensorShard(0))
+                                if table_config.dtensor_metadata.mesh.ndim == 2
+                                else (DTensorShard(0),)
+                            )
+                        else:
+                            stride = table_config.dtensor_metadata.stride
+                            placements = table_config.dtensor_metadata.placements
+
+                        return DTensor.from_local(
+                            local_tensor=LocalShardsWrapper(
+                                local_shards=[x.tensor for x in momentum_local_shards],
+                                local_offsets=[  # pyre-ignore[6]
+                                    x.metadata.shard_offsets
+                                    for x in momentum_local_shards
+                                ],
+                            ),
+                            device_mesh=table_config.dtensor_metadata.mesh,
+                            placements=placements,
+                            shape=optimizer_sharded_tensor_metadata.size,
+                            stride=stride,
+                            run_check=False,
+                        )
+                    else:
+                        # TODO we should be creating this in SPMD fashion (e.g. init_from_local_shards), and let it derive global metadata.
+                        return ShardedTensor._init_from_local_shards_and_global_metadata(
+                            local_shards=momentum_local_shards,
+                            sharded_tensor_metadata=optimizer_sharded_tensor_metadata,
+                            process_group=self._pg,
+                        )
 
                 num_states: int = min(
                     # pyre-ignore
@@ -480,7 +591,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
                         cur_state_key = optimizer_state_keys[cur_state_idx]
 
                     state[weight][f"{table_config.name}.{cur_state_key}"] = (
-                        get_sharded_optim_state(cur_state_idx + 1)
+                        get_sharded_optim_state(cur_state_idx + 1, cur_state_key)
                     )
 
         super().__init__(params, state, [param_group])
@@ -516,6 +627,27 @@ def _gen_named_parameters_by_table_ssd(
         yield (table_name, weight)
 
 
+def _gen_named_parameters_by_table_ssd_pmt(
+    emb_module: SSDTableBatchedEmbeddingBags,
+    table_name_to_count: Dict[str, int],
+    config: GroupedEmbeddingConfig,
+    pg: Optional[dist.ProcessGroup] = None,
+) -> Iterator[Tuple[str, nn.Parameter]]:
+    """
+    Return an iterator over module parameters that are embedding tables, yielding both the table
+    name as well as the parameter itself. The embedding table is in the form of
+    PartiallyMaterializedTensor to support windowed access.
+    """
+    pmts = emb_module.split_embedding_weights()
+    for table_config, pmt in zip(config.embedding_tables, pmts):
+        table_name = table_config.name
+        emb_table = pmt
+        weight: nn.Parameter = nn.Parameter(emb_table)
+        # pyre-ignore
+        weight._in_backward_optimizers = [EmptyFusedOptimizer()]
+        yield (table_name, weight)
+
+
 def _gen_named_parameters_by_table_fused(
     emb_module: SplitTableBatchedEmbeddingBagsCodegen,
     table_name_to_count: Dict[str, int],
@@ -530,13 +662,17 @@ def _gen_named_parameters_by_table_fused(
         table_count = table_name_to_count.pop(table_name)
         if emb_module.weights_precision == SparseType.INT8:
             dim += emb_module.int8_emb_row_dim_offset
+        # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, _NestedSeque...
         offset = emb_module.weights_physical_offsets[t_idx]
         weights: torch.Tensor
         if location == EmbeddingLocation.DEVICE.value:
+            # pyre-fixme[9]: weights has type `Tensor`; used as `Union[Module, Tensor]`.
             weights = emb_module.weights_dev
         elif location == EmbeddingLocation.HOST.value:
+            # pyre-fixme[9]: weights has type `Tensor`; used as `Union[Module, Tensor]`.
             weights = emb_module.weights_host
         else:
+            # pyre-fixme[9]: weights has type `Tensor`; used as `Union[Module, Tensor]`.
             weights = emb_module.weights_uvm
         weight = TableBatchedEmbeddingSlice(
             data=weights,
@@ -605,13 +741,24 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
         self.table_name_to_count: Dict[str, int] = {}
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = {}
 
+        # pyre-fixme[9]: config has type `GroupedEmbeddingConfig`; used as
+        #  `ShardedEmbeddingTable`.
         for idx, config in enumerate(self._config.embedding_tables):
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_rows`.
             self._local_rows.append(config.local_rows)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_min`.
             self._weight_init_mins.append(config.get_weight_init_min())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_max`.
             self._weight_init_maxs.append(config.get_weight_init_max())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `num_embeddings`.
             self._num_embeddings.append(config.num_embeddings)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_cols`.
             self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `name`.
             if config.name not in self.table_name_to_count:
                 self.table_name_to_count[config.name] = 0
             self.table_name_to_count[config.name] += 1
@@ -1011,13 +1158,24 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         self.table_name_to_count: Dict[str, int] = {}
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = {}
 
+        # pyre-fixme[9]: config has type `GroupedEmbeddingConfig`; used as
+        #  `ShardedEmbeddingTable`.
         for idx, config in enumerate(self._config.embedding_tables):
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_rows`.
             self._local_rows.append(config.local_rows)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_min`.
             self._weight_init_mins.append(config.get_weight_init_min())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `get_weight_init_max`.
             self._weight_init_maxs.append(config.get_weight_init_max())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute
+            #  `num_embeddings`.
             self._num_embeddings.append(config.num_embeddings)
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `local_cols`.
             self._local_cols.append(config.local_cols)
             self._feature_table_map.extend([idx] * config.num_features())
+            # pyre-fixme[16]: `GroupedEmbeddingConfig` has no attribute `name`.
             if config.name not in self.table_name_to_count:
                 self.table_name_to_count[config.name] = 0
             self.table_name_to_count[config.name] += 1
@@ -1047,6 +1205,7 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
             (
                 SplitTableBatchedEmbeddingBagsCodegen,
                 DenseTableBatchedEmbeddingBagsCodegen,
+                SSDTableBatchedEmbeddingBags,
             ),
         ):
             return self.emb_module(
@@ -1156,13 +1315,17 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
             **ssd_tbe_params,
         ).to(device)
 
+        logger.info(
+            f"tbe_unique_id:{self._emb_module.tbe_unique_id} => table name to count dict:{self.table_name_to_count}"
+        )
+
         self._optim: KeyValueEmbeddingFusedOptimizer = KeyValueEmbeddingFusedOptimizer(
             config,
             self._emb_module,
             pg,
         )
         self._param_per_table: Dict[str, nn.Parameter] = dict(
-            _gen_named_parameters_by_table_ssd(
+            _gen_named_parameters_by_table_ssd_pmt(
                 emb_module=self._emb_module,
                 table_name_to_count=self.table_name_to_count.copy(),
                 config=self._config,
@@ -1196,11 +1359,31 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         destination: Optional[Dict[str, Any]] = None,
         prefix: str = "",
         keep_vars: bool = False,
+        no_snapshot: bool = True,
     ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
+        """
+        Args:
+            no_snapshot (bool): the tensors in the returned dict are
+                PartiallyMaterializedTensors. this argument controls wether the
+                PartiallyMaterializedTensor owns a RocksDB snapshot handle. True means the
+                PartiallyMaterializedTensor doesn't have a RocksDB snapshot handle.  False means the
+                PartiallyMaterializedTensor has a RocksDB snapshot handle
+        """
+        # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
+        # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        return destination
+        emb_tables = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            emb_table.local_metadata.placement._device = torch.device("cpu")
+        ret = get_state_dict(
+            emb_table_config_copy,
+            emb_tables,
+            self._pg,
+            destination,
+            prefix,
+        )
+        return ret
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -1213,14 +1396,16 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         ):
             # hack before we support optimizer on sharded parameter level
             # can delete after PEA deprecation
+            # pyre-ignore [6]
             param = nn.Parameter(tensor)
             # pyre-ignore
             param._in_backward_optimizers = [EmptyFusedOptimizer()]
             yield name, param
 
+    # pyre-ignore [15]
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
         assert (
             remove_duplicate
         ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
@@ -1229,6 +1414,21 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
             self.split_embedding_weights(),
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, tensor
+
+    def get_named_split_embedding_weights_snapshot(
+        self, prefix: str = ""
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+        """
+        Return an iterator over embedding tables, yielding both the table name as well as the embedding
+        table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
+        RocksDB snapshot to support windowed access.
+        """
+        for config, tensor in zip(
+            self._config.embedding_tables,
+            self.split_embedding_weights(no_snapshot=False),
+        ):
+            key = append_prefix(prefix, f"{config.name}")
             yield key, tensor
 
     def flush(self) -> None:
@@ -1245,11 +1445,11 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
 
-    def split_embedding_weights(self) -> List[torch.Tensor]:
-        """
-        Return fake tensors.
-        """
-        return [param.data for param in self._param_per_table.values()]
+    # pyre-ignore [15]
+    def split_embedding_weights(
+        self, no_snapshot: bool = True
+    ) -> List[PartiallyMaterializedTensor]:
+        return self.emb_module.split_embedding_weights(no_snapshot)
 
 
 class BatchedFusedEmbeddingBag(
@@ -1289,7 +1489,6 @@ class BatchedFusedEmbeddingBag(
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
-
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(

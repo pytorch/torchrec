@@ -21,15 +21,19 @@ from torch.profiler import record_function
 from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.auprc import AUPRCMetric
+from torchrec.metrics.cali_free_ne import CaliFreeNEMetric
 from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.ctr import CTRMetric
+from torchrec.metrics.hindsight_target_pr import HindsightTargetPRMetric
 from torchrec.metrics.mae import MAEMetric
 from torchrec.metrics.metrics_config import (
+    BatchSizeStage,
     MetricsConfig,
     RecMetricEnum,
     RecMetricEnumBase,
     RecTaskInfo,
     StateMetricEnum,
+    validate_batch_size_stages,
 )
 from torchrec.metrics.metrics_namespace import (
     compose_customized_metric_key,
@@ -41,7 +45,10 @@ from torchrec.metrics.mse import MSEMetric
 from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
 from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
+from torchrec.metrics.ne_positive import NEPositiveMetric
+from torchrec.metrics.output import OutputMetric
 from torchrec.metrics.precision import PrecisionMetric
+from torchrec.metrics.precision_session import PrecisionSessionMetric
 from torchrec.metrics.rauc import RAUCMetric
 from torchrec.metrics.rec_metric import RecMetric, RecMetricList
 from torchrec.metrics.recall import RecallMetric
@@ -50,8 +57,10 @@ from torchrec.metrics.scalar import ScalarMetric
 from torchrec.metrics.segmented_ne import SegmentedNEMetric
 from torchrec.metrics.serving_calibration import ServingCalibrationMetric
 from torchrec.metrics.serving_ne import ServingNEMetric
+from torchrec.metrics.tensor_weighted_avg import TensorWeightedAvgMetric
 from torchrec.metrics.throughput import ThroughputMetric
 from torchrec.metrics.tower_qps import TowerQPSMetric
+from torchrec.metrics.unweighted_ne import UnweightedNEMetric
 from torchrec.metrics.weighted_avg import WeightedAvgMetric
 from torchrec.metrics.xauc import XAUCMetric
 
@@ -60,6 +69,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.NE: NEMetric,
+    RecMetricEnum.NE_POSITIVE: NEPositiveMetric,
     RecMetricEnum.SEGMENTED_NE: SegmentedNEMetric,
     RecMetricEnum.CTR: CTRMetric,
     RecMetricEnum.CALIBRATION: CalibrationMetric,
@@ -72,6 +82,7 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.WEIGHTED_AVG: WeightedAvgMetric,
     RecMetricEnum.TOWER_QPS: TowerQPSMetric,
     RecMetricEnum.RECALL_SESSION_LEVEL: RecallSessionMetric,
+    RecMetricEnum.PRECISION_SESSION_LEVEL: PrecisionSessionMetric,
     RecMetricEnum.ACCURACY: AccuracyMetric,
     RecMetricEnum.NDCG: NDCGMetric,
     RecMetricEnum.XAUC: XAUCMetric,
@@ -80,6 +91,11 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.RECALL: RecallMetric,
     RecMetricEnum.SERVING_NE: ServingNEMetric,
     RecMetricEnum.SERVING_CALIBRATION: ServingCalibrationMetric,
+    RecMetricEnum.OUTPUT: OutputMetric,
+    RecMetricEnum.TENSOR_WEIGHTED_AVG: TensorWeightedAvgMetric,
+    RecMetricEnum.CALI_FREE_NE: CaliFreeNEMetric,
+    RecMetricEnum.UNWEIGHTED_NE: UnweightedNEMetric,
+    RecMetricEnum.HINDSIGHT_TARGET_PR: HindsightTargetPRMetric,
 }
 
 
@@ -385,6 +401,8 @@ def _generate_rec_metrics(
         if metric_def and metric_def.arguments is not None:
             kwargs = metric_def.arguments
 
+        kwargs["enable_pt2_compile"] = metrics_config.enable_pt2_compile
+
         rec_tasks: List[RecTaskInfo] = []
         if metric_def.rec_tasks and metric_def.rec_task_indices:
             raise ValueError(
@@ -454,16 +472,25 @@ def generate_metric_module(
     state_metrics_mapping: Dict[StateMetricEnum, StateMetric],
     device: torch.device,
     process_group: Optional[dist.ProcessGroup] = None,
+    batch_size_stages: Optional[List[BatchSizeStage]] = None,
 ) -> RecMetricModule:
     rec_metrics = _generate_rec_metrics(
         metrics_config, world_size, my_rank, batch_size, process_group
     )
+    """
+    Batch_size_stages currently only used by ThroughputMetric to ensure total_example correct so
+    different training jobs have aligned mertics.
+    TODO: update metrics other than ThroughputMetric if it has dependency on batch_size
+    """
+    validate_batch_size_stages(batch_size_stages)
+
     if metrics_config.throughput_metric:
         throughput_metric = ThroughputMetric(
             batch_size=batch_size,
             world_size=world_size,
             window_seconds=metrics_config.throughput_metric.window_size,
             warmup_steps=metrics_config.throughput_metric.warmup_steps,
+            batch_size_stages=batch_size_stages,
         )
     else:
         throughput_metric = None

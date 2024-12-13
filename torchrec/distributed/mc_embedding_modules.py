@@ -121,6 +121,11 @@ class BaseShardedManagedCollisionEmbeddingCollection(
                 env=env,
                 device=device,
                 embedding_shardings=embedding_shardings,
+                use_index_dedup=(
+                    e_sharder._use_index_dedup
+                    if isinstance(e_sharder, EmbeddingCollectionSharder)
+                    else False
+                ),
             )
         )
         self._return_remapped_features: bool = module._return_remapped_features
@@ -128,6 +133,8 @@ class BaseShardedManagedCollisionEmbeddingCollection(
         # pyre-ignore
         self._table_to_tbe_and_index = {}
         for lookup in self._embedding_module._lookups:
+            # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Tensor, Module]` is not
+            #  a function.
             for emb_module in lookup._emb_modules:
                 for table_idx, table in enumerate(emb_module._config.embedding_tables):
                     self._table_to_tbe_and_index[table.name] = (
@@ -177,12 +184,16 @@ class BaseShardedManagedCollisionEmbeddingCollection(
 
                     if self.bagged:
                         table_weight_param = (
+                            # pyre-fixme[16]: Item `Tensor` of `Tensor | ModuleDict
+                            #  | Module` has no attribute `get_parameter`.
                             self._embedding_module.embedding_bags.get_parameter(
                                 f"{table}.weight"
                             )
                         )
                     else:
                         table_weight_param = (
+                            # pyre-fixme[16]: Item `Tensor` of `Tensor | ModuleDict
+                            #  | Module` has no attribute `get_parameter`.
                             self._embedding_module.embeddings.get_parameter(
                                 f"{table}.weight"
                             )

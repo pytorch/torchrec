@@ -13,9 +13,11 @@ from typing import Callable, Dict, List, Tuple
 
 import torch
 import torch.utils._pytree as pytree
+from torch.fx._pytree import tree_flatten_spec
 from torch.testing import FileCheck
 from torchrec.fx import symbolic_trace
 from torchrec.sparse.jagged_tensor import (
+    _fbgemm_permute_pooled_embs,
     _kt_regroup_arguments,
     _regroup_keyed_tensors,
     ComputeJTDictToKJT,
@@ -1536,6 +1538,39 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         # pyre-ignore[6]
         self.assertListEqual(kjt_expected._length_per_key, kjt_actual._length_per_key)
 
+    def test_concat_fxable(self) -> None:
+        class MyModule(torch.nn.Module):
+            def forward(self, inputs: List[KeyedJaggedTensor]) -> KeyedJaggedTensor:
+                return KeyedJaggedTensor.concat(inputs)
+
+        m = MyModule()
+
+        # input
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+        keys = ["index_0", "index_1", "index_2"]
+        lengths = torch.IntTensor([0, 2, 0, 1, 1, 1, 0, 3, 0, 0, 1, 0])
+        kjt_1 = KeyedJaggedTensor.from_lengths_sync(
+            values=values[:4],
+            keys=keys[:1],
+            lengths=lengths[:4],
+        )
+        kjt_2 = KeyedJaggedTensor.from_lengths_sync(
+            values=values[4:],
+            keys=keys[1:],
+            lengths=lengths[4:],
+        )
+        inputs = [kjt_1, kjt_2]
+
+        # ensure that symbolic tracing works
+        gm = torch.fx.symbolic_trace(m)
+        kjt_expected = m(inputs)
+        kjt_actual = gm(inputs)
+
+        self.assertTrue(torch.equal(kjt_expected.lengths(), kjt_actual.lengths()))
+        self.assertTrue(torch.equal(kjt_expected.offsets(), kjt_actual.offsets()))
+        self.assertTrue(torch.equal(kjt_expected.values(), kjt_actual.values()))
+        self.assertListEqual(kjt_expected._length_per_key, kjt_actual._length_per_key)
+
     def test_length_vs_offset(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
@@ -2121,13 +2156,13 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
                     lengths=input.lengths(),
                     offsets=input.offsets(),
                 )
-                return output, output._stride
+                return output, output.stride()
 
         # Case 3: KeyedJaggedTensor is used as both an input and an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsInputAndOutput()
         gm = symbolic_trace(m)
         FileCheck().check("KeyedJaggedTensor").check("keys()").check("values()").check(
-            "._stride"
+            "stride"
         ).run(gm.code)
         input = KeyedJaggedTensor.from_offsets_sync(
             values=torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
@@ -2185,7 +2220,7 @@ class TestKeyedJaggedTensorTracingScripting(unittest.TestCase):
                 lengths: torch.Tensor,
             ) -> Tuple[KeyedJaggedTensor, int]:
                 output = KeyedJaggedTensor(keys, values, weights, lengths)
-                return output, output._stride
+                return output, output.stride()
 
         # Case 1: KeyedJaggedTensor is only used as an output of the root module.
         m = ModuleUseKeyedJaggedTensorAsOutput()
@@ -2308,6 +2343,7 @@ class TestKeyedTensor(unittest.TestCase):
             KeyedTensor.regroup,
             regroup_kts,
             permute_multi_embedding,
+            _fbgemm_permute_pooled_embs,
         ],
         device_str=["cpu", "cuda", "meta"],
     )
@@ -2342,6 +2378,7 @@ class TestKeyedTensor(unittest.TestCase):
             KeyedTensor.regroup,
             regroup_kts,
             permute_multi_embedding,
+            _fbgemm_permute_pooled_embs,
         ],
         device_str=["cpu", "cuda", "meta"],
     )
@@ -2412,18 +2449,33 @@ class TestKeyedTensor(unittest.TestCase):
         torch.allclose(actual_kt_0_grad, expected_kt_0_grad)
         torch.allclose(actual_kt_1_grad, expected_kt_1_grad)
 
-    def test_regroup_backward(self) -> None:
+    @repeat_test(
+        regroup_func=[
+            KeyedTensor.regroup,
+            regroup_kts,
+            permute_multi_embedding,
+            _fbgemm_permute_pooled_embs,
+        ],
+        device_str=["cpu", "cuda"],
+    )
+    def test_regroup_backward(
+        self, regroup_func: Callable[..., List[torch.Tensor]], device_str: str
+    ) -> None:
+        if device_str == "cuda" and not torch.cuda.is_available():
+            return
+        else:
+            device = torch.device(device_str)
         kts = build_kts(
             dense_features=20,
             sparse_features=20,
             dim_dense=64,
             dim_sparse=128,
             batch_size=128,
-            device=torch.device("cpu"),
+            device=device,
             run_backward=True,
         )
         groups = build_groups(kts=kts, num_groups=2, skips=False, duplicates=False)
-        labels = torch.randint(0, 1, (128,), device=torch.device("cpu")).float()
+        labels = torch.randint(0, 1, (128,), device=device).float()
 
         tensor_groups = KeyedTensor.regroup(kts, groups)
         pred0 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
@@ -2439,7 +2491,7 @@ class TestKeyedTensor(unittest.TestCase):
         kts[0].values().grad = None
         kts[1].values().grad = None
 
-        tensor_groups = _regroup_keyed_tensors(kts, groups)
+        tensor_groups = regroup_func(kts, groups)
         pred1 = tensor_groups[0].sum(dim=1).mul(tensor_groups[1].sum(dim=1))
         loss = torch.nn.functional.l1_loss(pred1, labels).sum()
         expected_kt_0_grad = torch.autograd.grad(
@@ -2691,20 +2743,44 @@ KeyedTensor({
 
     def test_pytree(self) -> None:
         tensor_list = [
-            torch.Tensor([[1.0, 1.0]]),
-            torch.Tensor([[2.0, 2.0], [3.0, 3.0]]),
+            torch.Tensor([[1.0, 1.0]]).T,
+            torch.Tensor([[2.0, 2.0], [3.0, 3.0]]).T,
         ]
         keys = ["dense_0", "dense_1"]
-        kt = KeyedTensor.from_tensor_list(keys, tensor_list, cat_dim=0, key_dim=0)
-
+        kt = KeyedTensor.from_tensor_list(keys, tensor_list, cat_dim=1, key_dim=1)
+        # generate the out_spec in the torch.export run
         flattened, out_spec = pytree.tree_flatten(kt)
 
+        # first element of flattened list should be the kt._values
         self.assertTrue(torch.equal(flattened[0], kt.values()))
+        # re-construct the unflattened kt from the flattened list plus the out_spec
         unflattened = pytree.tree_unflatten(flattened, out_spec)
 
         self.assertTrue(isinstance(unflattened, KeyedTensor))
         self.assertListEqual(unflattened.keys(), keys)
         self.assertListEqual(unflattened._length_per_key, kt._length_per_key)
+
+        # for ir export, key order in KT could change
+        tensor_list = [
+            torch.Tensor([[2.0, 2.0], [3.0, 3.0]]).T,
+            torch.Tensor([[1.0, 1.0]]).T,
+        ]
+        keys = ["dense_1", "dense_0"]
+        kt2 = KeyedTensor.from_tensor_list(keys, tensor_list, cat_dim=1, key_dim=1)
+
+        # flatten the kt2 based on previously generated out_spec
+        # this is to mimic the exported_program module run
+        # the kt2 could have different key order but out_spec is the same
+        flattened2 = tree_flatten_spec(kt2, out_spec)
+
+        # re-construct the unflattened kt from the flattened list plus the out_spec
+        # the rebuilt kt2 should contain the same effective data as kt (ignoring key order)
+        unflattened2 = pytree.tree_unflatten(flattened2, out_spec)
+        self.assertTrue(isinstance(unflattened2, KeyedTensor))
+        self.assertSetEqual(set(unflattened.keys()), set(unflattened2.keys()))
+        for key in kt.keys():
+            torch.testing.assert_close(unflattened[key], unflattened2[key])
+            torch.testing.assert_close(kt[key], unflattened2[key])
 
 
 class TestKeyedTensorRegroupOp(unittest.TestCase):
@@ -2774,6 +2850,47 @@ class TestKeyedTensorRegroupOp(unittest.TestCase):
             refs = [torch.cat(ref, dim=1) for ref in refs]
             for out, ref in zip(outputs, refs):
                 torch.testing.assert_close(out, ref)
+
+    @repeat_test(
+        device_str=["meta", "cpu", "cuda"],
+        dtype=[
+            torch.float,
+            torch.float32,
+            torch.float16,
+            torch.bfloat16,
+        ],
+    )
+    def test_multi_permute_dtype(self, device_str: str, dtype: torch.dtype) -> None:
+        if device_str == "cuda" and not torch.cuda.is_available():
+            return
+        else:
+            device = torch.device(device_str)
+        batch_size = 4
+        keys = [["f1", "f2"], ["f3", "f4", "f5"], ["f6"]]
+        lengths = [[3, 4], [5, 6, 7], [8]]
+        groups = [["f1", "f3"], ["f2"], ["f4", "f1", "f6"], ["f1", "f5"]]
+        values = [
+            torch.randn(batch_size, sum(L), device=device, dtype=dtype) for L in lengths
+        ]
+        permutes, in_shapes, out_shapes, out_lengths = _kt_regroup_arguments(
+            values[0], keys, lengths, groups
+        )
+        outputs = torch.ops.fbgemm.permute_multi_embedding(
+            values, permutes, in_shapes, out_shapes, out_lengths
+        )
+
+        if device_str == "meta":
+            for out, ref in zip(outputs, out_lengths):
+                self.assertEqual(out.shape, (batch_size, ref))
+        else:
+            refs = [[] for _ in groups]
+            for i in range(permutes.size(0)):
+                in_idx, out, in_start, _, length, _ = permutes[i].tolist()
+                refs[out].append(values[in_idx][:, in_start : (in_start + length)])
+            refs = [torch.cat(ref, dim=1) for ref in refs]
+            for out, ref in zip(outputs, refs):
+                torch.testing.assert_close(out, ref)
+                self.assertEqual(out.dtype, ref.dtype)
 
     @repeat_test(
         ["cpu", 32, [[3, 4], [5, 6, 7], [8]]],

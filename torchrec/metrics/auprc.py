@@ -22,6 +22,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
 )
 
+
 PREDICTIONS = "predictions"
 LABELS = "labels"
 WEIGHTS = "weights"

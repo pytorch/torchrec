@@ -25,9 +25,7 @@ from torchrec.distributed.test_utils.infer_utils import (
     shard_qebc,
 )
 from torchrec.fx import symbolic_trace
-from torchrec.quant.embedding_modules import (
-    MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT,
-)
+from torchrec.inference.modules import set_pruning_data
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 SPARSE_NN_EBC_MODULE = "_module.sparse.ebc"
@@ -36,15 +34,9 @@ SEQUENTIAL_NN_EBC_MODULE = "0"
 
 def prune_and_quantize_model(
     model: torch.nn.Module,
-    pruning_ebc_dict: Dict[str, torch.Tensor],
-    ebc_target: str,
+    pruning_ebc_dict: Dict[str, int],
 ) -> torch.nn.Module:
-    ebc = model.get_submodule(ebc_target)
-    setattr(
-        ebc,
-        MODULE_ATTR_EMB_CONFIG_NAME_TO_PRUNING_INDICES_REMAPPING_DICT,
-        pruning_ebc_dict,
-    )
+    set_pruning_data(model, pruning_ebc_dict)
 
     quant_state_dict_split_scale_bias = True
     quant_model = quantize(
@@ -56,24 +48,6 @@ def prune_and_quantize_model(
     return quant_model
 
 
-def get_even_indices_pruning_ebc_dict(
-    table_key: str, num_embeddings: int
-) -> Dict[str, torch.Tensor]:
-    pruning_ebc_dict: Dict[str, torch.Tensor] = {}
-    remapping_indices = torch.full(
-        fill_value=-1, size=[num_embeddings], dtype=torch.int32
-    )
-
-    # Prune element at even index position
-    for i in range(200):
-        if i % 2 == 0:
-            continue
-        remapping_indices[i] = i // 2
-
-    pruning_ebc_dict[table_key] = remapping_indices
-    return pruning_ebc_dict
-
-
 def create_quant_and_sharded_ebc_models(
     num_embedding: int,
     emb_dim: int,
@@ -81,7 +55,8 @@ def create_quant_and_sharded_ebc_models(
     batch_size: int,
     sharding_type: ShardingType,
     device: torch.device,
-) -> Tuple[torch.nn.Module, torch.nn.Module]:
+    feature_processor: bool = False,
+) -> Tuple[torch.nn.Module, torch.nn.Module, Dict[str, int]]:
     mi = create_test_model_ebc_only_no_quantize(
         num_embedding,
         emb_dim,
@@ -91,14 +66,15 @@ def create_quant_and_sharded_ebc_models(
         num_weighted_features=0,
         dense_device=device,
         sparse_device=device,
+        feature_processor=feature_processor,
     )
     mi.model.to(device)
+    num_rows_post_pruned = num_embedding // 2
 
-    pruning_ebc_dict = get_even_indices_pruning_ebc_dict("table_0", num_embedding)
-    quant_model = prune_and_quantize_model(
-        mi.model, pruning_ebc_dict, SEQUENTIAL_NN_EBC_MODULE
-    )
+    pruning_ebc_dict = {"table_0": num_rows_post_pruned}
+    quant_model = prune_and_quantize_model(mi.model, pruning_ebc_dict)
 
+    # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
     quant_model = quant_model[0]
     mi.quant_model = quant_model
 
@@ -107,14 +83,34 @@ def create_quant_and_sharded_ebc_models(
         sharding_type=sharding_type,
         device=device,
         expected_shards=None,
+        feature_processor=feature_processor,
     )
 
     sharded_model.load_state_dict(quant_model.state_dict())
 
-    return quant_model, sharded_model
+    return quant_model, sharded_model, pruning_ebc_dict
 
 
 class QuantPruneTest(unittest.TestCase):
+    def check_tbe_pruned(
+        self, sharded_model: torch.nn.Module, pruned_dict: Dict[str, int]
+    ) -> None:
+        for module in sharded_model.modules():
+            if module.__class__.__name__ == "IntNBitTableBatchedEmbeddingBagsCodegen":
+                # pyre-fixme[6]: For 1st argument expected `Iterable[_T]` but got
+                #  `Union[Tensor, Module]`.
+                for i, spec in enumerate(module.embedding_specs):
+                    if spec[0] in pruned_dict:
+                        self.assertEqual(
+                            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
+                            module.split_embedding_weights()[i][0].size(0),
+                            pruned_dict[spec[0]],
+                        )
+                        self.assertEqual(
+                            spec[1],
+                            pruned_dict[spec[0]],
+                        )
+
     # pyre-ignore
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
@@ -134,6 +130,8 @@ class QuantPruneTest(unittest.TestCase):
             (num_embedding, emb_dim, num_embedding),
             (num_embedding, emb_dim, num_embedding - pruned_entry),
         ]
+        pruning_ebc_dict: Dict[str, int] = {}
+        pruning_ebc_dict["table_1"] = num_embedding - pruned_entry
 
         mi = create_test_model(
             num_embedding,
@@ -144,24 +142,8 @@ class QuantPruneTest(unittest.TestCase):
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
             num_features=len(table_specs),
+            pruning_dict=pruning_ebc_dict,
         )
-
-        pruning_ebc_dict: Dict[str, torch.Tensor] = {}
-        table_1_spec = table_specs[1]
-        table_1_num_emb: int = table_1_spec[0]
-        table_1_pruned_num_emb: int = table_1_spec[2]
-        table_1_remapping_indices = torch.full(
-            fill_value=-1, size=[table_1_num_emb], dtype=torch.int32
-        )
-        table_1_remapping_indices[-table_1_pruned_num_emb:] = torch.arange(
-            table_1_pruned_num_emb, dtype=torch.int32
-        )
-        pruning_ebc_dict["table_1"] = table_1_remapping_indices
-
-        quant_model = prune_and_quantize_model(
-            mi.model, pruning_ebc_dict, SPARSE_NN_EBC_MODULE
-        )
-        mi.quant_model = quant_model
 
         expected_shards = [
             [
@@ -178,6 +160,9 @@ class QuantPruneTest(unittest.TestCase):
             ],
         ]
 
+        quant_model = mi.quant_model
+        quant_state_dict = quant_model.state_dict()
+
         sharded_model = shard_qebc(
             mi,
             sharding_type=ShardingType.TABLE_WISE,
@@ -189,7 +174,8 @@ class QuantPruneTest(unittest.TestCase):
             model_input_to_forward_args(inp.to(local_device))
             for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
-        sharded_model.load_state_dict(quant_model.state_dict())
+
+        sharded_model.load_state_dict(quant_state_dict)
         quant_output = quant_model(*inputs[0])
         sharded_output = sharded_model(*inputs[0])
         assert_close(quant_output, sharded_output)
@@ -226,7 +212,7 @@ class QuantPruneTest(unittest.TestCase):
         emb_dim = 10
         sharding_type = ShardingType.TABLE_WISE
 
-        quant_model, sharded_model = create_quant_and_sharded_ebc_models(
+        quant_model, sharded_model, pruned_dict = create_quant_and_sharded_ebc_models(
             num_embedding=num_embedding,
             emb_dim=emb_dim,
             world_size=world_size,
@@ -247,8 +233,7 @@ class QuantPruneTest(unittest.TestCase):
 
         assert_close(q_output["feature_0"], s_output["feature_0"])
 
-        assert_close(q_output["feature_0"][0], torch.tensor([0.0] * emb_dim))
-        assert_close(q_output["feature_0"][2], torch.tensor([0.0] * emb_dim))
+        self.check_tbe_pruned(sharded_model, pruned_dict)
 
     # pyre-ignore
     @unittest.skipIf(
@@ -268,6 +253,7 @@ class QuantPruneTest(unittest.TestCase):
         table_specs: List[Tuple[int, int, int]] = [
             (num_embedding, emb_dim, num_embedding - pruned_entry),
         ]
+        pruning_ebc_dict: Dict[str, int] = {"table_0": num_embedding - pruned_entry}
 
         mi = create_test_model(
             num_embedding,
@@ -278,24 +264,8 @@ class QuantPruneTest(unittest.TestCase):
             sparse_device=local_device,
             quant_state_dict_split_scale_bias=True,
             num_features=len(table_specs),
+            pruning_dict=pruning_ebc_dict,
         )
-
-        pruning_ebc_dict: Dict[str, torch.Tensor] = {}
-        table_0_spec = table_specs[0]
-        table_0_num_emb: int = table_0_spec[0]
-        table_0_pruned_num_emb: int = table_0_spec[2]
-        table_0_remapping_indices = torch.full(
-            fill_value=-1, size=[table_0_num_emb], dtype=torch.int32
-        )
-        table_0_remapping_indices[-table_0_pruned_num_emb:] = torch.arange(
-            table_0_pruned_num_emb, dtype=torch.int32
-        )
-        pruning_ebc_dict["table_0"] = table_0_remapping_indices
-
-        quant_model = prune_and_quantize_model(
-            mi.model, pruning_ebc_dict, SPARSE_NN_EBC_MODULE
-        )
-        mi.quant_model = quant_model
 
         expected_shards = [
             [
@@ -329,8 +299,8 @@ class QuantPruneTest(unittest.TestCase):
             model_input_to_forward_args(inp.to(local_device))
             for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
         ]
-        sharded_model.load_state_dict(quant_model.state_dict())
-        quant_output = quant_model(*inputs[0])
+        sharded_model.load_state_dict(mi.quant_model.state_dict())
+        quant_output = mi.quant_model(*inputs[0])
         sharded_output = sharded_model(*inputs[0])
         assert_close(quant_output, sharded_output)
 
@@ -366,7 +336,7 @@ class QuantPruneTest(unittest.TestCase):
         emb_dim = 512
         sharding_type = ShardingType.COLUMN_WISE
 
-        quant_model, sharded_model = create_quant_and_sharded_ebc_models(
+        quant_model, sharded_model, pruned_dict = create_quant_and_sharded_ebc_models(
             num_embedding=num_embedding,
             emb_dim=emb_dim,
             world_size=world_size,
@@ -377,7 +347,7 @@ class QuantPruneTest(unittest.TestCase):
 
         kjt = KeyedJaggedTensor.from_lengths_sync(
             keys=["feature_0"],
-            values=torch.tensor([0, 1, 2, 197, 198, 199], dtype=torch.int32).cuda(),
+            values=torch.tensor([0, 1, 2, 59, 60, 99], dtype=torch.int32).cuda(),
             lengths=torch.tensor([1, 1, 1, 1, 1, 1], dtype=torch.int32).cuda(),
             weights=None,
         )
@@ -387,6 +357,41 @@ class QuantPruneTest(unittest.TestCase):
 
         assert_close(q_output["feature_0"], s_output["feature_0"])
 
-        assert_close(q_output["feature_0"][0], torch.tensor([0.0] * emb_dim))
-        assert_close(q_output["feature_0"][2], torch.tensor([0.0] * emb_dim))
-        assert_close(q_output["feature_0"][4], torch.tensor([0.0] * emb_dim))
+        self.check_tbe_pruned(sharded_model, pruned_dict)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    def test_fpqebc_pruned_tw_one_fpebc(self) -> None:
+        batch_size: int = 1
+        world_size: int = 2
+        local_device = torch.device("cuda:0")
+        num_embedding = 200
+        emb_dim = 512
+        sharding_type = ShardingType.COLUMN_WISE
+
+        quant_model, sharded_model, pruned_dict = create_quant_and_sharded_ebc_models(
+            num_embedding=num_embedding,
+            emb_dim=emb_dim,
+            world_size=world_size,
+            batch_size=batch_size,
+            sharding_type=sharding_type,
+            device=local_device,
+            feature_processor=True,
+        )
+
+        kjt = KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0"],
+            values=torch.tensor([0, 1, 2, 59, 60, 99], dtype=torch.int32).cuda(),
+            lengths=torch.tensor([1, 1, 1, 1, 1, 1], dtype=torch.int32).cuda(),
+            weights=None,
+        )
+
+        q_output = quant_model(kjt)
+        s_output = sharded_model(kjt)
+
+        assert_close(q_output["feature_0"], s_output["feature_0"])
+
+        self.check_tbe_pruned(sharded_model, pruned_dict)

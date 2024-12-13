@@ -70,12 +70,13 @@ class ShardedFusedEmbeddingBagCollection(
             if isinstance(sharding, DpPooledEmbeddingSharding):
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
-                    device_ids=[device],
+                    device_ids=[device] if device is not None else None,
                     process_group=env.process_group,
                     gradient_as_bucket_view=True,
                     broadcast_buffers=False,
                     static_graph=True,
                 )
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 self._lookups[index]._register_fused_optim(
                     optimizer_type, **optimizer_kwargs
                 )
@@ -94,6 +95,7 @@ class FusedEmbeddingBagCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingBagCollection:
 
         return ShardedFusedEmbeddingBagCollection(

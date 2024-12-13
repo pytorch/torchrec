@@ -12,9 +12,11 @@ from dataclasses import replace
 from typing import Dict, List, Optional, Type
 
 import hypothesis.strategies as st
+
 import torch
 from hypothesis import given, settings, Verbosity
 from torchrec import inference as trec_infer
+from torchrec.distributed.quant_embedding_kernel import _unwrap_kjt, _unwrap_kjt_for_cpu
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -27,8 +29,12 @@ from torchrec.modules.embedding_modules import (
     EmbeddingCollection,
 )
 from torchrec.quant.embedding_modules import (
+    _fx_trec_unwrap_kjt,
+    _get_batching_hinted_output,
+    _get_unflattened_lengths,
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
+    MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING,
     quant_prep_enable_quant_state_dict_split_scale_bias,
 )
 from torchrec.sparse.jagged_tensor import (
@@ -78,6 +84,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         # test forward
         if not per_table_weight_dtype:
+            # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
             ebc.qconfig = torch.quantization.QConfig(
                 activation=torch.quantization.PlaceholderObserver.with_args(
                     dtype=output_type
@@ -300,6 +307,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         ebc = EmbeddingBagCollection(tables=tables)
 
         # test forward
+        # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -399,6 +407,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
 
         ebc = EmbeddingBagCollection(tables=tables)
         # test forward
+        # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -438,6 +447,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
 
         ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        # pyre-fixme[16]: `EmbeddingBagCollection` has no attribute `qconfig`.
         ebc.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -525,11 +535,16 @@ class EmbeddingCollectionTest(unittest.TestCase):
         embeddings = ec(features)
 
         # test forward
-        ec.qconfig = torch.quantization.QConfig(
+        # pyre-fixme[16]: `EmbeddingCollection` has no attribute `qconfig`.
+        ec.qconfig = QuantConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
             ),
             weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+            per_table_weight_dtype={
+                x.name: torch.quint4x2 if x.data_type == DataType.INT4 else torch.qint8
+                for x in ec._embedding_configs
+            },
         )
 
         qec = QuantEmbeddingCollection.from_float(ec)
@@ -588,8 +603,15 @@ class EmbeddingCollectionTest(unittest.TestCase):
             feature_names=["f3", "f4"],
             data_type=data_type,
         )
+        eb3_config = EmbeddingConfig(
+            name="t3",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f5", "f6"],
+            data_type=DataType.INT4,
+        )
         features = KeyedJaggedTensor(
-            keys=["f1", "f2", "f3", "f4"],
+            keys=["f1", "f2", "f3", "f4", "f5", "f6"],
             values=torch.as_tensor(
                 [
                     5,
@@ -634,12 +656,26 @@ class EmbeddingCollectionTest(unittest.TestCase):
                     8,
                     1,
                     9,
+                    7,
+                    7,
+                    9,
+                    1,
+                    2,
+                    6,
+                    7,
+                    6,
+                    1,
+                    8,
+                    3,
+                    8,
+                    1,
+                    9,
                 ]
             ),
-            lengths=torch.as_tensor([9, 12, 9, 12]),
+            lengths=torch.as_tensor([9, 12, 9, 12, 5, 9]),
         )
         self._test_ec(
-            tables=[eb1_config, eb2_config],
+            tables=[eb3_config, eb1_config, eb2_config],
             features=features,
             quant_state_dict_split_scale_bias=quant_state_dict_split_scale_bias,
         )
@@ -695,6 +731,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
             inplace=True,
             per_table_weight_dtype={"t1": torch.float16},
         )
+        # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
         configs = model.m.embedding_configs()
         self.assertEqual(len(configs), 2)
         self.assertNotEqual(configs[0].name, configs[1].name)
@@ -725,6 +762,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
             inplace=True,
             per_table_weight_dtype={"t1": torch.float16},
         )
+        # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
         configs = model.m.embedding_bag_configs()
         self.assertEqual(len(configs), 2)
         self.assertNotEqual(configs[0].name, configs[1].name)
@@ -756,6 +794,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         )
 
         ec = EmbeddingCollection(tables=[ec1_config, ec2_config])
+        # pyre-fixme[16]: `EmbeddingCollection` has no attribute `qconfig`.
         ec.qconfig = torch.quantization.QConfig(
             activation=torch.quantization.PlaceholderObserver.with_args(
                 dtype=output_type
@@ -782,3 +821,149 @@ class EmbeddingCollectionTest(unittest.TestCase):
         scripted_out = scripted_module(features)
         self._comp_ec_output(original_out, traced_out, atol=0)
         self._comp_ec_output(original_out, scripted_out, atol=0)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]
+    @given(
+        offsets_dtype=st.sampled_from(
+            [
+                torch.int32,
+                torch.int64,
+            ]
+        ),
+        indices_dtype=st.sampled_from(
+            [
+                torch.int32,
+                torch.int64,
+            ]
+        ),
+        device=st.sampled_from(
+            [
+                torch.device("cpu"),
+                torch.device("cuda"),
+            ]
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_fx_unwrap_unsharded_vs_sharded_in_sync(
+        self,
+        offsets_dtype: torch.dtype,
+        indices_dtype: torch.dtype,
+        device: torch.device,
+    ) -> None:
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3", "f4"],
+            values=torch.tensor(
+                [0, 1, 2, 3, 4, 5, 6, 7], dtype=indices_dtype, device=device
+            ),
+            offsets=torch.tensor([0, 2, 5, 7, 8], dtype=offsets_dtype, device=device),
+        )
+
+        indices, offsets = _fx_trec_unwrap_kjt(features)
+        self.assertEqual(indices.dtype, offsets.dtype)
+        if device.type == "cpu":
+            sharded_indices, sharded_offsets, _ = _unwrap_kjt_for_cpu(
+                features, weighted=False
+            )
+            self.assertEqual(sharded_indices.dtype, indices_dtype)
+        else:  # cuda
+            sharded_indices, sharded_offsets, _ = _unwrap_kjt(features)
+            self.assertEqual(sharded_indices.dtype, torch.int32)  # only option!
+
+        self.assertEqual(indices.dtype, sharded_indices.dtype)
+        self.assertEqual(offsets.dtype, sharded_offsets.dtype)
+
+    def test_using_flattened_or_unflattened_length_rebatching(self) -> None:
+        data_type = DataType.FP16
+        quant_type = torch.half
+        output_type = torch.half
+
+        ec1_config = EmbeddingConfig(
+            name="t1",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f1", "f2"],
+            data_type=data_type,
+        )
+        ec2_config = EmbeddingConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f3", "f4"],
+            data_type=data_type,
+        )
+
+        ec = EmbeddingCollection(tables=[ec1_config, ec2_config])
+        # pyre-fixme[16]: `EmbeddingCollection` has no attribute `qconfig`.
+        ec.qconfig = torch.quantization.QConfig(
+            activation=torch.quantization.PlaceholderObserver.with_args(
+                dtype=output_type
+            ),
+            weight=torch.quantization.PlaceholderObserver.with_args(dtype=quant_type),
+        )
+
+        qec = QuantEmbeddingCollection.from_float(ec)
+
+        import copy
+
+        from torchrec.fx import symbolic_trace
+
+        # test using flattened lengths for rebatching (default)
+
+        gm = symbolic_trace(copy.deepcopy(qec))
+
+        found_get_unflattened_lengths_func = False
+
+        for node in gm.graph.nodes:
+            if (
+                node.op == "call_function"
+                and node.name == _get_unflattened_lengths.__name__
+            ):
+                found_get_unflattened_lengths_func = True
+                for user in node.users:
+                    if (
+                        user.op == "call_function"
+                        and user.name == _get_batching_hinted_output.__name__
+                    ):
+                        self.assertTrue(
+                            False,
+                            "Should not call _get_batching_hinted_output after _get_unflattened_lengths",
+                        )
+
+        self.assertTrue(
+            found_get_unflattened_lengths_func,
+            "_get_unflattened_lengths must exist in the graph",
+        )
+
+        # test using unflattened lengths for rebatching
+
+        setattr(qec, MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING, True)
+
+        gm = symbolic_trace(qec)
+
+        found_get_unflattened_lengths_func = False
+        for node in gm.graph.nodes:
+            if (
+                node.op == "call_function"
+                and node.name == _get_unflattened_lengths.__name__
+            ):
+                found_get_unflattened_lengths_func = True
+                found_get_batching_hinted_output_func = False
+                for user in node.users:
+                    if (
+                        user.op == "call_function"
+                        and user.name == _get_batching_hinted_output.__name__
+                    ):
+                        found_get_batching_hinted_output_func = True
+                self.assertTrue(
+                    found_get_batching_hinted_output_func,
+                    "Should call _get_batching_hinted_output after _get_unflattened_lengths",
+                )
+
+        self.assertTrue(
+            found_get_unflattened_lengths_func,
+            "_get_unflattened_lengths must exist in the graph",
+        )

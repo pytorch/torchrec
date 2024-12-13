@@ -12,6 +12,10 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import torch
+
+from torchrec.metrics.metrics_config import BatchSizeStage
+
 from torchrec.metrics.throughput import ThroughputMetric
 
 
@@ -30,7 +34,11 @@ class ThroughputMetricTest(unittest.TestCase):
             batch_size=self.batch_size, world_size=self.world_size, window_seconds=100
         )
         self.assertEqual(
-            throughput_metric.compute(), {"throughput-throughput|total_examples": 0}
+            throughput_metric.compute(),
+            {
+                "throughput-throughput|total_examples": 0,
+                "throughput-throughput|attempt_examples": 0,
+            },
         )
 
     @patch(THROUGHPUT_PATH + ".time.monotonic")
@@ -42,7 +50,12 @@ class ThroughputMetricTest(unittest.TestCase):
         throughput_metric.update()
         self.assertEqual(
             throughput_metric.compute(),
-            {"throughput-throughput|total_examples": self.batch_size * self.world_size},
+            {
+                "throughput-throughput|total_examples": self.batch_size
+                * self.world_size,
+                "throughput-throughput|attempt_examples": self.batch_size
+                * self.world_size,
+            },
         )
 
     @patch(THROUGHPUT_PATH + ".time.monotonic")
@@ -71,7 +84,11 @@ class ThroughputMetricTest(unittest.TestCase):
             total_examples = self.world_size * self.batch_size * (i + 1)
             if i < warmup_steps:
                 self.assertEqual(
-                    ret, {"throughput-throughput|total_examples": total_examples}
+                    ret,
+                    {
+                        "throughput-throughput|total_examples": total_examples,
+                        "throughput-throughput|attempt_examples": total_examples,
+                    },
                 )
                 continue
 
@@ -99,6 +116,13 @@ class ThroughputMetricTest(unittest.TestCase):
             )
             self.assertEqual(
                 ret["throughput-throughput|total_examples"], total_examples
+            )
+            # only one attempt so attempt examples and throughput are the same as total/lifetime
+            self.assertEqual(
+                ret["throughput-throughput|attempt_examples"], total_examples
+            )
+            self.assertEqual(
+                ret["throughput-throughput|attempt_throughput"], lifetime_throughput
             )
 
     def test_throughput_warmup_steps_0(self) -> None:
@@ -138,5 +162,52 @@ class ThroughputMetricTest(unittest.TestCase):
                 * self.world_size,
             )
 
+            self.assertEqual(
+                throughput_metric.attempt_warmup_examples.item(),
+                warmup_steps * self.batch_size * self.world_size,
+            )
+            self.assertEqual(
+                throughput_metric.attempt_examples.item(),
+                (warmup_steps + extra_steps) * self.batch_size * self.world_size,
+            )
             # Mimic trainer crashing and loading a checkpoint
             throughput_metric._steps = 0
+            throughput_metric.attempt_examples = torch.tensor(0, dtype=torch.long)
+            throughput_metric.attempt_warmup_examples = torch.tensor(
+                0, dtype=torch.long
+            )
+            throughput_metric.attempt_time_lapse_after_warmup = torch.tensor(
+                0, dtype=torch.double
+            )
+
+    @patch(THROUGHPUT_PATH + ".time.monotonic")
+    def test_batch_size_schedule(self, time_mock: Mock) -> None:
+        batch_size_stages = [BatchSizeStage(256, 1), BatchSizeStage(512, None)]
+        time_mock.return_value = 1
+        throughput_metric = ThroughputMetric(
+            batch_size=self.batch_size,
+            world_size=self.world_size,
+            window_seconds=100,
+            batch_size_stages=batch_size_stages,
+        )
+
+        total_examples = 0
+        throughput_metric.update()
+        total_examples += batch_size_stages[0].batch_size * self.world_size
+        self.assertEqual(
+            throughput_metric.compute(),
+            {
+                "throughput-throughput|total_examples": total_examples,
+                "throughput-throughput|attempt_examples": total_examples,
+            },
+        )
+
+        throughput_metric.update()
+        total_examples += batch_size_stages[1].batch_size * self.world_size
+        self.assertEqual(
+            throughput_metric.compute(),
+            {
+                "throughput-throughput|total_examples": total_examples,
+                "throughput-throughput|attempt_examples": total_examples,
+            },
+        )

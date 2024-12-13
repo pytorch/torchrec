@@ -94,12 +94,12 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             list(module_copy.named_buffers(recurse=recurse))
             + list(module_copy.named_parameters(recurse=recurse)),
         ):
-            self.assertEquals(name, name_copy)
+            self.assertEqual(name, name_copy)
             actual, expected = buffer.detach().cpu(), buffer_copy.detach().cpu()
             rtol, atol = _get_default_rtol_and_atol(actual, expected)
             torch.testing.assert_close(actual, expected, rtol=rtol, atol=atol)
-            self.assertEquals(buffer.detach().device, device)
-            self.assertEquals(buffer_copy.detach().device, device_copy)
+            self.assertEqual(buffer.detach().device, device)
+            self.assertEqual(buffer_copy.detach().device, device_copy)
 
     def _recursive_device_check(
         self,
@@ -393,7 +393,9 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
             dense_device=device,
             sparse_device=torch.device("meta"),
         )
+        # pyre-fixme[16]: `TestSparseNN` has no attribute `copy_module`.
         model.copy_module = CopyModule()
+        # pyre-fixme[16]: `TestSparseNN` has no attribute `no_copy_module`.
         model.no_copy_module = NoCopyModule()
         quant_model = quantize(model, inplace=True)
         dmp = DistributedModelParallel(
@@ -413,7 +415,9 @@ class QuantModelParallelModelCopyTest(unittest.TestCase):
         )
 
         dmp_1 = dmp.copy(device_1)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `tensor`.
         self.assertEqual(dmp_1.module.copy_module.tensor.device, device_1)
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `tensor`.
         self.assertEqual(dmp_1.module.no_copy_module.tensor.device, torch.device("cpu"))
 
 
@@ -531,6 +535,8 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             # flake8: noqa:C419
             all(
                 param.device.type == sharding_device_type
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `ebc`.
                 for param in dmp.module.sparse.ebc.buffers()
             )
         )
@@ -538,6 +544,8 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
             # flake8: noqa:C419
             all(
                 param.device.type == sparse_device.type
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `weighted_ebc`.
                 for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )
@@ -613,12 +621,15 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         )
 
         self.assertTrue(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
             all(param.device == device for param in dmp.module.sparse.ebc.buffers())
         )
         self.assertTrue(
             # flake8: noqa:C419
             all(
                 param.device == torch.device("meta")
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `weighted_ebc`.
                 for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )
@@ -696,6 +707,8 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         self.assertTrue(
             all(
                 param.device.type == device.type
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `ebc`.
                 for param in dmp.module.sparse.ebc.buffers()
             )
         )
@@ -703,6 +716,8 @@ class QuantModelParallelModelSharderTest(unittest.TestCase):
         self.assertTrue(
             all(
                 param.device.type == device.type
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `weighted_ebc`.
                 for param in dmp.module.sparse.weighted_ebc.buffers()
             )
         )

@@ -20,6 +20,7 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
 )
 
+
 SUM_NDCG = "sum_ndcg"
 NUM_SESSIONS = "num_sessions"
 REQUIRED_INPUTS = "required_inputs"
@@ -252,7 +253,7 @@ def _get_ndcg_states(
             dim=-1,
             index=expanded_session_ids,
             src=adjusted_weights,  # [num_tasks, batch_size]
-            reduce="max",
+            reduce="amax",
         )
     )
 

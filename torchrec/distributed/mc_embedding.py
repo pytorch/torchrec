@@ -9,7 +9,7 @@
 
 #!/usr/bin/env python3
 
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
 
@@ -87,9 +87,10 @@ class ShardedManagedCollisionEmbeddingCollection(
             device,
         )
 
-        # For consistency with embeddingbag
-        # pyre-ignore [8]
-        self._embedding_collection: ShardedEmbeddingCollection = self._embedding_module
+    # For consistency with embeddingbag
+    @property
+    def _embedding_collection(self) -> ShardedEmbeddingCollection:
+        return cast(ShardedEmbeddingCollection, self._embedding_module)
 
     def create_context(
         self,
@@ -123,6 +124,7 @@ class ManagedCollisionEmbeddingCollectionSharder(
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedManagedCollisionEmbeddingCollection:
 
         if device is None:

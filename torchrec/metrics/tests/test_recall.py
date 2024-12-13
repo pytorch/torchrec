@@ -17,8 +17,10 @@ from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.recall import compute_recall, RecallMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
+    rec_metric_gpu_sync_test_launcher,
     rec_metric_value_test_launcher,
     RecTaskInfo,
+    sync_test_helper,
     TestMetric,
 )
 
@@ -32,8 +34,8 @@ class TestRecallMetric(TestMetric):
         labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
-        true_pos_sum = torch.sum(weights * ((predictions >= 0.5) == labels))
-        false_neg_sum = torch.sum(weights * ((predictions <= 0.5) == (labels)))
+        true_pos_sum = torch.sum(weights * ((predictions >= 0.5) * labels))
+        false_neg_sum = torch.sum(weights * ((predictions <= 0.5) * (labels)))
         return {
             "true_pos_sum": true_pos_sum,
             "false_neg_sum": false_neg_sum,
@@ -51,34 +53,33 @@ class RecallMetricTest(unittest.TestCase):
     clazz: Type[RecMetric] = RecallMetric
     task_name: str = "recall"
 
-    # Temporarily comment out fuse unit tests due to unknown failure (D56856649).
-    # def test_unfused_recall(self) -> None:
-    #     rec_metric_value_test_launcher(
-    #         target_clazz=RecallMetric,
-    #         target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-    #         test_clazz=TestRecallMetric,
-    #         metric_name=RecallMetricTest.task_name,
-    #         task_names=["t1", "t2", "t3"],
-    #         fused_update_limit=0,
-    #         compute_on_all_ranks=False,
-    #         should_validate_update=False,
-    #         world_size=WORLD_SIZE,
-    #         entry_point=metric_test_helper,
-    #     )
+    def test_unfused_recall(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=RecallMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestRecallMetric,
+            metric_name=RecallMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
 
-    # def test_fused_recall(self) -> None:
-    #     rec_metric_value_test_launcher(
-    #         target_clazz=RecallMetric,
-    #         target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-    #         test_clazz=TestRecallMetric,
-    #         metric_name=RecallMetricTest.task_name,
-    #         task_names=["t1", "t2", "t3"],
-    #         fused_update_limit=0,
-    #         compute_on_all_ranks=False,
-    #         should_validate_update=False,
-    #         world_size=WORLD_SIZE,
-    #         entry_point=metric_test_helper,
-    #     )
+    def test_fused_recall(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=RecallMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            test_clazz=TestRecallMetric,
+            metric_name=RecallMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
 
 
 class RecallMetricValueTest(unittest.TestCase):
@@ -218,7 +219,6 @@ class ThresholdValueTest(unittest.TestCase):
             # pyre-ignore
             threshold=threshold,  # threshold is one of the kwargs
         )
-        # pyre-ignore
         recall.update(**inputs)
         actual_recall = recall.compute()
 
@@ -245,3 +245,24 @@ class ThresholdValueTest(unittest.TestCase):
             except AssertionError:
                 print("Assertion error caught with data set ", inputs)
                 raise
+
+
+class RecallGPUSyncTest(unittest.TestCase):
+    clazz: Type[RecMetric] = RecallMetric
+    task_name: str = "recall"
+
+    def test_sync_recall(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=RecallMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestRecallMetric,
+            metric_name=RecallGPUSyncTest.task_name,
+            task_names=["t1"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
+        )

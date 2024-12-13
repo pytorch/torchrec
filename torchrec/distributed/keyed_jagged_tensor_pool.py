@@ -329,7 +329,9 @@ class ShardedKeyedJaggedTensorPool(
         # somewhat hacky. ideally, we should be able to invoke this method on
         # any update to the lookup's key_lengths field.
         lengths, offsets = lookup._infer_jagged_lengths_inclusive_offsets()
+        # pyre-fixme[16]: `KeyedJaggedTensorPoolLookup` has no attribute `_lengths`.
         lookup._lengths = lengths
+        # pyre-fixme[16]: `KeyedJaggedTensorPoolLookup` has no attribute `_offsets`.
         lookup._offsets = offsets
 
     def _lookup_ids_dist(
@@ -552,9 +554,11 @@ class ShardedInferenceKeyedJaggedTensorPool(
             )
             if module._device != torch.device("meta"):
                 self._local_kjt_pool_shards[rank]._values.copy_(
+                    # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, ...
                     module.values[offset : offset + this_rank_size]
                 )
                 self._local_kjt_pool_shards[rank]._key_lengths.copy_(
+                    # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[None, ...
                     module.key_lengths[offset : offset + this_rank_size]
                 )
                 jagged_lengths, jagged_offsets = self._local_kjt_pool_shards[
@@ -585,6 +589,7 @@ class ShardedInferenceKeyedJaggedTensorPool(
 
     @property
     def dim(self) -> int:
+        # pyre-fixme[7]: Expected `int` but got `Union[Tensor, Module]`.
         return self._dim
 
     @property
@@ -667,8 +672,9 @@ class ShardedInferenceKeyedJaggedTensorPool(
     ) -> None:
         raise NotImplementedError("Inference does not support update")
 
+    # pyre-fixme[7]: Expected `KeyedJaggedTensor` but got implicit return value of
+    #  `None`.
     def _update_preproc(self, values: KeyedJaggedTensor) -> KeyedJaggedTensor:
-        # pyre-fixme[7]: Expected `Tensor` but got implicit return value of `None`.
         pass
 
 
@@ -682,6 +688,7 @@ class KeyedJaggedTensorPoolSharder(ModuleSharder[KeyedJaggedTensorPool]):
         plan: ObjectPoolShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> Union[ShardedKeyedJaggedTensorPool, ShardedInferenceKeyedJaggedTensorPool]:
         if plan.inference:
             return ShardedInferenceKeyedJaggedTensorPool(

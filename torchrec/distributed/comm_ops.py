@@ -119,6 +119,8 @@ class Request(Awaitable[W]):
         """
 
         ret = self.wait_function.apply(self.pg, self, self.dummy_tensor)
+        if isinstance(ret, torch.Tensor):
+            ret.record_stream(torch.get_device_module(ret.device).current_stream())
         self.req = None
         self.tensor = None
         return ret
@@ -559,14 +561,25 @@ def variable_batch_all2all_pooled_sync(
         ]
 
     with record_function("## alltoall_fwd_single ##"):
-        sharded_output_embeddings = torch.ops.torchrec.all_to_all_single(
-            sharded_input_embeddings,
-            output_split_sizes,
-            input_split_sizes,
-            pg_name(pg),
-            pg.size(),
-            get_gradient_division(),
-        )
+        if pg._get_backend_name() == "custom":
+            sharded_output_embeddings = torch.empty(
+                sum(output_split_sizes),
+                device=sharded_input_embeddings.device,
+                dtype=sharded_input_embeddings.dtype,
+            )
+            s0 = sharded_output_embeddings.size(0)
+            # Bad assumption that our rank GE than other
+            torch._check(s0 <= sharded_input_embeddings.size(0))
+            sharded_output_embeddings.copy_(sharded_input_embeddings[:s0])
+        else:
+            sharded_output_embeddings = torch.ops.torchrec.all_to_all_single(
+                sharded_input_embeddings,
+                output_split_sizes,
+                input_split_sizes,
+                pg_name(pg),
+                pg.size(),
+                get_gradient_division(),
+            )
 
     if a2ai.codecs is not None:
         codecs = none_throws(a2ai.codecs)
@@ -1246,30 +1259,43 @@ class All2All_Pooled_Req(Function):
 
         assert B_global == sum(batch_size_per_rank)
 
-        sharded_input_embeddings = input_embeddings.view(-1)
-
         if a2ai.codecs is not None:
             codecs = none_throws(a2ai.codecs)
             qcomm_ctx = codecs.forward.create_context()
+            padded_D_local_sum, padding_size = codecs.forward.padded_size(
+                input_embeddings, dim_sum_per_rank, my_rank, qcomm_ctx
+            )
+
+            if padding_size == 0:
+                sharded_input_embeddings = input_embeddings.view(-1)
+            else:
+                sharded_input_embeddings = input_embeddings
             sharded_input_embeddings = codecs.forward.encode(
                 sharded_input_embeddings,
                 qcomm_ctx,
+            )
+            padded_dim_sum_per_rank = (
+                qcomm_ctx.padded_dim_sum_per_rank
+                if qcomm_ctx is not None
+                and qcomm_ctx.padded_dim_sum_per_rank is not None
+                else dim_sum_per_rank
             )
             output_split_sizes = [
                 codecs.forward.calc_quantized_size(
                     B_local * D_rank_sum,
                     qcomm_ctx,
                 )
-                for D_rank_sum in dim_sum_per_rank
+                for D_rank_sum in padded_dim_sum_per_rank
             ]
             input_split_sizes = [
                 codecs.forward.calc_quantized_size(
-                    D_local_sum * B_rank,
+                    padded_D_local_sum * B_rank,
                     qcomm_ctx,
                 )
                 for B_rank in batch_size_per_rank
             ]
         else:
+            sharded_input_embeddings = input_embeddings.view(-1)
             output_split_sizes = [
                 B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank
             ]
@@ -1361,9 +1387,23 @@ class All2All_Pooled_Wait(Function):
                 myreq.qcomm_ctx,
             )
 
-        outputs_by_rank = sharded_output_embeddings.split(
-            [B_local * D_rank_sum for D_rank_sum in dim_sum_per_rank]
+        padded_dim_sum_per_rank = (
+            myreq.qcomm_ctx.padded_dim_sum_per_rank
+            if myreq.qcomm_ctx is not None
+            and myreq.qcomm_ctx.padded_dim_sum_per_rank is not None
+            else dim_sum_per_rank
         )
+        outputs_by_rank = sharded_output_embeddings.split(
+            [B_local * D_rank_sum for D_rank_sum in padded_dim_sum_per_rank]
+        )
+        if (
+            myreq.qcomm_ctx is not None
+            and myreq.qcomm_ctx.padded_dim_sum_per_rank is not None
+        ):
+            outputs_by_rank = [
+                output.view(B_local, -1)[:, :dim_sum]
+                for output, dim_sum in zip(outputs_by_rank, dim_sum_per_rank)
+            ]
         result = torch.cat(
             [output.view(B_local, -1) for output in outputs_by_rank], dim=1
         )
@@ -2115,8 +2155,8 @@ class ReduceScatterBase_Req(Function):
         if rsi.codecs is not None:
             inputs = rsi.codecs.forward.encode(inputs)
         output = inputs.new_empty((inputs.size(0) // my_size, inputs.size(1)))
-        with record_function("## reduce_scatter_base ##"):
-            req = dist._reduce_scatter_base(
+        with record_function("## reduce_scatter_tensor ##"):
+            req = dist.reduce_scatter_tensor(
                 output,
                 inputs,
                 group=pg,
@@ -2184,7 +2224,7 @@ class ReduceScatterBase_Wait(Function):
             grad_output = rsi.codecs.backward.encode(grad_output)
         grad_inputs = grad_output.new_empty(rsi.input_sizes)
         with record_function("## reduce_scatter_base_bw (all_gather) ##"):
-            req = dist._all_gather_base(
+            req = dist.all_gather_into_tensor(
                 grad_inputs,
                 grad_output.contiguous(),
                 group=ctx.pg,
@@ -2212,8 +2252,8 @@ class AllGatherBase_Req(Function):
             input = agi.codecs.forward.encode(input)
 
         outputs = input.new_empty((input.size(0) * my_size, input.size(1)))
-        with record_function("## all_gather_base ##"):
-            req = dist._all_gather_base(
+        with record_function("## all_gather_into_tensor ##"):
+            req = dist.all_gather_into_tensor(
                 outputs,
                 input,
                 group=pg,
@@ -2281,7 +2321,7 @@ class AllGatherBase_Wait(Function):
             grad_outputs = agi.codecs.backward.encode(grad_outputs)
         grad_input = grad_outputs.new_empty(agi.input_size)
         with record_function("## all_gather_base_bw (reduce_scatter) ##"):
-            req = dist._reduce_scatter_base(
+            req = dist.reduce_scatter_tensor(
                 grad_input,
                 grad_outputs.contiguous(),
                 group=ctx.pg,
@@ -2311,11 +2351,11 @@ class ReduceScatterV_Req(Function):
 
         output = input.new_empty(rsi.input_sizes[my_rank])
 
-        # Use dist._reduce_scatter_base when a vector reduce-scatter is not needed
+        # Use dist.reduce_scatter_tensor when a vector reduce-scatter is not needed
         # else use dist.reduce_scatter which internally supports vector reduce-scatter
         if rsi.equal_splits:
-            with record_function("## reduce_scatter_base ##"):
-                req = dist._reduce_scatter_base(
+            with record_function("## reduce_scatter_tensor ##"):
+                req = dist.reduce_scatter_tensor(
                     output,
                     input,
                     group=pg,
@@ -2396,7 +2436,7 @@ class ReduceScatterV_Wait(Function):
 
         if rsi.equal_splits:
             with record_function("## reduce_scatter_base_bw (all_gather) ##"):
-                req = dist._all_gather_base(
+                req = dist.all_gather_into_tensor(
                     grad_input,
                     grad_output.contiguous(),
                     group=ctx.pg,

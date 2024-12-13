@@ -174,7 +174,6 @@ class WeightedAvgValueTest(unittest.TestCase):
             batch_size=batch_size,
             tasks=task_list,
         )
-        # pyre-ignore
         weighted_avg.update(**inputs)
         actual_weighted_avg = weighted_avg.compute()
 

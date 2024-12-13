@@ -10,7 +10,7 @@
 import copy
 import itertools
 import logging
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
 
 from itertools import chain
@@ -21,6 +21,7 @@ from typing import (
     cast,
     Dict,
     Generic,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -31,9 +32,25 @@ from typing import (
     Union,
 )
 
+import torch
 from torch import distributed as dist
+from torchrec.distributed.types import LazyAwaitable
+
+if not torch._running_with_deploy():
+    from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
+else:
+
+    class FSDP2:
+        pass
+
+
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.fx.immutable_collections import (
+    immutable_dict as fx_immutable_dict,
+    immutable_list as fx_immutable_list,
+)
 from torch.fx.node import Node
+from torch.nn.modules.module import _IncompatibleKeys
 from torch.profiler import record_function
 from torchrec.distributed.dist_data import KJTAllToAll, KJTAllToAllTensorsAwaitable
 from torchrec.distributed.embedding_sharding import (
@@ -120,8 +137,11 @@ class PrefetchTrainPipelineContext(TrainPipelineContext):
 
 @dataclass
 class EmbeddingTrainPipelineContext(TrainPipelineContext):
-    embedding_a2a_requests: Dict[str, Multistreamable] = field(default_factory=dict)
+    embedding_a2a_requests: Dict[str, LazyAwaitable[Multistreamable]] = field(
+        default_factory=dict
+    )
     embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
+    embedding_features: List[List[Union[str, List[str]]]] = field(default_factory=list)
     detached_embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
 
 
@@ -156,6 +176,9 @@ class ArgInfo:
         input_attrs (List[str]): attributes of input batch,
             e.g. `batch.attr1.attr2` will produce ["attr1", "attr2"].
         is_getitems (List[bool]): `batch[attr1].attr2` will produce [True, False].
+        preproc_modules (List[Optional[PipelinedPreproc]]): list of torch.nn.Modules that
+            transform the input batch.
+        constants: constant arguments that are passed to preproc modules.
         name (Optional[str]): name for kwarg of pipelined forward() call or None for a
             positional arg.
     """
@@ -164,6 +187,7 @@ class ArgInfo:
     is_getitems: List[bool]
     # recursive dataclass as preproc_modules.args -> arginfo.preproc_modules -> so on
     preproc_modules: List[Optional["PipelinedPreproc"]]
+    constants: List[Optional[object]]
     name: Optional[str]
 
 
@@ -178,10 +202,16 @@ def _build_args_kwargs(
     for arg_info in fwd_args:
         if arg_info.input_attrs:
             arg = initial_input
-            for attr, is_getitem, preproc_mod in zip(
-                arg_info.input_attrs, arg_info.is_getitems, arg_info.preproc_modules
+            for attr, is_getitem, preproc_mod, obj in zip(
+                arg_info.input_attrs,
+                arg_info.is_getitems,
+                arg_info.preproc_modules,
+                arg_info.constants,
             ):
-                if preproc_mod is not None:
+                if obj is not None:
+                    arg = obj
+                    break
+                elif preproc_mod is not None:
                     # preproc will internally run the same logic recursively
                     # if its args are derived from other preproc modules
                     # we can get all inputs to preproc mod based on its recorded args_info + arg passed to it
@@ -201,6 +231,21 @@ def _build_args_kwargs(
         else:
             args.append(None)
     return args, kwargs
+
+
+def recursive_record_stream(
+    # pyre-fixme[2]: Parameter `re` must have a type that does not contain `Any`
+    res: Union[torch.Tensor, Pipelineable, Iterable[Any], Dict[Any, Any]],
+    stream: torch.Stream,
+) -> None:
+    if isinstance(res, (torch.Tensor, Pipelineable)):
+        res.record_stream(stream)
+    elif isinstance(res, (list, tuple)):
+        for v in res:
+            recursive_record_stream(v, stream)
+    elif isinstance(res, dict):
+        for v in res.values():
+            recursive_record_stream(v, stream)
 
 
 class PipelinedPreproc(torch.nn.Module):
@@ -224,18 +269,33 @@ class PipelinedPreproc(torch.nn.Module):
         setattr(model, fqn, preproc)
     """
 
+    _FORCE_STATE_DICT_LOAD = True
+
     def __init__(
         self,
         preproc_module: torch.nn.Module,
         fqn: str,
         args: List[ArgInfo],
         context: TrainPipelineContext,
+        # TODO: make streams non-optional - skipping now to avoid ripple effect
+        default_stream: Optional[torch.Stream],
+        dist_stream: Optional[torch.Stream],
     ) -> None:
         super().__init__()
         self._preproc_module = preproc_module
         self._fqn = fqn
         self._args = args
         self._context = context
+        self._default_stream = default_stream
+        self._dist_stream = dist_stream
+        if not default_stream:
+            logger.warning(
+                f"Preproc module {fqn} has no default stream. This may cause race conditions and NaNs during training!"
+            )
+        if not dist_stream:
+            logger.warning(
+                f"Preproc module {fqn} has no dist stream. This may cause race conditions and NaNs during training!"
+            )
 
     @property
     def preproc_module(self) -> torch.nn.Module:
@@ -280,9 +340,35 @@ class PipelinedPreproc(torch.nn.Module):
         args, kwargs = _build_args_kwargs(input[0], self._args)
 
         with record_function(f"## sdd_input_preproc {self._context.index} ##"):
-            res = self._preproc_module(*args, **kwargs)
-            # Cache results, only during _start_data_dist
-            self._context.preproc_fwd_results[self._fqn] = res
+            # should be no-op as we call this in dist stream
+            # pyre-ignore[6]: torch.cuda.Stream is a wrapper around torch.Stream
+            with torch.cuda.stream(self._dist_stream):
+                res = self._preproc_module(*args, **kwargs)
+
+            # Ensure preproc modules output is safe to use from default stream later
+            if self._default_stream and self._dist_stream:
+                self._default_stream.wait_stream(self._dist_stream)
+
+                if isinstance(res, (torch.Tensor, Pipelineable, Iterable, Dict)):
+                    # Result from module forward might be a complex type such as
+                    # Tuple[KeyedJaggedTensor, Dict[str, torch.Tensor]]
+                    # In this case, we need to first iterate over each element of tuple
+                    # and call record_stream on first item as KJT is Pipelineable
+                    # for the second item (Dict), we iterate over the values and call
+                    # record_stream accordingly.
+
+                    # pyre-ignore[6]
+                    recursive_record_stream(res, self._default_stream)
+                elif self._context.index == 0:
+                    logger.warning(
+                        f"Result of preproc module {self._fqn} is of type {type(res)}. We currently expect it to be a Tensor, Pipelineable, Iterable, or Dict to handle memory safety. If your output is not of this type, please add support for it above. Otherwise you might run into NaNs or CUDA Illegal Memory issues during training!"
+                    )
+
+            # pyre-ignore[6]: torch.cuda.Stream is a wrapper around torch.Stream
+            with torch.cuda.stream(self._default_stream):
+                # Cache results, only during _start_data_dist
+                self._context.preproc_fwd_results[self._fqn] = res
+
             return res
 
     @property
@@ -295,14 +381,75 @@ class PipelinedPreproc(torch.nn.Module):
     def get_context(self) -> TrainPipelineContext:
         return self._context
 
+    def named_modules(
+        self,
+        memo: Optional[Set[torch.nn.Module]] = None,
+        prefix: str = "",
+        remove_duplicate: bool = True,
+    ) -> Iterator[Tuple[str, torch.nn.Module]]:
+        if memo is None:
+            memo = set()
+        if self not in memo:
+            if remove_duplicate:
+                memo.add(self)
+            # This is needed because otherwise the rewrite won't find the existing preproc, and will create a new one
+            # Also, `named_modules` need to include self - see base implementation in the nn.modules.Module
+            yield prefix, self
+            # Difference from base implementation is here - the child name (_preproc_module) is not added to the prefix
+            yield from self._preproc_module.named_modules(
+                memo, prefix, remove_duplicate
+            )
 
-class BaseForward:
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.nn.Parameter]]:
+        yield from self._preproc_module.named_parameters(
+            prefix,
+            recurse,
+            remove_duplicate,
+        )
+
+    def named_buffers(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, torch.Tensor]]:
+        yield from self._preproc_module.named_buffers(prefix, recurse, remove_duplicate)
+
+    # pyre-ignore [14]
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        # super().state_dict(destination, prefix, keep_vars)
+        if destination is None:
+            destination = OrderedDict()
+            # pyre-ignore [16]
+            destination._metadata = OrderedDict()
+        self._preproc_module.state_dict(
+            destination=destination, prefix=prefix, keep_vars=keep_vars
+        )
+        return destination
+
+    # pyre-ignore [14]
+    def load_state_dict(
+        self,
+        state_dict: OrderedDict[str, torch.Tensor],
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        return self._preproc_module.load_state_dict(state_dict, strict=strict)
+
+
+TForwardContext = TypeVar("TForwardContext", bound=TrainPipelineContext)
+
+
+class BaseForward(Generic[TForwardContext]):
     def __init__(
         self,
         name: str,
         args: List[ArgInfo],
         module: ShardedModule,
-        context: TrainPipelineContext,
+        context: TForwardContext,
         stream: Optional[torch.Stream] = None,
     ) -> None:
         self._name = name
@@ -320,14 +467,14 @@ class BaseForward:
     def args(self) -> List[ArgInfo]:
         return self._args
 
-    def set_context(self, context: TrainPipelineContext) -> None:
+    def set_context(self, context: TForwardContext) -> None:
         self._context = context
 
-    def get_context(self) -> TrainPipelineContext:
+    def get_context(self) -> TForwardContext:
         return self._context
 
 
-class PipelinedForward(BaseForward):
+class PipelinedForward(BaseForward[TrainPipelineContext]):
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert (
@@ -360,21 +507,20 @@ class PipelinedForward(BaseForward):
         return self._module.compute_and_output_dist(ctx, data)
 
 
-class EmbeddingPipelinedForward(BaseForward):
+class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert (
-            self._name
-            # pyre-ignore [16]
-            in self._context.embedding_a2a_requests
+            self._name in self._context.embedding_a2a_requests
         ), "Invalid EmbeddingPipelinedForward usage, please do not directly call model.forward()"
 
         ctx = self._context.module_contexts.pop(self._name)
+        cur_stream = torch.get_device_module(self._device).current_stream()
+
         if self._stream is not None:
             torch.get_device_module(self._device).current_stream().wait_stream(
                 self._stream
             )
-            cur_stream = torch.get_device_module(self._device).current_stream()
             ctx.record_stream(cur_stream)
         awaitable = self._context.embedding_a2a_requests.pop(self._name)
         embeddings = awaitable.wait()  # trigger awaitable manually for type checking
@@ -389,12 +535,12 @@ class EmbeddingPipelinedForward(BaseForward):
                 jt._values = detached_tensor
                 tensors.append(tensor)
                 detached_tensors.append(detached_tensor)
-            # pyre-ignore [16]
             self._context.embedding_tensors.append(tensors)
-            # pyre-ignore [16]
+            self._context.embedding_features.append(list(embeddings.keys()))
             self._context.detached_embedding_tensors.append(detached_tensors)
         else:
             assert isinstance(embeddings, KeyedTensor)
+            embeddings.record_stream(cur_stream)
             tensor = embeddings.values()
             detached_tensor = tensor.detach().requires_grad_()
             detached_tensor.retain_grad()
@@ -402,12 +548,19 @@ class EmbeddingPipelinedForward(BaseForward):
             tensors.append(tensor)
             detached_tensors.append(detached_tensor)
             self._context.embedding_tensors.append(tensors)
+            # KeyedTensor is returned by EmbeddingBagCollections and its variants
+            # KeyedTensor holds dense data from multiple features and .values()
+            # returns a single concatenated dense tensor. To ensure that
+            # context.embedding_tensors[i] has the same length as
+            # context.embedding_features[i], we pass in a list with a single item:
+            # a list containing all the embedding feature names.
+            self._context.embedding_features.append([list(embeddings.keys())])
             self._context.detached_embedding_tensors.append(detached_tensors)
 
         return LazyNoWait(embeddings)
 
 
-class PrefetchPipelinedForward(BaseForward):
+class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
     def __init__(
         self,
         name: str,
@@ -427,12 +580,9 @@ class PrefetchPipelinedForward(BaseForward):
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert (
-            self._name
-            # pyre-ignore [16]
-            in self._context.module_input_post_prefetch
+            self._name in self._context.module_input_post_prefetch
         ), "Invalid PrefetchPipelinedForward usage, please do not directly call model.forward()"
         data = self._context.module_input_post_prefetch.pop(self._name)
-        # pyre-ignore [16]
         ctx = self._context.module_contexts_post_prefetch.pop(self._name)
 
         # Make sure that both result of input_dist and context
@@ -511,6 +661,7 @@ class Tracer(torch.fx.Tracer):
             isinstance(m, ShardedModule)
             or module_qualified_name in self._leaf_modules
             or isinstance(m, FSDP)
+            or isinstance(m, FSDP2)
         ):
             return True
         return super().is_leaf_module(m, module_qualified_name)
@@ -569,7 +720,7 @@ def _wait_for_events(
 
 def _start_data_dist(
     pipelined_modules: List[ShardedModule],
-    batch: In,
+    batch: Pipelineable,
     context: TrainPipelineContext,
 ) -> None:
     if context.version == 0:
@@ -606,17 +757,19 @@ def _start_data_dist(
 
 def _start_embedding_lookup(
     module: ShardedModule,
-    batch: In,  # not used in this function
     context: EmbeddingTrainPipelineContext,
-    stream: Optional[torch.Stream],
+    source_stream: Optional[torch.Stream],
+    target_stream: Optional[torch.Stream],
 ) -> None:
-    kjt = context.input_dist_tensors_requests[module.forward.name].wait()
     module_context = context.module_contexts[module.forward.name]
-    if stream:
-        kjt.record_stream(stream)
-        module_context.record_stream(stream)
+    # pyre-ignore[6]: torch.cuda.Stream is a wrapper around torch.Stream
+    with torch.cuda.stream(source_stream):
+        kjt = context.input_dist_tensors_requests[module.forward.name].wait()
+
+    if target_stream is not None:
+        kjt.record_stream(target_stream)
+        module_context.record_stream(target_stream)
     a2a_awaitable = module.compute_and_output_dist(module_context, kjt)
-    # pyre-ignore[6]
     context.embedding_a2a_requests[module.forward.name] = a2a_awaitable
 
 
@@ -682,6 +835,46 @@ def _check_preproc_pipelineable(
     return True
 
 
+def _find_preproc_module_recursive(
+    module: torch.nn.Module,
+    preproc_module_fqn: str,
+) -> Optional[torch.nn.Module]:
+    """
+    Finds the preproc module in the model.
+    """
+    for name, child in module.named_modules():
+        if name == preproc_module_fqn:
+            return child
+    return None
+
+
+def _swap_preproc_module_recursive(
+    module: torch.nn.Module,
+    to_swap_module: torch.nn.Module,
+    preproc_module_fqn: str,
+    path: str = "",
+) -> torch.nn.Module:
+    """
+    Swaps the preproc module in the model.
+    """
+    if isinstance(module, PipelinedPreproc):
+        return module
+
+    if path == preproc_module_fqn:
+        return to_swap_module
+
+    for name, child in module.named_children():
+        child = _swap_preproc_module_recursive(
+            child,
+            to_swap_module,
+            preproc_module_fqn,
+            path + "." + name if path else name,
+        )
+        setattr(module, name, child)
+
+    return module
+
+
 def _get_node_args_helper(
     model: torch.nn.Module,
     # pyre-ignore
@@ -690,18 +883,33 @@ def _get_node_args_helper(
     pipelined_preprocs: Set[PipelinedPreproc],
     context: TrainPipelineContext,
     pipeline_preproc: bool,
+    # Add `None` constants to arg info only for preproc modules
+    # Defaults to False for backward compatibility
+    for_preproc_module: bool = False,
+    default_stream: Optional[torch.Stream] = None,
+    dist_stream: Optional[torch.Stream] = None,
 ) -> Tuple[List[ArgInfo], int]:
     """
     Goes through the args/kwargs of a node and arranges them into a list of `ArgInfo`s.
     It also counts the number of (args + kwargs) found.
     """
-    arg_info_list = [ArgInfo([], [], [], None) for _ in range(len(arguments))]
+    arg_info_list = [ArgInfo([], [], [], [], None) for _ in range(len(arguments))]
     for arg, arg_info in zip(arguments, arg_info_list):
-        if arg is None:
+        if not for_preproc_module and arg is None:
             num_found += 1
             continue
         while True:
             if not isinstance(arg, torch.fx.Node):
+                if pipeline_preproc:
+                    arg_info.input_attrs.insert(0, "")
+                    arg_info.is_getitems.insert(0, False)
+                    arg_info.preproc_modules.insert(0, None)
+                    if isinstance(arg, (fx_immutable_dict, fx_immutable_list)):
+                        # Make them mutable again, in case in-place updates are made
+                        arg_info.constants.insert(0, arg.copy())
+                    else:
+                        arg_info.constants.insert(0, arg)
+                    num_found += 1
                 break
             child_node = arg
 
@@ -710,7 +918,8 @@ def _get_node_args_helper(
                     # pyre-ignore[16]
                     ph_key: str = child_node.ph_key
                     # example: ph_key = 'event_id_list_features_seqs[marketplace]'
-                    ph_keys = ph_key.split("[")
+                    ph_key = ph_key.replace("[", ".")
+                    ph_keys = ph_key.split(".")
                     for key in ph_keys:
                         if "]" in key:
                             arg_info.input_attrs.append(key[:-1])
@@ -719,11 +928,13 @@ def _get_node_args_helper(
                             arg_info.input_attrs.append(key)
                             arg_info.is_getitems.append(False)
                         arg_info.preproc_modules.append(None)
+                        arg_info.constants.append(None)
                 else:
                     # no-op
                     arg_info.input_attrs.insert(0, "")
                     arg_info.is_getitems.insert(0, False)
                     arg_info.preproc_modules.insert(0, None)
+                    arg_info.constants.insert(0, None)
 
                 num_found += 1
                 break
@@ -740,6 +951,7 @@ def _get_node_args_helper(
                 arg_info.input_attrs.insert(0, child_node.args[1])
                 arg_info.is_getitems.insert(0, False)
                 arg_info.preproc_modules.insert(0, None)
+                arg_info.constants.insert(0, None)
                 arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
@@ -754,6 +966,7 @@ def _get_node_args_helper(
                 arg_info.input_attrs.insert(0, child_node.args[1])
                 arg_info.is_getitems.insert(0, True)
                 arg_info.preproc_modules.insert(0, None)
+                arg_info.constants.insert(0, None)
                 arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
@@ -790,9 +1003,18 @@ def _get_node_args_helper(
                     arg = child_node.kwargs["values"]
                 else:
                     arg = child_node.args[1]
+            elif child_node.op == "call_method" and child_node.target == "get":
+                # pyre-ignore[6]
+                arg_info.input_attrs.insert(0, child_node.args[1])
+                arg_info.is_getitems.insert(0, True)
+                arg_info.preproc_modules.insert(0, None)
+                arg_info.constants.insert(0, None)
+                arg = child_node.args[0]
             elif child_node.op == "call_module":
                 preproc_module_fqn = str(child_node.target)
-                preproc_module = getattr(model, preproc_module_fqn, None)
+                preproc_module = _find_preproc_module_recursive(
+                    model, preproc_module_fqn
+                )
 
                 if not pipeline_preproc:
                     logger.warning(
@@ -810,6 +1032,7 @@ def _get_node_args_helper(
                     arg_info.is_getitems.insert(0, False)
                     pipelined_preprocs.add(preproc_module)
                     arg_info.preproc_modules.insert(0, preproc_module)
+                    arg_info.constants.insert(0, None)
                     num_found += 1
                     break
 
@@ -833,14 +1056,21 @@ def _get_node_args_helper(
                 # is either made of preproc module or non-modifying train batch input
                 # transformations
                 preproc_args, num_found_safe_preproc_args = _get_node_args(
-                    model, child_node, pipelined_preprocs, context, pipeline_preproc
+                    model,
+                    child_node,
+                    pipelined_preprocs,
+                    context,
+                    pipeline_preproc,
+                    True,
+                    default_stream=default_stream,
+                    dist_stream=dist_stream,
                 )
                 if num_found_safe_preproc_args == total_num_args:
                     logger.info(
                         f"""Module {preproc_module} is a valid preproc module (no
                         trainable params and inputs can be derived from train batch input
                          via a series of either valid preproc modules or non-modifying
-                         transformations) and will be applied during sparse data dist 
+                         transformations) and will be applied during sparse data dist
                          stage"""
                     )
 
@@ -849,15 +1079,20 @@ def _get_node_args_helper(
                         preproc_module_fqn,
                         preproc_args,
                         context,
+                        default_stream=default_stream,
+                        dist_stream=dist_stream,
                     )
 
                     # module swap
-                    setattr(model, preproc_module_fqn, pipelined_preproc_module)
+                    _swap_preproc_module_recursive(
+                        model, pipelined_preproc_module, preproc_module_fqn
+                    )
 
                     arg_info.input_attrs.insert(0, "")  # dummy value
                     arg_info.is_getitems.insert(0, False)
                     pipelined_preprocs.add(pipelined_preproc_module)
                     arg_info.preproc_modules.insert(0, pipelined_preproc_module)
+                    arg_info.constants.insert(0, None)
 
                     num_found += 1
 
@@ -875,6 +1110,9 @@ def _get_node_args(
     pipelined_preprocs: Set[PipelinedPreproc],
     context: TrainPipelineContext,
     pipeline_preproc: bool,
+    for_preproc_module: bool = False,
+    default_stream: Optional[torch.Stream] = None,
+    dist_stream: Optional[torch.Stream] = None,
 ) -> Tuple[List[ArgInfo], int]:
     num_found = 0
 
@@ -885,6 +1123,9 @@ def _get_node_args(
         pipelined_preprocs,
         context,
         pipeline_preproc,
+        for_preproc_module,
+        default_stream=default_stream,
+        dist_stream=dist_stream,
     )
     kwargs_arg_info_list, num_found = _get_node_args_helper(
         model,
@@ -893,6 +1134,9 @@ def _get_node_args(
         pipelined_preprocs,
         context,
         pipeline_preproc,
+        for_preproc_module,
+        default_stream=default_stream,
+        dist_stream=dist_stream,
     )
 
     # Replace with proper names for kwargs
@@ -1011,17 +1255,19 @@ def _pipeline_detach_model(
 # pyre-ignore[3]
 def _rewrite_model(  # noqa C901
     model: torch.nn.Module,
-    context: TrainPipelineContext,
+    context: TForwardContext,
     dist_stream: Optional[torch.Stream],
     batch: Optional[In] = None,
     apply_jit: bool = False,
-    pipelined_forward: Type[BaseForward] = PipelinedForward,
+    pipelined_forward: Type[BaseForward[TrainPipelineContext]] = PipelinedForward,
     pipeline_preproc: bool = False,
+    default_stream: Optional[torch.Stream] = None,
 ) -> Tuple[
     List[ShardedModule],
     torch.nn.Module,
     List[Callable[..., Any]],
     List[PipelinedPreproc],
+    List[str],
 ]:
     input_model = model
     # Get underlying nn.Module
@@ -1061,6 +1307,7 @@ def _rewrite_model(  # noqa C901
     original_forwards = []
 
     pipelined_preprocs: Set[PipelinedPreproc] = set()
+    non_pipelined_sharded_modules = []
 
     for node in graph.nodes:
         if node.op == "call_module" and node.target in sharded_modules:
@@ -1073,6 +1320,8 @@ def _rewrite_model(  # noqa C901
                 pipelined_preprocs,
                 context,
                 pipeline_preproc,
+                default_stream=default_stream,
+                dist_stream=dist_stream,
             )
 
             if num_found == total_num_args:
@@ -1091,6 +1340,7 @@ def _rewrite_model(  # noqa C901
                 logger.warning(
                     f"Module '{node.target}'' will not be pipelined, due to input modifications"
                 )
+                non_pipelined_sharded_modules.append(node.target)
 
     # JIT script unsharded modules if applicable.
     if apply_jit:
@@ -1099,7 +1349,20 @@ def _rewrite_model(  # noqa C901
         if isinstance(input_model, DistributedModelParallel):
             input_model.module = graph_model
 
-    return pipelined_forwards, input_model, original_forwards, list(pipelined_preprocs)
+    if non_pipelined_sharded_modules:
+        logger.warn(
+            "Sharded modules were not pipelined: %s. "
+            + "This should be fixed for pipelining to work to the full extent.",
+            ", ".join(non_pipelined_sharded_modules),
+        )
+
+    return (
+        pipelined_forwards,
+        input_model,
+        original_forwards,
+        list(pipelined_preprocs),
+        non_pipelined_sharded_modules,
+    )
 
 
 def _override_input_dist_forwards(
@@ -1143,17 +1406,21 @@ class DataLoadingThread(Thread, Generic[In]):
         dataloader_iter: Iterator[In],
         to_device_non_blocking: bool,
         memcpy_stream_priority: int = 0,
+        memcpy_stream: Optional[torch.Stream] = None,
     ) -> None:
         super().__init__()
         self._stop: bool = False
         self._dataloader_iter = dataloader_iter
         self._buffer_empty_event: Event = Event()
         self._buffer_filled_event: Event = Event()
-        self._memcpy_stream: Optional[torch.Stream] = (
-            torch.get_device_module(device).Stream(priority=memcpy_stream_priority)
-            if device.type in ["cuda", "mtia"]
-            else None
-        )
+        if memcpy_stream is None:
+            self._memcpy_stream: Optional[torch.Stream] = (
+                torch.get_device_module(device).Stream(priority=memcpy_stream_priority)
+                if device.type in ["cuda", "mtia"]
+                else None
+            )
+        else:
+            self._memcpy_stream = memcpy_stream
         self._device = device
         self._to_device_non_blocking = to_device_non_blocking
         self._buffered: Optional[In] = None
@@ -1276,7 +1543,7 @@ class SparseDataDistUtil(Generic[In]):
 
     Args:
         model (torch.nn.Module): Model to pipeline
-        prefetch_stream (torch.cuda.Stream): Stream on which to run sparse data dist.
+        data_dist_stream (torch.cuda.Stream): Stream on which to run sparse data dist.
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
         prefetch_stream (Optional[torch.cuda.Stream]): Stream on which model prefetch runs
             Defaults to `None`. This needs to be passed in to enable prefetch pipelining.
@@ -1341,8 +1608,9 @@ class SparseDataDistUtil(Generic[In]):
             Callable[[KeyedJaggedTensor], Awaitable[KJTAllToAllTensorsAwaitable]]
         ] = []
 
-        self._pipelined_forward = (
-            PrefetchPipelinedForward if prefetch_stream else PipelinedForward
+        self._pipelined_forward: Type[BaseForward[TrainPipelineContext]] = cast(
+            Type[BaseForward[TrainPipelineContext]],
+            (PrefetchPipelinedForward if prefetch_stream else PipelinedForward),
         )
 
         self._default_stream: Optional[torch.Stream] = (
@@ -1381,15 +1649,20 @@ class SparseDataDistUtil(Generic[In]):
         if not self.initialized:
             # Step 1: Pipeline input dist in trec sharded modules
             # TODO (yhshin): support preproc modules for `StagedTrainPipeline`
-            self._pipelined_modules, self.model, self._original_forwards, _ = (
-                _rewrite_model(
-                    model=self.model,
-                    context=self.context,
-                    dist_stream=self.data_dist_stream,
-                    batch=batch,
-                    apply_jit=self.apply_jit,
-                    pipelined_forward=self._pipelined_forward,
-                )
+            (
+                self._pipelined_modules,
+                self.model,
+                self._original_forwards,
+                _,
+                _,
+            ) = _rewrite_model(
+                model=self.model,
+                context=self.context,
+                dist_stream=self.data_dist_stream,
+                batch=batch,
+                apply_jit=self.apply_jit,
+                pipelined_forward=self._pipelined_forward,
+                default_stream=self._default_stream,
             )
             # initializes input dist, so we can override input dist forwards
             _start_data_dist(self._pipelined_modules, batch, self.context)

@@ -7,7 +7,8 @@
 
 # pyre-strict
 
-from typing import Any, Callable, Dict, List, Optional, Union
+import typing
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch.fx._compatibility import compatibility
@@ -109,7 +110,11 @@ class Tracer(torch.fx.Tracer):
             return self.create_node(
                 "call_function",
                 target=NoWait,
-                args=self.create_arg((a._obj,)),
+                # Ugh. This line seems to be triggering some bug in pyre - so
+                # cast instead of fixme.
+                args=typing.cast(
+                    Tuple[torch.fx.node.Argument, ...], self.create_arg((a._obj,))
+                ),
                 kwargs={},
                 type_expr=NoWait,
             )
@@ -130,6 +135,7 @@ class Tracer(torch.fx.Tracer):
         """
 
         if hasattr(mod, "_fx_path"):
+            # pyre-fixme[7]: Expected `str` but got `Union[Tensor, Module]`.
             return mod._fx_path
         else:
             return super().path_of_module(mod)
@@ -159,4 +165,6 @@ def symbolic_trace(
     """
     tracer = Tracer(leaf_modules)
     graph = tracer.trace(root, concrete_args)
-    return torch.fx.GraphModule(root, graph)
+    # Ugh. This line seems to be triggering some bug in pyre - so cast instead
+    # of fixme.
+    return torch.fx.GraphModule(typing.cast(torch.nn.Module, root), graph)

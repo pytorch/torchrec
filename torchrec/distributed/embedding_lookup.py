@@ -20,6 +20,10 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
+from fbgemm_gpu.tbe.ssd.training import SSDTableBatchedEmbeddingBags
+from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
+    PartiallyMaterializedTensor,
+)
 from torch import nn
 
 from torch.autograd.function import FunctionCtx
@@ -182,7 +186,10 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             config: GroupedEmbeddingConfig,
         ) -> BaseEmbedding:
             for table in config.embedding_tables:
-                if table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING:
+                if (
+                    table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
+                    or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
+                ):
                     self._need_prefetch = True
             if config.compute_kernel == EmbeddingComputeKernel.DENSE:
                 return BatchedDenseEmbedding(
@@ -246,11 +253,17 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             )
             for emb_op, features in zip(self._emb_modules, features_by_group):
                 if (
-                    isinstance(emb_op.emb_module, SplitTableBatchedEmbeddingBagsCodegen)
+                    isinstance(
+                        emb_op.emb_module,
+                        (
+                            SplitTableBatchedEmbeddingBagsCodegen,
+                            SSDTableBatchedEmbeddingBags,
+                        ),
+                    )
                     and not emb_op.emb_module.prefetch_pipeline
                 ):
                     logging.error(
-                        "Invalid setting on SplitTableBatchedEmbeddingBagsCodegen modules. prefetch_pipeline must be set to True.\n"
+                        f"Invalid setting on {type(emb_op.emb_module)} modules. prefetch_pipeline must be set to True.\n"
                         "If you don’t turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
                     )
                 if hasattr(emb_op.emb_module, "prefetch"):
@@ -455,7 +468,10 @@ class GroupedPooledEmbeddingsLookup(
     ) -> None:
         def _need_prefetch(config: GroupedEmbeddingConfig) -> bool:
             for table in config.embedding_tables:
-                if table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING:
+                if (
+                    table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
+                    or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
+                ):
                     return True
             return False
 
@@ -468,11 +484,17 @@ class GroupedPooledEmbeddingsLookup(
                 if not _need_prefetch(emb_op.config):
                     continue
                 if (
-                    isinstance(emb_op.emb_module, SplitTableBatchedEmbeddingBagsCodegen)
+                    isinstance(
+                        emb_op.emb_module,
+                        (
+                            SplitTableBatchedEmbeddingBagsCodegen,
+                            SSDTableBatchedEmbeddingBags,
+                        ),
+                    )
                     and not emb_op.emb_module.prefetch_pipeline
                 ):
                     logging.error(
-                        "Invalid setting on SplitTableBatchedEmbeddingBagsCodegen modules. prefetch_pipeline must be set to True.\n"
+                        f"Invalid setting on {type(emb_op.emb_module)} modules. prefetch_pipeline must be set to True.\n"
                         "If you don't turn on prefetch_pipeline, cache locations might be wrong in backward and can cause wrong results.\n"
                     )
                 if hasattr(emb_op.emb_module, "prefetch"):
@@ -619,6 +641,18 @@ class GroupedPooledEmbeddingsLookup(
                 tbe_slice,
             ) in embedding_kernel.named_parameters_by_table():
                 yield (table_name, tbe_slice)
+
+    def get_named_split_embedding_weights_snapshot(
+        self,
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+        """
+        Return an iterator over embedding tables, yielding both the table name as well as the embedding
+        table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
+        RocksDB snapshot to support windowed access.
+        """
+        for emb_module in self._emb_modules:
+            if isinstance(emb_module, KeyValueEmbeddingBag):
+                yield from emb_module.get_named_split_embedding_weights_snapshot()
 
     def flush(self) -> None:
         for emb_module in self._emb_modules:
@@ -993,20 +1027,42 @@ class InferGroupedPooledEmbeddingsLookup(
                 "meta" if device is not None and device.type == "meta" else "cuda"
             )
 
+        self._is_empty_rank: List[bool] = []
         for rank in range(world_size):
-            self._embedding_lookups_per_rank.append(
-                # TODO add position weighted module support
-                MetaInferGroupedPooledEmbeddingsLookup(
-                    grouped_configs=grouped_configs_per_rank[rank],
-                    device=rank_device(device_type, rank),
-                    fused_params=fused_params,
+            empty_rank = len(grouped_configs_per_rank[rank]) == 0
+            self._is_empty_rank.append(empty_rank)
+            if not empty_rank:
+                self._embedding_lookups_per_rank.append(
+                    # TODO add position weighted module support
+                    MetaInferGroupedPooledEmbeddingsLookup(
+                        grouped_configs=grouped_configs_per_rank[rank],
+                        device=rank_device(device_type, rank),
+                        fused_params=fused_params,
+                    )
                 )
-            )
 
     def get_tbes_to_register(
         self,
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return get_tbes_to_register_from_iterable(self._embedding_lookups_per_rank)
+
+    def forward(
+        self,
+        input_dist_outputs: InputDistOutputs,
+    ) -> List[torch.Tensor]:
+        embeddings: List[torch.Tensor] = []
+        sparse_features = [
+            input_dist_outputs.features[i]
+            for i, is_empty in enumerate(self._is_empty_rank)
+            if not is_empty
+        ]
+        # syntax for torchscript
+        for i, embedding_lookup in enumerate(
+            self._embedding_lookups_per_rank,
+        ):
+            sparse_features_rank = sparse_features[i]
+            embeddings.append(embedding_lookup.forward(sparse_features_rank))
+        return embeddings
 
 
 class InferGroupedEmbeddingsLookup(

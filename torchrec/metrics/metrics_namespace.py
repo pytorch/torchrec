@@ -40,22 +40,26 @@ class MetricName(MetricNameBase):
     DEFAULT = ""
 
     NE = "ne"
+    NE_POSITIVE = "ne_positive"
     SEGMENTED_NE = "segmented_ne"
     LOG_LOSS = "logloss"
     THROUGHPUT = "throughput"
     TOTAL_EXAMPLES = "total_examples"
+    ATTEMPT_EXAMPLES = "attempt_examples"
     CTR = "ctr"
     CALIBRATION = "calibration"
     MSE = "mse"
     MAE = "mae"
     RMSE = "rmse"
     AUC = "auc"
+    GAUC = "gauc"
     AUPRC = "auprc"
     RAUC = "rauc"
     GROUPED_AUC = "grouped_auc"
     GROUPED_AUPRC = "grouped_auprc"
     GROUPED_RAUC = "grouped_rauc"
     RECALL_SESSION_LEVEL = "recall_session_level"
+    PRECISION_SESSION_LEVEL = "precision_session_level"
     MULTICLASS_RECALL = "multiclass_recall"
     WEIGHTED_AVG = "weighted_avg"
     TOWER_QPS = "qps"
@@ -63,7 +67,9 @@ class MetricName(MetricNameBase):
     NDCG = "ndcg"
     XAUC = "xauc"
     SCALAR = "scalar"
+    OUTPUT = "output"
 
+    GAUC_NUM_SAMPLES = "gauc_num_samples"
     TOTAL_POSITIVE_EXAMPLES = "total_positive_examples"
     TOTAL_NEGATIVE_EXAMPLES = "total_negative_examples"
     PRECISION = "precision"
@@ -71,6 +77,14 @@ class MetricName(MetricNameBase):
 
     SERVING_NE = "serving_ne"
     SERVING_CALIBRATION = "serving_calibration"
+    TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
+
+    CALI_FREE_NE = "cali_free_ne"
+    UNWEIGHTED_NE = "unweighted_ne"
+
+    HINDSIGHT_TARGET_PR = "hindsight_target_pr"
+    HINDSIGHT_TARGET_PRECISION = "hindsight_target_precision"
+    HINDSIGHT_TARGET_RECALL = "hindsight_target_recall"
 
 
 class MetricNamespaceBase(StrValueMixin, Enum):
@@ -81,12 +95,14 @@ class MetricNamespace(MetricNamespaceBase):
     DEFAULT = ""
 
     NE = "ne"
+    NE_POSITIVE = "ne_positive"
     SEGMENTED_NE = "segmented_ne"
     THROUGHPUT = "throughput"
     CTR = "ctr"
     CALIBRATION = "calibration"
     MSE = "mse"
     AUC = "auc"
+    GAUC = "gauc"
     AUPRC = "auprc"
     RAUC = "rauc"
     MAE = "mae"
@@ -99,6 +115,7 @@ class MetricNamespace(MetricNamespaceBase):
 
     WEIGHTED_AVG = "weighted_avg"
     RECALL_SESSION_LEVEL = "recall_session_level"
+    PRECISION_SESSION_LEVEL = "precision_session_level"
 
     TOWER_QPS = "qps"
     NDCG = "ndcg"
@@ -112,11 +129,20 @@ class MetricNamespace(MetricNamespaceBase):
     SERVING_NE = "serving_ne"
     SERVING_CALIBRATION = "serving_calibration"
 
+    OUTPUT = "output"
+    TENSOR_WEIGHTED_AVG = "tensor_weighted_avg"
+
+    CALI_FREE_NE = "cali_free_ne"
+    UNWEIGHTED_NE = "unweighted_ne"
+
+    HINDSIGHT_TARGET_PR = "hindsight_target_pr"
+
 
 class MetricPrefix(StrValueMixin, Enum):
     DEFAULT = ""
     LIFETIME = "lifetime_"
     WINDOW = "window_"
+    ATTEMPT = "attempt_"
 
 
 def task_wildcard_metrics_pattern(

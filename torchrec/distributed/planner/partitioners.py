@@ -9,6 +9,7 @@
 
 import copy
 import heapq
+import itertools
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -150,7 +151,7 @@ class OrderedDeviceHardware:
 
 
 class GreedyPerfPartitioner(Partitioner):
-    """Greedy Partitioner
+    """Greedy Partitioner.
 
     Args:
         sort_by (SortBy): Sort sharding options by storage or perf in
@@ -243,6 +244,14 @@ class GreedyPerfPartitioner(Partitioner):
         for sharding_option_group in sharding_option_groups:
             if (
                 sharding_option_group.sharding_options[0].partition_by
+                == PartitionByType.MULTI_HOST.value
+            ):
+                self._multi_hosts_partition(sharding_option_group, _host_level_devices)
+                # _multi_hosts_partition invalidates minheap_devices, force rebuild before using
+                minheap_devices = None
+
+            elif (
+                sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.HOST.value
             ):
                 self._cohost_partition(sharding_option_group, _host_level_devices)
@@ -322,6 +331,136 @@ class GreedyPerfPartitioner(Partitioner):
                     heapq.heapify(minheap_devices)
 
     @classmethod
+    def _multi_hosts_partition(
+        cls,
+        sharding_option_group: ShardingOptionGroup,
+        _host_level_devices: List[List[DeviceHardware]],
+    ) -> None:
+        """
+        Partition shards on multiple hosts. This is a greedy algorithm trying to complete partitioning on multiple hosts (sorted by perf).
+        First we do columnwise sharding among hosts, then tablewise-rowwise sharding within each host.
+        There're two cases depends on the number of hosts needed to partition shards.
+
+        Case one: `num_host_to_allocate >= len(sorted_host_level_devices)`
+            We'll try to partition only once. Hosts might be selected multiple times in a circular manner.
+            E.g, we have 3 hosts and `num_host_to_allocate` = 4. We sort all devices on host level. The devices of hosts [0, 1, 2, 0] will be selected for uniform partitioning.
+            We'll update device information if success, otherwise raise a `PlannerError`.
+
+        Case two: `num_host_to_allocate < len(sorted_host_level_devices)`
+            We'll try to partition with hosts `[host_index, host_index + num_host_to_allocate]` iteratively with host_index incremented by 1 each time.
+            1) We sort all devices on host level. Set `host_index` = 0
+            2) We select hosts`[host_index, host_index + num_host_to_allocate]` if indexes are within range.
+            3) We do uniform partitioning over all devices of the selected hosts. If we cannot partition, then we increase `host_index` by 1 and go to 2); Otherwise we go to 4)
+            4) Update device information if success, otherwise raise a `PlannerError`.
+
+        Keyword arguments:
+        sharding_option_group -- grouped sharding options
+        _host_level_devices -- devices
+
+        Example::
+            sharding_option_group.sharding_options = [
+                    ShardingOption(partition_by="multi_host",
+                            shards=[
+                                Shards(storage=1, perf=1),
+                                Shards(storage=1, perf=1),
+                                Shards(storage=1, perf=1),
+                                Shards(storage=1, perf=1),
+                            ]),
+                ]
+            topology = Topology(world_size=6, local_world_size=2)
+
+            # sharding_options[0] will be placed on host 1 and host 2 with the multi_hosts strategy, resulting in
+
+            topology.devices[0].perf.total = (1,1)
+            topology.devices[1].perf.total = (1,1)
+            topology.devices[2].perf.total = (1,1)
+            topology.devices[3].perf.total = (1,1)
+            topology.devices[4].perf.total = (0,0)
+            topology.devices[5].perf.total = (0,0)
+
+        """
+        # TODO: for now assume just one option for multi_hosts.
+        if len(sharding_option_group.sharding_options) != 1:
+            raise PlannerError(
+                error_type=PlannerErrorType.PARTITION,
+                message=f"Unexpected length for sharding options: {len(sharding_option_group.sharding_options)}. Length needs to be 1",
+            )
+        num_shards = sharding_option_group.sharding_options[0].num_shards
+
+        if _host_level_devices is None:
+            raise PlannerError(
+                error_type=PlannerErrorType.PARTITION,
+                message="host level devices is None",
+            )
+
+        local_world_size = len(_host_level_devices[0])
+        num_host_to_allocate, remainder = divmod(num_shards, local_world_size)
+
+        if remainder > 0:
+            raise PlannerError(
+                error_type=PlannerErrorType.PARTITION,
+                message=f"Grid Sharding is unable to place shards equally over hosts without overlapping. {num_shards=} % {local_world_size=} != 0",
+            )
+
+        sorted_host_level_devices = _sort_devices_by_perf(_host_level_devices)
+        host_index = 0
+        all_hosts_used = False
+        while True:
+            if num_host_to_allocate >= len(sorted_host_level_devices):
+                # case one: we need to use all hosts
+                all_hosts_used = True
+                devices = []
+                for i in range(num_host_to_allocate):
+                    devices.extend(
+                        sorted_host_level_devices[i % len(sorted_host_level_devices)]
+                    )
+            else:
+                # case two: we can use some hosts
+                devices = list(
+                    itertools.chain(
+                        *sorted_host_level_devices[
+                            host_index : host_index + num_host_to_allocate
+                        ]
+                    )
+                )
+            host_index += 1  # shift to next host
+            host_devices = copy.deepcopy(devices)
+            success = True
+            sharding_option = sharding_option_group.sharding_options[0]
+            try:
+                if sharding_option.sharding_type == ShardingType.GRID_SHARD.value:
+                    cls._uniform_partition([sharding_option], host_devices)
+                else:
+                    raise PlannerError(
+                        error_type=PlannerErrorType.PARTITION,
+                        message=f"unexpected multi_host sharding type: {sharding_option.sharding_type}",
+                    )
+            except PlannerError:
+                success = False
+            if success:
+                # successfully found some hosts and partitioned on these hosts
+                # need to update the devices
+                for device, host_device in zip(devices, host_devices):
+                    # check that devices and host_devices are in the same order
+                    if device.rank != host_device.rank:
+                        raise PlannerError(
+                            error_type=PlannerErrorType.PARTITION,
+                            message=f"device rank {device.rank} is not the same as device_copy rank {host_device.rank}",
+                        )
+                    device.storage = host_device.storage
+                    device.perf = host_device.perf
+                return
+
+            if (
+                host_index + num_host_to_allocate > len(sorted_host_level_devices)
+            ) or all_hosts_used:
+                break
+        raise PlannerError(
+            error_type=PlannerErrorType.PARTITION,
+            message=f"can't find hosts for sharding option group {sharding_option_group}",
+        )
+
+    @classmethod
     def _cohost_partition(
         cls,
         sharding_option_group: ShardingOptionGroup,
@@ -358,8 +497,9 @@ class GreedyPerfPartitioner(Partitioner):
                             )
                         cls._device_partition(sharding_option, minheap_devices)
                     else:
-                        raise RuntimeError(
-                            f"unexpected cohost sharding type: {sharding_option.sharding_type}"
+                        raise PlannerError(
+                            error_type=PlannerErrorType.PARTITION,
+                            message=f"unexpected cohost sharding type: {sharding_option.sharding_type}",
                         )
                 except PlannerError:
                     success = False
@@ -395,8 +535,9 @@ class GreedyPerfPartitioner(Partitioner):
     ) -> None:
         for sharding_option in sharding_options:
             if sharding_option.num_shards != len(devices):
-                raise RuntimeError(
-                    f"For a uniform partition, the number of shards ({sharding_option.num_shards}) must equal the number of devices ({len(devices)})"
+                raise PlannerError(
+                    error_type=PlannerErrorType.PARTITION,
+                    message=f"For a uniform partition, the number of shards ({sharding_option.num_shards}) must equal the number of devices ({len(devices)})",
                 )
             for i in range(len(devices)):
                 storage_needed = cast(Storage, sharding_option.shards[i].storage)

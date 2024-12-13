@@ -94,3 +94,46 @@ class QuantizationCommCodecTest(unittest.TestCase):
             rtol=rtol,
             atol=atol,
         )
+
+    @settings(deadline=4000)
+    # pyre-ignore
+    @given(
+        row_size=st.integers(4, 256),
+        col_size=st.integers(4, 256),
+        rand_seed=st.integers(0, 65534),
+    )
+    def test_mx4_comm_codec(
+        self,
+        row_size: int,
+        col_size: int,
+        rand_seed: int,
+    ) -> None:
+
+        torch.manual_seed(rand_seed)
+        shape = (row_size, col_size)
+        input_tensor = torch.rand(shape, requires_grad=False) * 2 - 1
+
+        quant_codec = get_qcomm_codecs(
+            QCommsConfig(
+                forward_precision=CommType.MX4,
+            )
+        )
+        dim_sum_per_rank = [shape[1]]
+        ctx = quant_codec.forward.create_context()
+
+        rank = 0
+        quant_codec.forward.padded_size(input_tensor, dim_sum_per_rank, rank, ctx)
+        quant_tensor = quant_codec.forward.encode(input_tensor, ctx)
+        output_tensor = quant_codec.forward.decode(quant_tensor, ctx)
+        output_tensor = output_tensor.view(shape[0], ctx.padded_dim_sum_per_rank[rank])
+        output_tensor = output_tensor[:, : shape[1]]
+
+        rtol = 0.1
+        atol = 0.15
+
+        torch.testing.assert_close(
+            input_tensor.detach().cpu(),
+            output_tensor.detach().cpu(),
+            rtol=rtol,
+            atol=atol,
+        )

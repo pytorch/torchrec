@@ -52,7 +52,7 @@ class SparseArch(nn.Module):
            name="t2", embedding_dim=4, num_embeddings=10, feature_names=["f2"]
         )
 
-        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+        embedding_bag_collection = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
         sparse_arch = SparseArch(embedding_bag_collection)
 
         #     0       1        2  <-- batch

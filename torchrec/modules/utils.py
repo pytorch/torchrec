@@ -16,6 +16,7 @@ import torch
 from torch.profiler import record_function
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
+from torchrec.types import CacheMixin
 
 
 @dataclass
@@ -37,6 +38,14 @@ class SequenceVBEContext(Multistreamable):
 @torch.fx.wrap
 def _fx_to_list(tensor: torch.Tensor) -> List[int]:
     return tensor.long().tolist()
+
+
+@torch.fx.wrap
+def _slice_1d_tensor(tensor: torch.Tensor, start: int, end: int) -> torch.Tensor:
+    """
+    Slice tensor.
+    """
+    return tensor[start:end]
 
 
 def extract_module_or_tensor_callable(
@@ -132,13 +141,18 @@ def convert_list_of_modules_to_modulelist(
         #  `Iterable[torch.nn.Module]`.
         len(modules)
         == sizes[0]
+        # pyre-fixme[6]: For 1st argument expected `pyre_extensions.PyreReadOnly[Sized]`
+        #  but got `Iterable[Module]`.
     ), f"the counts of modules ({len(modules)}) do not match with the required counts {sizes}"
     if len(sizes) == 1:
         return torch.nn.ModuleList(modules)
     else:
         # recursively create nested list
         return torch.nn.ModuleList(
-            convert_list_of_modules_to_modulelist(m, sizes[1:]) for m in modules
+            # pyre-fixme[6]: For 1st argument expected `Iterable[Module]` but got
+            #  `Module`.
+            convert_list_of_modules_to_modulelist(m, sizes[1:])
+            for m in modules
         )
 
 
@@ -289,20 +303,22 @@ def construct_jagged_tensors_inference(
     need_indices: bool = False,
     features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
     reverse_indices: Optional[torch.Tensor] = None,
+    remove_padding: bool = False,
 ) -> Dict[str, JaggedTensor]:
     with record_function("## construct_jagged_tensors_inference ##"):
         if reverse_indices is not None:
             embeddings = torch.index_select(
                 embeddings, 0, reverse_indices.to(torch.int32)
             )
+        elif remove_padding:
+            embeddings = _slice_1d_tensor(embeddings, 0, lengths.sum().item())
 
         ret: Dict[str, JaggedTensor] = {}
-        length_per_key: List[int] = _fx_to_list(
-            torch.sum(lengths.view(len(embedding_names), -1), dim=1)
-        )
 
-        lengths = lengths.view(len(embedding_names), -1)
+        length_per_key: List[int] = _fx_to_list(torch.sum(lengths, dim=1))
+
         lengths_tuple = torch.unbind(lengths, dim=0)
+
         embeddings_list = torch.split(embeddings, length_per_key, dim=0)
         values_list = torch.split(values, length_per_key) if need_indices else None
 
@@ -373,3 +389,20 @@ def deterministic_dedup(ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     )
 
     return sorted_unique_ids.view(-1), last_existence_index.flatten()
+
+
+def reset_module_states_post_sharding(
+    module: torch.nn.Module,
+) -> None:
+    """
+    Reset the module states post sharding.
+    Involves clearing cached tensors if they exist
+    from unsharded version.
+    """
+
+    # Clear Cache for TorchRec modules that have cache. Normally would happen in sharding
+    # but cached modules might not be part of the TorchRec modules being sharded.
+    # For example, necessary for KTRegroupAsDict correctness,
+    for submod in module.modules():
+        if isinstance(submod, CacheMixin):
+            submod.clear_cache()

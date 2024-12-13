@@ -59,6 +59,7 @@ from torchrec.distributed.sharding.tw_sequence_sharding import (
 from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 from torchrec.distributed.types import (
     Awaitable,
+    EmbeddingEvent,
     EmbeddingModuleShardingPlan,
     LazyAwaitable,
     Multistreamable,
@@ -71,6 +72,7 @@ from torchrec.distributed.types import (
 from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
     convert_to_fbgemm_types,
+    maybe_annotate_embedding_event,
     merge_fused_params,
     optimizer_type_to_emb_opt_type,
 )
@@ -407,6 +409,8 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
         ctx: EmbeddingCollectionContext,
         need_indices: bool = False,
         features_to_permute_indices: Optional[Dict[str, List[int]]] = None,
+        module_fqn: Optional[str] = None,
+        sharding_types: Optional[List[str]] = None,
     ) -> None:
         super().__init__()
         self._awaitables_per_sharding = awaitables_per_sharding
@@ -415,6 +419,8 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
         self._features_to_permute_indices = features_to_permute_indices
         self._embedding_names_per_sharding = embedding_names_per_sharding
         self._ctx = ctx
+        self._module_fqn = module_fqn
+        self._sharding_types = sharding_types
 
     def _wait_impl(self) -> Dict[str, JaggedTensor]:
         jt_dict: Dict[str, JaggedTensor] = {}
@@ -438,9 +444,17 @@ class EmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
             seq_vbe_ctx = (
                 None if i >= len(self._ctx.seq_vbe_ctx) else self._ctx.seq_vbe_ctx[i]
             )
+
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.OUTPUT_DIST_WAIT,
+                self._module_fqn,
+                self._sharding_types[i] if self._sharding_types else None,
+            ):
+                embeddings = w.wait()
+
             jt_dict.update(
                 construct_jagged_tensors(
-                    embeddings=w.wait(),
+                    embeddings=embeddings,
                     features=f,
                     embedding_names=e,
                     need_indices=self._need_indices,
@@ -477,8 +491,10 @@ class ShardedEmbeddingCollection(
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
         use_index_dedup: bool = False,
+        module_fqn: Optional[str] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
+        self._module_fqn = module_fqn
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
         self._table_names: List[str] = [
             config.name for config in self._embedding_configs
@@ -493,6 +509,10 @@ class ShardedEmbeddingCollection(
                 for table_name, parameter_sharding in table_name_to_parameter_sharding.items()
                 if table_name in self._table_names
             },
+        )
+        # output parameters as DTensor in state dict
+        self._output_dtensor: bool = (
+            fused_params.get("output_dtensor", False) if fused_params else False
         )
 
         self._env = env
@@ -575,8 +595,8 @@ class ShardedEmbeddingCollection(
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
                     device_ids=(
-                        [device]
-                        if self._device and self._device.type == "cuda"
+                        [self._device]
+                        if self._device is not None and self._device.type == "cuda"
                         else None
                     ),
                     process_group=env.process_group,
@@ -641,10 +661,9 @@ class ShardedEmbeddingCollection(
                 if len(local_shards) == 0:
                     state_dict[key] = torch.empty(0)
                 elif len(local_shards) > 1:
-                    # TODO - add multiple shards on rank support
-                    raise RuntimeError(
-                        f"Multiple shards on rank is not supported for DTensor yet, got {len(local_shards)}"
-                    )
+                    state_dict[key] = torch.cat(
+                        [s.view(-1) for s in local_shards], dim=0
+                    ).view(-1, dim)
                 else:
                     state_dict[key] = local_shards[0].view(-1, dim)
             elif isinstance(state_dict[key], torch.Tensor):
@@ -759,6 +778,8 @@ class ShardedEmbeddingCollection(
             for (
                 table_name,
                 tbe_slice,
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+                #  `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
                 self.embeddings[table_name].register_parameter("weight", tbe_slice)
         for table_name in self._model_parallel_name_to_local_shards.keys():
@@ -782,21 +803,34 @@ class ShardedEmbeddingCollection(
                 EmbeddingComputeKernel.KEY_VALUE.value
             }:
                 continue
-
-            if shards_wrapper_map["local_tensors"]:
-                self._model_parallel_name_to_dtensor[table_name] = DTensor.from_local(
-                    local_tensor=LocalShardsWrapper(
-                        local_shards=shards_wrapper_map["local_tensors"],
-                        local_offsets=shards_wrapper_map["local_offsets"],
-                    ),
-                    device_mesh=self._env.device_mesh,
-                    placements=shards_wrapper_map["placements"],
-                    shape=shards_wrapper_map["global_size"],
-                    stride=shards_wrapper_map["global_stride"],
-                    run_check=False,
-                )
+            if self._output_dtensor:
+                if shards_wrapper_map["local_tensors"]:
+                    self._model_parallel_name_to_dtensor[table_name] = (
+                        DTensor.from_local(
+                            local_tensor=LocalShardsWrapper(
+                                local_shards=shards_wrapper_map["local_tensors"],
+                                local_offsets=shards_wrapper_map["local_offsets"],
+                            ),
+                            device_mesh=self._env.device_mesh,
+                            placements=shards_wrapper_map["placements"],
+                            shape=shards_wrapper_map["global_size"],
+                            stride=shards_wrapper_map["global_stride"],
+                            run_check=False,
+                        )
+                    )
+                else:
+                    # empty shard case
+                    self._model_parallel_name_to_dtensor[table_name] = (
+                        DTensor.from_local(
+                            local_tensor=LocalShardsWrapper(
+                                local_shards=[],
+                                local_offsets=[],
+                            ),
+                            device_mesh=self._env.device_mesh,
+                            run_check=False,
+                        )
+                    )
             else:
-                # if DTensors for table do not exist, create ShardedTensor
                 # created ShardedTensors once in init, use in post_state_dict_hook
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
                     ShardedTensor._init_from_local_shards(
@@ -1057,6 +1091,8 @@ class ShardedEmbeddingCollection(
         if self._features_order:
             unpadded_features = unpadded_features.permute(
                 self._features_order,
+                # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]` but
+                #  got `TypeUnion[Module, Tensor]`.
                 self._features_order_tensor,
             )
 
@@ -1116,6 +1152,8 @@ class ShardedEmbeddingCollection(
             if self._features_order:
                 features = features.permute(
                     self._features_order,
+                    # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
+                    #  but got `TypeUnion[Module, Tensor]`.
                     self._features_order_tensor,
                 )
             features_by_shards = features.split(self._feature_splits)
@@ -1123,8 +1161,14 @@ class ShardedEmbeddingCollection(
                 features_by_shards = self._dedup_indices(ctx, features_by_shards)
 
             awaitables = []
-            for input_dist, features in zip(self._input_dists, features_by_shards):
-                awaitables.append(input_dist(features))
+            for input_dist, features, sharding_type in zip(
+                self._input_dists, features_by_shards, self._sharding_type_to_sharding
+            ):
+                with maybe_annotate_embedding_event(
+                    EmbeddingEvent.KJT_SPLITS_DIST, self._module_fqn, sharding_type
+                ):
+                    awaitables.append(input_dist(features))
+
                 ctx.sharding_contexts.append(
                     SequenceShardingContext(
                         features_before_input_dist=features,
@@ -1137,7 +1181,13 @@ class ShardedEmbeddingCollection(
                 )
             if unpadded_features is not None:
                 self._compute_sequence_vbe_context(ctx, unpadded_features)
-        return KJTListSplitsAwaitable(awaitables, ctx)
+
+        return KJTListSplitsAwaitable(
+            awaitables,
+            ctx,
+            self._module_fqn,
+            list(self._sharding_type_to_sharding.keys()),
+        )
 
     def compute(
         self, ctx: EmbeddingCollectionContext, dist_input: KJTList
@@ -1197,9 +1247,19 @@ class ShardedEmbeddingCollection(
                 -1, features.stride()
             )
             embedding_dim = self._embedding_dim_for_sharding_type(sharding_type)
-            awaitables_per_sharding.append(
-                odist(lookup(features).view(-1, embedding_dim), sharding_ctx)
-            )
+
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.LOOKUP, self._module_fqn, sharding_type
+            ):
+                embs = lookup(features)
+
+            with maybe_annotate_embedding_event(
+                EmbeddingEvent.OUTPUT_DIST, self._module_fqn, sharding_type
+            ):
+                awaitables_per_sharding.append(
+                    odist(embs.view(-1, embedding_dim), sharding_ctx)
+                )
+
             features_before_all2all_per_sharding.append(
                 # pyre-fixme[6]: For 1st argument expected `KeyedJaggedTensor` but
                 #  got `Optional[KeyedJaggedTensor]`.
@@ -1212,6 +1272,8 @@ class ShardedEmbeddingCollection(
             need_indices=self._need_indices,
             features_to_permute_indices=self._features_to_permute_indices,
             ctx=ctx,
+            module_fqn=self._module_fqn,
+            sharding_types=list(self._sharding_type_to_sharding.keys()),
         )
 
     def _embedding_dim_for_sharding_type(self, sharding_type: str) -> int:
@@ -1245,6 +1307,7 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
         params: Dict[str, ParameterSharding],
         env: ShardingEnv,
         device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
     ) -> ShardedEmbeddingCollection:
         return ShardedEmbeddingCollection(
             module,
@@ -1254,6 +1317,7 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
             device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
             use_index_dedup=self._use_index_dedup,
+            module_fqn=module_fqn,
         )
 
     def shardable_parameters(

@@ -12,10 +12,12 @@ from torchrec.distributed.train_pipeline.train_pipelines import (  # noqa
     EvalPipelineSparseDist,  # noqa
     PrefetchTrainPipelineSparseDist,  # noqa
     StagedTrainPipeline,  # noqa
+    TorchCompileConfig,  # noqa
     TrainPipeline,  # noqa
     TrainPipelineBase,  # noqa
     TrainPipelinePT2,  # noqa
     TrainPipelineSparseDist,  # noqa
+    TrainPipelineSparseDistCompAutograd,  # noqa
 )
 from torchrec.distributed.train_pipeline.utils import (  # noqa
     _override_input_dist_forwards,  # noqa

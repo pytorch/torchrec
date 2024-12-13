@@ -16,6 +16,7 @@ from typing import Any, Callable, cast, Dict, Iterable, List, Optional, Tuple, U
 
 from torch import nn
 
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner.constants import BIGINT_DTYPE, NUM_POOLINGS
 from torchrec.distributed.planner.shard_estimators import _calculate_shard_io_sizes
 from torchrec.distributed.planner.storage_reservations import (
@@ -53,62 +54,73 @@ MIN_WIDTH = 90
 
 def _normalize_float(p: List[float]) -> List[float]:
     p_total = sum(p)
+    assert p_total > 0
     return [p_i / p_total for p_i in p]
 
 
 def _normalize_int(p: List[int]) -> List[float]:
     p_total = sum(p)
+    assert p_total > 0
     return [p_i * 1.0 / p_total for p_i in p]
 
 
 def _total_variation(p: List[float]) -> float:
     k = len(p)
-    if not k:
-        return -1.0
+    assert k > 0
     return max(abs(pi - 1.0 / k) for pi in p)
 
 
 def _total_distance(p: List[float]) -> float:
     k = len(p)
-    if not k:
-        return -1.0
+    assert k > 0
     return sum(abs(pi - 1.0 / k) for pi in p)
 
 
-def _chi_divergence(p: List[float], alpha: float = 1.0) -> float:
-    assert alpha >= 1
+def _chi_sq_divergence(p: List[float]) -> float:
     k = len(p)
-    if not k:
-        return -1.0
-    return sum(abs(pi - 1.0 / k) ** alpha * k ** (alpha - 1.0) for pi in p)
+    assert k > 0
+    return sum(abs(pi - 1.0 / k) ** 2.0 * k for pi in p)
 
 
 def _kl_divergence(p: List[float]) -> float:
     k = len(p)
-    if not k:
-        return -1.0
+    assert k > 0
     return sum(pi * math.log(k * pi) for pi in p if pi > 0)
 
 
-def _calc_max_chi_divergence(N: int, alpha: float) -> float:
+def _calc_max_chi_sq_divergence(N: int) -> float:
+    # Upper bound for chi-sq divergence in our case given sample size of distribution (N)
     assert N > 0
-    # Upper bound for chi divergence in our case given sample size of distribution (N) and alpha
-    return (N - 1) ** alpha * (1.0 / N) + (N - 1) * (1.0 / N)
+    return (((N - 1) / N) ** 2.0) * N + (N - 1) * (1 / N)
 
 
 def _calc_max_kl_divergence(N: int) -> float:
-    assert N > 0
     # Upper bound for KL divergence in our case given sample size of distribution (N)
+    assert N > 0
     return math.log(N)
 
 
-CHI_DIVERGENCE_ALPHA = 1.0
+def _normalized_kl_divergence(p: List[float]) -> float:
+    k = len(p)
+    assert k > 0
+    # Max val can be 0 if world size is 1 (e.g. local run)
+    max_val = _calc_max_kl_divergence(k)
+    return _kl_divergence(p) / max_val if max_val > 0 else 0.0
+
+
+def _normalized_chi_sq_divergence(p: List[float]) -> float:
+    k = len(p)
+    assert k > 0
+    # Max val can be 0 if world size is 1 (e.g. local run)
+    max_val = _calc_max_chi_sq_divergence(k)
+    return _chi_sq_divergence(p) / max_val if max_val > 0 else 0.0
+
 
 IMBALANCE_STAT_MEASURE: Dict[str, Tuple[Callable[..., float], Dict[str, Any]]] = {
     "Total Variation": (_total_variation, {}),
     "Total Distance": (_total_distance, {}),
-    "Chi Divergence": (_chi_divergence, {"alpha": CHI_DIVERGENCE_ALPHA}),
-    "KL Divergence": (_kl_divergence, {}),
+    "Chi Divergence": (_normalized_chi_sq_divergence, {}),
+    "KL Divergence": (_normalized_kl_divergence, {}),
 }
 
 
@@ -402,6 +414,7 @@ class EmbeddingStats(Stats):
                     f"{so.tensor.shape[1]} ({so.shards[0].size[1]})"
                     if so.sharding_type == ShardingType.COLUMN_WISE.value
                     or so.sharding_type == ShardingType.TABLE_COLUMN_WISE.value
+                    or so.sharding_type == ShardingType.GRID_SHARD.value
                     else f"{so.tensor.shape[1]}"
                 )
                 sharder_cache_load_factor = (
@@ -409,11 +422,14 @@ class EmbeddingStats(Stats):
                     if hasattr(sharder, "fused_params") and sharder.fused_params
                     else None
                 )
-                cache_load_factor = str(
-                    so.cache_load_factor
-                    if so.cache_load_factor is not None
-                    else sharder_cache_load_factor
-                )
+                cache_load_factor = "None"
+                # Surfacing cache load factor does not make sense if not using uvm caching.
+                if so.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING.value:
+                    cache_load_factor = str(
+                        so.cache_load_factor
+                        if so.cache_load_factor is not None
+                        else sharder_cache_load_factor
+                    )
                 hash_size = so.tensor.shape[0]
                 param_table.append(
                     [
@@ -609,46 +625,48 @@ class EmbeddingStats(Stats):
 
         if sum(used_hbm) > 0:
             imbalance_logged = True
-            normalized_used_hbm = _normalize_int(used_hbm)
             self._stats_table.append(f"#{'' : ^{self._width-2}}#")
             self._stats_table.append(
                 f"# {'HBM Imbalance Statistics' : <{self._width-3}}#"
             )
+            normalized_used_hbm = _normalize_int(used_hbm)
             self._log_dist_imbalance_stats(normalized_used_hbm)
 
         if sum(used_ddr) > 0:
             imbalance_logged = True
-            normalized_used_ddr = _normalize_int(used_ddr)
             self._stats_table.append(f"#{'' : ^{self._width-2}}#")
             self._stats_table.append(
                 f"# {'DDR Imbalance Statistics' : <{self._width-3}}#"
             )
+            normalized_used_ddr = _normalize_int(used_ddr)
             self._log_dist_imbalance_stats(normalized_used_ddr)
 
         if imbalance_logged:
             self._stats_table.append(f"#{'' : ^{self._width-2}}#")
             self._stats_table.append(
-                f"# {'Total Variation: higher means more imbalanced (ranges 0 to 1)' : <{self._width-3}}#"
+                f"# {'Imbalance stats range 0-1, higher means more imbalanced' : <{self._width-3}}#"
             )
-            self._stats_table.append(
-                f"# {'Total Distance: higher means more imbalanced (ranges 0 to 1)' : <{self._width-3}}#"
-            )
-            N = len(perf)  # world size
-            if N > 0:
-                max_chi_divergence = _calc_max_chi_divergence(
-                    N=N, alpha=CHI_DIVERGENCE_ALPHA
-                )
-                self._stats_table.append(
-                    f"# {f'Chi Divergence: higher means more imbalanced (ranges 0 to {max_chi_divergence:.3f})' : <{self._width-3}}#"
-                )
-                max_kl_divergence = _calc_max_kl_divergence(N)
-                self._stats_table.append(
-                    f"# {f'KL Divergence: higher means more imbalanced (ranges 0 to {max_kl_divergence:.3f})' : <{self._width-3}}#"
-                )
 
     def _log_max_perf_and_max_hbm(self, perfs: List[Perf], used_hbm: List[int]) -> None:
+        total_perfs = [perf.total for perf in perfs]
 
-        max_total_perf_text = f"Longest Critical Path (Maximum of Total Perf): {_generate_max_text([perf.total for perf in perfs])}"
+        max_total_perf_text = f"Longest Critical Path (Maximum of Total Perf): {_generate_max_text(total_perfs)}"
+
+        mean_total_perf = statistics.mean(total_perfs)
+        mean_total_perf_text = f"Mean Total Perf: {round(mean_total_perf,3)} ms"
+
+        max_total_perf = max(total_perfs)
+
+        total_perf_delta_pct = 0.0
+        if mean_total_perf > 0.0:
+            total_perf_delta_pct = (
+                (max_total_perf - mean_total_perf) / mean_total_perf * 100
+            )
+
+        total_perf_delta_text = (
+            f"Max Total Perf is {total_perf_delta_pct:.3g}% greater than the mean"
+        )
+
         max_fwd_compute_perf_text = f"Maximum of Forward Compute: {_generate_max_text([perf.fwd_compute for perf in perfs])}"
         max_fwd_comms_perf_text = f"Maximum of Forward Comms: {_generate_max_text([perf.fwd_comms for perf in perfs])}"
         max_bwd_compute_perf_text = f"Maximum of Backward Compute: {_generate_max_text([perf.bwd_compute for perf in perfs])}"
@@ -666,6 +684,8 @@ class EmbeddingStats(Stats):
 
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(f"# {max_total_perf_text : <{self._width-3}}#")
+        self._stats_table.append(f"# {mean_total_perf_text : <{self._width-3}}#")
+        self._stats_table.append(f"# {total_perf_delta_text : <{self._width-3}}#")
         self._stats_table.append(f"# {max_fwd_compute_perf_text : <{self._width-3}}#")
         self._stats_table.append(f"# {max_fwd_comms_perf_text : <{self._width-3}}#")
         self._stats_table.append(f"# {max_bwd_compute_perf_text : <{self._width-3}}#")
@@ -694,6 +714,14 @@ class EmbeddingStats(Stats):
         self._stats_table.append(
             f"# {'High Median HBM: '+_generate_rank_hbm_stats(used_hbm, statistics.median_high) : <{self._width-3}}#"
         )
+
+        max_used_hbm = max(used_hbm)
+        mean_used_hbm = statistics.mean(used_hbm)
+        hbm_delta_pct = 0.0
+        if mean_used_hbm > 0.0:
+            hbm_delta_pct = (max_used_hbm - mean_used_hbm) / mean_used_hbm * 100
+        hbm_delta_text = f"Max HBM is {hbm_delta_pct:.3g}% greater than the mean"
+        self._stats_table.append(f"# {hbm_delta_text : <{self._width-3}}#")
 
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         per_rank_hbm = copy.copy(used_hbm)
@@ -852,6 +880,8 @@ def _get_sharding_type_abbr(sharding_type: str) -> str:
         return "TWRW"
     elif sharding_type == ShardingType.TABLE_COLUMN_WISE.value:
         return "TWCW"
+    elif sharding_type == ShardingType.GRID_SHARD.value:
+        return "GS"
     else:
         raise ValueError(
             f"Unrecognized or unsupported sharding type provided: {sharding_type}"

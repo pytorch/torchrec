@@ -8,6 +8,9 @@
 # pyre-strict
 
 
+import functools
+from typing import Any, Callable
+
 import torch
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -72,12 +75,15 @@ def kjt_for_pt2_tracing(
 
     values = kjt.values().long()
     torch._dynamo.decorators.mark_unbacked(values, 0)
+    weights = kjt.weights_or_none()
+    if weights is not None:
+        torch._dynamo.decorators.mark_unbacked(weights, 0)
 
     return KeyedJaggedTensor(
         keys=kjt.keys(),
         values=values,
         lengths=lengths,
-        weights=kjt.weights_or_none(),
+        weights=weights,
         stride=stride if not is_vb else None,
         stride_per_key_per_rank=kjt.stride_per_key_per_rank() if is_vb else None,
         inverse_indices=inverse_indices,
@@ -151,3 +157,29 @@ def register_fake_classes() -> None:
 def deregister_fake_classes() -> None:
     torch._library.fake_class_registry.deregister_fake_class("fbgemm::AtomicCounter")
     torch._library.fake_class_registry.deregister_fake_class("fbgemm::TensorQueue")
+
+
+# pyre-ignore[24]
+def pt2_compile_callable(f: Callable) -> Callable:
+    """
+    This method is used to decorate the update and compute methods of a metric computation class.
+    If the metric computation class has enable_pt2_compile attribute set to True,
+    then the update and compute methods will be compiled using torch.compile.
+    """
+
+    @functools.wraps(f)
+    # pyre-ignore[3]
+    def inner_forward(
+        ref: torch.nn.Module,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        if hasattr(ref, "enable_pt2_compile") and ref.enable_pt2_compile:
+            pt2_compiled_attr_name = f"_{f.__name__}_pt2_compiled"
+            if not hasattr(ref, pt2_compiled_attr_name):
+                setattr(ref, pt2_compiled_attr_name, torch.compile(f))
+            return getattr(ref, pt2_compiled_attr_name)(ref, *args, **kwargs)
+
+        return f(ref, *args, **kwargs)
+
+    return inner_forward
