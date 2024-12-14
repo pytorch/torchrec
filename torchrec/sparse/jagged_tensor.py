@@ -49,9 +49,12 @@ except OSError:
 
 # OSS
 try:
-    pass
+    from tensordict import TensorDict
 except ImportError:
-    pass
+
+    class TensorDict:
+        pass
+
 
 logger: logging.Logger = logging.getLogger()
 
