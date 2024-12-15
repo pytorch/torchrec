@@ -26,6 +26,7 @@ from typing import (
 )
 
 import torch
+from tensordict import TensorDict
 from torch import distributed as dist, nn
 from torch.autograd.profiler import record_function
 from torch.distributed._tensor import DTensor
@@ -89,19 +90,13 @@ from torchrec.modules.utils import construct_jagged_tensors, SequenceVBEContext
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import _to_offsets, JaggedTensor, KeyedJaggedTensor
+from torchrec.sparse.tensor_dict import maybe_td_to_kjt
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
 except OSError:
     pass
-
-try:
-    from tensordict import TensorDict
-except ImportError:
-
-    class TensorDict:
-        pass
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -1146,25 +1141,50 @@ class ShardedEmbeddingCollection(
     def input_dist(
         self,
         ctx: EmbeddingCollectionContext,
-        features: KeyedJaggedTensor,
+        features: TypeUnion[KeyedJaggedTensor, TensorDict],
     ) -> Awaitable[Awaitable[KJTList]]:
+        # torch.distributed.breakpoint()
+        feature_keys = list(features.keys())  # pyre-ignore[6]
         if self._has_uninitialized_input_dist:
-            self._create_input_dist(input_feature_names=features.keys())
+            self._create_input_dist(input_feature_names=feature_keys)
             self._has_uninitialized_input_dist = False
         with torch.no_grad():
             unpadded_features = None
-            if features.variable_stride_per_key():
+            if (
+                isinstance(features, KeyedJaggedTensor)
+                and features.variable_stride_per_key()
+            ):
                 unpadded_features = features
                 features = pad_vbe_kjt_lengths(unpadded_features)
 
-            if self._features_order:
+            if isinstance(features, KeyedJaggedTensor) and self._features_order:
                 features = features.permute(
                     self._features_order,
                     # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
                     #  but got `TypeUnion[Module, Tensor]`.
                     self._features_order_tensor,
                 )
-            features_by_shards = features.split(self._feature_splits)
+
+            if isinstance(features, KeyedJaggedTensor):
+                features_by_shards = features.split(self._feature_splits)
+            else:  # TensorDict
+                feature_names = (
+                    [feature_keys[i] for i in self._features_order]
+                    if self._features_order  # empty features_order means no reordering
+                    else feature_keys
+                )
+                feature_names = [name.split("@")[0] for name in feature_names]
+                feature_name_by_sharding_types: List[List[str]] = []
+                start = 0
+                for length in self._feature_splits:
+                    feature_name_by_sharding_types.append(
+                        feature_names[start : start + length]
+                    )
+                    start += length
+                features_by_shards = [
+                    maybe_td_to_kjt(features, names)
+                    for names in feature_name_by_sharding_types
+                ]
             if self._use_index_dedup:
                 features_by_shards = self._dedup_indices(ctx, features_by_shards)
 
