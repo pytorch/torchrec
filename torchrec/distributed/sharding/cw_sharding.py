@@ -32,7 +32,6 @@ from torchrec.distributed.embedding_types import (
     DTensorMetadata,
     EmbeddingComputeKernel,
     InputDistOutputs,
-    KJTList,
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.sharding.tw_sharding import (

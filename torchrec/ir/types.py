@@ -10,7 +10,7 @@
 #!/usr/bin/env python3
 
 import abc
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import torch
 
