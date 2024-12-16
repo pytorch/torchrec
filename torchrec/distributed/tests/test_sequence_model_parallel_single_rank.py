@@ -9,18 +9,13 @@
 
 
 import unittest
-from typing import cast, Dict, List, Optional, OrderedDict, Tuple
+from typing import cast, OrderedDict
 
 import hypothesis.strategies as st
 import torch
 from hypothesis import given, settings, Verbosity
-from torch import distributed as dist, nn
-from torchrec import distributed as trec_dist
-from torchrec.distributed import DistributedModelParallel
+from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.model_parallel import get_default_sharders
-from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
-from torchrec.distributed.test_utils.test_model import ModelInput
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelSingleRankBase,
 )
@@ -28,7 +23,7 @@ from torchrec.distributed.tests.test_sequence_model import (
     TestEmbeddingCollectionSharder,
     TestSequenceSparseNN,
 )
-from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
+from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import DataType, EmbeddingConfig
 
 

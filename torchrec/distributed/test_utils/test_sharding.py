@@ -41,7 +41,6 @@ from torchrec.distributed.test_utils.test_model import (
 )
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
-    EnumerableShardingSpec,
     ModuleSharder,
     ShardedTensor,
     ShardingEnv,
@@ -288,7 +287,6 @@ def sharding_single_rank_test(
     world_size_2D: Optional[int] = None,
     node_group_size: Optional[int] = None,
 ) -> None:
-
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         # Generate model & inputs.
         (global_model, inputs) = gen_model_and_input(

@@ -17,7 +17,6 @@ from torchrec.distributed.dist_data import (
 )
 from torchrec.distributed.embedding_lookup import (
     GroupedEmbeddingsLookup,
-    InferCPUGroupedEmbeddingsLookup,
     InferGroupedEmbeddingsLookup,
 )
 from torchrec.distributed.embedding_sharding import (
