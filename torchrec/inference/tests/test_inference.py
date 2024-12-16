@@ -14,7 +14,6 @@ from typing import Any, cast, Dict, List
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
-from torch.fx import symbolic_trace
 from torchrec import PoolingType
 from torchrec.datasets.criteo import DEFAULT_CAT_NAMES, DEFAULT_INT_NAMES
 from torchrec.distributed.fused_params import (
