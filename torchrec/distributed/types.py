@@ -633,6 +633,7 @@ class KeyValueParams:
         gather_ssd_cache_stats: bool: whether enable ssd stats collection, std reporter and ods reporter
         report_interval: int: report interval in train iteration if gather_ssd_cache_stats is enabled
         ods_prefix: str: ods prefix for ods reporting
+        bulk_init_chunk_size: int: number of rows to insert into rocksdb in each chunk
 
         # Parameter Server (PS) Attributes
         ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
@@ -652,6 +653,7 @@ class KeyValueParams:
     l2_cache_size: Optional[int] = None  # size in GB
     max_l1_cache_size: Optional[int] = None  # size in MB
     enable_async_update: Optional[bool] = None
+    bulk_init_chunk_size: Optional[int] = None  # number of rows
 
     # Parameter Server (PS) Attributes
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -676,6 +678,7 @@ class KeyValueParams:
                 self.l2_cache_size,
                 self.max_l1_cache_size,
                 self.enable_async_update,
+                self.bulk_init_chunk_size,
             )
         )
 
