@@ -179,7 +179,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             )
 
             dtensor_metadata = None
-            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+            if self._env.output_dtensor:
                 placements = (
                     (Replicate(), Shard(0)) if self._is_2D_parallel else (Shard(0),)
                 )
@@ -197,8 +197,6 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     ),
                     stride=info.param.stride(),
                 )
-            # to not pass onto TBE
-            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(

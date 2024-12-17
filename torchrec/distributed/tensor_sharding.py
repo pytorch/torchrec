@@ -11,7 +11,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import cast, Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import torch
 from torch import distributed as dist

@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Any, cast, Dict, List, Optional, Tuple
+from typing import cast, Dict, Optional, Tuple
 
 import hypothesis.strategies as st
 import torch

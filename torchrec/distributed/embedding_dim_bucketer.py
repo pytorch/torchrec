@@ -10,10 +10,7 @@
 from enum import Enum, unique
 from typing import Dict, List
 
-from torchrec.distributed.embedding_types import (
-    EmbeddingComputeKernel,
-    ShardedEmbeddingTable,
-)
+from torchrec.distributed.embedding_types import ShardedEmbeddingTable
 from torchrec.modules.embedding_configs import DATA_TYPE_NUM_BITS, DataType
 
 

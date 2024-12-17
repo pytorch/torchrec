@@ -466,8 +466,8 @@ class Test2DSharding(ModelParallelTestShared):
 
         self._test_sharding(
             world_size=self.WORLD_SIZE,
-            local_size=self.WORLD_SIZE_2D // 2,
             world_size_2D=self.WORLD_SIZE_2D,
+            node_group_size=self.WORLD_SIZE // 4,
             sharders=[
                 cast(
                     ModuleSharder[nn.Module],
