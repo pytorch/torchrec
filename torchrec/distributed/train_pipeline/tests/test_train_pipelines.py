@@ -2257,6 +2257,7 @@ class TrainPipelineSparseDistCompAutogradTest(TrainPipelineSparseDistTest):
         torch.autograd.set_detect_anomaly(False)
         self._exit_stack = ExitStack()
         self._exit_stack.enter_context(
+            # type: ignore[attr-defined]
             torch._dynamo.config.patch(
                 optimize_ddp="python_reducer_without_compiled_forward"
             ),
