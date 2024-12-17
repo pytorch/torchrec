@@ -610,9 +610,7 @@ class ShardedEmbeddingBagCollection(
         )
         self._env = env
         # output parameters as DTensor in state dict
-        self._output_dtensor: bool = (
-            fused_params.get("output_dtensor", False) if fused_params else False
-        )
+        self._output_dtensor: bool = env.output_dtensor
 
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
             module,

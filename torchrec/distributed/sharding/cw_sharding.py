@@ -169,7 +169,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
             )
 
             dtensor_metadata = None
-            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+            if self._env.output_dtensor:
                 dtensor_metadata = DTensorMetadata(
                     mesh=self._env.device_mesh,
                     placements=(
@@ -186,8 +186,6 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
                     ),
                     stride=info.param.stride(),
                 )
-            # to not pass onto TBE
-            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):

@@ -813,6 +813,7 @@ class ShardingEnv:
         world_size: int,
         rank: int,
         pg: Optional[dist.ProcessGroup] = None,
+        output_dtensor: bool = False,
     ) -> None:
         self.world_size = world_size
         self.rank = rank
@@ -825,6 +826,7 @@ class ShardingEnv:
             if pg
             else None
         )
+        self.output_dtensor: bool = output_dtensor
 
     @classmethod
     def from_process_group(cls, pg: dist.ProcessGroup) -> "ShardingEnv":
@@ -886,6 +888,7 @@ class ShardingEnv2D(ShardingEnv):
         self.sharding_pg: dist.ProcessGroup = sharding_pg
         self.device_mesh: DeviceMesh = device_mesh
         self.node_group_size: Optional[int] = node_group_size
+        self.output_dtensor: bool = True
 
     def num_sharding_groups(self) -> int:
         """
