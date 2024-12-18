@@ -1002,6 +1002,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                         context,
                         source_stream=self._data_dist_stream,
                         target_stream=stream,
+                        stream_context=self._stream_context,
                     )
                     event = torch.get_device_module(self._device).Event()
                     event.record()
