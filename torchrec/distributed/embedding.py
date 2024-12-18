@@ -28,6 +28,7 @@ from typing import (
 import torch
 from torch import distributed as dist, nn
 from torch.autograd.profiler import record_function
+from torch.distributed._shard.sharding_spec.api import EnumerableShardingSpec
 from torch.distributed._tensor import DTensor
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
@@ -102,9 +103,27 @@ logger: logging.Logger = logging.getLogger(__name__)
 EC_INDEX_DEDUP: bool = False
 
 
-def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
-    # pyre-ignore
-    return ps.sharding_spec.shards[0].placement.device().type
+def get_device_from_parameter_sharding(
+    ps: ParameterSharding,
+) -> TypeUnion[str, Tuple[str, ...]]:
+    """
+    Returns list of device type per shard if table is sharded across different device type
+    else reutrns single device type for the table parameter
+    """
+    if not isinstance(ps.sharding_spec, EnumerableShardingSpec):
+        raise ValueError("Expected EnumerableShardingSpec as input to the function")
+
+    device_type_list: Tuple[str, ...] = tuple(
+        # pyre-fixme[16]: `Optional` has no attribute `device`
+        [shard.placement.device().type for shard in ps.sharding_spec.shards]
+    )
+    if len(set(device_type_list)) == 1:
+        return device_type_list[0]
+    else:
+        assert (
+            ps.sharding_type == "row_wise"
+        ), "Only row_wise sharding supports sharding across multiple device types for a table"
+        return device_type_list
 
 
 def set_ec_index_dedup(val: bool) -> None:
@@ -248,13 +267,13 @@ def create_sharding_infos_by_sharding_device_group(
     module: EmbeddingCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
     fused_params: Optional[Dict[str, Any]],
-) -> Dict[Tuple[str, str], List[EmbeddingShardingInfo]]:
+) -> Dict[Tuple[str, TypeUnion[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]]:
 
     if fused_params is None:
         fused_params = {}
 
     sharding_type_device_group_to_sharding_infos: Dict[
-        Tuple[str, str], List[EmbeddingShardingInfo]
+        Tuple[str, TypeUnion[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]
     ] = {}
     # state_dict returns parameter.Tensor, which loses parameter level attributes
     parameter_by_name = dict(module.named_parameters())
@@ -280,7 +299,9 @@ def create_sharding_infos_by_sharding_device_group(
         assert param_name in parameter_by_name or param_name in state_dict
         param = parameter_by_name.get(param_name, state_dict[param_name])
 
-        device_group = get_device_from_parameter_sharding(parameter_sharding)
+        device_group: TypeUnion[str, Tuple[str, ...]] = (
+            get_device_from_parameter_sharding(parameter_sharding)
+        )
         if (
             parameter_sharding.sharding_type,
             device_group,
