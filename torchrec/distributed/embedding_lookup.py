@@ -677,12 +677,14 @@ class MetaInferGroupedEmbeddingsLookup(
         grouped_configs: List[GroupedEmbeddingConfig],
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
+        shard_index: Optional[int] = None,
     ) -> None:
         # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
             fused_params: Optional[Dict[str, Any]] = None,
+            shard_index: Optional[int] = None,
         ) -> BaseBatchedEmbedding[
             Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
         ]:
@@ -690,12 +692,15 @@ class MetaInferGroupedEmbeddingsLookup(
                 config=config,
                 device=device,
                 fused_params=fused_params,
+                shard_index=shard_index,
             )
 
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config, device, fused_params))
+            self._emb_modules.append(
+                _create_lookup(config, device, fused_params, shard_index)
+            )
 
         self._feature_splits: List[int] = [
             config.num_features() for config in grouped_configs
@@ -1076,6 +1081,7 @@ class InferGroupedEmbeddingsLookup(
         world_size: int,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = None,
     ) -> None:
         super().__init__()
         self._embedding_lookups_per_rank: List[MetaInferGroupedEmbeddingsLookup] = []
@@ -1089,11 +1095,18 @@ class InferGroupedEmbeddingsLookup(
                 "meta" if device is not None and device.type == "meta" else "cuda"
             )
         for rank in range(world_size):
+            # propagate shard index to get the correct runtime_device based on shard metadata
+            # in case of heterogenous sharding of a single table acorss different device types
+            shard_index = (
+                rank if isinstance(device_type_from_sharding_infos, tuple) else None
+            )
+            device = rank_device(device_type, rank)
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
                     device=rank_device(device_type, rank),
                     fused_params=fused_params,
+                    shard_index=shard_index,
                 )
             )
 
