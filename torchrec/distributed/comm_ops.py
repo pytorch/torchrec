@@ -107,10 +107,13 @@ class Request(Awaitable[W]):
         # This dummy tensor is used to build the autograd graph between
         # CommOp-Req and CommOp-Await. The actual forward tensors, and backwards gradient tensors
         # are stored in self.tensor
-        self.dummy_tensor: torch.Tensor = torch.empty(
-            1,
-            requires_grad=True,
-            device=device,
+        # torch.zeros is a call_function, not placeholder, hence fx.trace incompatible.
+        self.dummy_tensor: torch.Tensor = torch.zeros_like(
+            torch.empty(
+                1,
+                requires_grad=True,
+                device=device,
+            )
         )
 
     def _wait_impl(self) -> W:
