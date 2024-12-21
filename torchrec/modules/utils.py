@@ -13,10 +13,13 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
+from torch import Tensor
 from torch.profiler import record_function
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 from torchrec.types import CacheMixin
+
+torch.fx.wrap("len")
 
 
 @dataclass
@@ -406,3 +409,20 @@ def reset_module_states_post_sharding(
     for submod in module.modules():
         if isinstance(submod, CacheMixin):
             submod.clear_cache()
+
+
+@torch.fx.wrap
+def _get_batching_hinted_output(lengths: Tensor, output: Tensor) -> Tensor:
+    # this is a fx rule to help with batching hinting jagged sequence tensor coalescing.
+    return output
+
+
+@torch.fx.wrap
+def _fx_trec_get_feature_length(
+    features: KeyedJaggedTensor, embedding_names: List[str]
+) -> torch.Tensor:
+    torch._assert(
+        len(embedding_names) == len(features.keys()),
+        "embedding output and features mismatch",
+    )
+    return features.lengths()
