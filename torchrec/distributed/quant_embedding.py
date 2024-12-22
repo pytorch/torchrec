@@ -17,7 +17,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
-from torch.distributed._shard.sharding_spec.api import EnumerableShardingSpec
+from torch.distributed._shard.sharding_spec import EnumerableShardingSpec
 from torchrec.distributed.embedding import (
     create_sharding_infos_by_sharding_device_group,
     EmbeddingShardingInfo,
