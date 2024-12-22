@@ -8,6 +8,8 @@
 # pyre-strict
 
 import copy
+import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Dict, List, Mapping, Optional, Tuple, TypeVar, Union
@@ -29,6 +31,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingModule,
 )
 from torchrec.distributed.types import ParameterSharding, ShardingType
+from torchrec.fb.modules.hash_mc_modules import HashZchManagedCollisionModule
 from torchrec.modules.embedding_configs import DataType
 from torchrec.streamable import Multistreamable
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
@@ -37,6 +40,8 @@ Out = TypeVar("Out")
 CompIn = TypeVar("CompIn")
 DistOut = TypeVar("DistOut")
 ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _append_table_shard(
@@ -309,59 +314,66 @@ class ShardedQuantEmbeddingModuleState(
         _unexpected_keys: List[str] = list(state_dict.keys())
         for name, dst_tensor in dst_state_dict.items():
             src_state_dict_name = prefix + name
-            if src_state_dict_name not in state_dict:
-                _missing_keys.append(src_state_dict_name)
-                continue
+            try:
+                if src_state_dict_name not in state_dict:
+                    _missing_keys.append(src_state_dict_name)
+                    continue
 
-            src_tensor = state_dict[src_state_dict_name]
-            if isinstance(dst_tensor, ShardedTensorBase) and isinstance(
-                src_tensor, ShardedTensorBase
-            ):
-                # sharded to sharded model, only identically sharded
-                for dst_local_shard in dst_tensor.local_shards():
-                    copied: bool = False
-                    for src_local_shard in src_tensor.local_shards():
-                        if (
-                            dst_local_shard.metadata.shard_offsets
-                            == src_local_shard.metadata.shard_offsets
-                            and dst_local_shard.metadata.shard_sizes
-                            == src_local_shard.metadata.shard_sizes
-                        ):
-                            dst_local_shard.tensor.copy_(src_local_shard.tensor)
-                            copied = True
-                            break
-                    assert copied, "Incompatible state_dict"
-            elif isinstance(dst_tensor, ShardedTensorBase) and isinstance(
-                src_tensor, torch.Tensor
-            ):
-                # non_sharded to sharded model
-                for dst_local_shard in dst_tensor.local_shards():
-                    dst_tensor = dst_local_shard.tensor
-                    assert src_tensor.ndim == dst_tensor.ndim
-                    meta = dst_local_shard.metadata
-                    t = src_tensor.detach()
-                    rows_from = meta.shard_offsets[0]
-                    rows_to = rows_from + meta.shard_sizes[0]
-                    if t.ndim == 1:
-                        dst_tensor.copy_(t[rows_from:rows_to])
-                    elif t.ndim == 2:
-                        cols_from = meta.shard_offsets[1]
-                        cols_to = cols_from + meta.shard_sizes[1]
-                        dst_tensor.copy_(
-                            t[
-                                rows_from:rows_to,
-                                cols_from:cols_to,
-                            ]
-                        )
-                    else:
-                        raise RuntimeError("Tensors with ndim > 2 are not supported")
-            elif isinstance(dst_tensor, list) and isinstance(src_tensor, torch.Tensor):
-                # non_sharded to CW columns qscale, qbias (one to many)
-                for t in dst_tensor:
-                    assert isinstance(t, torch.Tensor)
-                    t.copy_(src_tensor)
-            else:
-                dst_tensor.copy_(src_tensor)
+                src_tensor = state_dict[src_state_dict_name]
+                if isinstance(dst_tensor, ShardedTensorBase) and isinstance(
+                    src_tensor, ShardedTensorBase
+                ):
+                    # sharded to sharded model, only identically sharded
+                    for dst_local_shard in dst_tensor.local_shards():
+                        copied: bool = False
+                        for src_local_shard in src_tensor.local_shards():
+                            if (
+                                dst_local_shard.metadata.shard_offsets
+                                == src_local_shard.metadata.shard_offsets
+                                and dst_local_shard.metadata.shard_sizes
+                                == src_local_shard.metadata.shard_sizes
+                            ):
+                                dst_local_shard.tensor.copy_(src_local_shard.tensor)
+                                copied = True
+                                break
+                        assert copied, "Incompatible state_dict"
+                elif isinstance(dst_tensor, ShardedTensorBase) and isinstance(
+                    src_tensor, torch.Tensor
+                ):
+                    # non_sharded to sharded model
+                    for dst_local_shard in dst_tensor.local_shards():
+                        dst_tensor = dst_local_shard.tensor
+                        assert src_tensor.ndim == dst_tensor.ndim
+                        meta = dst_local_shard.metadata
+                        t = src_tensor.detach()
+                        rows_from = meta.shard_offsets[0]
+                        rows_to = rows_from + meta.shard_sizes[0]
+                        if t.ndim == 1:
+                            dst_tensor.copy_(t[rows_from:rows_to])
+                        elif t.ndim == 2:
+                            cols_from = meta.shard_offsets[1]
+                            cols_to = cols_from + meta.shard_sizes[1]
+                            dst_tensor.copy_(
+                                t[
+                                    rows_from:rows_to,
+                                    cols_from:cols_to,
+                                ]
+                            )
+                        else:
+                            raise RuntimeError(
+                                "Tensors with ndim > 2 are not supported"
+                            )
+                elif isinstance(dst_tensor, list) and isinstance(
+                    src_tensor, torch.Tensor
+                ):
+                    # non_sharded to CW columns qscale, qbias (one to many)
+                    for t in dst_tensor:
+                        assert isinstance(t, torch.Tensor)
+                        t.copy_(src_tensor)
+                else:
+                    dst_tensor.copy_(src_tensor)
+            except Exception as e:
+                logger.error(f"Weight {name} could not be loaded. Exception: {e}.")
 
             _unexpected_keys.remove(src_state_dict_name)
         missing_keys.extend(_missing_keys)
@@ -403,17 +415,17 @@ def sharded_tbes_weights_spec(
     # }
     # In the format of ebc.tbes.i.j.table_k.weight, where i is the index of the TBE, j is the index of the embedding bag within TBE i, k is the index of the original table set in the ebc embedding_configs
     # e.g. ebc.tbes.1.1.table_1.weight, it represents second embedding bag within the second TBE. This part of weight is from a shard of table_1
-
     ret: Dict[str, WeightSpec] = {}
     for module_fqn, module in sharded_model.named_modules():
         type_name: str = type(module).__name__
         is_sqebc: bool = "ShardedQuantEmbeddingBagCollection" in type_name
         is_sqec: bool = "ShardedQuantEmbeddingCollection" in type_name
+        is_sqmcec: bool = "ShardedQuantManagedCollisionEmbeddingCollection" in type_name
 
-        if is_sqebc or is_sqec:
-            assert not (
-                is_sqebc and is_sqec
-            ), "Cannot be both ShardedQuantEmbeddingBagCollection and ShardedQuantEmbeddingCollection"
+        if is_sqebc or is_sqec or is_sqmcec:
+            assert (
+                is_sqec + is_sqebc + is_sqmcec == 1
+            ), "Cannot have any two of ShardedQuantEmbeddingBagCollection, ShardedQuantEmbeddingCollection and ShardedQuantManagedCollisionEmbeddingCollection are true"
             tbes_configs: Dict[
                 IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
             ] = module.tbes_configs()
@@ -465,6 +477,84 @@ def sharded_tbes_weights_spec(
                             fqn=f"{unsharded_fqn_weight}_{qcomponent}",
                             shard_offsets=qcomp_shard_offsets,
                             shard_sizes=qcomp_shard_sizes,
+                            sharding_type=sharding_type,
+                        )
+    return ret
+
+
+def sharded_zchs_buffers_spec(
+    sharded_model: torch.nn.Module,
+) -> Dict[str, WeightSpec]:
+    """
+    OUTPUT:
+    Example:
+    "main_module.module.ec_in_task_arch_hash._decoupled_embedding_collection._mcec_lookup.0.0._mcc_lookup.zchs.viewer_rid_duplicate._hash_zch_identities", [0, 0], [500, 1])
+    "main_module.module.ec_in_task_arch_hash._decoupled_embedding_collection._mcec_lookup.0.1._mcc_lookup.zchs.viewer_rid_duplicate._hash_zch_identities", [500, 0], [1000, 1])
+
+    'main_module.module.ec_in_task_arch_hash._decoupled_embedding_collection._mcec_lookup.0.0._mcc_lookup.zchs.viewer_rid_duplicate._hash_zch_identities': WeightSpec(fqn='main_module.module.ec_in_task_arch_hash._ d_embedding_collection._managed_collision_collection.viewer_rid_duplicate._hash_zch_identities'
+    """
+
+    def _get_table_names(
+        sharded_module: torch.nn.Module,
+    ) -> List[str]:
+        table_names: List[str] = []
+        for _, module in sharded_module.named_modules():
+            type_name: str = type(module).__name__
+            if "ShardedMCCRemapper" in type_name:
+                for table_name in module._tables:
+                    if table_name not in table_names:
+                        table_names.append(table_name)
+        return table_names
+
+    def _get_unsharded_fqn_identities(
+        sharded_module: torch.nn.Module,
+        fqn: str,
+        table_name: str,
+    ) -> str:
+        for module_fqn, module in sharded_module.named_modules():
+            type_name: str = type(module).__name__
+            if "ManagedCollisionCollection" in type_name:
+                if table_name in module._table_to_features:
+                    return f"{fqn}.{module_fqn}.{table_name}.{HashZchManagedCollisionModule.IDENTITY_BUFFER}"
+        logger.info(f"did not find table {table_name} in module {fqn}")
+        return ""
+
+    ret: Dict[str, WeightSpec] = defaultdict()
+    for module_fqn, module in sharded_model.named_modules():
+        type_name: str = type(module).__name__
+        if "ShardedQuantManagedCollisionEmbeddingCollection" in type_name:
+            sharding_type = ShardingType.ROW_WISE.value
+            table_name_to_unsharded_fqn_identities: Dict[str, str] = {}
+            for subfqn, submodule in module.named_modules():
+                type_name: str = type(submodule).__name__
+                if "ShardedMCCRemapper" in type_name:
+                    for table_name in submodule.zchs.keys():
+                        # identities tensor has only one column
+                        shard_offsets: List[int] = [
+                            submodule._shard_metadata[table_name][0],
+                            0,
+                        ]
+                        shard_sizes: List[int] = [
+                            submodule._shard_metadata[table_name][1],
+                            1,
+                        ]
+                        if table_name not in table_name_to_unsharded_fqn_identities:
+                            table_name_to_unsharded_fqn_identities[table_name] = (
+                                _get_unsharded_fqn_identities(
+                                    module, module_fqn, table_name
+                                )
+                            )
+                        unsharded_fqn_identities: str = (
+                            table_name_to_unsharded_fqn_identities[table_name]
+                        )
+                        # subfqn contains the index of sharding, so no need to add it specifically here
+                        sharded_fqn_identities: str = (
+                            f"{module_fqn}.{subfqn}.zchs.{table_name}.{HashZchManagedCollisionModule.IDENTITY_BUFFER}"
+                        )
+                        ret[sharded_fqn_identities] = WeightSpec(
+                            fqn=unsharded_fqn_identities,
+                            shard_offsets=shard_offsets,
+                            shard_sizes=shard_sizes,
                             sharding_type=sharding_type,
                         )
     return ret

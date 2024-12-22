@@ -27,8 +27,12 @@ from torchrec.distributed.mc_embedding import ManagedCollisionEmbeddingCollectio
 from torchrec.distributed.mc_embeddingbag import (
     ManagedCollisionEmbeddingBagCollectionSharder,
 )
+from torchrec.distributed.mc_modules import InferManagedCollisionCollectionSharder
 from torchrec.distributed.planner.constants import MIN_CW_DIM
-from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
+from torchrec.distributed.quant_embedding import (
+    QuantEmbeddingCollectionSharder,
+    QuantManagedCollisionEmbeddingCollectionSharder,
+)
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
@@ -51,6 +55,13 @@ def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
         cast(ModuleSharder[nn.Module], QuantEmbeddingCollectionSharder()),
         cast(ModuleSharder[nn.Module], ManagedCollisionEmbeddingBagCollectionSharder()),
         cast(ModuleSharder[nn.Module], ManagedCollisionEmbeddingCollectionSharder()),
+        cast(
+            ModuleSharder[nn.Module],
+            QuantManagedCollisionEmbeddingCollectionSharder(
+                QuantEmbeddingCollectionSharder(),
+                InferManagedCollisionCollectionSharder(),
+            ),
+        ),
     ]
 
 
@@ -834,7 +845,7 @@ def construct_module_sharding_plan(
 
     assert isinstance(
         module, sharder.module_type
-    ), f"Incorrect sharder for module type {type(module)}"
+    ), f"Incorrect sharder {type(sharder)} for module type {type(module)}"
     shardable_parameters = sharder.shardable_parameters(module)
     assert shardable_parameters.keys() == per_param_sharding.keys(), (
         "per_param_sharding_config doesn't match the shardable parameters of the module,"
