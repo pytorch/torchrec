@@ -29,7 +29,6 @@ from torchrec.distributed.types import (
 )
 from torchrec.distributed.utils import init_parameters
 from torchrec.modules.utils import reset_module_states_post_sharding
-from torchrec.types import CacheMixin
 
 
 def _join_module_path(path: str, name: str) -> str:

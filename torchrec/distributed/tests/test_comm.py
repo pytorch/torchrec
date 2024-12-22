@@ -205,84 +205,6 @@ class TestAllToAll(unittest.TestCase):
             self.assertEqual(0, p.exitcode)
 
     @classmethod
-    def _test_alltoallv(
-        cls,
-        rank: int,
-        world_size: int,
-        backend: str,
-        compile_config: _CompileConfig,
-        specify_pg: bool,
-    ) -> None:
-        dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
-        pg = GroupMember.WORLD
-        assert pg is not None
-
-        device = torch.device(f"cuda:{rank}")
-
-        torch.cuda.set_device(device)
-
-        B_global = 10
-        D0 = 8
-        D1 = 9
-
-        input_embedding0 = torch.rand(
-            (B_global, D0),
-            device=device,
-            requires_grad=True,
-        )
-        input_embedding1 = torch.rand(
-            (B_global, D1),
-            device=device,
-            requires_grad=True,
-        )
-
-        input_embeddings = [input_embedding0, input_embedding1]
-        out_split = [17, 17]
-
-        # pyre-ignore
-        def fn(*args, **kwargs) -> List[torch.Tensor]:
-            return comm_ops.alltoallv(*args, **kwargs).wait()
-
-        fn_transform = compile_config_to_fn_transform(compile_config)
-
-        with unittest.mock.patch(
-            "torch._dynamo.config.skip_torchrec",
-            False,
-        ):
-            v_embs_out = fn_transform(fn)(
-                input_embeddings, out_split=out_split, group=pg if specify_pg else None
-            )
-
-        res = torch.cat(v_embs_out, dim=1).cpu()
-        assert tuple(res.size()) == (5, 34)
-        dist.destroy_process_group()
-
-    @unittest.skipIf(
-        torch.cuda.device_count() < 2, "Need at least two ranks to run this test"
-    )
-    # pyre-ignore
-    @given(
-        specify_pg=st.sampled_from([True]),
-        test_compiled_with_noncompiled_ranks=st.sampled_from([False, True]),
-    )
-    @settings(deadline=None)
-    def test_alltoallv(
-        self,
-        specify_pg: bool,
-        test_compiled_with_noncompiled_ranks: bool,
-    ) -> None:
-        self._run_multi_process_test(
-            world_size=self.WORLD_SIZE,
-            backend="nccl",
-            # pyre-ignore [6]
-            callable=self._test_alltoallv,
-            compile_config=_CompileConfig(
-                test_compiled_with_noncompiled_ranks=test_compiled_with_noncompiled_ranks
-            ),
-            specify_pg=specify_pg,
-        )
-
-    @classmethod
     def _test_alltoall_sequence(
         cls,
         rank: int,
@@ -766,4 +688,31 @@ class TestAllToAll(unittest.TestCase):
             ),
             specify_pg=specify_pg,
             gradient_division=gradient_division,
+        )
+
+    @classmethod
+    def _test_all_gather_base_pooled_cpu(
+        cls,
+        rank: int,
+        world_size: int,
+        backend: str,
+    ) -> None:
+        pg = GroupMember.WORLD
+        if pg is None:
+            dist.init_process_group(rank=rank, world_size=world_size, backend=backend)
+            pg = GroupMember.WORLD
+
+        device = torch.device(f"cpu")
+        input_tensor = torch.randn([4, 4], requires_grad=True).to(device)
+        comm_ops.all_gather_base_pooled(input_tensor, pg).wait()
+        dist.destroy_process_group()
+
+    def test_all_gather_base_pooled_cpu(
+        self,
+    ) -> None:
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="gloo",
+            # pyre-ignore [6]
+            callable=self._test_all_gather_base_pooled_cpu,
         )

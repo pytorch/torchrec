@@ -69,6 +69,10 @@ class ITEPEmbeddingBagCollection(nn.Module):
             The iteration counter is incremented after each forward pass to keep track of the number of iterations.
         """
 
+        # We need to explicitly move iter to CPU since it might be moved to GPU
+        # after __init__. This should be done once.
+        self._iter = self._iter.cpu()
+
         features = self._itep_module(features, self._iter.item())
         pooled_embeddings = self._embedding_bag_collection(features)
         self._iter += 1

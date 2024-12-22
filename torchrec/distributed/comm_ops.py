@@ -107,10 +107,13 @@ class Request(Awaitable[W]):
         # This dummy tensor is used to build the autograd graph between
         # CommOp-Req and CommOp-Await. The actual forward tensors, and backwards gradient tensors
         # are stored in self.tensor
-        self.dummy_tensor: torch.Tensor = torch.empty(
-            1,
-            requires_grad=True,
-            device=device,
+        # torch.zeros is a call_function, not placeholder, hence fx.trace incompatible.
+        self.dummy_tensor: torch.Tensor = torch.zeros_like(
+            torch.empty(
+                1,
+                requires_grad=True,
+                device=device,
+            )
         )
 
     def _wait_impl(self) -> W:
@@ -119,7 +122,7 @@ class Request(Awaitable[W]):
         """
 
         ret = self.wait_function.apply(self.pg, self, self.dummy_tensor)
-        if isinstance(ret, torch.Tensor):
+        if isinstance(ret, torch.Tensor) and ret.device.type == "cuda":
             ret.record_stream(torch.get_device_module(ret.device).current_stream())
         self.req = None
         self.tensor = None
@@ -443,7 +446,7 @@ def all2all_pooled_sync(
         qcomm_ctx = None
 
     with record_function("## alltoall_fwd_single ##"):
-        sharded_output_embeddings = torch.ops.torchrec.all_to_all_single(
+        sharded_output_embeddings = AllToAllSingle.apply(
             sharded_input_embeddings,
             output_split_sizes,
             input_split_sizes,
@@ -572,7 +575,7 @@ def variable_batch_all2all_pooled_sync(
             torch._check(s0 <= sharded_input_embeddings.size(0))
             sharded_output_embeddings.copy_(sharded_input_embeddings[:s0])
         else:
-            sharded_output_embeddings = torch.ops.torchrec.all_to_all_single(
+            sharded_output_embeddings = AllToAllSingle.apply(
                 sharded_input_embeddings,
                 output_split_sizes,
                 input_split_sizes,
@@ -722,7 +725,7 @@ def all2all_sequence_sync(
         qcomm_ctx = None
 
     with record_function("## alltoall_seq_embedding_fwd_single ##"):
-        sharded_output_embeddings = torch.ops.torchrec.all_to_all_single(
+        sharded_output_embeddings = AllToAllSingle.apply(
             sharded_input_embeddings,
             output_splits,
             input_splits,
@@ -737,115 +740,6 @@ def all2all_sequence_sync(
             sharded_output_embeddings, qcomm_ctx
         )
     return sharded_output_embeddings.view(-1, D)
-
-
-def alltoallv(
-    inputs: List[Tensor],
-    out_split: Optional[List[int]] = None,
-    per_rank_split_lengths: Optional[List[int]] = None,
-    group: Optional[dist.ProcessGroup] = None,
-    codecs: Optional[QuantizedCommCodecs] = None,
-) -> Awaitable[List[Tensor]]:
-    """
-    Performs `alltoallv` operation for a list of input embeddings. Each process scatters
-    the list to all processes in the group.
-
-    Args:
-        inputs (List[Tensor]): list of tensors to scatter, one per rank. The tensors in
-            the list usually have different lengths.
-        out_split (Optional[List[int]]): output split sizes (or dim_sum_per_rank), if
-            not specified, we will use `per_rank_split_lengths` to construct a output
-            split with the assumption that all the embs have the same dimension.
-        per_rank_split_lengths (Optional[List[int]]): split lengths per rank. If not
-            specified, the `out_split` must be specified.
-        group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
-            default process group will be used.
-        codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
-
-    Returns:
-        Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting list of tensors.
-
-    .. warning::
-        `alltoallv` is experimental and subject to change.
-    """
-
-    if group is None:
-        group = dist.distributed_c10d._get_default_group()
-
-    world_size: int = group.size()
-    my_rank: int = group.rank()
-
-    B_global = inputs[0].size(0)
-
-    D_local_list = []
-    for e in inputs:
-        D_local_list.append(e.size()[1])
-
-    B_local, B_local_list = _get_split_lengths_by_len(world_size, my_rank, B_global)
-
-    if out_split is not None:
-        dims_sum_per_rank = out_split
-    elif per_rank_split_lengths is not None:
-        # all the embs have the same dimension
-        dims_sum_per_rank = []
-        for s in per_rank_split_lengths:
-            dims_sum_per_rank.append(s * D_local_list[0])
-    else:
-        raise RuntimeError("Need to specify either out_split or per_rank_split_lengths")
-
-    a2ai = All2AllVInfo(
-        dims_sum_per_rank=dims_sum_per_rank,
-        B_local=B_local,
-        B_local_list=B_local_list,
-        D_local_list=D_local_list,
-        B_global=B_global,
-        codecs=codecs,
-    )
-
-    if get_use_sync_collectives():
-        return NoWait(all2allv_sync(group, a2ai, inputs))
-
-    myreq = Request(group, device=inputs[0].device)
-    All2Allv_Req.apply(group, myreq, a2ai, inputs)
-
-    return myreq
-
-
-def all2allv_sync(
-    pg: dist.ProcessGroup,
-    a2ai: All2AllVInfo,
-    inputs: List[Tensor],
-) -> List[Tensor]:
-    input_split_sizes = []
-    sum_D_local_list = sum(a2ai.D_local_list)
-    for m in a2ai.B_local_list:
-        input_split_sizes.append(m * sum_D_local_list)
-
-    output_split_sizes = []
-    for e in a2ai.dims_sum_per_rank:
-        output_split_sizes.append(a2ai.B_local * e)
-
-    input = torch.cat(inputs, dim=1).view([-1])
-    if a2ai.codecs is not None:
-        input = a2ai.codecs.forward.encode(input)
-
-    with record_function("## alltoallv_bwd_single ##"):
-        output = torch.ops.torchrec.all_to_all_single(
-            input,
-            output_split_sizes,
-            input_split_sizes,
-            pg_name(pg),
-            pg.size(),
-            get_gradient_division(),
-        )
-
-    if a2ai.codecs is not None:
-        output = a2ai.codecs.forward.decode(output)
-
-    outputs = []
-    for out in output.split(output_split_sizes):
-        outputs.append(out.view([a2ai.B_local, -1]))
-    return outputs
 
 
 def reduce_scatter_pooled(
@@ -1113,7 +1007,7 @@ def reduce_scatter_v_sync(
             input_splits = rsi.input_splits
             output_splits = [rsi.input_splits[rank]] * world_size
             # TODO(ivankobzarev): Replace with _functional_collectives.reduce_scatter_v when it is added
-            a2a_output = torch.ops.torchrec.all_to_all_single(
+            a2a_output = AllToAllSingle.apply(
                 input,
                 output_splits,
                 input_splits,
@@ -2457,71 +2351,41 @@ class ReduceScatterV_Wait(Function):
 
 if not torch._running_with_deploy():  # noqa C901
     # Torch Library op def can not be used in Deploy
+    class AllToAllSingle(torch.autograd.Function):
+        @staticmethod
+        # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+        def forward(
+            # pyre-fixme[2]: Parameter must be annotated.
+            ctx,
+            input: Tensor,
+            output_split_sizes: List[int],
+            input_split_sizes: List[int],
+            group_name: str,
+            group_size: int,
+            gradient_division: bool,
+        ) -> Tensor:
+            ctx.output_split_sizes = input_split_sizes
+            ctx.input_split_sizes = output_split_sizes
+            ctx.group_name = group_name
+            ctx.group_size = group_size
+            ctx.gradient_division = gradient_division
+            return torch.distributed._functional_collectives.all_to_all_single(
+                input, output_split_sizes, input_split_sizes, group_name
+            )
 
-    # torchrec::all_to_all_single
-    @torch.library.custom_op("torchrec::all_to_all_single", mutates_args=())
-    def all_to_all_single(
-        input: Tensor,
-        output_split_sizes: List[int],
-        input_split_sizes: List[int],
-        group_name: str,
-        group_size: int,
-        gradient_division: bool,
-    ) -> Tensor:
-        out = torch.ops._c10d_functional.all_to_all_single(
-            input, output_split_sizes, input_split_sizes, group_name
-        )
-        return torch.ops._c10d_functional.wait_tensor(out)
+        @staticmethod
+        # pyre-ignore
+        def backward(ctx, grad):
+            grad = torch.distributed._functional_collectives.all_to_all_single(
+                grad,
+                ctx.output_split_sizes,
+                ctx.input_split_sizes,
+                ctx.group_name,
+            )
+            if ctx.gradient_division:
+                grad.div_(ctx.group_size)
 
-    @torch.library.register_fake("torchrec::all_to_all_single")
-    def all_to_all_single_fake(
-        input: Tensor,
-        output_split_sizes: List[int],
-        input_split_sizes: List[int],
-        group_name: str,
-        group_size: int,
-        gradient_division: bool,
-    ) -> Tensor:
-        return torch.ops._c10d_functional.all_to_all_single(
-            input, output_split_sizes, input_split_sizes, group_name
-        )
-
-    # pyre-ignore
-    def all_to_all_single_setup_context(ctx, inputs, output) -> None:
-        (
-            _,
-            output_split_sizes,
-            input_split_sizes,
-            group_name,
-            group_size,
-            gradient_division,
-        ) = inputs
-        ctx.output_split_sizes = input_split_sizes
-        ctx.input_split_sizes = output_split_sizes
-        ctx.group_name = group_name
-        ctx.group_size = group_size
-        ctx.gradient_division = gradient_division
-
-    # pyre-ignore
-    def all_to_all_single_backward(ctx, grad):
-        # TODO(ivankobzarev): Support codecs(quantization) on backward
-        a2a_out = torch.ops._c10d_functional.all_to_all_single(
-            grad,
-            ctx.output_split_sizes,
-            ctx.input_split_sizes,
-            ctx.group_name,
-        )
-        grad = torch.ops._c10d_functional.wait_tensor(a2a_out)
-        if ctx.gradient_division:
-            grad.div_(ctx.group_size)
-
-        return grad, None, None, None, None, None
-
-    torch.library.register_autograd(
-        "torchrec::all_to_all_single",
-        all_to_all_single_backward,
-        setup_context=all_to_all_single_setup_context,
-    )
+            return grad, None, None, None, None, None
 
     # torchrec::reduce_scatter_tensor
     @torch.library.custom_op("torchrec::reduce_scatter_tensor", mutates_args=())

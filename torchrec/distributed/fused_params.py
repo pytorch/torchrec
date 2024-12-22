@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, Optional
 
 import torch
 
@@ -55,7 +55,7 @@ def is_fused_param_register_tbe(fused_params: Optional[Dict[str, Any]]) -> bool:
 
 
 def get_fused_param_tbe_row_alignment(
-    fused_params: Optional[Dict[str, Any]]
+    fused_params: Optional[Dict[str, Any]],
 ) -> Optional[int]:
     if fused_params is None or FUSED_PARAM_TBE_ROW_ALIGNMENT not in fused_params:
         return None
@@ -64,7 +64,7 @@ def get_fused_param_tbe_row_alignment(
 
 
 def fused_param_bounds_check_mode(
-    fused_params: Optional[Dict[str, Any]]
+    fused_params: Optional[Dict[str, Any]],
 ) -> Optional[BoundsCheckMode]:
     if fused_params is None or FUSED_PARAM_BOUNDS_CHECK_MODE not in fused_params:
         return None
@@ -73,7 +73,7 @@ def fused_param_bounds_check_mode(
 
 
 def fused_param_lengths_to_offsets_lookup(
-    fused_params: Optional[Dict[str, Any]]
+    fused_params: Optional[Dict[str, Any]],
 ) -> bool:
     if (
         fused_params is None
@@ -85,7 +85,7 @@ def fused_param_lengths_to_offsets_lookup(
 
 
 def is_fused_param_quant_state_dict_split_scale_bias(
-    fused_params: Optional[Dict[str, Any]]
+    fused_params: Optional[Dict[str, Any]],
 ) -> bool:
     return (
         fused_params
@@ -95,7 +95,7 @@ def is_fused_param_quant_state_dict_split_scale_bias(
 
 
 def tbe_fused_params(
-    fused_params: Optional[Dict[str, Any]]
+    fused_params: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     if not fused_params:
         return None

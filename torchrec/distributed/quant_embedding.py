@@ -17,6 +17,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
+from torch.distributed._shard.sharding_spec.api import EnumerableShardingSpec
 from torchrec.distributed.embedding import (
     create_sharding_infos_by_sharding_device_group,
     EmbeddingShardingInfo,
@@ -56,8 +57,11 @@ from torchrec.modules.embedding_configs import (
     dtype_to_data_type,
     EmbeddingConfig,
 )
-from torchrec.quant.embedding_modules import (
+from torchrec.modules.utils import (
+    _fx_trec_get_feature_length,
     _get_batching_hinted_output,
+)
+from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
     MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
 )
@@ -66,6 +70,7 @@ from torchrec.streamable import Multistreamable
 
 torch.fx.wrap("len")
 torch.fx.wrap("_get_batching_hinted_output")
+torch.fx.wrap("_fx_trec_get_feature_length")
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -83,14 +88,32 @@ class EmbeddingCollectionContext(Multistreamable):
             ctx.record_stream(stream)
 
 
-def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
-    # pyre-ignore
-    return ps.sharding_spec.shards[0].placement.device().type
+def get_device_from_parameter_sharding(
+    ps: ParameterSharding,
+) -> Union[str, Tuple[str, ...]]:
+    """
+    Returns list ofdevice type / shard if table is sharded across different device type
+    else reutrns single device type for the table parameter
+    """
+    if not isinstance(ps.sharding_spec, EnumerableShardingSpec):
+        raise ValueError("Expected EnumerableShardingSpec as input to the function")
+
+    device_type_list: Tuple[str, ...] = tuple(
+        # pyre-fixme[16]: `Optional` has no attribute `device`
+        [shard.placement.device().type for shard in ps.sharding_spec.shards]
+    )
+    if len(set(device_type_list)) == 1:
+        return device_type_list[0]
+    else:
+        assert (
+            ps.sharding_type == "row_wise"
+        ), "Only row_wise sharding supports sharding across multiple device types for a table"
+        return device_type_list
 
 
 def get_device_from_sharding_infos(
     emb_shard_infos: List[EmbeddingShardingInfo],
-) -> str:
+) -> Union[str, Tuple[str, ...]]:
     res = list(
         {
             get_device_from_parameter_sharding(ps.param_sharding)
@@ -99,6 +122,13 @@ def get_device_from_sharding_infos(
     )
     assert len(res) == 1, "All shards should be on the same type of device"
     return res[0]
+
+
+def get_device_for_first_shard_from_sharding_infos(
+    emb_shard_infos: List[EmbeddingShardingInfo],
+) -> str:
+    device_type = get_device_from_sharding_infos(emb_shard_infos)
+    return device_type[0] if isinstance(device_type, tuple) else device_type
 
 
 def create_infer_embedding_sharding(
@@ -112,8 +142,8 @@ def create_infer_embedding_sharding(
     List[torch.Tensor],
     List[torch.Tensor],
 ]:
-    device_type_from_sharding_infos: str = get_device_from_sharding_infos(
-        sharding_infos
+    device_type_from_sharding_infos: Union[str, Tuple[str, ...]] = (
+        get_device_from_sharding_infos(sharding_infos)
     )
 
     if device_type_from_sharding_infos in ["cuda", "mtia"]:
@@ -132,7 +162,9 @@ def create_infer_embedding_sharding(
             raise ValueError(
                 f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
             )
-    elif device_type_from_sharding_infos == "cpu":
+    elif device_type_from_sharding_infos == "cpu" or isinstance(
+        device_type_from_sharding_infos, tuple
+    ):
         if sharding_type == ShardingType.ROW_WISE.value:
             return InferRwSequenceEmbeddingSharding(
                 sharding_infos=sharding_infos,
@@ -171,17 +203,6 @@ def _get_unbucketize_tensor_via_length_alignment(
     bucket_mapping_tensor: torch.Tensor,
 ) -> torch.Tensor:
     return bucketize_permute_tensor
-
-
-@torch.fx.wrap
-def _fx_trec_get_feature_length(
-    features: KeyedJaggedTensor, embedding_names: List[str]
-) -> torch.Tensor:
-    torch._assert(
-        len(embedding_names) == len(features.keys()),
-        "embedding output and features mismatch",
-    )
-    return features.lengths()
 
 
 def _construct_jagged_tensors_tw(
@@ -327,6 +348,7 @@ def _construct_jagged_tensors(
     rw_feature_length_after_bucketize: Optional[torch.Tensor],
     cw_features_to_permute_indices: Dict[str, torch.Tensor],
     key_to_feature_permuted_coordinates: Dict[str, torch.Tensor],
+    device_type: Union[str, Tuple[str, ...]],
 ) -> Dict[str, JaggedTensor]:
 
     # Validating sharding type and parameters
@@ -345,15 +367,24 @@ def _construct_jagged_tensors(
         features_before_input_dist_length = _fx_trec_get_feature_length(
             features_before_input_dist, embedding_names
         )
-        embeddings = [
-            _get_batching_hinted_output(
-                _fx_trec_get_feature_length(features[i], embedding_names_per_rank[i]),
-                embeddings[i],
-            )
-            for i in range(len(embedding_names_per_rank))
-        ]
+        input_embeddings = []
+        for i in range(len(embedding_names_per_rank)):
+            if isinstance(device_type, tuple) and device_type[i] != "cpu":
+                # batching hint is already propagated and passed for this case
+                # upstream
+                input_embeddings.append(embeddings[i])
+            else:
+                input_embeddings.append(
+                    _get_batching_hinted_output(
+                        _fx_trec_get_feature_length(
+                            features[i], embedding_names_per_rank[i]
+                        ),
+                        embeddings[i],
+                    )
+                )
+
         return _construct_jagged_tensors_rw(
-            embeddings,
+            input_embeddings,
             embedding_names,
             features_before_input_dist_length,
             features_before_input_dist.values() if need_indices else None,
@@ -437,13 +468,13 @@ class ShardedQuantEmbeddingCollection(
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
 
         self._sharding_type_device_group_to_sharding_infos: Dict[
-            Tuple[str, str], List[EmbeddingShardingInfo]
+            Tuple[str, Union[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]
         ] = create_sharding_infos_by_sharding_device_group(
             module, table_name_to_parameter_sharding, fused_params
         )
 
         self._sharding_type_device_group_to_sharding: Dict[
-            Tuple[str, str],
+            Tuple[str, Union[str, Tuple[str, ...]]],
             EmbeddingSharding[
                 InferSequenceShardingContext,
                 InputDistOutputs,
@@ -457,7 +488,11 @@ class ShardedQuantEmbeddingCollection(
                 (
                     env
                     if not isinstance(env, Dict)
-                    else env[get_device_from_sharding_infos(embedding_configs)]
+                    else env[
+                        get_device_for_first_shard_from_sharding_infos(
+                            embedding_configs
+                        )
+                    ]
                 ),
                 device if get_propogate_device() else None,
             )
@@ -580,7 +615,7 @@ class ShardedQuantEmbeddingCollection(
 
     def sharding_type_device_group_to_sharding_infos(
         self,
-    ) -> Dict[Tuple[str, str], List[EmbeddingShardingInfo]]:
+    ) -> Dict[Tuple[str, Union[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]]:
         return self._sharding_type_device_group_to_sharding_infos
 
     def embedding_configs(self) -> List[EmbeddingConfig]:
@@ -714,6 +749,9 @@ class ShardedQuantEmbeddingCollection(
                         unbucketize_permute_tensor=unbucketize_permute_tensor_list[i],
                         bucket_mapping_tensor=bucket_mapping_tensor_list[i],
                         bucketized_length=bucketized_length_list[i],
+                        embedding_names_per_rank=self._embedding_names_per_rank_per_sharding[
+                            i
+                        ],
                     )
                 )
         return input_dist_result_list
@@ -796,7 +834,7 @@ class ShardedQuantEmbeddingCollection(
     ) -> Dict[str, JaggedTensor]:
         jt_dict_res: Dict[str, JaggedTensor] = {}
         for (
-            (sharding_type, _),
+            (sharding_type, device_type),
             emb_sharding,
             features_sharding,
             embedding_names,
@@ -844,6 +882,7 @@ class ShardedQuantEmbeddingCollection(
                 ),
                 cw_features_to_permute_indices=self._features_to_permute_indices,
                 key_to_feature_permuted_coordinates=key_to_feature_permuted_coordinates,
+                device_type=device_type,
             )
             for embedding_name in embedding_names:
                 jt_dict_res[embedding_name] = jt_dict[embedding_name]
@@ -872,7 +911,9 @@ class ShardedQuantEmbeddingCollection(
         return EmbeddingCollectionContext(sharding_contexts=[])
 
     @property
-    def shardings(self) -> Dict[Tuple[str, str], FeatureShardingMixIn]:
+    def shardings(
+        self,
+    ) -> Dict[Tuple[str, Union[str, Tuple[str, ...]]], FeatureShardingMixIn]:
         # pyre-ignore [7]
         return self._sharding_type_device_group_to_sharding
 
@@ -965,7 +1006,7 @@ class ShardedQuantEcInputDist(torch.nn.Module):
         self,
         input_feature_names: List[str],
         sharding_type_device_group_to_sharding: Dict[
-            Tuple[str, str],
+            Tuple[str, Union[str, Tuple[str, ...]]],
             EmbeddingSharding[
                 InferSequenceShardingContext,
                 InputDistOutputs,

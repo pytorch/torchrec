@@ -98,6 +98,7 @@ class InferSequenceShardingContext(Multistreamable):
     unbucketize_permute_tensor: Optional[torch.Tensor] = None
     bucket_mapping_tensor: Optional[torch.Tensor] = None
     bucketized_length: Optional[torch.Tensor] = None
+    embedding_names_per_rank: Optional[List[List[str]]] = None
 
     def record_stream(self, stream: torch.Stream) -> None:
         for feature in self.features:

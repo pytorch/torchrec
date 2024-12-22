@@ -120,8 +120,11 @@ def _quantize_weight(
 
 
 def _get_runtime_device(
-    device: Optional[torch.device], config: GroupedEmbeddingConfig
+    device: Optional[torch.device],
+    config: GroupedEmbeddingConfig,
+    shard_index: Optional[int] = None,
 ) -> torch.device:
+    index: int = 0 if shard_index is None else shard_index
     if device is not None and device.type != "meta":
         return device
     else:
@@ -136,9 +139,12 @@ def _get_runtime_device(
                 or (
                     table.global_metadata is not None
                     and len(table.global_metadata.shards_metadata)
-                    and table.global_metadata.shards_metadata[0].placement is not None
+                    and table.global_metadata.shards_metadata[index].placement
+                    is not None
                     # pyre-ignore: Undefined attribute [16]
-                    and table.global_metadata.shards_metadata[0].placement.device().type
+                    and table.global_metadata.shards_metadata[index]
+                    .placement.device()
+                    .type
                     == "cpu"
                 )
                 for table in config.embedding_tables
@@ -430,6 +436,7 @@ class QuantBatchedEmbedding(
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
+        shard_index: Optional[int] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -446,7 +453,9 @@ class QuantBatchedEmbedding(
         self._quant_state_dict_split_scale_bias: bool = (
             is_fused_param_quant_state_dict_split_scale_bias(fused_params)
         )
-        self._runtime_device: torch.device = _get_runtime_device(device, config)
+        self._runtime_device: torch.device = _get_runtime_device(
+            device, config, shard_index
+        )
         # 16 for CUDA, 1 for others like CPU and MTIA.
         self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = (

@@ -232,7 +232,7 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             )
 
             dtensor_metadata = None
-            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+            if self._env.output_dtensor:
                 placements = (
                     (Replicate(), Shard(1)) if self._is_2D_parallel else (Shard(1),)
                 )
@@ -245,9 +245,6 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     ),
                     stride=info.param.stride(),
                 )
-
-            # to not pass onto TBE
-            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             # Expectation is planner CW shards across a node, so each CW shard will have local_size number of row shards
             # pyre-fixme [6]

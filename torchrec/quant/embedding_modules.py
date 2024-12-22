@@ -10,7 +10,18 @@
 import copy
 import itertools
 from collections import defaultdict
-from typing import Callable, cast, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+)
 
 import torch
 import torch.nn as nn
@@ -48,7 +59,10 @@ from torchrec.modules.mc_embedding_modules import (
     ManagedCollisionEmbeddingCollection as OriginalManagedCollisionEmbeddingCollection,
 )
 from torchrec.modules.mc_modules import ManagedCollisionCollection
-from torchrec.modules.utils import construct_jagged_tensors_inference
+from torchrec.modules.utils import (
+    _get_batching_hinted_output,
+    construct_jagged_tensors_inference,
+)
 from torchrec.sparse.jagged_tensor import (
     ComputeKJTToJTDict,
     JaggedTensor,
@@ -57,6 +71,8 @@ from torchrec.sparse.jagged_tensor import (
 )
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
+
+torch.fx.wrap("_get_batching_hinted_output")
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -91,12 +107,6 @@ MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING: str = (
 MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT: str = "__use_batching_hinted_output"
 
 DEFAULT_ROW_ALIGNMENT = 16
-
-
-@torch.fx.wrap
-def _get_batching_hinted_output(lengths: Tensor, output: Tensor) -> Tensor:
-    # this is a fx rule to help with batching hinting jagged sequence tensor coalescing.
-    return output
 
 
 @torch.fx.wrap
@@ -971,6 +981,27 @@ class QuantManagedCollisionEmbeddingCollection(EmbeddingCollection):
             managed_collision_module
         ) in self._managed_collision_collection._managed_collision_modules.values():
             managed_collision_module.reset_inference_mode()
+
+    def to(
+        self, *args: List[Any], **kwargs: Dict[str, Any]
+    ) -> "QuantManagedCollisionEmbeddingCollection":
+        device, dtype, non_blocking, _ = torch._C._nn._parse_to(
+            *args,  # pyre-ignore
+            **kwargs,  # pyre-ignore
+        )
+        for param in self.parameters():
+            if param.device.type != "meta":
+                param.to(device)
+
+        for buffer in self.buffers():
+            if buffer.device.type != "meta":
+                buffer.to(device)
+        # Skip device movement and continue with other args
+        super().to(
+            dtype=dtype,
+            non_blocking=non_blocking,
+        )
+        return self
 
     def forward(
         self,

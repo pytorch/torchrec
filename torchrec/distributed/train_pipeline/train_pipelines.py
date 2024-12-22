@@ -11,7 +11,6 @@ import abc
 import contextlib
 import logging
 from collections import deque
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -31,7 +30,6 @@ from typing import (
 )
 
 import torch
-import torchrec.distributed.comm_ops
 from torch.autograd.profiler import record_function
 from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
 from torchrec.distributed.model_parallel import ShardedModule
@@ -760,7 +758,6 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             param.grad = grad
 
     def _init_embedding_streams(self) -> None:
-
         for _ in self._pipelined_modules:
             self._embedding_streams.append(
                 (torch.get_device_module(self._device).Stream(priority=0))
@@ -1005,6 +1002,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                         context,
                         source_stream=self._data_dist_stream,
                         target_stream=stream,
+                        stream_context=self._stream_context,
                     )
                     event = torch.get_device_module(self._device).Event()
                     event.record()

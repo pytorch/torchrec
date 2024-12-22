@@ -37,10 +37,8 @@ from torchrec.distributed.planner.shard_estimators import (
 )
 from torchrec.distributed.quant_embedding import QuantEmbeddingCollectionSharder
 from torchrec.distributed.quant_embeddingbag import (
-    QuantEmbeddingBagCollection,
     QuantEmbeddingBagCollectionSharder,
     QuantFeatureProcessedEmbeddingBagCollectionSharder,
-    ShardedQuantEmbeddingBagCollection,
 )
 from torchrec.distributed.quant_state import sharded_tbes_weights_spec, WeightSpec
 from torchrec.distributed.shard import _shard_modules

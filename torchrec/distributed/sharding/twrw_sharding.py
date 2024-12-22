@@ -13,7 +13,13 @@ from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
 import torch.distributed as dist
-from torchrec.distributed.comm import get_local_size, intra_and_cross_node_pg
+from torch.distributed._tensor import Shard
+from torch.distributed.distributed_c10d import get_process_group_ranks
+from torchrec.distributed.comm import (
+    get_local_size,
+    intra_and_cross_node_pg,
+    intra_and_cross_node_pg_2D,
+)
 from torchrec.distributed.dist_data import (
     KJTAllToAll,
     PooledEmbeddingsAllToAll,
@@ -34,6 +40,7 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
+    DTensorMetadata,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
@@ -44,6 +51,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensorMetadata,
     ShardingEnv,
+    ShardingEnv2D,
     ShardingType,
     ShardMetadata,
 )
@@ -71,14 +79,26 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
-        self._pg: Optional[dist.ProcessGroup] = self._env.process_group
+        self._is_2D_parallel: bool = isinstance(env, ShardingEnv2D)
+        self._pg: Optional[dist.ProcessGroup] = (
+            self._env.sharding_pg  # pyre-ignore[16]
+            if self._is_2D_parallel
+            else self._env.process_group
+        )
         self._world_size: int = self._env.world_size
         self._rank: int = self._env.rank
         self._device = device
         self._need_pos = need_pos
-        intra_pg, cross_pg = intra_and_cross_node_pg(
-            device, backend=dist.get_backend(self._pg)
-        )
+        if self._is_2D_parallel:
+            intra_pg, cross_pg = intra_and_cross_node_pg_2D(
+                # pyre-fixme[6]
+                self._env,
+                device=device,
+            )
+        else:
+            intra_pg, cross_pg = intra_and_cross_node_pg(
+                device, backend=dist.get_backend(self._pg)
+            )
         self._intra_pg: Optional[dist.ProcessGroup] = intra_pg
         self._cross_pg: Optional[dist.ProcessGroup] = cross_pg
         self._local_size: int = (
@@ -112,11 +132,23 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         world_size = self._world_size
         local_size = self._local_size
         tables_per_rank: List[List[ShardedEmbeddingTable]] = [
-            [] for i in range(world_size)
+            [] for _ in range(world_size)
         ]
+        peer_group = (
+            # pyre-ignore [6]
+            get_process_group_ranks(self._pg)
+            if self._is_2D_parallel
+            else None
+        )
         for info in sharding_infos:
-            # pyre-ignore [16]
-            table_node = info.param_sharding.ranks[0] // local_size
+            # Under 2D parallelism we transform rank to the logical ordering in a regular parallelism scheme
+            rank = (
+                # pyre-ignore [16]
+                peer_group.index(info.param_sharding.ranks[0])
+                if peer_group is not None
+                else info.param_sharding.ranks[0]
+            )
+            table_node = rank // local_size
             # pyre-fixme [16]
             shards = info.param_sharding.sharding_spec.shards
 
@@ -130,6 +162,19 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     ]
                 ),
             )
+
+            dtensor_metadata = None
+            if self._env.output_dtensor:
+                placements = (Shard(0),)
+                dtensor_metadata = DTensorMetadata(
+                    mesh=self._env.device_mesh,
+                    placements=placements,
+                    size=(
+                        info.embedding_config.num_embeddings,
+                        info.embedding_config.embedding_dim,
+                    ),
+                    stride=info.param.stride(),
+                )
 
             for rank in range(
                 table_node * local_size,
@@ -154,6 +199,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         ),
                         local_metadata=shards[rank_idx],
                         global_metadata=global_metadata,
+                        dtensor_metadata=dtensor_metadata,
                         weight_init_max=info.embedding_config.weight_init_max,
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,

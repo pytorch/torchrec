@@ -402,3 +402,90 @@ class Test2DSharding(ModelParallelTestShared):
             variable_batch_size=variable_batch_size,
             pooling=pooling,
         )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 7,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ],
+        ),
+        qcomms_config=st.sampled_from(
+            [
+                # None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16, backward_precision=CommType.BF16
+                ),
+            ]
+        ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embedding_bags": (
+                        torch.optim.SGD,
+                        {
+                            "lr": 0.01,
+                        },
+                    ),
+                },
+            ]
+        ),
+        pooling=st.sampled_from([PoolingType.SUM]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_sharding_twrw_2D(
+        self,
+        sharder_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        pooling: PoolingType,
+    ) -> None:
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
+        sharding_type = ShardingType.TABLE_ROW_WISE.value
+        assume(sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value)
+
+        self._test_sharding(
+            world_size=self.WORLD_SIZE,
+            world_size_2D=self.WORLD_SIZE_2D,
+            node_group_size=self.WORLD_SIZE // 4,
+            sharders=[
+                cast(
+                    ModuleSharder[nn.Module],
+                    create_test_sharder(
+                        sharder_type,
+                        sharding_type,
+                        kernel_type,
+                        qcomms_config=qcomms_config,
+                        device=self.device,
+                    ),
+                ),
+            ],
+            qcomms_config=qcomms_config,
+            constraints={
+                table.name: ParameterConstraints(min_partition=2)
+                for table in self.tables
+            },
+            backend=self.backend,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            pooling=pooling,
+        )

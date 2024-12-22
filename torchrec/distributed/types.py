@@ -633,6 +633,7 @@ class KeyValueParams:
         gather_ssd_cache_stats: bool: whether enable ssd stats collection, std reporter and ods reporter
         report_interval: int: report interval in train iteration if gather_ssd_cache_stats is enabled
         ods_prefix: str: ods prefix for ods reporting
+        bulk_init_chunk_size: int: number of rows to insert into rocksdb in each chunk
 
         # Parameter Server (PS) Attributes
         ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
@@ -649,8 +650,10 @@ class KeyValueParams:
     gather_ssd_cache_stats: Optional[bool] = None
     stats_reporter_config: Optional[TBEStatsReporterConfig] = None
     use_passed_in_path: bool = True
-    l2_cache_size: Optional[int] = None
+    l2_cache_size: Optional[int] = None  # size in GB
+    max_l1_cache_size: Optional[int] = None  # size in MB
     enable_async_update: Optional[bool] = None
+    bulk_init_chunk_size: Optional[int] = None  # number of rows
 
     # Parameter Server (PS) Attributes
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -673,7 +676,9 @@ class KeyValueParams:
                 self.gather_ssd_cache_stats,
                 self.stats_reporter_config,
                 self.l2_cache_size,
+                self.max_l1_cache_size,
                 self.enable_async_update,
+                self.bulk_init_chunk_size,
             )
         )
 
@@ -811,6 +816,7 @@ class ShardingEnv:
         world_size: int,
         rank: int,
         pg: Optional[dist.ProcessGroup] = None,
+        output_dtensor: bool = False,
     ) -> None:
         self.world_size = world_size
         self.rank = rank
@@ -823,6 +829,7 @@ class ShardingEnv:
             if pg
             else None
         )
+        self.output_dtensor: bool = output_dtensor
 
     @classmethod
     def from_process_group(cls, pg: dist.ProcessGroup) -> "ShardingEnv":
@@ -884,6 +891,7 @@ class ShardingEnv2D(ShardingEnv):
         self.sharding_pg: dist.ProcessGroup = sharding_pg
         self.device_mesh: DeviceMesh = device_mesh
         self.node_group_size: Optional[int] = node_group_size
+        self.output_dtensor: bool = True
 
     def num_sharding_groups(self) -> int:
         """

@@ -118,7 +118,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-        device_type_from_sharding_infos: Optional[str] = None,
+        device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = None,
         independent_emb_key_pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
@@ -135,7 +135,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         if device is None:
             device = torch.device("cpu")
         self._device: torch.device = device
-        self._device_type_from_sharding_infos: Optional[str] = (
+        self._device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = (
             device_type_from_sharding_infos
         )
         sharded_tables_per_rank = self._shard(sharding_infos)
@@ -181,7 +181,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             )
 
             dtensor_metadata = None
-            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+            if self._env.output_dtensor:
                 placements = (
                     (Replicate(), Shard(0)) if self._is_2D_parallel else (Shard(0),)
                 )
@@ -199,8 +199,6 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     ),
                     stride=info.param.stride(),
                 )
-            # to not pass onto TBE
-            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             for rank in range(self._world_size):
                 tables_per_rank[rank].append(
