@@ -8,16 +8,29 @@
 # pyre-strict
 
 
+import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Any, cast, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import (
+    Any,
+    cast,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
-from torch.distributed._shard.sharding_spec.api import EnumerableShardingSpec
+from torch.distributed._shard.sharding_spec import EnumerableShardingSpec
 from torchrec.distributed.embedding import (
     create_sharding_infos_by_sharding_device_group,
     EmbeddingShardingInfo,
@@ -25,6 +38,7 @@ from torchrec.distributed.embedding import (
 from torchrec.distributed.embedding_sharding import EmbeddingSharding
 from torchrec.distributed.embedding_types import (
     BaseQuantEmbeddingSharder,
+    EmbeddingComputeKernel,
     FeatureShardingMixIn,
     GroupedEmbeddingConfig,
     InputDistOutputs,
@@ -40,6 +54,11 @@ from torchrec.distributed.fused_params import (
     is_fused_param_register_tbe,
 )
 from torchrec.distributed.global_settings import get_propogate_device
+from torchrec.distributed.mc_modules import (
+    InferManagedCollisionCollectionSharder,
+    ShardedMCCRemapper,
+    ShardedQuantManagedCollisionCollection,
+)
 from torchrec.distributed.quant_state import ShardedQuantEmbeddingModuleState
 from torchrec.distributed.sharding.cw_sequence_sharding import (
     InferCwSequenceEmbeddingSharding,
@@ -47,11 +66,15 @@ from torchrec.distributed.sharding.cw_sequence_sharding import (
 from torchrec.distributed.sharding.rw_sequence_sharding import (
     InferRwSequenceEmbeddingSharding,
 )
-from torchrec.distributed.sharding.sequence_sharding import InferSequenceShardingContext
+from torchrec.distributed.sharding.sequence_sharding import (
+    InferSequenceShardingContext,
+    SequenceShardingContext,
+)
 from torchrec.distributed.sharding.tw_sequence_sharding import (
     InferTwSequenceEmbeddingSharding,
 )
 from torchrec.distributed.types import ParameterSharding, ShardingEnv, ShardMetadata
+from torchrec.distributed.utils import append_prefix
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
@@ -64,8 +87,9 @@ from torchrec.modules.utils import (
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
     MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+    QuantManagedCollisionEmbeddingCollection,
 )
-from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Multistreamable
 
 torch.fx.wrap("len")
@@ -79,6 +103,12 @@ except OSError:
     pass
 
 
+logger: logging.Logger = logging.getLogger(__name__)
+
+
+ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
+
+
 @dataclass
 class EmbeddingCollectionContext(Multistreamable):
     sharding_contexts: List[InferSequenceShardingContext]
@@ -86,6 +116,35 @@ class EmbeddingCollectionContext(Multistreamable):
     def record_stream(self, stream: torch.Stream) -> None:
         for ctx in self.sharding_contexts:
             ctx.record_stream(stream)
+
+
+class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
+
+    def __init__(
+        self,
+        sharding_contexts: Optional[List[SequenceShardingContext]] = None,
+        input_features: Optional[List[KeyedJaggedTensor]] = None,
+        reverse_indices: Optional[List[torch.Tensor]] = None,
+        evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = None,
+        remapped_kjt: Optional[KJTList] = None,
+    ) -> None:
+        # pyre-ignore
+        super().__init__(sharding_contexts)
+        self.evictions_per_table: Optional[Dict[str, Optional[torch.Tensor]]] = (
+            evictions_per_table
+        )
+        self.remapped_kjt: Optional[KJTList] = remapped_kjt
+
+    def record_stream(self, stream: torch.Stream) -> None:
+        super().record_stream(stream)
+        if self.evictions_per_table:
+            #  pyre-ignore
+            for value in self.evictions_per_table.values():
+                if value is None:
+                    continue
+                value.record_stream(stream)
+        if self.remapped_kjt is not None:
+            self.remapped_kjt.record_stream(stream)
 
 
 def get_device_from_parameter_sharding(
@@ -1089,3 +1148,240 @@ class ShardedQuantEcInputDist(torch.nn.Module):
                 bucket_mapping_tensor,
                 bucketized_lengths,
             )
+
+
+class ShardedMCECLookup(torch.nn.Module):
+    """
+    This module implements distributed compute of a ShardedQuantManagedCollisionEmbeddingCollection.
+
+    Args:
+        managed_collision_collection (ShardedQuantManagedCollisionCollection): managed collision collection
+        lookups (List[nn.Module]): embedding lookups
+
+    Example::
+
+    """
+
+    def __init__(
+        self,
+        sharding: int,
+        rank: int,
+        mcc_remapper: ShardedMCCRemapper,
+        ec_lookup: nn.Module,
+    ) -> None:
+        super().__init__()
+        self._sharding = sharding
+        self._rank = rank
+        self._mcc_remapper = mcc_remapper
+        self._ec_lookup = ec_lookup
+
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+    ) -> torch.Tensor:
+        remapped_kjt = self._mcc_remapper(features)
+        return self._ec_lookup(remapped_kjt)
+
+
+class ShardedQuantManagedCollisionEmbeddingCollection(ShardedQuantEmbeddingCollection):
+    def __init__(
+        self,
+        module: QuantManagedCollisionEmbeddingCollection,
+        table_name_to_parameter_sharding: Dict[str, ParameterSharding],
+        mc_sharder: InferManagedCollisionCollectionSharder,
+        # TODO - maybe we need this to manage unsharded/sharded consistency/state consistency
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],
+        fused_params: Optional[Dict[str, Any]] = None,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        super().__init__(
+            module, table_name_to_parameter_sharding, env, fused_params, device
+        )
+
+        self._device = device
+        self._env = env
+
+        # TODO: This is a hack since _embedding_module doesn't need input
+        # dist, so eliminating it so all fused a2a will ignore it.
+        # we're using ec input_dist directly, so this cannot be escaped.
+        # self._has_uninitialized_input_dist = False
+        embedding_shardings = list(
+            self._sharding_type_device_group_to_sharding.values()
+        )
+
+        self._managed_collision_collection: ShardedQuantManagedCollisionCollection = (
+            mc_sharder.shard(
+                module._managed_collision_collection,
+                table_name_to_parameter_sharding,
+                env=env,
+                device=device,
+                # pyre-ignore
+                embedding_shardings=embedding_shardings,
+            )
+        )
+        self._return_remapped_features: bool = module._return_remapped_features
+        self._create_mcec_lookups()
+
+    def _create_mcec_lookups(self) -> None:
+        mcec_lookups: List[nn.ModuleList] = []
+        mcc_remappers: List[List[ShardedMCCRemapper]] = (
+            self._managed_collision_collection.create_mcc_remappers()
+        )
+        for sharding in range(
+            len(self._managed_collision_collection._embedding_shardings)
+        ):
+            ec_sharding_lookups = self._lookups[sharding]
+            sharding_mcec_lookups: List[ShardedMCECLookup] = []
+            for j, ec_lookup in enumerate(
+                ec_sharding_lookups._embedding_lookups_per_rank  # pyre-ignore
+            ):
+                sharding_mcec_lookups.append(
+                    ShardedMCECLookup(
+                        sharding,
+                        j,
+                        mcc_remappers[sharding][j],
+                        ec_lookup,
+                    )
+                )
+            mcec_lookups.append(nn.ModuleList(sharding_mcec_lookups))
+        self._mcec_lookup: nn.ModuleList = nn.ModuleList(mcec_lookups)
+
+    # For consistency with ShardedManagedCollisionEmbeddingCollection
+    @property
+    def _embedding_collection(self) -> ShardedQuantEmbeddingCollection:
+        return cast(ShardedQuantEmbeddingCollection, self)
+
+    def input_dist(
+        self,
+        ctx: EmbeddingCollectionContext,
+        features: KeyedJaggedTensor,
+    ) -> ListOfKJTList:
+        # TODO: resolve incompatiblity with different contexts
+        if self._has_uninitialized_output_dist:
+            self._create_output_dist(features.device())
+            self._has_uninitialized_output_dist = False
+
+        return self._managed_collision_collection.input_dist(
+            # pyre-fixme [6]
+            ctx,
+            features,
+        )
+
+    def compute(
+        self,
+        ctx: ShrdCtx,
+        dist_input: ListOfKJTList,
+    ) -> List[List[torch.Tensor]]:
+        ret: List[List[torch.Tensor]] = []
+        for i in range(len(self._managed_collision_collection._embedding_shardings)):
+            dist_input_i = dist_input[i]
+            lookups = self._mcec_lookup[i]
+            sharding_ret: List[torch.Tensor] = []
+            for j, lookup in enumerate(lookups):
+                rank_ret = lookup(
+                    features=dist_input_i[j],
+                )
+                sharding_ret.append(rank_ret)
+            ret.append(sharding_ret)
+        return ret
+
+    # pyre-ignore
+    def output_dist(
+        self,
+        ctx: ShrdCtx,
+        output: List[List[torch.Tensor]],
+    ) -> Tuple[
+        Union[KeyedTensor, Dict[str, JaggedTensor]], Optional[KeyedJaggedTensor]
+    ]:
+
+        # pyre-ignore [6]
+        ebc_out = super().output_dist(ctx, output)
+
+        kjt_out: Optional[KeyedJaggedTensor] = None
+
+        return ebc_out, kjt_out
+
+    def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
+        for fqn, _ in self.named_parameters():
+            yield append_prefix(prefix, fqn)
+        for fqn, _ in self.named_buffers():
+            yield append_prefix(prefix, fqn)
+
+
+class QuantManagedCollisionEmbeddingCollectionSharder(
+    BaseQuantEmbeddingSharder[QuantManagedCollisionEmbeddingCollection]
+):
+    """
+    This implementation uses non-fused EmbeddingCollection
+    """
+
+    def __init__(
+        self,
+        e_sharder: QuantEmbeddingCollectionSharder,
+        mc_sharder: InferManagedCollisionCollectionSharder,
+    ) -> None:
+        super().__init__()
+        self._e_sharder: QuantEmbeddingCollectionSharder = e_sharder
+        self._mc_sharder: InferManagedCollisionCollectionSharder = mc_sharder
+
+    def shardable_parameters(
+        self, module: QuantManagedCollisionEmbeddingCollection
+    ) -> Dict[str, torch.nn.Parameter]:
+        return self._e_sharder.shardable_parameters(module)
+
+    def compute_kernels(
+        self,
+        sharding_type: str,
+        compute_device_type: str,
+    ) -> List[str]:
+        return [
+            EmbeddingComputeKernel.QUANT.value,
+        ]
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return list(
+            set.intersection(
+                set(self._e_sharder.sharding_types(compute_device_type)),
+                set(self._mc_sharder.sharding_types(compute_device_type)),
+            )
+        )
+
+    @property
+    def fused_params(self) -> Optional[Dict[str, Any]]:
+        # TODO: to be deprecate after planner get cache_load_factor from ParameterConstraints
+        return self._e_sharder.fused_params
+
+    def shard(
+        self,
+        module: QuantManagedCollisionEmbeddingCollection,
+        params: Dict[str, ParameterSharding],
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],
+        device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
+    ) -> ShardedQuantManagedCollisionEmbeddingCollection:
+        fused_params = self.fused_params if self.fused_params else {}
+        fused_params["output_dtype"] = data_type_to_sparse_type(
+            dtype_to_data_type(module.output_dtype())
+        )
+        if FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS not in fused_params:
+            fused_params[FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS] = getattr(
+                module,
+                MODULE_ATTR_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
+                False,
+            )
+        if FUSED_PARAM_REGISTER_TBE_BOOL not in fused_params:
+            fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = getattr(
+                module, FUSED_PARAM_REGISTER_TBE_BOOL, False
+            )
+        return ShardedQuantManagedCollisionEmbeddingCollection(
+            module,
+            params,
+            self._mc_sharder,
+            env,
+            fused_params,
+            device,
+        )
+
+    @property
+    def module_type(self) -> Type[QuantManagedCollisionEmbeddingCollection]:
+        return QuantManagedCollisionEmbeddingCollection

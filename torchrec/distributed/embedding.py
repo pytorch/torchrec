@@ -28,7 +28,7 @@ from typing import (
 import torch
 from torch import distributed as dist, nn
 from torch.autograd.profiler import record_function
-from torch.distributed._shard.sharding_spec.api import EnumerableShardingSpec
+from torch.distributed._shard.sharding_spec import EnumerableShardingSpec
 from torch.distributed._tensor import DTensor
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_sharding import (
