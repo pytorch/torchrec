@@ -1142,7 +1142,7 @@ def calculate_shard_storages(
     if compute_kernel in {EmbeddingComputeKernel.KEY_VALUE.value}:
         ddr_storage = 0
 
-    optimizer_class = getattr(tensor, "_optimizer_class", None)
+    optimizer_class = getattr(tensor, "_optimizer_classes", [None])[0]
 
     hbm_specific_sizes: List[int] = _calculate_storage_specific_sizes(
         storage=hbm_storage,
