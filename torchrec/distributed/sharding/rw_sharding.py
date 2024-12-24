@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import logging
 import math
 
 from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
@@ -58,6 +59,7 @@ from torchrec.distributed.types import (
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
+logger: logging.Logger = logging.getLogger(__name__)
 
 C = TypeVar("C", bound=Multistreamable)
 F = TypeVar("F", bound=Multistreamable)
@@ -575,10 +577,38 @@ class RwPooledEmbeddingSharding(
 
 
 @torch.fx.wrap
+def get_total_num_buckets_runtime_device(
+    total_num_buckets: Optional[List[int]],
+    runtime_device: torch.device,
+    tensor_cache: Dict[
+        str,
+        Tuple[torch.Tensor, List[torch.Tensor]],
+    ],
+    dtype: torch.dtype = torch.int32,
+) -> Optional[torch.Tensor]:
+    if total_num_buckets is None:
+        return None
+    cache_key: str = "__total_num_buckets"
+    if cache_key not in tensor_cache:
+        tensor_cache[cache_key] = (
+            torch.tensor(
+                total_num_buckets,
+                device=runtime_device,
+                dtype=dtype,
+            ),
+            [],
+        )
+    return tensor_cache[cache_key][0]
+
+
+@torch.fx.wrap
 def get_block_sizes_runtime_device(
     block_sizes: List[int],
     runtime_device: torch.device,
-    tensor_cache: Dict[str, Tuple[torch.Tensor, List[torch.Tensor]]],
+    tensor_cache: Dict[
+        str,
+        Tuple[torch.Tensor, List[torch.Tensor]],
+    ],
     embedding_shard_metadata: Optional[List[List[int]]] = None,
     dtype: torch.dtype = torch.int32,
 ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
@@ -613,6 +643,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
         world_size: int,
         num_features: int,
         feature_hash_sizes: List[int],
+        feature_total_num_buckets: Optional[List[int]] = None,
         device: Optional[torch.device] = None,
         is_sequence: bool = False,
         has_feature_processor: bool = False,
@@ -620,12 +651,22 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
         embedding_shard_metadata: Optional[List[List[int]]] = None,
     ) -> None:
         super().__init__()
+        logger.info(
+            f"InferRwSparseFeaturesDist: {world_size=}, {num_features=}, {feature_hash_sizes=}, {feature_total_num_buckets=}, {device=}, {is_sequence=}, {has_feature_processor=}, {need_pos=}, {embedding_shard_metadata=}"
+        )
         self._world_size: int = world_size
         self._num_features = num_features
-        self.feature_block_sizes: List[int] = [
-            (hash_size + self._world_size - 1) // self._world_size
-            for hash_size in feature_hash_sizes
-        ]
+        self._feature_total_num_buckets: Optional[List[int]] = feature_total_num_buckets
+
+        self.feature_block_sizes: List[int] = []
+        for i, hash_size in enumerate(feature_hash_sizes):
+            block_divisor = self._world_size
+            if feature_total_num_buckets is not None:
+                assert feature_total_num_buckets[i] % self._world_size == 0
+                block_divisor = feature_total_num_buckets[i]
+            self.feature_block_sizes.append(
+                (hash_size + block_divisor - 1) // block_divisor
+            )
         self.tensor_cache: Dict[
             str, Tuple[torch.Tensor, Optional[List[torch.Tensor]]]
         ] = {}
@@ -651,6 +692,12 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
             self._embedding_shard_metadata,
             sparse_features.values().dtype,
         )
+        total_num_buckets = get_total_num_buckets_runtime_device(
+            self._feature_total_num_buckets,
+            sparse_features.device(),
+            self.tensor_cache,
+            sparse_features.values().dtype,
+        )
 
         (
             bucketized_features,
@@ -660,6 +707,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
             sparse_features,
             num_buckets=self._world_size,
             block_sizes=block_sizes,
+            total_num_buckets=total_num_buckets,
             bucketize_pos=(
                 self._has_feature_processor
                 if sparse_features.weights_or_none() is None
