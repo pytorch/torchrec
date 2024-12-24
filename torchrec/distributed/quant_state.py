@@ -409,11 +409,12 @@ def sharded_tbes_weights_spec(
         type_name: str = type(module).__name__
         is_sqebc: bool = "ShardedQuantEmbeddingBagCollection" in type_name
         is_sqec: bool = "ShardedQuantEmbeddingCollection" in type_name
+        is_sqmcec: bool = "ShardedQuantManagedCollisionEmbeddingCollection" in type_name
 
-        if is_sqebc or is_sqec:
-            assert not (
-                is_sqebc and is_sqec
-            ), "Cannot be both ShardedQuantEmbeddingBagCollection and ShardedQuantEmbeddingCollection"
+        if is_sqebc or is_sqec or is_sqmcec:
+            assert (
+                is_sqec + is_sqebc + is_sqmcec == 1
+            ), "Cannot have any two of ShardedQuantEmbeddingBagCollection, ShardedQuantEmbeddingCollection and ShardedQuantManagedCollisionEmbeddingCollection are true"
             tbes_configs: Dict[
                 IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
             ] = module.tbes_configs()

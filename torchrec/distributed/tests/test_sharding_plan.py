@@ -15,6 +15,9 @@ import hypothesis.strategies as st
 import torch
 from hypothesis import given, settings, Verbosity
 from torchrec import distributed as trec_dist
+from torchrec.distributed.quant_embedding import (
+    QuantManagedCollisionEmbeddingCollectionSharder,
+)
 from torchrec.distributed.sharding_plan import (
     column_wise,
     construct_module_sharding_plan,
@@ -63,6 +66,7 @@ from torchrec.modules.mc_embedding_modules import (
 from torchrec.quant.embedding_modules import (
     EmbeddingBagCollection as QuantEmbeddingBagCollection,
     EmbeddingCollection as QuantEmbeddingCollection,
+    QuantManagedCollisionEmbeddingCollection,
 )
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -892,21 +896,24 @@ class ShardingPlanTest(unittest.TestCase):
                 )
             }
         )
-        expected = """
-module: ebc
+        expected = """module: ebc
 
- param   | sharding type | compute kernel | ranks 
+ param   | sharding type | compute kernel | ranks
 -------- | ------------- | -------------- | ------
-user_id  | table_wise    | dense          | [0]   
+user_id  | table_wise    | dense          | [0]
 movie_id | row_wise      | dense          | [0, 1]
 
- param   | shard offsets | shard sizes |   placement  
+ param   | shard offsets | shard sizes |   placement
 -------- | ------------- | ----------- | -------------
 user_id  | [0, 0]        | [4096, 32]  | rank:0/cuda:0
 movie_id | [0, 0]        | [2048, 32]  | rank:0/cuda:0
 movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1
 """
-        self.assertEqual(expected.strip(), str(plan))
+        self.maxDiff = None
+        for i in range(len(expected.splitlines())):
+            self.assertEqual(
+                expected.splitlines()[i].strip(), str(plan).splitlines()[i].strip()
+            )
 
     def test_module_to_default_sharders(self) -> None:
         default_sharder_map = get_module_to_default_sharders()
@@ -921,6 +928,7 @@ movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1
                 QuantEmbeddingCollection,
                 ManagedCollisionEmbeddingBagCollection,
                 ManagedCollisionEmbeddingCollection,
+                QuantManagedCollisionEmbeddingCollection,
             ],
         )
         self.assertIsInstance(
@@ -953,4 +961,9 @@ movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1
         self.assertIsInstance(
             default_sharder_map[ManagedCollisionEmbeddingCollection],
             ManagedCollisionEmbeddingCollectionSharder,
+        )
+
+        self.assertIsInstance(
+            default_sharder_map[QuantManagedCollisionEmbeddingCollection],
+            QuantManagedCollisionEmbeddingCollectionSharder,
         )
