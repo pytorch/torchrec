@@ -348,6 +348,18 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             ) in embedding_kernel.named_parameters_by_table():
                 yield (table_name, tbe_slice)
 
+    def get_named_split_embedding_weights_snapshot(
+        self,
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+        """
+        Return an iterator over embedding tables, yielding both the table name as well as the embedding
+        table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
+        RocksDB snapshot to support windowed access.
+        """
+        for emb_module in self._emb_modules:
+            if isinstance(emb_module, KeyValueEmbedding):
+                yield from emb_module.get_named_split_embedding_weights_snapshot()
+
     def flush(self) -> None:
         for emb_module in self._emb_modules:
             emb_module.flush()

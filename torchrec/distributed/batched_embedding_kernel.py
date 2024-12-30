@@ -900,7 +900,7 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
             pg,
         )
         self._param_per_table: Dict[str, nn.Parameter] = dict(
-            _gen_named_parameters_by_table_ssd(
+            _gen_named_parameters_by_table_ssd_pmt(
                 emb_module=self._emb_module,
                 table_name_to_count=self.table_name_to_count.copy(),
                 config=self._config,
@@ -933,11 +933,31 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         destination: Optional[Dict[str, Any]] = None,
         prefix: str = "",
         keep_vars: bool = False,
+        no_snapshot: bool = True,
     ) -> Dict[str, Any]:
-        if destination is None:
-            destination = OrderedDict()
+        """
+        Args:
+            no_snapshot (bool): the tensors in the returned dict are
+                PartiallyMaterializedTensors. this argument controls wether the
+                PartiallyMaterializedTensor owns a RocksDB snapshot handle. True means the
+                PartiallyMaterializedTensor doesn't have a RocksDB snapshot handle.  False means the
+                PartiallyMaterializedTensor has a RocksDB snapshot handle
+        """
+        # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
+        # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        return destination
+        emb_tables = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            emb_table.local_metadata.placement._device = torch.device("cpu")
+        ret = get_state_dict(
+            emb_table_config_copy,
+            emb_tables,
+            self._pg,
+            destination,
+            prefix,
+        )
+        return ret
 
     def named_parameters(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
@@ -950,14 +970,16 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         ):
             # hack before we support optimizer on sharded parameter level
             # can delete after PEA deprecation
+            # pyre-ignore [6]
             param = nn.Parameter(tensor)
             # pyre-ignore
             param._in_backward_optimizers = [EmptyFusedOptimizer()]
             yield name, param
 
+    # pyre-ignore [15]
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
-    ) -> Iterator[Tuple[str, torch.Tensor]]:
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
         assert (
             remove_duplicate
         ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
@@ -966,6 +988,21 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
             self.split_embedding_weights(),
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, tensor
+
+    def get_named_split_embedding_weights_snapshot(
+        self, prefix: str = ""
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+        """
+        Return an iterator over embedding tables, yielding both the table name as well as the embedding
+        table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
+        RocksDB snapshot to support windowed access.
+        """
+        for config, tensor in zip(
+            self._config.embedding_tables,
+            self.split_embedding_weights(no_snapshot=False),
+        ):
+            key = append_prefix(prefix, f"{config.name}")
             yield key, tensor
 
     def flush(self) -> None:
@@ -982,11 +1019,11 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
 
-    def split_embedding_weights(self) -> List[torch.Tensor]:
-        """
-        Return fake tensors.
-        """
-        return [param.data for param in self._param_per_table.values()]
+    # pyre-ignore [15]
+    def split_embedding_weights(
+        self, no_snapshot: bool = True
+    ) -> List[PartiallyMaterializedTensor]:
+        return self.emb_module.split_embedding_weights(no_snapshot)
 
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule):

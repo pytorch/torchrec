@@ -744,7 +744,7 @@ class ShardedEmbeddingCollection(
         self._model_parallel_name_to_shards_wrapper = OrderedDict()
         self._model_parallel_name_to_sharded_tensor = OrderedDict()
         self._model_parallel_name_to_dtensor = OrderedDict()
-        model_parallel_name_to_compute_kernel: Dict[str, str] = {}
+        _model_parallel_name_to_compute_kernel: Dict[str, str] = {}
         for (
             table_name,
             parameter_sharding,
@@ -755,7 +755,7 @@ class ShardedEmbeddingCollection(
             self._model_parallel_name_to_shards_wrapper[table_name] = OrderedDict(
                 [("local_tensors", []), ("local_offsets", [])]
             )
-            model_parallel_name_to_compute_kernel[table_name] = (
+            _model_parallel_name_to_compute_kernel[table_name] = (
                 parameter_sharding.compute_kernel
             )
 
@@ -813,18 +813,17 @@ class ShardedEmbeddingCollection(
                     "weight", nn.Parameter(torch.empty(0))
                 )
                 if (
-                    model_parallel_name_to_compute_kernel[table_name]
+                    _model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
                     self.embeddings[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
 
-            if model_parallel_name_to_compute_kernel[table_name] in {
-                EmbeddingComputeKernel.KEY_VALUE.value
-            }:
-                continue
             if self._output_dtensor:
+                assert _model_parallel_name_to_compute_kernel[table_name] not in {
+                    EmbeddingComputeKernel.KEY_VALUE.value
+                }
                 if shards_wrapper_map["local_tensors"]:
                     self._model_parallel_name_to_dtensor[table_name] = (
                         DTensor.from_local(
@@ -853,6 +852,8 @@ class ShardedEmbeddingCollection(
                     )
             else:
                 # created ShardedTensors once in init, use in post_state_dict_hook
+                # note: at this point kvstore backed tensors don't own valid snapshots, so no read
+                # access is allowed on them.
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
                     ShardedTensor._init_from_local_shards(
                         local_shards,
@@ -860,6 +861,21 @@ class ShardedEmbeddingCollection(
                         process_group=self._env.process_group,
                     )
                 )
+
+        def extract_sharded_kvtensors(
+            module: ShardedEmbeddingCollection,
+        ) -> OrderedDict[str, ShardedTensor]:
+            # retrieve all kvstore backed tensors
+            ret = OrderedDict()
+            for (
+                table_name,
+                sharded_t,
+            ) in module._model_parallel_name_to_sharded_tensor.items():
+                if _model_parallel_name_to_compute_kernel[table_name] in {
+                    EmbeddingComputeKernel.KEY_VALUE.value
+                }:
+                    ret[table_name] = sharded_t
+            return ret
 
         def post_state_dict_hook(
             module: ShardedEmbeddingCollection,
@@ -880,6 +896,28 @@ class ShardedEmbeddingCollection(
             ) in module._model_parallel_name_to_dtensor.items():
                 destination_key = f"{prefix}embeddings.{table_name}.weight"
                 destination[destination_key] = d_tensor
+
+            # kvstore backed tensors do not have a valid backing snapshot at this point. Fill in a valid
+            # snapshot for read access.
+            sharded_kvtensors = extract_sharded_kvtensors(module)
+            if len(sharded_kvtensors) == 0:
+                return
+
+            sharded_kvtensors_copy = copy.deepcopy(sharded_kvtensors)
+            for lookup, sharding_type in zip(
+                module._lookups, module._sharding_type_to_sharding.keys()
+            ):
+                if sharding_type != ShardingType.DATA_PARALLEL.value:
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
+                    for key, v in lookup.get_named_split_embedding_weights_snapshot():
+                        assert key in sharded_kvtensors_copy
+                        sharded_kvtensors_copy[key].local_shards()[0].tensor = v
+            for (
+                table_name,
+                sharded_kvtensor,
+            ) in sharded_kvtensors_copy.items():
+                destination_key = f"{prefix}embeddings.{table_name}.weight"
+                destination[destination_key] = sharded_kvtensor
 
         self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)
