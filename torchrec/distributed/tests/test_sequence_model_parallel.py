@@ -376,3 +376,44 @@ class SequenceModelParallelTest(MultiProcessTestBase):
             variable_batch_per_feature=variable_batch_per_feature,
             global_constant_batch=True,
         )
+
+
+@skip_if_asan_class
+class TDSequenceModelParallelTest(SequenceModelParallelTest):
+
+    def test_sharding_variable_batch(self) -> None:
+        pass
+
+    def _test_sharding(
+        self,
+        sharders: List[TestEmbeddingCollectionSharder],
+        backend: str = "gloo",
+        world_size: int = 2,
+        local_size: Optional[int] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        model_class: Type[TestSparseNNBase] = TestSequenceSparseNN,
+        qcomms_config: Optional[QCommsConfig] = None,
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ] = None,
+        variable_batch_size: bool = False,
+        variable_batch_per_feature: bool = False,
+    ) -> None:
+        self._run_multi_process_test(
+            callable=sharding_single_rank_test,
+            world_size=world_size,
+            local_size=local_size,
+            model_class=model_class,
+            tables=self.tables,
+            embedding_groups=self.embedding_groups,
+            sharders=sharders,
+            optim=EmbOptimType.EXACT_SGD,
+            backend=backend,
+            constraints=constraints,
+            qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
+            variable_batch_per_feature=variable_batch_per_feature,
+            global_constant_batch=True,
+            input_type="td",
+        )
