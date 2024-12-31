@@ -66,7 +66,9 @@ from torchrec.streamable import Multistreamable
 
 @dataclass
 class EmbeddingCollectionContext(Multistreamable):
-    sharding_contexts: List[InferSequenceShardingContext | SequenceShardingContext]
+    sharding_contexts: List[
+        Union[InferSequenceShardingContext, SequenceShardingContext]
+    ]
 
     def record_stream(self, stream: torch.Stream) -> None:
         for ctx in self.sharding_contexts:
