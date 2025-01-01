@@ -27,6 +27,7 @@ from typing import (
 
 import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
+from tensordict import TensorDict
 from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
 from torch.distributed._tensor import DTensor
@@ -90,6 +91,7 @@ from torchrec.modules.embedding_modules import (
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.tensor_dict import maybe_td_to_kjt
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -652,9 +654,7 @@ class ShardedEmbeddingBagCollection(
         self._inverse_indices_permute_indices: Optional[torch.Tensor] = None
         # to support mean pooling callback hook
         self._has_mean_pooling_callback: bool = (
-            True
-            if PoolingType.MEAN.value in self._pooling_type_to_rs_features
-            else False
+            PoolingType.MEAN.value in self._pooling_type_to_rs_features
         )
         self._dim_per_key: Optional[torch.Tensor] = None
         self._kjt_key_indices: Dict[str, int] = {}
@@ -1144,26 +1144,37 @@ class ShardedEmbeddingBagCollection(
 
     # pyre-ignore [14]
     def input_dist(
-        self, ctx: EmbeddingBagCollectionContext, features: KeyedJaggedTensor
+        self,
+        ctx: EmbeddingBagCollectionContext,
+        features: Union[KeyedJaggedTensor, TensorDict],
     ) -> Awaitable[Awaitable[KJTList]]:
-        ctx.variable_batch_per_feature = features.variable_stride_per_key()
-        ctx.inverse_indices = features.inverse_indices_or_none()
+        if isinstance(features, KeyedJaggedTensor):
+            ctx.variable_batch_per_feature = features.variable_stride_per_key()
+            ctx.inverse_indices = features.inverse_indices_or_none()
+            feature_keys = features.keys()
+        else:  # features is TensorDict
+            ctx.variable_batch_per_feature = False  # TD does not support variable batch
+            ctx.inverse_indices = None
+            feature_keys = list(features.keys())  # pyre-ignore[6]
         if self._has_uninitialized_input_dist:
-            self._create_input_dist(features.keys())
+            self._create_input_dist(feature_keys)
             self._has_uninitialized_input_dist = False
             if ctx.variable_batch_per_feature:
                 self._create_inverse_indices_permute_indices(ctx.inverse_indices)
             if self._has_mean_pooling_callback:
-                self._init_mean_pooling_callback(features.keys(), ctx.inverse_indices)
+                self._init_mean_pooling_callback(feature_keys, ctx.inverse_indices)
         with torch.no_grad():
-            if self._has_features_permute:
+            if isinstance(features, KeyedJaggedTensor) and self._has_features_permute:
                 features = features.permute(
                     self._features_order,
                     # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
                     #  but got `Union[Module, Tensor]`.
                     self._features_order_tensor,
                 )
-            if self._has_mean_pooling_callback:
+            if (
+                isinstance(features, KeyedJaggedTensor)
+                and self._has_mean_pooling_callback
+            ):
                 ctx.divisor = _create_mean_pooling_divisor(
                     lengths=features.lengths(),
                     stride=features.stride(),
@@ -1182,9 +1193,24 @@ class ShardedEmbeddingBagCollection(
                     weights=features.weights_or_none(),
                 )
 
-            features_by_shards = features.split(
-                self._feature_splits,
-            )
+            if isinstance(features, KeyedJaggedTensor):
+                features_by_shards = features.split(
+                    self._feature_splits,
+                )
+            else:
+                feature_names = [feature_keys[i] for i in self._features_order]
+                feature_name_by_sharding_types: List[List[str]] = []
+                start = 0
+                for length in self._feature_splits:
+                    feature_name_by_sharding_types.append(
+                        feature_names[start : start + length]
+                    )
+                    start += length
+                features_by_shards = [
+                    maybe_td_to_kjt(features, names)
+                    for names in feature_name_by_sharding_types
+                ]
+
             awaitables = []
             for input_dist, features_by_shard, sharding_type in zip(
                 self._input_dists,
