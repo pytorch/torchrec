@@ -24,7 +24,7 @@ from torchrec.distributed.train_pipeline.utils import (
     _get_node_args,
     _rewrite_model,
     PipelinedForward,
-    PipelinedPreproc,
+    PipelinedPostproc,
     TrainPipelineContext,
 )
 from torchrec.distributed.types import ShardingType
@@ -57,16 +57,16 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
             randomize_indices=False,
         )[0].to(self.device)
 
-        preproc_module = TestNegSamplingModule(
+        postproc_module = TestNegSamplingModule(
             extra_input=extra_input,
         )
-        model = self._setup_model(preproc_module=preproc_module)
+        model = self._setup_model(postproc_module=postproc_module)
 
         sharded_model, optim = self._generate_sharded_model_and_optimizer(
             model, sharding_type, kernel_type, fused_params
         )
 
-        # Try to rewrite model without ignored_preproc_modules defined, EBC forwards not overwritten to PipelinedForward due to KJT modification
+        # Try to rewrite model without ignored_postproc_modules defined, EBC forwards not overwritten to PipelinedForward due to KJT modification
         _rewrite_model(
             model=sharded_model,
             batch=None,
@@ -86,13 +86,13 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
             PipelinedForward,
         )
 
-        # Now provide preproc module explicitly
+        # Now provide postproc module explicitly
         _rewrite_model(
             model=sharded_model,
             batch=None,
             context=TrainPipelineContext(),
             dist_stream=None,
-            pipeline_preproc=True,
+            pipeline_postproc=True,
         )
 
         # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `sparse`.
@@ -106,27 +106,27 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `sparse`.
-            sharded_model.module.sparse.ebc.forward._args[0].preproc_modules[0],
+            sharded_model.module.sparse.ebc.forward._args[0].postproc_modules[0],
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_module`.
-            sharded_model.module.preproc_module,
+            #  `postproc_module`.
+            sharded_model.module.postproc_module,
         )
         self.assertEqual(
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `sparse`.
-            sharded_model.module.sparse.weighted_ebc.forward._args[0].preproc_modules[
+            sharded_model.module.sparse.weighted_ebc.forward._args[0].postproc_modules[
                 0
             ],
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_module`.
-            sharded_model.module.preproc_module,
+            #  `postproc_module`.
+            sharded_model.module.postproc_module,
         )
         state_dict = sharded_model.state_dict()
         missing_keys, unexpected_keys = sharded_model.load_state_dict(state_dict)
         self.assertEqual(missing_keys, [])
         self.assertEqual(unexpected_keys, [])
 
-    def test_pipelined_preproc_state_dict(self) -> None:
+    def test_pipelined_postproc_state_dict(self) -> None:
         class TestModule(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -147,8 +147,8 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
 
         rewritten_model = copy.deepcopy(model)
         # pyre-ignore[8]
-        rewritten_model.test_module = PipelinedPreproc(
-            preproc_module=rewritten_model.test_module,
+        rewritten_model.test_module = PipelinedPostproc(
+            postproc_module=rewritten_model.test_module,
             fqn="test_module",
             args=[],
             context=TrainPipelineContext(),
@@ -173,10 +173,10 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
                 randomize_indices=False,
             )[0].to(self.device)
 
-            preproc_module = TestNegSamplingModule(
+            postproc_module = TestNegSamplingModule(
                 extra_input=extra_input,
             )
-            model = self._setup_model(preproc_module=preproc_module)
+            model = self._setup_model(postproc_module=postproc_module)
             model.to_empty(device=self.device)
             return model
         elif source_model_type == ModelType.SHARDED:
@@ -195,7 +195,7 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
                 batch=None,
                 context=TrainPipelineContext(),
                 dist_stream=None,
-                pipeline_preproc=True,
+                pipeline_postproc=True,
             )
             return model
         else:
@@ -217,7 +217,7 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
 
         state_dict = source_model.state_dict()
         self.assertTrue(
-            f"preproc_module.{TestNegSamplingModule.TEST_BUFFER_NAME}"
+            f"postproc_module.{TestNegSamplingModule.TEST_BUFFER_NAME}"
             in state_dict.keys()
         )
 

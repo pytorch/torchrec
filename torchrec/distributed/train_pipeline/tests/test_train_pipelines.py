@@ -61,7 +61,7 @@ from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
     get_h2d_func,
     PipelinedForward,
-    PipelinedPreproc,
+    PipelinedPostproc,
     PipelineStage,
     SparseDataDistUtil,
     StageOut,
@@ -935,7 +935,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=True,
-            pipeline_preproc=True,
+            pipeline_postproc=True,
         )
 
         for i in range(self.num_batches):
@@ -957,14 +957,14 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipeline_modules_share_preproc(self) -> None:
+    def test_pipeline_modules_share_postproc(self) -> None:
         """
-        Setup: preproc module takes in input batch and returns modified
+        Setup: postproc module takes in input batch and returns modified
         input batch. EBC and weighted EBC inside model sparse arch subsequently
         uses this modified KJT.
 
-        Test case where single preproc module is shared by multiple sharded modules
-        and output of preproc module needs to be transformed in the SAME way
+        Test case where single postproc module is shared by multiple sharded modules
+        and output of postproc module needs to be transformed in the SAME way
         """
 
         extra_input = ModelInput.generate(
@@ -976,10 +976,10 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             randomize_indices=False,
         )[0].to(self.device)
 
-        preproc_module = TestNegSamplingModule(
+        postproc_module = TestNegSamplingModule(
             extra_input=extra_input,
         )
-        model = self._setup_model(preproc_module=preproc_module)
+        model = self._setup_model(postproc_module=postproc_module)
 
         pipelined_model, pipeline = self._check_output_equal(
             model,
@@ -988,22 +988,22 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # Check that both EC and EBC pipelined
         self.assertEqual(len(pipeline._pipelined_modules), 2)
-        self.assertEqual(len(pipeline._pipelined_preprocs), 1)
+        self.assertEqual(len(pipeline._pipelined_postprocs), 1)
 
     # pyre-ignore
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipeline_preproc_not_shared_with_arg_transform(self) -> None:
+    def test_pipeline_postproc_not_shared_with_arg_transform(self) -> None:
         """
-        Test case where arguments to preproc module is some non-modifying
-        transformation of the input batch (no nested preproc modules) AND
+        Test case where arguments to postproc module is some non-modifying
+        transformation of the input batch (no nested postproc modules) AND
         arguments to multiple sharded modules can be derived from the output
-        of different preproc modules (i.e. preproc modules not shared).
+        of different postproc modules (i.e. postproc modules not shared).
         """
         model = TestModelWithPreproc(
-            tables=self.tables[:-1],  # ignore last table as preproc will remove
+            tables=self.tables[:-1],  # ignore last table as postproc will remove
             weighted_tables=self.weighted_tables[:-1],  # ignore last table
             device=self.device,
         )
@@ -1024,53 +1024,53 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             self.assertEqual(len(ebc.forward._args), 1)
             self.assertEqual(ebc.forward._args[0].input_attrs, ["", 0])
             self.assertEqual(ebc.forward._args[0].is_getitems, [False, True])
-            self.assertEqual(len(ebc.forward._args[0].preproc_modules), 2)
+            self.assertEqual(len(ebc.forward._args[0].postproc_modules), 2)
             self.assertIsInstance(
-                ebc.forward._args[0].preproc_modules[0], PipelinedPreproc
+                ebc.forward._args[0].postproc_modules[0], PipelinedPostproc
             )
-            self.assertEqual(ebc.forward._args[0].preproc_modules[1], None)
+            self.assertEqual(ebc.forward._args[0].postproc_modules[1], None)
 
         self.assertEqual(
-            pipelined_ebc.forward._args[0].preproc_modules[0],
+            pipelined_ebc.forward._args[0].postproc_modules[0],
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_nonweighted`.
-            pipelined_model.module.preproc_nonweighted,
+            #  `postproc_nonweighted`.
+            pipelined_model.module.postproc_nonweighted,
         )
         self.assertEqual(
-            pipelined_weighted_ebc.forward._args[0].preproc_modules[0],
+            pipelined_weighted_ebc.forward._args[0].postproc_modules[0],
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_weighted`.
-            pipelined_model.module.preproc_weighted,
+            #  `postproc_weighted`.
+            pipelined_model.module.postproc_weighted,
         )
 
-        # preproc args
-        self.assertEqual(len(pipeline._pipelined_preprocs), 2)
+        # postproc args
+        self.assertEqual(len(pipeline._pipelined_postprocs), 2)
         input_attr_names = {"idlist_features", "idscore_features"}
-        for i in range(len(pipeline._pipelined_preprocs)):
-            preproc_mod = pipeline._pipelined_preprocs[i]
-            self.assertEqual(len(preproc_mod._args), 1)
+        for i in range(len(pipeline._pipelined_postprocs)):
+            postproc_mod = pipeline._pipelined_postprocs[i]
+            self.assertEqual(len(postproc_mod._args), 1)
 
-            input_attr_name = preproc_mod._args[0].input_attrs[1]
+            input_attr_name = postproc_mod._args[0].input_attrs[1]
             self.assertTrue(input_attr_name in input_attr_names)
-            self.assertEqual(preproc_mod._args[0].input_attrs, ["", input_attr_name])
+            self.assertEqual(postproc_mod._args[0].input_attrs, ["", input_attr_name])
             input_attr_names.remove(input_attr_name)
 
-            self.assertEqual(preproc_mod._args[0].is_getitems, [False, False])
-            # no parent preproc module in FX graph
-            self.assertEqual(preproc_mod._args[0].preproc_modules, [None, None])
+            self.assertEqual(postproc_mod._args[0].is_getitems, [False, False])
+            # no parent postproc module in FX graph
+            self.assertEqual(postproc_mod._args[0].postproc_modules, [None, None])
 
     # pyre-ignore
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipeline_preproc_recursive(self) -> None:
+    def test_pipeline_postproc_recursive(self) -> None:
         """
-        Test recursive case where multiple arguments to preproc module is derived
-        from output of another preproc module. For example,
+        Test recursive case where multiple arguments to postproc module is derived
+        from output of another postproc module. For example,
 
-        out_a, out_b, out_c = preproc_1(input)
-        out_d = preproc_2(out_a, out_b)
+        out_a, out_b, out_c = postproc_1(input)
+        out_d = postproc_2(out_a, out_b)
         # do something with out_c
         out = ebc(out_d)
         """
@@ -1083,7 +1083,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             randomize_indices=False,
         )[0].to(self.device)
 
-        preproc_module = TestNegSamplingModule(
+        postproc_module = TestNegSamplingModule(
             extra_input=extra_input,
         )
 
@@ -1091,7 +1091,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             tables=self.tables[:-1],
             weighted_tables=self.weighted_tables[:-1],
             device=self.device,
-            preproc_module=preproc_module,
+            postproc_module=postproc_module,
         )
 
         pipelined_model, pipeline = self._check_output_equal(model, self.sharding_type)
@@ -1107,74 +1107,74 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             self.assertEqual(len(ebc.forward._args), 1)
             self.assertEqual(ebc.forward._args[0].input_attrs, ["", 0])
             self.assertEqual(ebc.forward._args[0].is_getitems, [False, True])
-            self.assertEqual(len(ebc.forward._args[0].preproc_modules), 2)
+            self.assertEqual(len(ebc.forward._args[0].postproc_modules), 2)
             self.assertIsInstance(
-                ebc.forward._args[0].preproc_modules[0], PipelinedPreproc
+                ebc.forward._args[0].postproc_modules[0], PipelinedPostproc
             )
-            self.assertEqual(ebc.forward._args[0].preproc_modules[1], None)
+            self.assertEqual(ebc.forward._args[0].postproc_modules[1], None)
 
         self.assertEqual(
-            pipelined_ebc.forward._args[0].preproc_modules[0],
+            pipelined_ebc.forward._args[0].postproc_modules[0],
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_nonweighted`.
-            pipelined_model.module.preproc_nonweighted,
+            #  `postproc_nonweighted`.
+            pipelined_model.module.postproc_nonweighted,
         )
         self.assertEqual(
-            pipelined_weighted_ebc.forward._args[0].preproc_modules[0],
+            pipelined_weighted_ebc.forward._args[0].postproc_modules[0],
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_weighted`.
-            pipelined_model.module.preproc_weighted,
+            #  `postproc_weighted`.
+            pipelined_model.module.postproc_weighted,
         )
 
-        # preproc args
-        self.assertEqual(len(pipeline._pipelined_preprocs), 3)
+        # postproc args
+        self.assertEqual(len(pipeline._pipelined_postprocs), 3)
 
         # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-        #  `_preproc_module`.
-        parent_preproc_mod = pipelined_model.module._preproc_module
+        #  `_postproc_module`.
+        parent_postproc_mod = pipelined_model.module._postproc_module
 
-        for preproc_mod in pipeline._pipelined_preprocs:
+        for postproc_mod in pipeline._pipelined_postprocs:
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_nonweighted`.
-            if preproc_mod == pipelined_model.module.preproc_nonweighted:
-                self.assertEqual(len(preproc_mod._args), 1)
-                args = preproc_mod._args[0]
+            #  `postproc_nonweighted`.
+            if postproc_mod == pipelined_model.module.postproc_nonweighted:
+                self.assertEqual(len(postproc_mod._args), 1)
+                args = postproc_mod._args[0]
                 self.assertEqual(args.input_attrs, ["", "idlist_features"])
                 self.assertEqual(args.is_getitems, [False, False])
-                self.assertEqual(len(args.preproc_modules), 2)
+                self.assertEqual(len(args.postproc_modules), 2)
                 self.assertEqual(
-                    args.preproc_modules[0],
-                    parent_preproc_mod,
+                    args.postproc_modules[0],
+                    parent_postproc_mod,
                 )
-                self.assertEqual(args.preproc_modules[1], None)
+                self.assertEqual(args.postproc_modules[1], None)
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_weighted`.
-            elif preproc_mod == pipelined_model.module.preproc_weighted:
-                self.assertEqual(len(preproc_mod._args), 1)
-                args = preproc_mod._args[0]
+            #  `postproc_weighted`.
+            elif postproc_mod == pipelined_model.module.postproc_weighted:
+                self.assertEqual(len(postproc_mod._args), 1)
+                args = postproc_mod._args[0]
                 self.assertEqual(args.input_attrs, ["", "idscore_features"])
                 self.assertEqual(args.is_getitems, [False, False])
-                self.assertEqual(len(args.preproc_modules), 2)
+                self.assertEqual(len(args.postproc_modules), 2)
                 self.assertEqual(
-                    args.preproc_modules[0],
-                    parent_preproc_mod,
+                    args.postproc_modules[0],
+                    parent_postproc_mod,
                 )
-                self.assertEqual(args.preproc_modules[1], None)
-            elif preproc_mod == parent_preproc_mod:
-                self.assertEqual(len(preproc_mod._args), 1)
-                args = preproc_mod._args[0]
+                self.assertEqual(args.postproc_modules[1], None)
+            elif postproc_mod == parent_postproc_mod:
+                self.assertEqual(len(postproc_mod._args), 1)
+                args = postproc_mod._args[0]
                 self.assertEqual(args.input_attrs, [""])
                 self.assertEqual(args.is_getitems, [False])
-                self.assertEqual(args.preproc_modules, [None])
+                self.assertEqual(args.postproc_modules, [None])
 
     # pyre-ignore
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipeline_invalid_preproc_inputs_has_trainable_params(self) -> None:
+    def test_pipeline_invalid_postproc_inputs_has_trainable_params(self) -> None:
         """
-        Test case where preproc module sits in front of sharded module but this cannot be
+        Test case where postproc module sits in front of sharded module but this cannot be
         safely pipelined as it contains trainable params in its child modules
         """
         max_feature_lengths = {
@@ -1184,12 +1184,12 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             "feature_3": 10,
         }
 
-        preproc_module = TestPositionWeightedPreprocModule(
+        postproc_module = TestPositionWeightedPreprocModule(
             max_feature_lengths=max_feature_lengths,
             device=self.device,
         )
 
-        model = self._setup_model(preproc_module=preproc_module)
+        model = self._setup_model(postproc_module=postproc_module)
 
         (
             sharded_model_pipelined,
@@ -1203,7 +1203,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=True,
-            pipeline_preproc=True,
+            pipeline_postproc=True,
         )
 
         data = self._generate_data(
@@ -1217,14 +1217,14 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # Check that no modules are pipelined
         self.assertEqual(len(pipeline._pipelined_modules), 0)
-        self.assertEqual(len(pipeline._pipelined_preprocs), 0)
+        self.assertEqual(len(pipeline._pipelined_postprocs), 0)
 
     # pyre-ignore
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipeline_invalid_preproc_trainable_params_recursive(
+    def test_pipeline_invalid_postproc_trainable_params_recursive(
         self,
     ) -> None:
         max_feature_lengths = {
@@ -1234,7 +1234,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             "feature_3": 10,
         }
 
-        preproc_module = TestPositionWeightedPreprocModule(
+        postproc_module = TestPositionWeightedPreprocModule(
             max_feature_lengths=max_feature_lengths,
             device=self.device,
         )
@@ -1243,7 +1243,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             tables=self.tables[:-1],
             weighted_tables=self.weighted_tables[:-1],
             device=self.device,
-            preproc_module=preproc_module,
+            postproc_module=postproc_module,
         )
 
         (
@@ -1258,7 +1258,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=True,
-            pipeline_preproc=True,
+            pipeline_postproc=True,
         )
 
         data = self._generate_data(
@@ -1271,25 +1271,25 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # Check that no modules are pipelined
         self.assertEqual(len(pipeline._pipelined_modules), 0)
-        self.assertEqual(len(pipeline._pipelined_preprocs), 0)
+        self.assertEqual(len(pipeline._pipelined_postprocs), 0)
 
     # pyre-ignore
     @unittest.skipIf(
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipeline_invalid_preproc_inputs_modify_kjt_recursive(self) -> None:
+    def test_pipeline_invalid_postproc_inputs_modify_kjt_recursive(self) -> None:
         """
-        Test case where preproc module cannot be pipelined because at least one of args
-        is derived from output of another preproc module whose arg(s) cannot be derived
+        Test case where postproc module cannot be pipelined because at least one of args
+        is derived from output of another postproc module whose arg(s) cannot be derived
         from input batch (i.e. it has modifying transformations)
         """
         model = TestModelWithPreproc(
             tables=self.tables[:-1],
             weighted_tables=self.weighted_tables[:-1],
             device=self.device,
-            preproc_module=None,
-            run_preproc_inline=True,  # run preproc inline, outside a module
+            postproc_module=None,
+            run_postproc_inline=True,  # run postproc inline, outside a module
         )
 
         (
@@ -1304,7 +1304,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=True,
-            pipeline_preproc=True,
+            pipeline_postproc=True,
         )
 
         data = self._generate_data(
@@ -1316,13 +1316,13 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # Check that only weighted EBC is pipelined
         self.assertEqual(len(pipeline._pipelined_modules), 1)
-        self.assertEqual(len(pipeline._pipelined_preprocs), 1)
+        self.assertEqual(len(pipeline._pipelined_postprocs), 1)
         self.assertEqual(pipeline._pipelined_modules[0]._is_weighted, True)
         self.assertEqual(
-            pipeline._pipelined_preprocs[0],
+            pipeline._pipelined_postprocs[0],
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `preproc_weighted`.
-            sharded_model_pipelined.module.preproc_weighted,
+            #  `postproc_weighted`.
+            sharded_model_pipelined.module.postproc_weighted,
         )
 
     # pyre-ignore
@@ -1330,11 +1330,11 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_pipeline_preproc_fwd_values_cached(self) -> None:
+    def test_pipeline_postproc_fwd_values_cached(self) -> None:
         """
-        Test to check that during model forward, the preproc module pipelined uses the
+        Test to check that during model forward, the postproc module pipelined uses the
         saved result from previous iteration(s) and doesn't perform duplicate work
-        check that fqns for ALL preproc modules are populated in the right train pipeline
+        check that fqns for ALL postproc modules are populated in the right train pipeline
         context.
         """
         extra_input = ModelInput.generate(
@@ -1346,7 +1346,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             randomize_indices=False,
         )[0].to(self.device)
 
-        preproc_module = TestNegSamplingModule(
+        postproc_module = TestNegSamplingModule(
             extra_input=extra_input,
         )
 
@@ -1354,7 +1354,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             tables=self.tables[:-1],
             weighted_tables=self.weighted_tables[:-1],
             device=self.device,
-            preproc_module=preproc_module,
+            postproc_module=postproc_module,
         )
 
         (
@@ -1369,7 +1369,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=True,
-            pipeline_preproc=True,
+            pipeline_postproc=True,
         )
 
         data = self._generate_data(
@@ -1382,22 +1382,22 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # This was second context that was appended
         current_context = pipeline.contexts[0]
-        cached_results = current_context.preproc_fwd_results
+        cached_results = current_context.postproc_fwd_results
         self.assertEqual(
             list(cached_results.keys()),
-            ["_preproc_module", "preproc_nonweighted", "preproc_weighted"],
+            ["_postproc_module", "postproc_nonweighted", "postproc_weighted"],
         )
 
         # next context cached results should be empty
         next_context = pipeline.contexts[1]
-        next_cached_results = next_context.preproc_fwd_results
+        next_cached_results = next_context.postproc_fwd_results
         self.assertEqual(len(next_cached_results), 0)
 
         # After progress, next_context should be populated
         pipeline.progress(dataloader)
         self.assertEqual(
             list(next_cached_results.keys()),
-            ["_preproc_module", "preproc_nonweighted", "preproc_weighted"],
+            ["_postproc_module", "postproc_nonweighted", "postproc_weighted"],
         )
 
     # pyre-ignore
@@ -1405,9 +1405,9 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_nested_preproc(self) -> None:
+    def test_nested_postproc(self) -> None:
         """
-        If preproc module is nested, we should still be able to pipeline it
+        If postproc module is nested, we should still be able to pipeline it
         """
         extra_input = ModelInput.generate(
             tables=self.tables,
@@ -1418,10 +1418,10 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             randomize_indices=False,
         )[0].to(self.device)
 
-        preproc_module = TestNegSamplingModule(
+        postproc_module = TestNegSamplingModule(
             extra_input=extra_input,
         )
-        model = self._setup_model(preproc_module=preproc_module)
+        model = self._setup_model(postproc_module=postproc_module)
 
         class ParentModule(nn.Module):
             def __init__(
@@ -1446,7 +1446,7 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # Check that both EC and EBC pipelined
         self.assertEqual(len(pipeline._pipelined_modules), 2)
-        self.assertEqual(len(pipeline._pipelined_preprocs), 1)
+        self.assertEqual(len(pipeline._pipelined_postprocs), 1)
 
 
 class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
@@ -1808,7 +1808,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
             optim.step()
             non_pipelined_outputs.append(pred)
 
-        def gpu_preproc(x: StageOut) -> StageOut:
+        def gpu_postproc(x: StageOut) -> StageOut:
             return x
 
         sdd = SparseDataDistUtil[ModelInput](
@@ -1824,18 +1824,18 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 stream=torch.cuda.Stream(),
             ),
             PipelineStage(
-                name="gpu_preproc",
-                runnable=gpu_preproc,
+                name="gpu_postproc",
+                runnable=gpu_postproc,
                 stream=torch.cuda.Stream(),
             ),
             PipelineStage(
-                name="gpu_preproc_1",
-                runnable=gpu_preproc,
+                name="gpu_postproc_1",
+                runnable=gpu_postproc,
                 stream=torch.cuda.Stream(),
             ),
             PipelineStage(
-                name="gpu_preproc_2",
-                runnable=gpu_preproc,
+                name="gpu_postproc_2",
+                runnable=gpu_postproc,
                 stream=torch.cuda.Stream(),
             ),
             PipelineStage(
@@ -1885,7 +1885,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
             model, sharding_type, kernel_type
         )
 
-        def gpu_preproc(x: StageOut) -> StageOut:
+        def gpu_postproc(x: StageOut) -> StageOut:
             return x
 
         sdd = SparseDataDistUtil[ModelInput](
@@ -1901,8 +1901,8 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 stream=torch.cuda.Stream(),
             ),
             PipelineStage(
-                name="gpu_preproc",
-                runnable=gpu_preproc,
+                name="gpu_postproc",
+                runnable=gpu_postproc,
                 stream=torch.cuda.Stream(),
             ),
             PipelineStage(
@@ -2112,8 +2112,8 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(len(sharded_model_pipelined._forward_hooks.items()), 1)
 
         # Check pipeline exhausted
-        preproc_input = pipeline.progress(dataloader)
-        self.assertIsNone(preproc_input)
+        postproc_input = pipeline.progress(dataloader)
+        self.assertIsNone(postproc_input)
 
     @unittest.skipIf(
         not torch.cuda.is_available(),
@@ -2193,7 +2193,7 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
             optim.step()
             non_pipelined_outputs.append(pred)
 
-        def gpu_preproc(x: StageOut) -> StageOut:
+        def gpu_postproc(x: StageOut) -> StageOut:
             return x
 
         sdd = SparseDataDistUtil[ModelInput](
