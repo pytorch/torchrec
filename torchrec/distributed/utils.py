@@ -15,7 +15,7 @@ import sys
 from collections import OrderedDict
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional, Set, Type, TypeVar, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
@@ -511,3 +511,44 @@ class ForkedPdb(pdb.Pdb):
             pdb.Pdb.interaction(self, *args, **kwargs)
         finally:
             sys.stdin = _stdin
+
+
+def create_global_tensor_shape_stride_from_metadata(
+    parameter_sharding: ParameterSharding, devices_per_node: Optional[int] = None
+) -> Tuple[torch.Size, Tuple[int, int]]:
+    """
+    Create a global tensor shape and stride from shard metadata.
+
+    Returns:
+        torch.Size: global tensor shape.
+        tuple: global tensor stride.
+    """
+    size = None
+    if parameter_sharding.sharding_type == ShardingType.COLUMN_WISE.value:
+        row_dim = parameter_sharding.sharding_spec.shards[0].shard_sizes[0]  # pyre-ignore[16]
+        col_dim = 0
+        for shard in parameter_sharding.sharding_spec.shards:
+            col_dim += shard.shard_sizes[1]
+        size = torch.Size([row_dim, col_dim])
+    elif (
+        parameter_sharding.sharding_type == ShardingType.ROW_WISE.value
+        or parameter_sharding.sharding_type == ShardingType.TABLE_ROW_WISE.value
+    ):
+        row_dim = 0
+        col_dim = parameter_sharding.sharding_spec.shards[0].shard_sizes[1]
+        for shard in parameter_sharding.sharding_spec.shards:
+            row_dim += shard.shard_sizes[0]
+        size = torch.Size([row_dim, col_dim])
+    elif parameter_sharding.sharding_type == ShardingType.TABLE_WISE.value:
+        size = torch.Size(parameter_sharding.sharding_spec.shards[0].shard_sizes)
+    elif parameter_sharding.sharding_type == ShardingType.GRID_SHARD.value:
+        # we need node group size to appropriately calculate global shape from shard
+        assert devices_per_node is not None
+        row_dim, col_dim = 0, 0
+        num_cw_shards = len(parameter_sharding.sharding_spec.shards) // devices_per_node
+        for _ in range(num_cw_shards):
+            col_dim += parameter_sharding.sharding_spec.shards[0].shard_sizes[1]
+        for _ in range(devices_per_node):
+            row_dim += parameter_sharding.sharding_spec.shards[0].shard_sizes[0]
+        size = torch.Size([row_dim, col_dim])
+    return size, (size[1], 1) if size else (torch.Size([0, 0]), (0, 1))  # pyre-ignore[7]
