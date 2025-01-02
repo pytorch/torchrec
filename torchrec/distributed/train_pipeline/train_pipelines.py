@@ -49,7 +49,7 @@ from torchrec.distributed.train_pipeline.utils import (
     In,
     Out,
     PipelinedForward,
-    PipelinedPreproc,
+    PipelinedPostproc,
     PipelineStage,
     PrefetchPipelinedForward,
     PrefetchTrainPipelineContext,
@@ -319,7 +319,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         execute_all_batches: bool = True,
         apply_jit: bool = False,
         context_type: Type[TrainPipelineContext] = TrainPipelineContext,
-        pipeline_preproc: bool = False,
+        # keep for backward compatibility
+        pipeline_postproc: bool = False,
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
@@ -364,12 +365,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         ] = []
 
         self._model_attached = True
-        self._pipeline_preproc = pipeline_preproc
+        self._pipeline_postproc = pipeline_postproc
 
         self._next_index: int = 0
         self.contexts: Deque[TrainPipelineContext] = deque()
         self._pipelined_modules: List[ShardedModule] = []
-        self._pipelined_preprocs: List[PipelinedPreproc] = []
+        self._pipelined_postprocs: List[PipelinedPostproc] = []
         self.batches: Deque[Optional[In]] = deque()
         self._dataloader_iter: Optional[Iterator[In]] = None
         self._dataloader_exhausted: bool = False
@@ -425,9 +426,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         for module in self._pipelined_modules:
             module.forward.set_context(context)
 
-        for preproc_module in self._pipelined_preprocs:
+        for postproc_module in self._pipelined_postprocs:
             # This ensures that next iter model fwd uses cached results
-            preproc_module.set_context(context)
+            postproc_module.set_context(context)
 
     def enqueue_batch(self, dataloader_iter: Iterator[In]) -> bool:
         batch, context = self.copy_batch_to_gpu(dataloader_iter)
@@ -528,7 +529,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._pipelined_modules,
             self._model,
             self._original_forwards,
-            self._pipelined_preprocs,
+            self._pipelined_postprocs,
             _,
         ) = _rewrite_model(
             model=self._model,
@@ -538,7 +539,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             batch=batch,
             apply_jit=self._apply_jit,
             pipelined_forward=pipelined_forward,
-            pipeline_preproc=self._pipeline_preproc,
+            pipeline_postproc=self._pipeline_postproc,
         )
         # initializes input dist, so we can override input dist forwards
         self.start_sparse_data_dist(batch, context)
@@ -615,16 +616,18 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with self._stream_context(self._data_dist_stream):
                 _wait_for_batch(batch, self._memcpy_stream)
 
-                original_contexts = [p.get_context() for p in self._pipelined_preprocs]
+                original_contexts = [p.get_context() for p in self._pipelined_postprocs]
 
                 # Temporarily set context for next iter to populate cache
-                for preproc_mod in self._pipelined_preprocs:
-                    preproc_mod.set_context(context)
+                for postproc_mod in self._pipelined_postprocs:
+                    postproc_mod.set_context(context)
 
                 _start_data_dist(self._pipelined_modules, batch, context)
 
                 # Restore context for model fwd
-                for module, context in zip(self._pipelined_preprocs, original_contexts):
+                for module, context in zip(
+                    self._pipelined_postprocs, original_contexts
+                ):
                     module.set_context(context)
 
     def wait_sparse_data_dist(self, context: TrainPipelineContext) -> None:
@@ -728,7 +731,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         apply_jit: bool = False,
         start_batch: int = 900,
         stash_gradients: bool = False,
-        pipeline_preproc: bool = False,
+        pipeline_postproc: bool = True,
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
@@ -740,7 +743,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             execute_all_batches=execute_all_batches,
             apply_jit=apply_jit,
             context_type=EmbeddingTrainPipelineContext,
-            pipeline_preproc=pipeline_preproc,
+            pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
         )
         self._start_batch = start_batch
@@ -837,7 +840,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         iteration: int = context.index or 0
         losses, output = self._mlp_forward(cast(In, batch), context)
 
-        # After this point, pipelined preproc/module forward won't be called
+        # After this point, pipelined postproc/module forward won't be called
         # so we can advance their contexts to the context of the next batch already
         # and also pop batch and context from self.batches and self.contexts
         self.dequeue_batch()
@@ -845,8 +848,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         # batch no longer needed - delete to free up memory
         del batch
 
-        # cached preproc fwd results no longer needed - delete to free up memory
-        del context.preproc_fwd_results
+        # cached postproc fwd results no longer needed - delete to free up memory
+        del context.postproc_fwd_results
 
         # batch i+3
         self.enqueue_batch(dataloader_iter)
@@ -963,9 +966,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             return
 
         # Temporarily set context for next iter to populate cache
-        original_contexts = [p.get_context() for p in self._pipelined_preprocs]
-        for preproc_mod in self._pipelined_preprocs:
-            preproc_mod.set_context(context)
+        original_contexts = [p.get_context() for p in self._pipelined_postprocs]
+        for postproc_mod in self._pipelined_postprocs:
+            postproc_mod.set_context(context)
 
         with record_function(f"## start_sparse_data_dist {context.index} ##"):
             with self._stream_context(self._data_dist_stream):
@@ -977,7 +980,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                 context.events.append(event)
 
         # Restore context for model forward
-        for module, context in zip(self._pipelined_preprocs, original_contexts):
+        for module, context in zip(self._pipelined_postprocs, original_contexts):
             module.set_context(context)
 
     def start_embedding_lookup(
@@ -1044,7 +1047,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         device: torch.device,
         execute_all_batches: bool = True,
         apply_jit: bool = False,
-        pipeline_preproc: bool = False,
+        pipeline_postproc: bool = True,
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
@@ -1056,7 +1059,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             execute_all_batches=execute_all_batches,
             apply_jit=apply_jit,
             context_type=PrefetchTrainPipelineContext,
-            pipeline_preproc=pipeline_preproc,
+            pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
         )
         self._context = PrefetchTrainPipelineContext(version=0)
@@ -1273,8 +1276,8 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
     calling each of the pipeline stages in order.
 
     In the example below a fully synchronous will expose the `data_copy` and
-    `gpu_preproc` calls. After pipelining, the `data_copy` of batch i+2 can be
-    overlapped with the `gpu_preproc` of batch i+1 and the main model processing of
+    `gpu_postproc` calls. After pipelining, the `data_copy` of batch i+2 can be
+    overlapped with the `gpu_postproc` of batch i+1 and the main model processing of
     batch i.
 
     Args:
@@ -1295,8 +1298,8 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
                     stream=torch.cuda.Stream(),
                 ),
                 PipelineStage(
-                    name="gpu_preproc",
-                    runnable=gpu_preproc,
+                    name="gpu_postproc",
+                    runnable=gpu_postproc,
                     stream=torch.cuda.Stream(),
                 ),
             ]
@@ -1556,7 +1559,7 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
         execute_all_batches: bool = True,
         apply_jit: bool = False,
         context_type: Type[TrainPipelineContext] = TrainPipelineContext,
-        pipeline_preproc: bool = False,
+        pipeline_postproc: bool = False,
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
@@ -1568,7 +1571,7 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
             execute_all_batches,
             apply_jit,
             context_type,
-            pipeline_preproc,
+            pipeline_postproc,
             custom_model_fwd,
         )
 
