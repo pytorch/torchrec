@@ -95,14 +95,14 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
         self,
         model_type: Type[nn.Module] = TestSparseNN,
         enable_fsdp: bool = False,
-        preproc_module: Optional[nn.Module] = None,
+        postproc_module: Optional[nn.Module] = None,
     ) -> nn.Module:
         unsharded_model = model_type(
             tables=self.tables,
             weighted_tables=self.weighted_tables,
             dense_device=self.device,
             sparse_device=torch.device("meta"),
-            preproc_module=preproc_module,
+            postproc_module=postproc_module,
         )
         if enable_fsdp:
             unsharded_model.over.dhn_arch.linear0 = FSDP(
