@@ -32,6 +32,7 @@ from torch.autograd.profiler import record_function
 from torch.distributed._tensor import DTensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
+from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingContext,
@@ -73,6 +74,7 @@ from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
     append_prefix,
     convert_to_fbgemm_types,
+    create_global_tensor_shape_stride_from_metadata,
     maybe_annotate_embedding_event,
     merge_fused_params,
     none_throws,
@@ -918,6 +920,14 @@ class ShardedEmbeddingBagCollection(
                         )
                     )
                 else:
+                    shape, stride = create_global_tensor_shape_stride_from_metadata(
+                        none_throws(self.module_sharding_plan[table_name]),
+                        (
+                            self._env.node_group_size
+                            if isinstance(self._env, ShardingEnv2D)
+                            else get_local_size(self._env.world_size)
+                        ),
+                    )
                     # empty shard case
                     self._model_parallel_name_to_dtensor[table_name] = (
                         DTensor.from_local(
@@ -927,6 +937,8 @@ class ShardedEmbeddingBagCollection(
                             ),
                             device_mesh=self._env.device_mesh,
                             run_check=False,
+                            shape=shape,
+                            stride=stride,
                         )
                     )
             else:
