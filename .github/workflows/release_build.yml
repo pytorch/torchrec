@@ -48,6 +48,7 @@ jobs:
       run: |
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
         bash ~/miniconda.sh -b -p $HOME/miniconda -u
+        conda update -n base -c defaults -y conda
     - name: setup Path
       run: |
         echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
@@ -62,9 +63,28 @@ jobs:
     - name: check python version
       run: |
         conda run -n build_binary python --version
-    - name: Install C/C++ compilers
+    - name: Install gcc
       run: |
-        sudo yum install -y gcc gcc-c++
+        conda install -n build_binary -c conda-forge -y gxx_linux-64=11.4.0 sysroot_linux-64=2.17
+        echo "[INSTALL] Setting the C/C++ compiler symlinks ..."
+        cc_path=$(conda run -n build_binary printenv CC)
+        cxx_path=$(conda run -n build_binary printenv CXX)
+        ln -sf "${cc_path}" "$(dirname "$cc_path")/cc"
+        ln -sf "${cc_path}" "$(dirname "$cc_path")/gcc"
+        ln -sf "${cxx_path}" "$(dirname "$cxx_path")/c++"
+        ln -sf "${cxx_path}" "$(dirname "$cxx_path")/g++"
+
+        conda_prefix=$(conda run -n build_binary printenv CONDA_PREFIX)
+        echo "[TEST] Enumerating libstdc++.so files ..."
+        all_libcxx_libs=$(find "${conda_prefix}/lib" -type f -name 'libstdc++.so*' -print | sort)
+        for f in $all_libcxx_libs; do
+          echo "$f";
+          objdump -TC "$f" | grep GLIBCXX_ | sed 's/.*GLIBCXX_\([.0-9]*\).*/GLIBCXX_\1/g' | sort -Vu | cat
+          echo ""
+        done
+
+        echo "[TEST] Appending the Conda-installed libstdc++ to LD_PRELOAD ..."
+        conda env config vars set -n build_binary LD_PRELOAD="${all_libcxx_libs[0]}"
     - name: Install PyTorch and CUDA
       shell: bash
       run: |
