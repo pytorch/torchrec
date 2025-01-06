@@ -28,6 +28,7 @@ from torchrec.distributed.test_utils.test_sharding import (
 from torchrec.distributed.types import ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, PoolingType
 from torchrec.test_utils import seed_and_log, skip_if_asan_class
+from torchrec.types import DataType
 
 
 class ModelParallelTestShared(MultiProcessTestBase):
@@ -35,27 +36,48 @@ class ModelParallelTestShared(MultiProcessTestBase):
     def setUp(self, backend: str = "nccl") -> None:
         super().setUp()
 
-        num_features = 4
-        num_weighted_features = 2
-        shared_features = 2
+        self.num_features = 4
+        self.num_weighted_features = 2
+        self.num_shared_features = 2
 
+        self.tables = []
+        self.mean_tables = []
+        self.weighted_tables = []
+        self.embedding_groups = {}
+        self.shared_features = []
+
+        self.backend = backend
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
+
+        if self.backend == "nccl" and self.device == torch.device("cpu"):
+            self.skipTest("NCCL not supported on CPUs.")
+
+    def _build_tables_and_groups(
+        self,
+        data_type: DataType = DataType.FP32,
+    ) -> None:
         self.tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
+                data_type=data_type,
             )
-            for i in range(num_features)
+            for i in range(self.num_features)
         ]
         shared_features_tables = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i + num_features),
+                name="table_" + str(i + self.num_features),
                 feature_names=["feature_" + str(i)],
+                data_type=data_type,
             )
-            for i in range(shared_features)
+            for i in range(self.num_shared_features)
         ]
         self.tables += shared_features_tables
 
@@ -66,19 +88,21 @@ class ModelParallelTestShared(MultiProcessTestBase):
                 name="table_" + str(i),
                 feature_names=["feature_" + str(i)],
                 pooling=PoolingType.MEAN,
+                data_type=data_type,
             )
-            for i in range(num_features)
+            for i in range(self.num_features)
         ]
 
         shared_features_tables_mean = [
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i + num_features),
+                name="table_" + str(i + self.num_features),
                 feature_names=["feature_" + str(i)],
                 pooling=PoolingType.MEAN,
+                data_type=data_type,
             )
-            for i in range(shared_features)
+            for i in range(self.num_shared_features)
         ]
         self.mean_tables += shared_features_tables_mean
 
@@ -88,11 +112,11 @@ class ModelParallelTestShared(MultiProcessTestBase):
                 embedding_dim=(i + 2) * 4,
                 name="weighted_table_" + str(i),
                 feature_names=["weighted_feature_" + str(i)],
+                data_type=data_type,
             )
-            for i in range(num_weighted_features)
+            for i in range(self.num_weighted_features)
         ]
-
-        self.shared_features = [f"feature_{i}" for i in range(shared_features)]
+        self.shared_features = [f"feature_{i}" for i in range(self.num_shared_features)]
         self.embedding_groups = {
             "group_0": [
                 (
@@ -104,14 +128,6 @@ class ModelParallelTestShared(MultiProcessTestBase):
                 for feature in table.feature_names
             ]
         }
-        self.backend = backend
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
-
-        if self.backend == "nccl" and self.device == torch.device("cpu"):
-            self.skipTest("NCCL not supported on CPUs.")
 
     def _test_sharding(
         self,
@@ -132,7 +148,9 @@ class ModelParallelTestShared(MultiProcessTestBase):
         has_weighted_tables: bool = True,
         global_constant_batch: bool = False,
         pooling: PoolingType = PoolingType.SUM,
+        data_type: DataType = DataType.FP32,
     ) -> None:
+        self._build_tables_and_groups(data_type=data_type)
         self._run_multi_process_test(
             callable=sharding_single_rank_test,
             world_size=world_size,
@@ -198,6 +216,7 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         variable_batch_size=st.booleans(),
         pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_rw(
@@ -210,6 +229,7 @@ class ModelParallelBase(ModelParallelTestShared):
         ],
         variable_batch_size: bool,
         pooling: PoolingType,
+        data_type: DataType,
     ) -> None:
         if self.backend == "gloo":
             self.skipTest(
@@ -240,6 +260,7 @@ class ModelParallelBase(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
             pooling=pooling,
+            data_type=data_type,
         )
 
     # pyre-fixme[56]
@@ -252,6 +273,7 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         kernel_type=st.just(EmbeddingComputeKernel.DENSE.value),
         apply_optimizer_in_backward_config=st.just(None),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
@@ -262,6 +284,7 @@ class ModelParallelBase(ModelParallelTestShared):
         apply_optimizer_in_backward_config: Optional[
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
+        data_type: DataType,
     ) -> None:
         sharding_type = ShardingType.DATA_PARALLEL.value
         self._test_sharding(
@@ -271,6 +294,7 @@ class ModelParallelBase(ModelParallelTestShared):
             ],
             backend=self.backend,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            data_type=data_type,
         )
 
     # pyre-fixme[56]
@@ -306,6 +330,7 @@ class ModelParallelBase(ModelParallelTestShared):
             ]
         ),
         variable_batch_size=st.booleans(),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_sharding_cw(
@@ -317,6 +342,7 @@ class ModelParallelBase(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
+        data_type: DataType,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -348,6 +374,7 @@ class ModelParallelBase(ModelParallelTestShared):
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+            data_type=data_type,
         )
 
     # pyre-fixme[56]
@@ -383,6 +410,7 @@ class ModelParallelBase(ModelParallelTestShared):
             ]
         ),
         variable_batch_size=st.booleans(),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_sharding_twcw(
@@ -394,6 +422,7 @@ class ModelParallelBase(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
+        data_type: DataType,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -425,6 +454,7 @@ class ModelParallelBase(ModelParallelTestShared):
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+            data_type=data_type,
         )
 
     # pyre-fixme[56]
@@ -461,6 +491,7 @@ class ModelParallelBase(ModelParallelTestShared):
             ]
         ),
         variable_batch_size=st.booleans(),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
     def test_sharding_tw(
@@ -472,6 +503,7 @@ class ModelParallelBase(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         variable_batch_size: bool,
+        data_type: DataType,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -499,6 +531,7 @@ class ModelParallelBase(ModelParallelTestShared):
             qcomms_config=qcomms_config,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
+            data_type=data_type,
         )
 
     @unittest.skipIf(
@@ -540,6 +573,7 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         variable_batch_size=st.booleans(),
         pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_twrw(
@@ -552,6 +586,7 @@ class ModelParallelBase(ModelParallelTestShared):
         ],
         variable_batch_size: bool,
         pooling: PoolingType,
+        data_type: DataType,
     ) -> None:
         if self.backend == "gloo":
             self.skipTest(
@@ -597,6 +632,7 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         global_constant_batch=st.booleans(),
         pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
     def test_sharding_variable_batch(
@@ -604,6 +640,7 @@ class ModelParallelBase(ModelParallelTestShared):
         sharding_type: str,
         global_constant_batch: bool,
         pooling: PoolingType,
+        data_type: DataType,
     ) -> None:
         if self.backend == "gloo":
             # error is from FBGEMM, it says CPU even if we are on GPU.
@@ -634,6 +671,7 @@ class ModelParallelBase(ModelParallelTestShared):
             has_weighted_tables=False,
             global_constant_batch=global_constant_batch,
             pooling=pooling,
+            data_type=data_type,
         )
 
     @unittest.skipIf(
@@ -641,9 +679,14 @@ class ModelParallelBase(ModelParallelTestShared):
         "Not enough GPUs, this test requires at least two GPUs",
     )
     # pyre-fixme[56]
-    @given(sharding_type=st.just(ShardingType.COLUMN_WISE.value))
+    @given(
+        sharding_type=st.just(ShardingType.COLUMN_WISE.value),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
+    )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
-    def test_sharding_multiple_kernels(self, sharding_type: str) -> None:
+    def test_sharding_multiple_kernels(
+        self, sharding_type: str, data_type: DataType
+    ) -> None:
         if self.backend == "gloo":
             self.skipTest("ProcessGroupGloo does not support reduce_scatter")
         constraints = {
@@ -665,6 +708,7 @@ class ModelParallelBase(ModelParallelTestShared):
             constraints=constraints,
             variable_batch_per_feature=True,
             has_weighted_tables=False,
+            data_type=data_type,
         )
 
     @unittest.skipIf(

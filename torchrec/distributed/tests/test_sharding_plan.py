@@ -52,7 +52,7 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardMetadata,
 )
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import data_type_to_dtype, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
@@ -71,6 +71,7 @@ from torchrec.quant.embedding_modules import (
 
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
+from torchrec.types import DataType
 
 
 def _test_sharding(
@@ -145,12 +146,15 @@ class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
                 },
             ]
         ),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_parameter_sharding_ebc(
         self,
         per_param_sharding: Dict[str, ParameterShardingGenerator],
+        data_type: DataType,
     ) -> None:
+
         WORLD_SIZE = 2
 
         embedding_bag_config = [
@@ -159,12 +163,14 @@ class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
                 feature_names=["feature_0"],
                 embedding_dim=16,
                 num_embeddings=4,
+                data_type=data_type,
             ),
             EmbeddingBagConfig(
                 name="table_1",
                 feature_names=["feature_1"],
                 embedding_dim=16,
                 num_embeddings=4,
+                data_type=data_type,
             ),
         ]
 
@@ -213,21 +219,23 @@ class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
             world_size=WORLD_SIZE,
             tables=embedding_bag_config,
             initial_state_dict={
-                "embedding_bags.table_0.weight": torch.Tensor(
+                "embedding_bags.table_0.weight": torch.tensor(
                     [
                         [1] * 16,
                         [2] * 16,
                         [3] * 16,
                         [4] * 16,
-                    ]
+                    ],
+                    dtype=data_type_to_dtype(data_type),
                 ),
-                "embedding_bags.table_1.weight": torch.Tensor(
+                "embedding_bags.table_1.weight": torch.tensor(
                     [
                         [101] * 16,
                         [102] * 16,
                         [103] * 16,
                         [104] * 16,
-                    ]
+                    ],
+                    dtype=data_type_to_dtype(data_type),
                 ),
             },
             kjt_input_per_rank=kjt_input_per_rank,
@@ -237,13 +245,18 @@ class ConstructParameterShardingAndShardTest(MultiProcessTestBase):
 
 
 class ConstructParameterShardingTest(unittest.TestCase):
-    def test_construct_module_sharding_plan(self) -> None:
+    # pyre-fixme[56]
+    @given(data_type=st.sampled_from([DataType.FP32, DataType.FP16]))
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_construct_module_sharding_plan(self, data_type: DataType) -> None:
+
         embedding_bag_config = [
             EmbeddingBagConfig(
                 name=f"table_{idx}",
                 feature_names=[f"feature_{idx}"],
                 embedding_dim=256,
                 num_embeddings=32 * 32,
+                data_type=data_type,
             )
             for idx in range(6)
         ]
@@ -679,13 +692,18 @@ class ConstructParameterShardingTest(unittest.TestCase):
         )
         self.assertDictEqual(expected, module_sharding_plan)
 
-    def test_table_wise_set_device(self) -> None:
+    # pyre-fixme[56]
+    @given(data_type=st.sampled_from([DataType.FP32, DataType.FP16]))
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_table_wise_set_device(self, data_type: DataType) -> None:
+
         embedding_bag_config = [
             EmbeddingBagConfig(
                 name=f"table_{idx}",
                 feature_names=[f"feature_{idx}"],
                 embedding_dim=64,
                 num_embeddings=4096,
+                data_type=data_type,
             )
             for idx in range(2)
         ]
@@ -718,13 +736,18 @@ class ConstructParameterShardingTest(unittest.TestCase):
             "cpu",
         )
 
-    def test_row_wise_set_heterogenous_device(self) -> None:
+    # pyre-fixme[56]
+    @given(data_type=st.sampled_from([DataType.FP32, DataType.FP16]))
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_row_wise_set_heterogenous_device(self, data_type: DataType) -> None:
+
         embedding_bag_config = [
             EmbeddingBagConfig(
                 name=f"table_{idx}",
                 feature_names=[f"feature_{idx}"],
                 embedding_dim=64,
                 num_embeddings=4096,
+                data_type=data_type,
             )
             for idx in range(2)
         ]
@@ -732,7 +755,10 @@ class ConstructParameterShardingTest(unittest.TestCase):
             EmbeddingBagCollection(tables=embedding_bag_config),
             per_param_sharding={
                 "table_0": row_wise(
-                    sizes_placement=([2048, 1024, 1024], ["cpu", "cuda", "cuda"])
+                    sizes_placement=(
+                        [2048, 1024, 1024],
+                        ["cpu", "cuda", "cuda"],
+                    )
                 ),
                 "table_1": row_wise(
                     sizes_placement=([2048, 1024, 1024], ["cpu", "cpu", "cpu"])
@@ -790,13 +816,18 @@ class ConstructParameterShardingTest(unittest.TestCase):
                 0,
             )
 
-    def test_column_wise(self) -> None:
+    # pyre-fixme[56]
+    @given(data_type=st.sampled_from([DataType.FP32, DataType.FP16]))
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_column_wise(self, data_type: DataType) -> None:
+
         embedding_bag_config = [
             EmbeddingBagConfig(
                 name=f"table_{idx}",
                 feature_names=[f"feature_{idx}"],
                 embedding_dim=64,
                 num_embeddings=4096,
+                data_type=data_type,
             )
             for idx in range(2)
         ]
