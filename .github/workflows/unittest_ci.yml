@@ -74,19 +74,19 @@ jobs:
         python --version
         conda run -n build_binary python --version
         conda run -n build_binary \
-          pip install torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
+          pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
         conda run -n build_binary \
           python -c "import torch"
         echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
-          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
+          pip install --pre fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
         conda run -n build_binary \
           python -c "import fbgemm_gpu"
         echo "fbgemm_gpu succeeded"
         conda run -n build_binary \
-          pip install -r requirements.txt
+          pip install --pre -r requirements.txt
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}

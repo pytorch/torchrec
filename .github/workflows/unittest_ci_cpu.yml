@@ -45,20 +45,44 @@ jobs:
         conda info
         python --version
         conda run -n build_binary python --version
+
+        echo "[INSTALL] Installing gcc..."
+        conda install -n build_binary -c conda-forge -y gxx_linux-64=11.4.0 sysroot_linux-64=2.17
+
+        echo "[INSTALL] Setting the C/C++ compiler symlinks ..."
+        cc_path=$(conda run -n build_binary printenv CC)
+        cxx_path=$(conda run -n build_binary printenv CXX)
+        ln -sf "${cc_path}" "$(dirname "$cc_path")/cc"
+        ln -sf "${cc_path}" "$(dirname "$cc_path")/gcc"
+        ln -sf "${cxx_path}" "$(dirname "$cxx_path")/c++"
+        ln -sf "${cxx_path}" "$(dirname "$cxx_path")/g++"
+
+        conda_prefix=$(conda run -n build_binary printenv CONDA_PREFIX)
+        echo "[INSTALL] Enumerating libstdc++.so files ..."
+        all_libcxx_libs=$(find "${conda_prefix}/lib" -type f -name 'libstdc++.so*' -print | sort)
+        for f in $all_libcxx_libs; do
+          echo "$f";
+          objdump -TC "$f" | grep GLIBCXX_ | sed 's/.*GLIBCXX_\([.0-9]*\).*/GLIBCXX_\1/g' | sort -Vu | cat
+          echo ""
+        done
+
+        echo "[INSTALL] Appending the Conda-installed libstdc++ to LD_PRELOAD ..."
+        conda env config vars set -n build_binary LD_PRELOAD="${all_libcxx_libs[0]}"
+
         conda run -n build_binary \
-          pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
+          pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu/
         conda run -n build_binary \
-          python -c "import torch"
+          python -c "import torch; print(torch.__version__, torch.version.cuda); "
         echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
-          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+          pip install --pre fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu/
         conda run -n build_binary \
-          python -c "import fbgemm_gpu"
+          python -c "import torch; import fbgemm_gpu; print(fbgemm_gpu.__version__)"
         echo "fbgemm_gpu succeeded"
         conda run -n build_binary \
-          pip install -r requirements.txt
+          pip install --pre -r requirements.txt
         conda run -n build_binary \
           python setup.py bdist_wheel \
           --python-tag=${{ matrix.python-tag }}
@@ -73,9 +97,6 @@ jobs:
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
           --ignore-glob=**/test_utils/
         echo "Starting C++ Tests"
-        conda install -n build_binary -y gxx_linux-64
-        conda run -n build_binary \
-          x86_64-conda-linux-gnu-g++ --version
         conda install -n build_binary -c anaconda redis -y
         conda run -n build_binary redis-server --daemonize yes
         mkdir cpp-build
