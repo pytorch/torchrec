@@ -413,6 +413,12 @@ class CombinedOptimizer(KeyedOptimizer):
                 # pyre-ignore [16]: Undefined attribute [16]: `KeyedOptimizer` has no attribute `set_optimizer_step`.
                 opt.set_optimizer_step(step)
 
+    def update_hyper_parameters(self, params_dict: Dict[str, Any]) -> None:
+        for _, opt in self._optims:
+            if hasattr(opt, "update_hyper_parameters"):
+                # pyre-ignore [16].
+                opt.update_hyper_parameters(params_dict)
+
 
 class KeyedOptimizerWrapper(KeyedOptimizer):
     """
@@ -440,6 +446,11 @@ class KeyedOptimizerWrapper(KeyedOptimizer):
         if hasattr(self._optimizer, "set_optimizer_step"):
             # pyre-ignore [16].
             self._optimizer.set_optimizer_step(step)
+
+    def update_hyper_parameters(self, params_dict: Dict[str, Any]) -> None:
+        if hasattr(self._optimizer, "update_hyper_parameters"):
+            # pyre-ignore [16].
+            self._optimizer.update_hyper_parameters(params_dict)
 
 
 class OptimizerWrapper(KeyedOptimizer):
@@ -493,3 +504,8 @@ class OptimizerWrapper(KeyedOptimizer):
         if hasattr(self._optimizer, "set_optimizer_step"):
             # pyre-ignore [16].
             self._optimizer.set_optimizer_step(step)
+
+    def update_hyper_parameters(self, params_dict: Dict[str, Any]) -> None:
+        if hasattr(self._optimizer, "update_hyper_parameters"):
+            # pyre-ignore [16].
+            self._optimizer.update_hyper_parameters(params_dict)
