@@ -9,7 +9,6 @@
 
 import abc
 import copy
-import os
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Dict, Generic, Iterator, List, Optional, Tuple, TypeVar, Union
@@ -21,6 +20,9 @@ from torch.distributed._tensor import DeviceMesh
 from torch.distributed._tensor.placement_types import Placement
 from torch.nn.modules.module import _addindent
 from torch.nn.parallel import DistributedDataParallel
+from torchrec.distributed.global_settings import (
+    construct_sharded_tensor_from_metadata_enabled,
+)
 from torchrec.distributed.types import (
     get_tensor_size_bytes,
     ModuleSharder,
@@ -346,8 +348,7 @@ class ShardedEmbeddingModule(
 
         # option to construct ShardedTensor from metadata avoiding expensive all-gather
         self._construct_sharded_tensor_from_metadata: bool = (
-            os.environ.get("TORCHREC_CONSTRUCT_SHARDED_TENSOR_FROM_METADATA", "0")
-            == "1"
+            construct_sharded_tensor_from_metadata_enabled()
         )
 
     def prefetch(
