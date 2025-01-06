@@ -9,6 +9,7 @@
 
 import abc
 import copy
+import os
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Dict, Generic, Iterator, List, Optional, Tuple, TypeVar, Union
@@ -342,6 +343,12 @@ class ShardedEmbeddingModule(
         self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._output_dists: List[nn.Module] = []
+
+        # option to construct ShardedTensor from metadata avoiding expensive all-gather
+        self._construct_sharded_tensor_from_metadata: bool = (
+            os.environ.get("TORCHREC_CONSTRUCT_SHARDED_TENSOR_FROM_METADATA", "0")
+            == "1"
+        )
 
     def prefetch(
         self,

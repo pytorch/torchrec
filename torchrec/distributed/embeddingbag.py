@@ -29,6 +29,7 @@ import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
 from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
+from torch.distributed._shard.sharded_tensor import TensorProperties
 from torch.distributed._tensor import DTensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
@@ -81,6 +82,7 @@ from torchrec.distributed.utils import (
     optimizer_type_to_emb_opt_type,
 )
 from torchrec.modules.embedding_configs import (
+    data_type_to_dtype,
     EmbeddingBagConfig,
     EmbeddingTableConfig,
     PoolingType,
@@ -945,17 +947,48 @@ class ShardedEmbeddingBagCollection(
                 # created ShardedTensors once in init, use in post_state_dict_hook
                 # note: at this point kvstore backed tensors don't own valid snapshots, so no read
                 # access is allowed on them.
-                self._model_parallel_name_to_sharded_tensor[table_name] = (
-                    ShardedTensor._init_from_local_shards(
-                        local_shards,
-                        self._name_to_table_size[table_name],
-                        process_group=(
-                            self._env.sharding_pg
-                            if isinstance(self._env, ShardingEnv2D)
-                            else self._env.process_group
+
+                # create ShardedTensor from local shards and metadata avoding all_gather collective
+                if self._construct_sharded_tensor_from_metadata:
+                    sharding_spec = none_throws(
+                        self.module_sharding_plan[table_name].sharding_spec
+                    )
+
+                    tensor_properties = TensorProperties(
+                        dtype=(
+                            data_type_to_dtype(
+                                self._table_name_to_config[table_name].data_type
+                            )
                         ),
                     )
-                )
+
+                    self._model_parallel_name_to_sharded_tensor[table_name] = (
+                        ShardedTensor._init_from_local_shards_and_global_metadata(
+                            local_shards=local_shards,
+                            sharded_tensor_metadata=sharding_spec.build_metadata(
+                                tensor_sizes=self._name_to_table_size[table_name],
+                                tensor_properties=tensor_properties,
+                            ),
+                            process_group=(
+                                self._env.sharding_pg
+                                if isinstance(self._env, ShardingEnv2D)
+                                else self._env.process_group
+                            ),
+                        )
+                    )
+                else:
+                    # create ShardedTensor from local shards using all_gather collective
+                    self._model_parallel_name_to_sharded_tensor[table_name] = (
+                        ShardedTensor._init_from_local_shards(
+                            local_shards,
+                            self._name_to_table_size[table_name],
+                            process_group=(
+                                self._env.sharding_pg
+                                if isinstance(self._env, ShardingEnv2D)
+                                else self._env.process_group
+                            ),
+                        )
+                    )
 
         def extract_sharded_kvtensors(
             module: ShardedEmbeddingBagCollection,

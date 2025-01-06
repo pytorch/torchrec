@@ -223,7 +223,12 @@ def copy_state_dict(
 
         if isinstance(tensor, ShardedTensor):
             for local_shard in tensor.local_shards():
-                assert global_tensor.ndim == local_shard.tensor.ndim
+                assert (
+                    global_tensor.ndim == local_shard.tensor.ndim
+                ), f"global_tensor.ndim: {global_tensor.ndim}, local_shard.tensor.ndim: {local_shard.tensor.ndim}"
+                assert (
+                    global_tensor.dtype == local_shard.tensor.dtype
+                ), f"global tensor dtype: {global_tensor.dtype}, local tensor dtype: {local_shard.tensor.dtype}"
                 shard_meta = local_shard.metadata
                 t = global_tensor.detach()
                 if t.ndim == 1:
@@ -246,7 +251,13 @@ def copy_state_dict(
                 tensor.to_local().local_shards(),
                 tensor.to_local().local_offsets(),  # pyre-ignore[16]
             ):
-                assert global_tensor.ndim == local_shard.ndim
+                assert (
+                    global_tensor.ndim == local_shard.ndim
+                ), f"global_tensor.ndim: {global_tensor.ndim}, local_shard.ndim: {local_shard.ndim}"
+                assert (
+                    global_tensor.dtype == local_shard.dtype
+                ), f"global_tensor.dtype: {global_tensor.dtype}, local_shard.dtype: {local_shard.tensor.dtype}"
+
                 t = global_tensor.detach()
                 local_shape = local_shard.shape
                 if t.ndim == 1:
