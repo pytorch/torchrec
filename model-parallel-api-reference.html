@@ -421,7 +421,7 @@ parallel modules.</p></li>
 </dl>
 <p>Example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
-<span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">init_weights</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">):</span>
         <span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">EmbeddingBagCollection</span><span class="p">):</span>
@@ -483,9 +483,9 @@ persistent buffers.</p></li>
 <li><p><strong>strict</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to strictly enforce that the keys
 in <a class="reference internal" href="#torchrec.distributed.model_parallel.DistributedModelParallel.state_dict" title="torchrec.distributed.model_parallel.DistributedModelParallel.state_dict"><code class="xref py py-attr docutils literal notranslate"><span class="pre">state_dict</span></code></a> match the keys returned by this module’s
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code> function. Default: <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
-<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
-in the current module are preserved while when <code class="docutils literal notranslate"><span class="pre">True</span></code>, the
-properties of the Tensors in the state dict are preserved. The only
+<li><p><strong>assign</strong> (<em>bool</em><em>, </em><em>optional</em>) – When set to <code class="docutils literal notranslate"><span class="pre">False</span></code>, the properties of the tensors
+in the current module are preserved whereas setting it to <code class="docutils literal notranslate"><span class="pre">True</span></code> preserves
+properties of the Tensors in the state dict. The only
 exception is the <code class="docutils literal notranslate"><span class="pre">requires_grad</span></code> field of <code class="xref py py-class docutils literal notranslate">
 <span class="pre">Default:</span> <span class="pre">``False`</span></code></p></li>
 </ul>

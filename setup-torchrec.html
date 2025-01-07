@@ -486,10 +486,10 @@ changes in TorchRec. To build from source, check out this <a class="reference ex
 <h2>Run a Simple TorchRec Example<a class="headerlink" href="#run-a-simple-torchrec-example" title="Permalink to this heading">¶</a></h2>
 <p>Now that we have TorchRec properly set up, let’s run some TorchRec code!
 Below, we’ll run a simple forward pass with TorchRec data types: <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code> and <code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-<span class="kn">import</span> <span class="nn">torchrec</span>
-<span class="kn">from</span> <span class="nn">torchrec.sparse.jagged_tensor</span> <span class="kn">import</span> <span class="n">JaggedTensor</span><span class="p">,</span> <span class="n">KeyedJaggedTensor</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torchrec</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">torchrec.sparse.jagged_tensor</span><span class="w"> </span><span class="kn">import</span> <span class="n">JaggedTensor</span><span class="p">,</span> <span class="n">KeyedJaggedTensor</span>
 
 <span class="n">ebc</span> <span class="o">=</span> <span class="n">torchrec</span><span class="o">.</span><span class="n">EmbeddingBagCollection</span><span class="p">(</span>
     <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>

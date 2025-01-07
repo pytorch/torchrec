@@ -251,7 +251,7 @@ to shard and integrate the plan. At a high level,
 -  Initializes the environment by setting up process groups and
    assigning device type.
 
--  Uses default shaders if no shaders are provided, the default includes
+-  Uses default sharders if no sharders are provided, the default includes
    ``EmbeddingBagCollectionSharder``.
 
 -  Takes in the provided sharding plan, if none is provided, it
