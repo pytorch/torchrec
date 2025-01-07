@@ -20,6 +20,9 @@ from torch.distributed._tensor import DeviceMesh
 from torch.distributed._tensor.placement_types import Placement
 from torch.nn.modules.module import _addindent
 from torch.nn.parallel import DistributedDataParallel
+from torchrec.distributed.global_settings import (
+    construct_sharded_tensor_from_metadata_enabled,
+)
 from torchrec.distributed.types import (
     get_tensor_size_bytes,
     ModuleSharder,
@@ -342,6 +345,11 @@ class ShardedEmbeddingModule(
         self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._output_dists: List[nn.Module] = []
+
+        # option to construct ShardedTensor from metadata avoiding expensive all-gather
+        self._construct_sharded_tensor_from_metadata: bool = (
+            construct_sharded_tensor_from_metadata_enabled()
+        )
 
     def prefetch(
         self,
