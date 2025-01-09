@@ -94,7 +94,7 @@ def compute_gauc_3d(
 
 
 def to_3d(
-    tensor_2d: torch.Tensor, seq_lengths: torch.Tensor, max_length: torch.Tensor
+    tensor_2d: torch.Tensor, seq_lengths: torch.Tensor, max_length: int
 ) -> torch.Tensor:
     offsets = torch.ops.fbgemm.asynchronous_complete_cumsum(seq_lengths)
     return torch.ops.fbgemm.jagged_2d_to_dense(tensor_2d, offsets, max_length)
@@ -108,7 +108,7 @@ def get_auc_states(
 ) -> Dict[str, torch.Tensor]:
 
     # predictions, labels: [n_task, n_sample]
-    max_length = num_candidates.max()
+    max_length = int(num_candidates.max().item())
     predictions_perm = predictions.permute(1, 0)
     labels_perm = labels.permute(1, 0)
     predictions_3d = to_3d(predictions_perm, num_candidates, max_length).permute(
