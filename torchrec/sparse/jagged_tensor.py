@@ -47,14 +47,6 @@ try:
 except OSError:
     pass
 
-# OSS
-try:
-    from tensordict import TensorDict
-except ImportError:
-
-    class TensorDict:
-        pass
-
 
 logger: logging.Logger = logging.getLogger()
 
