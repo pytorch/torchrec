@@ -21,14 +21,6 @@ from torchrec.modules.embedding_configs import (
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 
 
-try:
-    from tensordict import TensorDict
-except ImportError:
-
-    class TensorDict:
-        pass
-
-
 @torch.fx.wrap
 def reorder_inverse_indices(
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
