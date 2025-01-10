@@ -97,6 +97,8 @@ class MetricNamespace(MetricNamespaceBase):
     NE = "ne"
     NE_POSITIVE = "ne_positive"
     SEGMENTED_NE = "segmented_ne"
+    RECALIBRATED_NE = "recalibrated_ne"
+    RECALIBRATED_CALIBRATION = "recalibrated_calibration"
     THROUGHPUT = "throughput"
     CTR = "ctr"
     CALIBRATION = "calibration"
