@@ -102,13 +102,6 @@ try:
 except OSError:
     pass
 
-try:
-    from tensordict import TensorDict
-except ImportError:
-
-    class TensorDict:
-        pass
-
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     return (
