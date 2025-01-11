@@ -23,6 +23,9 @@ from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.auprc import AUPRCMetric
 from torchrec.metrics.cali_free_ne import CaliFreeNEMetric
 from torchrec.metrics.calibration import CalibrationMetric
+from torchrec.metrics.calibration_with_recalibration import (
+    RecalibratedCalibrationMetric,
+)
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.hindsight_target_pr import HindsightTargetPRMetric
 from torchrec.metrics.mae import MAEMetric
@@ -46,6 +49,7 @@ from torchrec.metrics.multiclass_recall import MulticlassRecallMetric
 from torchrec.metrics.ndcg import NDCGMetric
 from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.ne_positive import NEPositiveMetric
+from torchrec.metrics.ne_with_recalibration import RecalibratedNEMetric
 from torchrec.metrics.output import OutputMetric
 from torchrec.metrics.precision import PrecisionMetric
 from torchrec.metrics.precision_session import PrecisionSessionMetric
@@ -71,6 +75,8 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.NE: NEMetric,
     RecMetricEnum.NE_POSITIVE: NEPositiveMetric,
     RecMetricEnum.SEGMENTED_NE: SegmentedNEMetric,
+    RecMetricEnum.RECALIBRATED_NE: RecalibratedNEMetric,
+    RecMetricEnum.RECALIBRATED_CALIBRATION: RecalibratedCalibrationMetric,
     RecMetricEnum.CTR: CTRMetric,
     RecMetricEnum.CALIBRATION: CalibrationMetric,
     RecMetricEnum.AUC: AUCMetric,
