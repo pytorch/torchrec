@@ -30,3 +30,7 @@ def construct_sharded_tensor_from_metadata_enabled() -> bool:
     return (
         os.environ.get(TORCHREC_CONSTRUCT_SHARDED_TENSOR_FROM_METADATA_ENV, "0") == "1"
     )
+
+
+def enable_construct_sharded_tensor_from_metadata() -> None:
+    os.environ[TORCHREC_CONSTRUCT_SHARDED_TENSOR_FROM_METADATA_ENV] = "1"
