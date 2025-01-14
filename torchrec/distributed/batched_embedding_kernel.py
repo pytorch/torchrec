@@ -624,6 +624,9 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
     def set_optimizer_step(self, step: int) -> None:
         self._emb_module.set_optimizer_step(step)
 
+    def update_hyper_parameters(self, params_dict: Dict[str, Any]) -> None:
+        self._emb_module.update_hyper_parameters(params_dict)
+
 
 def _gen_named_parameters_by_table_ssd(
     emb_module: SSDTableBatchedEmbeddingBags,
