@@ -239,7 +239,9 @@ def recursive_record_stream(
     res: Union[torch.Tensor, Pipelineable, Iterable[Any], Dict[Any, Any]],
     stream: torch.Stream,
 ) -> None:
-    if isinstance(res, (torch.Tensor, Pipelineable)):
+    if isinstance(res, torch.Tensor) and res.device.type in ["cuda", "mtia"]:
+        res.record_stream(stream)
+    elif isinstance(res, Pipelineable):
         res.record_stream(stream)
     elif isinstance(res, (list, tuple)):
         for v in res:
