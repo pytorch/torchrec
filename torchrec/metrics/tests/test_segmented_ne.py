@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Iterable, Union
+from typing import Any, Dict, Iterable, Union
 
 import torch
 from torch import no_grad
@@ -31,6 +31,8 @@ class SegementedNEValueTest(unittest.TestCase):
         weights: torch.Tensor,
         expected_ne: torch.Tensor,
         grouping_keys: torch.Tensor,
+        grouping_key_tensor_name: str = "grouping_keys",
+        cast_keys_to_int: bool = False,
     ) -> None:
         num_task = labels.shape[0]
         batch_size = labels.shape[0]
@@ -41,7 +43,7 @@ class SegementedNEValueTest(unittest.TestCase):
             "weights": {},
         }
         if grouping_keys is not None:
-            inputs["required_inputs"] = {"grouping_keys": grouping_keys}
+            inputs["required_inputs"] = {grouping_key_tensor_name: grouping_keys}
         for i in range(num_task):
             task_info = RecTaskInfo(
                 name=f"Task:{i}",
@@ -64,6 +66,10 @@ class SegementedNEValueTest(unittest.TestCase):
             tasks=task_list,
             # pyre-ignore
             num_groups=max(2, torch.unique(grouping_keys)[-1].item() + 1),
+            # pyre-ignore
+            grouping_keys=grouping_key_tensor_name,
+            # pyre-ignore
+            cast_keys_to_int=cast_keys_to_int,
         )
         ne.update(**inputs)
         actual_ne = ne.compute()
@@ -95,7 +101,7 @@ class SegementedNEValueTest(unittest.TestCase):
                 raise
 
 
-def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
+def generate_model_outputs_cases() -> Iterable[Dict[str, Any]]:
     return [
         # base condition
         {
@@ -148,5 +154,24 @@ def generate_model_outputs_cases() -> Iterable[Dict[str, torch._tensor.Tensor]]:
                 [0, 1, 0, 1, 1]
             ),  # for this case, both tasks have same groupings
             "expected_ne": torch.tensor([[3.1615, 1.6004], [1.0034, 0.4859]]),
+        },
+        # Custom grouping key tensor name
+        {
+            "labels": torch.tensor([[1, 0, 0, 1, 1]]),
+            "predictions": torch.tensor([[0.2, 0.6, 0.8, 0.4, 0.9]]),
+            "weights": torch.tensor([[0.13, 0.2, 0.5, 0.8, 0.75]]),
+            "grouping_keys": torch.tensor([0, 1, 0, 1, 1]),
+            "expected_ne": torch.tensor([[3.1615, 1.6004]]),
+            "grouping_key_tensor_name": "custom_key",
+        },
+        # Cast grouping keys to int32
+        {
+            "labels": torch.tensor([[1, 0, 0, 1, 1]]),
+            "predictions": torch.tensor([[0.2, 0.6, 0.8, 0.4, 0.9]]),
+            "weights": torch.tensor([[0.13, 0.2, 0.5, 0.8, 0.75]]),
+            "grouping_keys": torch.tensor([0.0, 1.0, 0.0, 1.0, 1.0]),
+            "expected_ne": torch.tensor([[3.1615, 1.6004]]),
+            "grouping_key_tensor_name": "custom_key",
+            "cast_keys_to_int": True,
         },
     ]
