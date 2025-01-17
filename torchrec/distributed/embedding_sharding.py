@@ -132,6 +132,7 @@ def _fx_wrap_seq_block_bucketize_sparse_features_inference(
     bucketize_pos: bool = False,
     block_bucketize_pos: Optional[List[torch.Tensor]] = None,
     total_num_blocks: Optional[torch.Tensor] = None,
+    keep_original_indices: bool = False,
 ) -> Tuple[
     torch.Tensor,
     torch.Tensor,
@@ -159,6 +160,7 @@ def _fx_wrap_seq_block_bucketize_sparse_features_inference(
         max_B=_fx_wrap_max_B(kjt),
         block_bucketize_pos=block_bucketize_pos,
         return_bucket_mapping=True,
+        keep_orig_idx=keep_original_indices,
     )
 
     return (
@@ -305,6 +307,7 @@ def bucketize_kjt_inference(
     bucketize_pos: bool = False,
     block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
     is_sequence: bool = False,
+    keep_original_indices: bool = False,
 ) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
     """
     Bucketizes the `values` in KeyedJaggedTensor into `num_buckets` buckets,
@@ -352,6 +355,7 @@ def bucketize_kjt_inference(
             total_num_blocks=total_num_buckets_new_type,
             bucketize_pos=bucketize_pos,
             block_bucketize_pos=block_bucketize_row_pos,
+            keep_original_indices=keep_original_indices,
         )
     else:
         (

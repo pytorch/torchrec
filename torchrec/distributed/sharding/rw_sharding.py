@@ -649,10 +649,12 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
         has_feature_processor: bool = False,
         need_pos: bool = False,
         embedding_shard_metadata: Optional[List[List[int]]] = None,
+        keep_original_indices: bool = False,
     ) -> None:
         super().__init__()
         logger.info(
             f"InferRwSparseFeaturesDist: {world_size=}, {num_features=}, {feature_hash_sizes=}, {feature_total_num_buckets=}, {device=}, {is_sequence=}, {has_feature_processor=}, {need_pos=}, {embedding_shard_metadata=}"
+            f", keep_original_indices={keep_original_indices}"
         )
         self._world_size: int = world_size
         self._num_features = num_features
@@ -683,6 +685,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
         self._embedding_shard_metadata: Optional[List[List[int]]] = (
             embedding_shard_metadata
         )
+        self._keep_original_indices = keep_original_indices
 
     def forward(self, sparse_features: KeyedJaggedTensor) -> InputDistOutputs:
         block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
@@ -717,6 +720,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
                 block_bucketize_row_pos
             ),
             is_sequence=self._is_sequence,
+            keep_original_indices=self._keep_original_indices,
         )
         # KJTOneToAll
         dist_kjt = self._dist.forward(bucketized_features)
