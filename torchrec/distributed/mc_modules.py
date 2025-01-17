@@ -1171,6 +1171,7 @@ class ShardedQuantManagedCollisionCollection(
                 has_feature_processor=sharding._has_feature_processor,
                 need_pos=False,
                 embedding_shard_metadata=emb_sharding,
+                keep_original_indices=True,
             )
             self._input_dists.append(input_dist)
 

@@ -165,6 +165,9 @@ class SegmentedNEMetricComputation(RecMetricComputation):
 
     Args:
         include_logloss (bool): return vanilla logloss as one of metrics results, on top of segmented NE.
+        num_groups (int): number of groups to segment NE by.
+        grouping_keys (str): name of the tensor containing the label by which results will be segmented. This tensor should be of type torch.int64.
+        cast_keys_to_int (bool): whether to cast grouping_keys to torch.int64. Only works if grouping_keys is of type torch.float32.
     """
 
     def __init__(
@@ -172,11 +175,15 @@ class SegmentedNEMetricComputation(RecMetricComputation):
         *args: Any,
         include_logloss: bool = False,  # TODO - include
         num_groups: int = 1,
+        grouping_keys: str = "grouping_keys",
+        cast_keys_to_int: bool = False,
         **kwargs: Any,
     ) -> None:
         self._include_logloss: bool = include_logloss
         super().__init__(*args, **kwargs)
         self._num_groups = num_groups  # would there be checkpointing issues with this? maybe make this state
+        self._grouping_keys = grouping_keys
+        self._cast_keys_to_int = cast_keys_to_int
         self._add_state(
             "cross_entropy_sum",
             torch.zeros((self._n_tasks, num_groups), dtype=torch.double),
@@ -217,21 +224,30 @@ class SegmentedNEMetricComputation(RecMetricComputation):
     ) -> None:
         if predictions is None or weights is None:
             raise RecMetricException(
-                "Inputs 'predictions' and 'weights' and 'grouping_keys' should not be None for NEMetricComputation update"
+                f"Inputs 'predictions' and 'weights' and '{self._grouping_keys}' should not be None for NEMetricComputation update"
             )
         elif (
             "required_inputs" not in kwargs
-            or kwargs["required_inputs"].get("grouping_keys") is None
+            or kwargs["required_inputs"].get(self._grouping_keys) is None
         ):
             raise RecMetricException(
-                f"Required inputs for SegmentedNEMetricComputation update should contain 'grouping_keys', got kwargs: {kwargs}"
+                f"Required inputs for SegmentedNEMetricComputation update should contain {self._grouping_keys}, got kwargs: {kwargs}"
             )
-        elif kwargs["required_inputs"]["grouping_keys"].dtype != torch.int64:
-            raise RecMetricException(
-                f"Grouping keys must have type torch.int64, got {kwargs['required_inputs']['grouping_keys'].dtype}."
-            )
+        elif kwargs["required_inputs"][self._grouping_keys].dtype != torch.int64:
+            if (
+                self._cast_keys_to_int
+                and kwargs["required_inputs"][self._grouping_keys].dtype
+                == torch.float32
+            ):
+                kwargs["required_inputs"][self._grouping_keys] = kwargs[
+                    "required_inputs"
+                ][self._grouping_keys].to(torch.int64)
+            else:
+                raise RecMetricException(
+                    f"Grouping keys expected to have type torch.int64 or torch.float32 with cast_keys_to_int set to true, got {kwargs['required_inputs'][self._grouping_keys].dtype}."
+                )
 
-        grouping_keys = kwargs["required_inputs"]["grouping_keys"]
+        grouping_keys = kwargs["required_inputs"][self._grouping_keys]
         states = get_segemented_ne_states(
             labels,
             predictions,
@@ -325,4 +341,8 @@ class SegmentedNEMetric(RecMetric):
             process_group=process_group,
             **kwargs,
         )
-        self._required_inputs.add("grouping_keys")
+        if "grouping_keys" not in kwargs:
+            self._required_inputs.add("grouping_keys")
+        else:
+            # pyre-ignore[6]
+            self._required_inputs.add(kwargs["grouping_keys"])
