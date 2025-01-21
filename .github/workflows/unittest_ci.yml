@@ -64,6 +64,9 @@ jobs:
             python-tag: "py312"
             cuda-tag: "cu124"
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    permissions:
+      id-token: write
+      contents: read
     with:
       runner: ${{ matrix.os }}
       timeout: 30
