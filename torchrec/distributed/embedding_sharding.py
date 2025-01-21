@@ -274,7 +274,10 @@ def bucketize_kjt_before_all2all(
         batch_size_per_feature=_fx_wrap_batch_size_per_feature(kjt),
         max_B=_fx_wrap_max_B(kjt),
         block_bucketize_pos=(
-            _fx_wrap_tensor_to_device_dtype(block_bucketize_row_pos, kjt.lengths())
+            [
+                _fx_wrap_tensor_to_device_dtype(pos, kjt.values())
+                for pos in block_bucketize_row_pos
+            ]
             if block_bucketize_row_pos is not None
             else None
         ),
