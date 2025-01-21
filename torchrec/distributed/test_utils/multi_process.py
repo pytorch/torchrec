@@ -9,6 +9,7 @@
 
 #!/usr/bin/env python3
 
+import logging
 import multiprocessing
 import os
 import unittest
@@ -22,11 +23,6 @@ from torchrec.test_utils import (
     init_distributed_single_host,
     seed_and_log,
 )
-
-
-# AMD's HIP runtime doesn't seem to work with forkserver; hipMalloc will fail
-# Therefore we use spawn for HIP runtime until AMD fixes the issue
-_MP_INIT_MODE = "forkserver" if torch.version.hip is None else "spawn"
 
 
 class MultiProcessContext:
@@ -98,6 +94,15 @@ class MultiProcessContext:
 
 
 class MultiProcessTestBase(unittest.TestCase):
+    def __init__(
+        self, methodName: str = "runTest", mp_init_mode: str = "forkserver"
+    ) -> None:
+        super().__init__(methodName)
+
+        # AMD's HIP runtime doesn't seem to work with forkserver; hipMalloc will fail
+        # Therefore we use spawn for HIP runtime until AMD fixes the issue
+        self._mp_init_mode: str = mp_init_mode if torch.version.hip is None else "spawn"
+        logging.info(f"Using {self._mp_init_mode} for multiprocessing")
 
     @seed_and_log
     def setUp(self) -> None:
@@ -131,7 +136,7 @@ class MultiProcessTestBase(unittest.TestCase):
         # pyre-ignore
         **kwargs,
     ) -> None:
-        ctx = multiprocessing.get_context(_MP_INIT_MODE)
+        ctx = multiprocessing.get_context(self._mp_init_mode)
         processes = []
         for rank in range(world_size):
             kwargs["rank"] = rank
@@ -157,7 +162,7 @@ class MultiProcessTestBase(unittest.TestCase):
         world_size: int,
         kwargs_per_rank: List[Dict[str, Any]],
     ) -> None:
-        ctx = multiprocessing.get_context(_MP_INIT_MODE)
+        ctx = multiprocessing.get_context(self._mp_init_mode)
         processes = []
         for rank in range(world_size):
             kwargs = {}
