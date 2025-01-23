@@ -199,6 +199,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 device=device,
                 include_last_offset=True,
                 dtype=dtype,
+                sparse=embedding_config.sparse,
             )
             if device is None:
                 device = self.embedding_bags[embedding_config.name].weight.device
