@@ -374,14 +374,11 @@ def get_inputs(
 
         if train:
             sparse_features_by_rank = [
-                model_input.idlist_features
-                for model_input in model_input_by_rank
-                if isinstance(model_input.idlist_features, KeyedJaggedTensor)
+                model_input.idlist_features for model_input in model_input_by_rank
             ]
             inputs_batch.append(sparse_features_by_rank)
         else:
             sparse_features = model_input_by_rank[0].idlist_features
-            assert isinstance(sparse_features, KeyedJaggedTensor)
             inputs_batch.append([sparse_features])
 
     # Transpose if train, as inputs_by_rank is currently in  [B X R] format
