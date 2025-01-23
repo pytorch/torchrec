@@ -19,7 +19,6 @@ from torchrec.modules.embedding_configs import (
     pooling_type_to_str,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
-from torchrec.sparse.tensor_dict import maybe_td_to_kjt
 
 
 @torch.fx.wrap
@@ -219,10 +218,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self._feature_names: List[List[str]] = [table.feature_names for table in tables]
         self.reset_parameters()
 
-    def forward(
-        self,
-        features: KeyedJaggedTensor,  # can also take TensorDict as input
-    ) -> KeyedTensor:
+    def forward(self, features: KeyedJaggedTensor) -> KeyedTensor:
         """
         Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
         and returns a `KeyedTensor`, which is the result of pooling the embeddings for each feature.
@@ -233,7 +229,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             KeyedTensor
         """
         flat_feature_names: List[str] = []
-        features = maybe_td_to_kjt(features, None)
         for names in self._feature_names:
             flat_feature_names.extend(names)
         inverse_indices = reorder_inverse_indices(
@@ -453,7 +448,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
 
     def forward(
         self,
-        features: KeyedJaggedTensor,  # can also take TensorDict as input
+        features: KeyedJaggedTensor,
     ) -> Dict[str, JaggedTensor]:
         """
         Run the EmbeddingBagCollection forward pass. This method takes in a `KeyedJaggedTensor`
@@ -466,7 +461,6 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
             Dict[str, JaggedTensor]
         """
 
-        features = maybe_td_to_kjt(features, None)
         feature_embeddings: Dict[str, JaggedTensor] = {}
         jt_dict: Dict[str, JaggedTensor] = features.to_dict()
         for i, emb_module in enumerate(self.embeddings.values()):
