@@ -98,7 +98,7 @@ jobs:
           FOLDER: docs/build/html # The folder the action should deploy.
 
   doc-preview:
-    runs-on: [linux.2xlarge]
+    runs-on: [linux.20_04.4x]
     needs: build_docs_job
     if: ${{ github.event_name == 'pull_request' }}
     steps:
