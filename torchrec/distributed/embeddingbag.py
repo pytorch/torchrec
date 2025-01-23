@@ -27,7 +27,6 @@ from typing import (
 
 import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
-from tensordict import TensorDict
 from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
 from torch.distributed._shard.sharded_tensor import TensorProperties
@@ -95,7 +94,6 @@ from torchrec.modules.embedding_modules import (
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
-from torchrec.sparse.tensor_dict import maybe_td_to_kjt
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -658,7 +656,9 @@ class ShardedEmbeddingBagCollection(
         self._inverse_indices_permute_indices: Optional[torch.Tensor] = None
         # to support mean pooling callback hook
         self._has_mean_pooling_callback: bool = (
-            PoolingType.MEAN.value in self._pooling_type_to_rs_features
+            True
+            if PoolingType.MEAN.value in self._pooling_type_to_rs_features
+            else False
         )
         self._dim_per_key: Optional[torch.Tensor] = None
         self._kjt_key_indices: Dict[str, int] = {}
@@ -1189,16 +1189,8 @@ class ShardedEmbeddingBagCollection(
 
     # pyre-ignore [14]
     def input_dist(
-        self,
-        ctx: EmbeddingBagCollectionContext,
-        features: Union[KeyedJaggedTensor, TensorDict],
+        self, ctx: EmbeddingBagCollectionContext, features: KeyedJaggedTensor
     ) -> Awaitable[Awaitable[KJTList]]:
-        if isinstance(features, TensorDict):
-            feature_keys = list(features.keys())  # pyre-ignore[6]
-            if len(self._features_order) > 0:
-                feature_keys = [feature_keys[i] for i in self._features_order]
-                self._has_features_permute = False  # feature_keys are in order
-            features = maybe_td_to_kjt(features, feature_keys)  # pyre-ignore[6]
         ctx.variable_batch_per_feature = features.variable_stride_per_key()
         ctx.inverse_indices = features.inverse_indices_or_none()
         if self._has_uninitialized_input_dist:

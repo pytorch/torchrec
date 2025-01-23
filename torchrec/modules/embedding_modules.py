@@ -19,7 +19,6 @@ from torchrec.modules.embedding_configs import (
     pooling_type_to_str,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
-from torchrec.sparse.tensor_dict import maybe_td_to_kjt
 
 
 @torch.fx.wrap
@@ -230,7 +229,6 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
             KeyedTensor
         """
         flat_feature_names: List[str] = []
-        features = maybe_td_to_kjt(features, None)
         for names in self._feature_names:
             flat_feature_names.extend(names)
         inverse_indices = reorder_inverse_indices(
