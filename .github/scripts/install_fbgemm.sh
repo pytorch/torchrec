@@ -15,6 +15,10 @@ if [[ $CU_VERSION = cu* ]]; then
     echo "[NOVA] Setting LD_LIBRARY_PATH ..."
     conda env config vars set -p ${CONDA_ENV}  \
         LD_LIBRARY_PATH="/usr/local/lib:${CUDA_HOME}/lib64:${CONDA_ENV}/lib:${LD_LIBRARY_PATH}"
+else
+    echo "[NOVA] Setting LD_LIBRARY_PATH ..."
+    conda env config vars set -p ${CONDA_ENV}  \
+        LD_LIBRARY_PATH="/usr/local/lib:${CONDA_ENV}/lib:${LD_LIBRARY_PATH}"
 fi
 
 if [ "$CHANNEL" = "nightly" ]; then
