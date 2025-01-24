@@ -76,11 +76,6 @@ def _gen_pipelines(
     help="Total number of sparse embeddings to be used.",
 )
 @click.option(
-    "--ratio_features_weighted",
-    default=0.4,
-    help="percentage of features weighted vs unweighted",
-)
-@click.option(
     "--dim_emb",
     type=int,
     default=512,
@@ -137,7 +132,6 @@ def _gen_pipelines(
 def main(
     world_size: int,
     n_features: int,
-    ratio_features_weighted: float,
     dim_emb: int,
     n_batches: int,
     batch_size: int,
@@ -155,9 +149,8 @@ def main(
     os.environ["MASTER_ADDR"] = str("localhost")
     os.environ["MASTER_PORT"] = str(get_free_port())
 
-    num_weighted_features = int(n_features * ratio_features_weighted)
-    num_features = n_features - num_weighted_features
-
+    num_features = n_features // 2
+    num_weighted_features = n_features // 2
     tables = [
         EmbeddingBagConfig(
             num_embeddings=(i + 1) * 1000,
@@ -264,7 +257,6 @@ def _generate_data(
             world_size=world_size,
             num_float_features=num_float_features,
             pooling_avg=pooling_factor,
-            input_type=input_type,
         )[1]
         for i in range(num_batches)
     ]

@@ -1987,7 +1987,6 @@ class InferShardingsTest(unittest.TestCase):
         inputs = []
         for model_input in model_inputs:
             kjt = model_input.idlist_features
-            assert isinstance(kjt, KeyedJaggedTensor)
             kjt = kjt.to(local_device)
             weights = torch.rand(
                 kjt._values.size(0), dtype=torch.float, device=local_device
@@ -2167,7 +2166,6 @@ class InferShardingsTest(unittest.TestCase):
         inputs = []
         for model_input in model_inputs:
             kjt = model_input.idlist_features
-            assert isinstance(kjt, KeyedJaggedTensor)
             kjt = kjt.to(local_device)
             weights = None
             inputs.append(
@@ -2303,7 +2301,6 @@ class InferShardingsTest(unittest.TestCase):
         )
         inputs = []
         kjt = model_inputs[0].idlist_features
-        assert isinstance(kjt, KeyedJaggedTensor)
         kjt = kjt.to(local_device)
         weights = torch.rand(
             kjt._values.size(0), dtype=torch.float, device=local_device
