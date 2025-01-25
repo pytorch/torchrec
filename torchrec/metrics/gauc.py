@@ -100,6 +100,7 @@ def to_3d(
     return torch.ops.fbgemm.jagged_2d_to_dense(tensor_2d, offsets, max_length)
 
 
+@torch.compiler.disable
 def get_auc_states(
     labels: torch.Tensor,
     predictions: torch.Tensor,
