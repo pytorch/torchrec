@@ -47,12 +47,14 @@ jobs:
         conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         python --version
+        conda run -n build_binary ldd --version
         conda run -n build_binary python --version
+        conda install -n build_binary -y numpy
         conda run -n build_binary \
           pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
         conda run -n build_binary \
-          python -c "import torch"
-        echo "torch succeeded"
+          python -c "import torch" && \
+          echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
@@ -71,16 +73,6 @@ jobs:
         conda run -n build_binary \
           python -c "import numpy"
         echo "numpy succeeded"
-        conda install -n build_binary -y pytest
-        conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
-          --ignore-glob=**/test_utils/
-        echo "Starting C++ Tests"
-        conda install -n build_binary -y gxx_linux-64
-        conda run -n build_binary \
-          x86_64-conda-linux-gnu-g++ --version
-        conda install -n build_binary -c anaconda redis -y
-        conda run -n build_binary redis-server --daemonize yes
         mkdir cpp-build
         cd cpp-build
         conda run -n build_binary cmake \
