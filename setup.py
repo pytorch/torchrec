@@ -106,7 +106,6 @@ def main(argv: List[str]) -> None:
         zip_safe=False,
         # PyPI package information.
         classifiers=[
-            "Development Status :: 5 - Stable",
             "Intended Audience :: Developers",
             "Intended Audience :: Science/Research",
             "License :: OSI Approved :: BSD License",
