@@ -353,8 +353,8 @@ class RecMetricModule(nn.Module):
         right before logging the metrics results to the data sink.
         """
         self.compute_count += 1
-        self.check_memory_usage(self.compute_count)
         with record_function("## RecMetricModule:compute ##"):
+            self.check_memory_usage(self.compute_count)
             ret: Dict[str, MetricValue] = {}
             if self.rec_metrics:
                 self._adjust_compute_interval()
