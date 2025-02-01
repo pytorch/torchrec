@@ -147,13 +147,30 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
             self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
         self._connected = True
 
+    def _next_batch(self, dataloader_iter: Iterator[In]) -> In:
+        with record_function("## next_batch ##"):
+            next_batch = next(dataloader_iter)
+        return next_batch
+
+    def _wait_for_batch(self, cur_batch: In) -> None:
+        with record_function("## wait_for_batch ##"):
+            _wait_for_batch(cur_batch, self._memcpy_stream)
+
+    def _backward(self, losses: torch.Tensor) -> None:
+        with record_function("## backward ##"):
+            torch.sum(losses, dim=0).backward()
+
+    def _copy_batch_to_gpu(self, cur_batch: In) -> None:
+        with record_function("## copy_batch_to_gpu ##"):
+            with self._stream_context(self._memcpy_stream):
+                self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
+
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         if not self._connected:
             self._connect(dataloader_iter)
 
         # Fetch next batch
-        with record_function("## next_batch ##"):
-            next_batch = next(dataloader_iter)
+        next_batch = self._next_batch(dataloader_iter)
         cur_batch = self._cur_batch
         assert cur_batch is not None
 
@@ -161,21 +178,17 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
             with record_function("## zero_grad ##"):
                 self._optimizer.zero_grad()
 
-        with record_function("## wait_for_batch ##"):
-            _wait_for_batch(cur_batch, self._memcpy_stream)
+        self._wait_for_batch(cur_batch)
 
         with record_function("## forward ##"):
             (losses, output) = self._model(cur_batch)
 
         if self._model.training:
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
+            self._backward(losses)
 
         # Copy the next batch to GPU
         self._cur_batch = cur_batch = next_batch
-        with record_function("## copy_batch_to_gpu ##"):
-            with self._stream_context(self._memcpy_stream):
-                self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
+        self._copy_batch_to_gpu(cur_batch)
 
         # Update
         if self._model.training:
@@ -471,6 +484,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if not self.enqueue_batch(dataloader_iter):
             return
 
+    def _wait_for_batch(self) -> None:
+        with record_function("## wait_for_batch ##"):
+            _wait_for_batch(cast(In, self.batches[0]), self._data_dist_stream)
+
+    def _backward(self, losses: torch.Tensor) -> None:
+        with record_function("## backward ##"):
+            torch.sum(losses, dim=0).backward()
+
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         if not self._model_attached:
             self.attach(self._model)
@@ -486,8 +507,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with record_function("## zero_grad ##"):
                 self._optimizer.zero_grad()
 
-        with record_function("## wait_for_batch ##"):
-            _wait_for_batch(cast(In, self.batches[0]), self._data_dist_stream)
+        self._wait_for_batch()
 
         if len(self.batches) >= 2:
             self.start_sparse_data_dist(self.batches[1], self.contexts[1])
@@ -504,8 +524,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         if self._model.training:
             # backward
-            with record_function("## backward ##"):
-                torch.sum(losses, dim=0).backward()
+            self._backward(losses)
 
             # update
             with record_function("## optimizer ##"):
