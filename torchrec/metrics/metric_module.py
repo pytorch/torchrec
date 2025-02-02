@@ -109,9 +109,6 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
 MODEL_METRIC_LABEL: str = "model"
 
 
-MEMORY_AVG_WARNING_PERCENTAGE = 20
-MEMORY_AVG_WARNING_WARMUP = 100
-
 MetricValue = Union[torch.Tensor, float]
 
 
@@ -146,7 +143,7 @@ class RecMetricModule(nn.Module):
         throughput_metric (Optional[ThroughputMetric]): the ThroughputMetric.
         state_metrics (Optional[Dict[str, StateMetric]]): the dict of StateMetrics.
         compute_interval_steps (int): the intervals between two compute calls in the unit of batch number
-        memory_usage_limit_mb (float): the memory usage limit for OOM check
+        memory_usage_limit_mb (float): [Unused] the memory usage limit for OOM check
 
     Call Args:
         Not supported.
@@ -177,8 +174,6 @@ class RecMetricModule(nn.Module):
     rec_metrics: RecMetricList
     throughput_metric: Optional[ThroughputMetric]
     state_metrics: Dict[str, StateMetric]
-    memory_usage_limit_mb: float
-    memory_usage_mb_avg: float
     oom_count: int
     compute_count: int
     last_compute_time: float
@@ -195,6 +190,7 @@ class RecMetricModule(nn.Module):
         compute_interval_steps: int = 100,
         min_compute_interval: float = 0.0,
         max_compute_interval: float = float("inf"),
+        # Unused, but needed for backwards compatibility. TODO: Remove from callsites
         memory_usage_limit_mb: float = 512,
     ) -> None:
         super().__init__()
@@ -205,8 +201,6 @@ class RecMetricModule(nn.Module):
         self.trained_batches: int = 0
         self.batch_size = batch_size
         self.world_size = world_size
-        self.memory_usage_limit_mb = memory_usage_limit_mb
-        self.memory_usage_mb_avg = 0.0
         self.oom_count = 0
         self.compute_count = 0
 
@@ -229,37 +223,6 @@ class RecMetricModule(nn.Module):
             persistent=False,
         )
         self.last_compute_time = -1.0
-
-    def get_memory_usage(self) -> int:
-        r"""Total memory of unique RecMetric tensors in bytes"""
-        total = {}
-        for metric in self.rec_metrics.rec_metrics:
-            total.update(metric.get_memory_usage())
-        return sum(total.values())
-
-    def check_memory_usage(self, compute_count: int) -> None:
-        memory_usage_mb = self.get_memory_usage() / (10**6)
-        if memory_usage_mb > self.memory_usage_limit_mb:
-            self.oom_count += 1
-            logger.warning(
-                f"MetricModule is using {memory_usage_mb}MB. "
-                f"This is larger than the limit{self.memory_usage_limit_mb}MB. "
-                f"This is the f{self.oom_count}th OOM."
-            )
-
-        if (
-            compute_count > MEMORY_AVG_WARNING_WARMUP
-            and memory_usage_mb
-            > self.memory_usage_mb_avg * ((100 + MEMORY_AVG_WARNING_PERCENTAGE) / 100)
-        ):
-            logger.warning(
-                f"MetricsModule is using more than {MEMORY_AVG_WARNING_PERCENTAGE}% of "
-                f"the average memory usage. Current usage: {memory_usage_mb}MB."
-            )
-
-        self.memory_usage_mb_avg = (
-            self.memory_usage_mb_avg * (compute_count - 1) + memory_usage_mb
-        ) / compute_count
 
     def _update_rec_metrics(
         self, model_out: Dict[str, torch.Tensor], **kwargs: Any
@@ -353,9 +316,8 @@ class RecMetricModule(nn.Module):
         right before logging the metrics results to the data sink.
         """
         self.compute_count += 1
+        ret: Dict[str, MetricValue] = {}
         with record_function("## RecMetricModule:compute ##"):
-            self.check_memory_usage(self.compute_count)
-            ret: Dict[str, MetricValue] = {}
             if self.rec_metrics:
                 self._adjust_compute_interval()
                 ret.update(self.rec_metrics.compute())
