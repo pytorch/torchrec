@@ -26,6 +26,7 @@ from typing import (
 )
 
 import torch
+from tensordict import TensorDict
 from torch import distributed as dist, nn
 from torch.autograd.profiler import record_function
 from torch.distributed._shard.sharding_spec import EnumerableShardingSpec
@@ -90,6 +91,7 @@ from torchrec.modules.utils import construct_jagged_tensors, SequenceVBEContext
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import _to_offsets, JaggedTensor, KeyedJaggedTensor
+from torchrec.sparse.tensor_dict import maybe_td_to_kjt
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -1198,8 +1200,15 @@ class ShardedEmbeddingCollection(
     def input_dist(
         self,
         ctx: EmbeddingCollectionContext,
-        features: KeyedJaggedTensor,
+        features: TypeUnion[KeyedJaggedTensor, TensorDict],
     ) -> Awaitable[Awaitable[KJTList]]:
+        need_permute: bool = True
+        if isinstance(features, TensorDict):
+            feature_keys = list(features.keys())  # pyre-ignore[6]
+            if self._features_order:
+                feature_keys = [feature_keys[i] for i in self._features_order]
+                need_permute = False
+            features = maybe_td_to_kjt(features, feature_keys)  # pyre-ignore[6]
         if self._has_uninitialized_input_dist:
             self._create_input_dist(input_feature_names=features.keys())
             self._has_uninitialized_input_dist = False
@@ -1209,7 +1218,7 @@ class ShardedEmbeddingCollection(
                 unpadded_features = features
                 features = pad_vbe_kjt_lengths(unpadded_features)
 
-            if self._features_order:
+            if need_permute and self._features_order:
                 features = features.permute(
                     self._features_order,
                     # pyre-fixme[6]: For 2nd argument expected `Optional[Tensor]`
