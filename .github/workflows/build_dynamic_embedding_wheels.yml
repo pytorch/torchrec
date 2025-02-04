@@ -55,6 +55,17 @@ jobs:
         shell: bash
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
+          name: upload-wheels-artifact-${{ matrix.runs-on }}
           path: wheelhouse/*.whl
+
+  merge:
+    runs-on: ${{ matrix.os }}
+    needs: build_wheels
+    steps:
+      - name: Merge Artifacts
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: all-my-wheels
+          pattern: wheels-*

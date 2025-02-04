@@ -83,10 +83,11 @@ jobs:
         conda run -n build_binary make html
         cd ..
     - name: Upload Built-Docs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Built-Docs
         path: docs/build/html/
+        overwrite: true
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
@@ -105,10 +106,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: Built-Docs
           path: docs
+          overwrite: true
       - name: Add no-index tag
         run: |
           find docs -name "*.html" -print0 | xargs -0 sed -i '/<head>/a \ \ <meta name="robots" content="noindex">';
