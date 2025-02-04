@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: 3.9
       - name: Checkout Torchrec
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Install dependencies
         run: >
           pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu &&
