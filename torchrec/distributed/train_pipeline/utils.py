@@ -230,7 +230,10 @@ def _build_args_kwargs(
             else:
                 args.append(arg)
         else:
-            args.append(None)
+            if arg_info.name:
+                kwargs[arg_info.name] = None
+            else:
+                args.append(None)
     return args, kwargs
 
 

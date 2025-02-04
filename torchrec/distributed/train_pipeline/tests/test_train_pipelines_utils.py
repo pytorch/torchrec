@@ -10,9 +10,11 @@
 import copy
 import enum
 import unittest
+from typing import List
 from unittest.mock import MagicMock
 
 import torch
+from parameterized import parameterized
 
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.test_utils.test_model import ModelInput, TestNegSamplingModule
@@ -21,8 +23,10 @@ from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import 
     TrainPipelineSparseDistTestBase,
 )
 from torchrec.distributed.train_pipeline.utils import (
+    _build_args_kwargs,
     _get_node_args,
     _rewrite_model,
+    ArgInfo,
     PipelinedForward,
     PipelinedPostproc,
     TrainPipelineContext,
@@ -252,6 +256,89 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         ]
         for source_model_type, recipient_model_type in variants:
             self._test_restore_from_snapshot(source_model_type, recipient_model_type)
+
+    @parameterized.expand(
+        [
+            (
+                [
+                    # Empty attrs to ignore any attr based logic.
+                    ArgInfo(
+                        input_attrs=[
+                            "",
+                        ],
+                        is_getitems=[False],
+                        postproc_modules=[None],
+                        constants=[None],
+                        name="id_list_features",
+                    ),
+                    ArgInfo(
+                        input_attrs=[],
+                        is_getitems=[],
+                        postproc_modules=[],
+                        constants=[],
+                        name="id_score_list_features",
+                    ),
+                ],
+                0,
+                ["id_list_features", "id_score_list_features"],
+            ),
+            (
+                [
+                    # Empty attrs to ignore any attr based logic.
+                    ArgInfo(
+                        input_attrs=[
+                            "",
+                        ],
+                        is_getitems=[False],
+                        postproc_modules=[None],
+                        constants=[None],
+                        name=None,
+                    ),
+                    ArgInfo(
+                        input_attrs=[],
+                        is_getitems=[],
+                        postproc_modules=[],
+                        constants=[],
+                        name=None,
+                    ),
+                ],
+                2,
+                [],
+            ),
+            (
+                [
+                    # Empty attrs to ignore any attr based logic.
+                    ArgInfo(
+                        input_attrs=[
+                            "",
+                        ],
+                        is_getitems=[False],
+                        postproc_modules=[None],
+                        constants=[None],
+                        name=None,
+                    ),
+                    ArgInfo(
+                        input_attrs=[],
+                        is_getitems=[],
+                        postproc_modules=[],
+                        constants=[],
+                        name="id_score_list_features",
+                    ),
+                ],
+                1,
+                ["id_score_list_features"],
+            ),
+        ]
+    )
+    def test_build_args_kwargs(
+        self,
+        fwd_args: List[ArgInfo],
+        args_len: int,
+        kwarges_keys: List[str],
+    ) -> None:
+        args, kwargs = _build_args_kwargs("initial_input", fwd_args)
+        self.assertEqual(len(args), args_len)
+        self.assertEqual(list(kwargs.keys()), kwarges_keys)
 
 
 class TestUtils(unittest.TestCase):
