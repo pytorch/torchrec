@@ -160,12 +160,12 @@ def _get_ndcg_states(
     )
 
     # Expand these to be [num_task, num_sessions, batch_size] for masking to handle later.
-    expanded_sorted_labels_by_labels = sorted_labels_by_labels.expand(
+    expanded_sorted_labels_by_labels = sorted_labels_by_labels.unsqueeze(1).expand(
         (num_tasks, num_sessions, batch_size)
     )
-    expanded_sorted_labels_by_predictions = sorted_labels_by_predictions.expand(
-        (num_tasks, num_sessions, batch_size)
-    )
+    expanded_sorted_labels_by_predictions = sorted_labels_by_predictions.unsqueeze(
+        1
+    ).expand((num_tasks, num_sessions, batch_size))
 
     # Make sure to correspondingly sort session IDs according to how we sorted labels above.
     session_ids_by_sorted_labels = torch.gather(
@@ -188,10 +188,10 @@ def _get_ndcg_states(
 
     # Figure out after sorting which example indices belong to which session.
     sorted_session_ids_by_labels_mask = (
-        task_to_session_to_examples == session_ids_by_sorted_labels
+        task_to_session_to_examples == session_ids_by_sorted_labels.unsqueeze(1)
     ).long()
     sorted_session_ids_by_predictions_mask = (
-        task_to_session_to_examples == session_ids_by_sorted_predictions
+        task_to_session_to_examples == session_ids_by_sorted_predictions.unsqueeze(1)
     ).long()
 
     # Get the ranks (1, N] for each example in each session for every task.

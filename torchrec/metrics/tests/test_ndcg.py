@@ -13,7 +13,7 @@ from dataclasses import replace
 from typing import Any, Dict, List
 
 import torch
-from torchrec.metrics.metrics_config import DefaultTaskInfo
+from torchrec.metrics.metrics_config import DefaultTaskInfo, RecComputeMode
 
 from torchrec.metrics.ndcg import NDCGMetric, SESSION_KEY
 from torchrec.metrics.test_utils import RecTaskInfo
@@ -21,6 +21,27 @@ from torchrec.metrics.test_utils import RecTaskInfo
 
 WORLD_SIZE = 4
 BATCH_SIZE = 10
+
+DefaultTaskInfo0 = RecTaskInfo(
+    name="DefaultTask0",
+    label_name="label",
+    prediction_name="prediction",
+    weight_name="weight",
+)
+
+DefaultTaskInfo1 = RecTaskInfo(
+    name="DefaultTask1",
+    label_name="label",
+    prediction_name="prediction",
+    weight_name="weight",
+)
+
+DefaultTaskInfo2 = RecTaskInfo(
+    name="DefaultTask2",
+    label_name="label",
+    prediction_name="prediction",
+    weight_name="weight",
+)
 
 
 def get_test_case_single_session_within_batch() -> Dict[str, torch.Tensor]:
@@ -117,6 +138,41 @@ def get_test_case_scale_by_weights_tensor() -> Dict[str, torch.Tensor]:
     }
 
 
+def get_test_case_multitask() -> Dict[str, torch.Tensor]:
+    return {
+        "predictions": torch.tensor(
+            [
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.1, 0.2, 0.3],
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.1, 0.2, 0.3],
+                [0.1, 0.2, 0.3, 0.4, 0.5, 0.1, 0.2, 0.3],
+            ]
+        ),
+        "session_ids": torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 2, 2, 2],
+                [1, 1, 1, 1, 1, 2, 2, 2],
+                [1, 1, 1, 1, 1, 2, 2, 2],
+            ]
+        ),
+        "labels": torch.tensor(
+            [
+                [0.0, 1.0, 0.0, 0.0, 2.0, 2.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0, 2.0, 2.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0, 2.0, 2.0, 1.0, 0.0],
+            ]
+        ),
+        "weights": torch.tensor(
+            [
+                [1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 3.0],
+                [1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 3.0],
+                [1.0, 1.0, 1.0, 1.0, 2.0, 1.0, 1.0, 3.0],
+            ]
+        ),
+        "expected_ndcg_exp": torch.tensor([0.6748, 0.6748, 0.6748]),
+        "expected_ndcg_non_exp": torch.tensor([0.6463, 0.6463, 0.6463]),
+    }
+
+
 class NDCGMetricValueTest(unittest.TestCase):
     def generate_metric(
         self,
@@ -130,6 +186,7 @@ class NDCGMetricValueTest(unittest.TestCase):
         remove_single_length_sessions: bool = False,
         scale_by_weights_tensor: bool = False,
         report_ndcg_as_decreasing_curve: bool = True,
+        compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION,
         **kwargs: Dict[str, Any],
     ) -> NDCGMetric:
         return NDCGMetric(
@@ -149,6 +206,7 @@ class NDCGMetricValueTest(unittest.TestCase):
             report_ndcg_as_decreasing_curve=report_ndcg_as_decreasing_curve,
             # pyre-ignore[6]
             k=k,
+            compute_mode=compute_mode,
             # pyre-ignore[6]
             **kwargs,
         )
@@ -555,6 +613,86 @@ class NDCGMetricValueTest(unittest.TestCase):
         output = metric.compute()
         actual_metric = output[f"ndcg-{DefaultTaskInfo.name}|lifetime_ndcg"]
         expected_metric = model_output["expected_ndcg_non_exp"]
+
+        torch.testing.assert_close(
+            actual_metric,
+            expected_metric,
+            atol=1e-4,
+            rtol=1e-4,
+            check_dtype=False,
+            equal_nan=True,
+            msg=f"Actual: {actual_metric}, Expected: {expected_metric}",
+        )
+
+    def test_multitask_non_exp(self) -> None:
+        """
+        Test NDCG with multiple tasks.
+        """
+        model_output = get_test_case_multitask()
+        metric = self.generate_metric(
+            world_size=WORLD_SIZE,
+            my_rank=0,
+            batch_size=BATCH_SIZE,
+            tasks=[DefaultTaskInfo0, DefaultTaskInfo1, DefaultTaskInfo2],
+            exponential_gain=False,
+            session_key=SESSION_KEY,
+            compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+        )
+
+        metric.update(
+            predictions=model_output["predictions"],
+            labels=model_output["labels"],
+            weights=model_output["weights"],
+            required_inputs={SESSION_KEY: model_output["session_ids"]},
+        )
+        output = metric.compute()
+        actual_metric = torch.stack(
+            [
+                output[f"ndcg-{task.name}|lifetime_ndcg"]
+                for task in [DefaultTaskInfo0, DefaultTaskInfo1, DefaultTaskInfo2]
+            ]
+        )
+        expected_metric = model_output["expected_ndcg_non_exp"]
+
+        torch.testing.assert_close(
+            actual_metric,
+            expected_metric,
+            atol=1e-4,
+            rtol=1e-4,
+            check_dtype=False,
+            equal_nan=True,
+            msg=f"Actual: {actual_metric}, Expected: {expected_metric}",
+        )
+
+    def test_multitask_exp(self) -> None:
+        """
+        Test NDCG with multiple tasks.
+        """
+        model_output = get_test_case_multitask()
+        metric = self.generate_metric(
+            world_size=WORLD_SIZE,
+            my_rank=0,
+            batch_size=BATCH_SIZE,
+            tasks=[DefaultTaskInfo0, DefaultTaskInfo1, DefaultTaskInfo2],
+            exponential_gain=True,
+            session_key=SESSION_KEY,
+            compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+        )
+
+        metric.update(
+            predictions=model_output["predictions"],
+            labels=model_output["labels"],
+            weights=model_output["weights"],
+            required_inputs={SESSION_KEY: model_output["session_ids"]},
+        )
+        output = metric.compute()
+        actual_metric = torch.stack(
+            [
+                output[f"ndcg-{task.name}|lifetime_ndcg"]
+                for task in [DefaultTaskInfo0, DefaultTaskInfo1, DefaultTaskInfo2]
+            ]
+        )
+        expected_metric = model_output["expected_ndcg_exp"]
 
         torch.testing.assert_close(
             actual_metric,
