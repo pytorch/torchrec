@@ -2217,7 +2217,7 @@ class InferShardingsTest(unittest.TestCase):
             [sharder],
         )
 
-        sharded_model = shard_qec(
+        sharded_model = shard_qebc(
             mi,
             sharding_type=ShardingType.ROW_WISE,
             device=local_device,
