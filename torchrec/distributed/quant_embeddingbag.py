@@ -512,8 +512,8 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
     This module implements distributed inputs of a ShardedQuantEmbeddingBagCollection.
 
     Args:
-        sharding_type_to_sharding (Dict[
-            str,
+        sharding_type_device_group_to_sharding (Dict[
+            Tuple[str, str],
             EmbeddingSharding[
                 NullShardingContext,
                 KJTList,
@@ -526,8 +526,8 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
     Example::
 
         sqebc_input_dist = ShardedQuantEbcInputDist(
-            sharding_type_to_sharding={
-                ShardingType.TABLE_WISE: InferTwSequenceEmbeddingSharding(
+            sharding_type_device_group_to_sharding={
+                (ShardingType.TABLE_WISE, "cpu"): InferTwSequenceEmbeddingSharding(
                     [],
                     ShardingEnv(
                         world_size=2,
@@ -568,10 +568,24 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
         )
         self._device = device
 
+        self._shardings: List[
+            EmbeddingSharding[
+                NullShardingContext,
+                InputDistOutputs,
+                List[torch.Tensor],
+                torch.Tensor,
+            ]
+        ] = list(sharding_type_device_group_to_sharding.values())
+
         self._input_dists: List[nn.Module] = []
 
-        self._feature_splits: List[int] = []
         self._features_order: List[int] = []
+        self._feature_names: List[List[str]] = [
+            sharding.feature_names() for sharding in self._shardings
+        ]
+        self._feature_splits: List[int] = [
+            len(sharding) for sharding in self._feature_names
+        ]
 
         # forward pass flow control
         self._has_uninitialized_input_dist: bool = True
@@ -583,18 +597,20 @@ class ShardedQuantEbcInputDist(torch.nn.Module):
         features_device: torch.device,
         input_dist_device: Optional[torch.device] = None,
     ) -> None:
-        feature_names: List[str] = []
-        for sharding in self._sharding_type_device_group_to_sharding.values():
-            self._input_dists.append(
-                sharding.create_input_dist(device=input_dist_device)
-            )
-            feature_names.extend(sharding.feature_names())
-            self._feature_splits.append(len(sharding.feature_names()))
+        flat_feature_names: List[str] = [
+            feature_name
+            for sharding_feature_name in self._feature_names
+            for feature_name in sharding_feature_name
+        ]
+        self._input_dists = [
+            sharding.create_input_dist(device=input_dist_device)
+            for sharding in self._shardings
+        ]
 
-        if feature_names == input_feature_names:
+        if flat_feature_names == input_feature_names:
             self._has_features_permute = False
         else:
-            for f in feature_names:
+            for f in flat_feature_names:
                 self._features_order.append(input_feature_names.index(f))
             self.register_buffer(
                 "_features_order_tensor",
