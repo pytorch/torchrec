@@ -75,7 +75,10 @@ from torchrec.modules.feature_processor_ import (
     PositionWeightedModuleCollection,
 )
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
-from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
+from torchrec.modules.mc_embedding_modules import (
+    ManagedCollisionEmbeddingBagCollection,
+    ManagedCollisionEmbeddingCollection,
+)
 from torchrec.modules.mc_modules import (
     DistanceLFU_EvictionPolicy,
     ManagedCollisionCollection,
@@ -2098,6 +2101,162 @@ class InferShardingsTest(unittest.TestCase):
         device_type=st.sampled_from(["cpu", "cuda"]),
     )
     @settings(max_examples=2, deadline=None)
+    def test_sharded_quant_mc_ebc_rw(
+        self, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
+        num_embeddings = 10
+        emb_dim = 16
+        world_size = 2
+        batch_size = 2
+        local_device = torch.device(f"{device_type}:0")
+
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
+        mi = TestModelInfo(
+            dense_device=local_device,
+            sparse_device=local_device,
+            num_features=1,
+            num_float_features=10,
+            num_weighted_features=0,
+            topology=topology,
+        )
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+
+        mi.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=num_embeddings,
+                embedding_dim=emb_dim,
+                name=f"table_{i}",
+                feature_names=[f"feature_{i}"],
+            )
+            for i in range(mi.num_features)
+        ]
+
+        mi.model = KJTInputWrapper(
+            module_kjt_input=torch.nn.Sequential(
+                ManagedCollisionEmbeddingBagCollection(
+                    EmbeddingBagCollection(
+                        tables=mi.tables,
+                        device=mi.sparse_device,
+                    ),
+                    ManagedCollisionCollection(
+                        managed_collision_modules={
+                            "table_0": MCHManagedCollisionModule(
+                                zch_size=num_embeddings,
+                                input_hash_size=4000,
+                                device=mi.sparse_device,
+                                eviction_interval=2,
+                                eviction_policy=DistanceLFU_EvictionPolicy(),
+                            )
+                        },
+                        embedding_configs=mi.tables,
+                    ),
+                )
+            )
+        )
+        model_inputs: List[ModelInput] = prep_inputs(
+            mi, world_size, batch_size, long_indices=True
+        )
+        inputs = []
+        for model_input in model_inputs:
+            kjt = model_input.idlist_features
+            assert isinstance(kjt, KeyedJaggedTensor)
+            kjt = kjt.to(local_device)
+            weights = None
+            inputs.append(
+                (
+                    kjt._keys,
+                    kjt._values,
+                    weights,
+                    kjt._lengths,
+                    kjt._offsets,
+                )
+            )
+
+        mi.model(*inputs[0])
+        print(f"model:\n{mi.model}")
+        assert mi.model.training is True
+        mi.quant_model = quantize(
+            module=mi.model,
+            inplace=False,
+            register_tbes=False,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+        )
+        quant_model = mi.quant_model
+        assert quant_model.training is False
+        non_sharded_output, _ = mi.quant_model(*inputs[0])
+
+        topology: Topology = Topology(world_size=world_size, compute_device=device_type)
+        mi.planner = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=EmbeddingEnumerator(
+                topology=topology,
+                batch_size=batch_size,
+                estimator=[
+                    EmbeddingPerfEstimator(topology=topology, is_inference=True),
+                    EmbeddingStorageEstimator(topology=topology),
+                ],
+            ),
+        )
+        sharder = QuantEmbeddingCollectionSharder()
+        # pyre-ignore
+        plan = mi.planner.plan(
+            mi.quant_model,
+            [sharder],
+        )
+
+        sharded_model = shard_qec(
+            mi,
+            sharding_type=ShardingType.ROW_WISE,
+            device=local_device,
+            expected_shards=None,
+            plan=plan,
+        )
+
+        print(f"sharded_model:\n{sharded_model}")
+        for n, m in sharded_model.named_modules():
+            print(f"sharded_model.MODULE[{n}]:{type(m)}")
+
+        sharded_model.load_state_dict(quant_model.state_dict())
+        sharded_output, _ = sharded_model(*inputs[0])
+
+        assert_close(non_sharded_output, sharded_output)
+        gm: torch.fx.GraphModule = symbolic_trace(
+            sharded_model,
+            leaf_modules=[
+                "IntNBitTableBatchedEmbeddingBagsCodegen",
+                "ComputeJTDictToKJT",
+            ],
+        )
+
+        print(f"fx.graph:\n{gm.graph}")
+        gm_script = torch.jit.script(gm)
+        print(f"gm_script:\n{gm_script}")
+        gm_script_output, _ = gm_script(*inputs[0])
+        assert_close(sharded_output, gm_script_output)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8]),
+        device_type=st.sampled_from(["cpu", "cuda"]),
+    )
+    @settings(max_examples=2, deadline=None)
     def test_sharded_quant_mc_ec_rw(
         self, weight_dtype: torch.dtype, device_type: str
     ) -> None:
@@ -2192,7 +2351,7 @@ class InferShardingsTest(unittest.TestCase):
         )
         quant_model = mi.quant_model
         assert quant_model.training is False
-        non_sharded_output = mi.quant_model(*inputs[0])
+        non_sharded_output, _ = mi.quant_model(*inputs[0])
 
         topology: Topology = Topology(world_size=world_size, compute_device=device_type)
         mi.planner = EmbeddingShardingPlanner(
@@ -2227,7 +2386,7 @@ class InferShardingsTest(unittest.TestCase):
             print(f"sharded_model.MODULE[{n}]:{type(m)}")
 
         sharded_model.load_state_dict(quant_model.state_dict())
-        sharded_output = sharded_model(*inputs[0])
+        sharded_output, _ = sharded_model(*inputs[0])
 
         assert_close(non_sharded_output, sharded_output)
         gm: torch.fx.GraphModule = symbolic_trace(
@@ -2241,7 +2400,7 @@ class InferShardingsTest(unittest.TestCase):
         print(f"fx.graph:\n{gm.graph}")
         gm_script = torch.jit.script(gm)
         print(f"gm_script:\n{gm_script}")
-        gm_script_output = gm_script(*inputs[0])
+        gm_script_output, _ = gm_script(*inputs[0])
         assert_close(sharded_output, gm_script_output)
 
     @unittest.skipIf(
@@ -2409,3 +2568,7 @@ class InferShardingsTest(unittest.TestCase):
         gm_script = torch.jit.script(gm)
         print(f"gm_script:\n{gm_script}")
         gm_script(*inputs)
+
+
+if __name__ == "__main__":
+    unittest.main()
