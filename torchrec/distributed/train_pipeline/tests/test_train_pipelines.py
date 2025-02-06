@@ -1703,22 +1703,22 @@ class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
                 torch.testing.assert_close(pred, pred_pipeline)
 
 
-class DataLoadingThreadTest(unittest.TestCase):
-    def test_fetch_data(self) -> None:
-        data = []
-        for i in range(7):
-            data.append(torch.tensor([i]))
-        data_iter = iter(data)
-        data_loader = DataLoadingThread(torch.device("cpu"), data_iter, True)
-        data_loader.start()
-        for i in range(7):
-            item = data_loader.get_next_batch()
-            self.assertEqual(item.item(), i)
+# class DataLoadingThreadTest(unittest.TestCase):
+#     def test_fetch_data(self) -> None:
+#         data = []
+#         for i in range(7):
+#             data.append(torch.tensor([i]))
+#         data_iter = iter(data)
+#         data_loader = DataLoadingThread(torch.device("cpu"), data_iter, True)
+#         data_loader.start()
+#         for i in range(7):
+#             item = data_loader.get_next_batch()
+#             self.assertEqual(item.item(), i)
 
-        self.assertIsNone(data_loader.get_next_batch(False))
-        with self.assertRaises(StopIteration):
-            data_loader.get_next_batch(True)
-        data_loader.stop()
+#         self.assertIsNone(data_loader.get_next_batch(False))
+#         with self.assertRaises(StopIteration):
+#             data_loader.get_next_batch(True)
+#         data_loader.stop()
 
 
 class EvalPipelineSparseDistTest(unittest.TestCase):

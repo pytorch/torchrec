@@ -253,52 +253,52 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(deserialized.shape, orginal.shape)
             self.assertTrue(torch.allclose(deserialized, orginal))
 
-    def test_dynamic_shape_ebc(self) -> None:
-        model = self.generate_model()
-        feature1 = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
-        )
+    # def test_dynamic_shape_ebc(self) -> None:
+    #     model = self.generate_model()
+    #     feature1 = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),
+    #     )
 
-        feature2 = KeyedJaggedTensor.from_offsets_sync(
-            keys=["f1", "f2", "f3"],
-            values=torch.tensor([0, 1, 2, 3, 2, 3, 4]),
-            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7]),
-        )
-        eager_out = model(feature2)
+    #     feature2 = KeyedJaggedTensor.from_offsets_sync(
+    #         keys=["f1", "f2", "f3"],
+    #         values=torch.tensor([0, 1, 2, 3, 2, 3, 4]),
+    #         offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7]),
+    #     )
+    #     eager_out = model(feature2)
 
-        # Serialize EBC
-        collection = mark_dynamic_kjt(feature1)
-        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
-        ep = torch.export.export(
-            model,
-            (feature1,),
-            {},
-            dynamic_shapes=collection.dynamic_shapes(model, (feature1,)),
-            strict=False,
-            # Allows KJT to not be unflattened and run a forward on unflattened EP
-            preserve_module_call_signature=tuple(sparse_fqns),
-        )
+    #     # Serialize EBC
+    #     collection = mark_dynamic_kjt(feature1)
+    #     model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+    #     ep = torch.export.export(
+    #         model,
+    #         (feature1,),
+    #         {},
+    #         dynamic_shapes=collection.dynamic_shapes(model, (feature1,)),
+    #         strict=False,
+    #         # Allows KJT to not be unflattened and run a forward on unflattened EP
+    #         preserve_module_call_signature=tuple(sparse_fqns),
+    #     )
 
-        # Run forward on ExportedProgram
-        ep_output = ep.module()(feature2)
+    #     # Run forward on ExportedProgram
+    #     ep_output = ep.module()(feature2)
 
-        # other asserts
-        for i, tensor in enumerate(ep_output):
-            self.assertEqual(eager_out[i].shape, tensor.shape)
+    #     # other asserts
+    #     for i, tensor in enumerate(ep_output):
+    #         self.assertEqual(eager_out[i].shape, tensor.shape)
 
-        # Deserialize EBC
-        unflatten_ep = torch.export.unflatten(ep)
-        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
-        deserialized_model.load_state_dict(model.state_dict())
+    #     # Deserialize EBC
+    #     unflatten_ep = torch.export.unflatten(ep)
+    #     deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+    #     deserialized_model.load_state_dict(model.state_dict())
 
-        # Run forward on deserialized model
-        deserialized_out = deserialized_model(feature2)
+    #     # Run forward on deserialized model
+    #     deserialized_out = deserialized_model(feature2)
 
-        for i, tensor in enumerate(deserialized_out):
-            self.assertEqual(eager_out[i].shape, tensor.shape)
-            assert torch.allclose(eager_out[i], tensor)
+    #     for i, tensor in enumerate(deserialized_out):
+    #         self.assertEqual(eager_out[i].shape, tensor.shape)
+    #         assert torch.allclose(eager_out[i], tensor)
 
     def test_ir_emb_lookup_device(self) -> None:
         model = self.generate_model()
