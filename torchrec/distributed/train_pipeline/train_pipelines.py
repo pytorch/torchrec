@@ -418,14 +418,16 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._model_attached = False
         return self._model
 
-    def attach(self, model: Optional[torch.nn.Module] = None) -> None:
+    def attach(
+        self, model: Optional[torch.nn.Module] = None, sparse_dist: bool = True
+    ) -> None:
         if model:
             self._model = model
 
         self._model_attached = True
         if self.contexts:
             self._pipeline_model(
-                batch=self.batches[0],
+                batch=self.batches[0] if sparse_dist else None,
                 context=self.contexts[0],
                 pipelined_forward=PipelinedForward,
             )
