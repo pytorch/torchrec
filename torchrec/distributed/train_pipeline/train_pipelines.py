@@ -269,6 +269,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
 
                 # Mandatory dynamo configuration for Torchrec PT2 compilation
                 torch._dynamo.config.capture_scalar_outputs = True
+                torch._dynamo.config.enable_trace_contextlib = False
                 torch._dynamo.config.capture_dynamic_output_shape_ops = True
                 torch._dynamo.config.force_unspec_int_unbacked_size_like_on_torchrec_kjt = (
                     True
