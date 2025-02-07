@@ -149,6 +149,7 @@ def create_embedding_bag_sharding(
     device: Optional[torch.device] = None,
     permute_embeddings: bool = False,
     qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    independent_emb_key_pg: Optional[dist.ProcessGroup] = None,
 ) -> EmbeddingSharding[
     EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
 ]:
@@ -169,6 +170,7 @@ def create_embedding_bag_sharding(
             env,
             device,
             qcomm_codecs_registry=qcomm_codecs_registry,
+            independent_emb_key_pg=independent_emb_key_pg,
         )
     elif sharding_type == ShardingType.DATA_PARALLEL.value:
         return DpPooledEmbeddingSharding(sharding_infos, env, device)
@@ -591,7 +593,7 @@ class ShardedEmbeddingBagCollection(
         self._table_names: List[str] = []
         self._pooling_type_to_rs_features: Dict[str, List[str]] = defaultdict(list)
         self._table_name_to_config: Dict[str, EmbeddingBagConfig] = {}
-
+        self.independent_emb_key_pg = dist.new_group();
         for config in self._embedding_bag_configs:
             self._table_names.append(config.name)
             self._table_name_to_config[config.name] = config
@@ -637,6 +639,7 @@ class ShardedEmbeddingBagCollection(
                 device,
                 permute_embeddings=True,
                 qcomm_codecs_registry=self.qcomm_codecs_registry,
+                independent_emb_key_pg=self.independent_emb_key_pg,
             )
             for embedding_configs in sharding_type_to_sharding_infos.values()
         ]
