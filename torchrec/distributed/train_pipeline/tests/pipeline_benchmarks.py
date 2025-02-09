@@ -160,7 +160,7 @@ def main(
 
     tables = [
         EmbeddingBagConfig(
-            num_embeddings=(i + 1) * 1000,
+            num_embeddings=max(i + 1, 100) * 1000,
             embedding_dim=dim_emb,
             name="table_" + str(i),
             feature_names=["feature_" + str(i)],
@@ -169,7 +169,7 @@ def main(
     ]
     weighted_tables = [
         EmbeddingBagConfig(
-            num_embeddings=(i + 1) * 1000,
+            num_embeddings=max(i + 1, 100) * 1000,
             embedding_dim=dim_emb,
             name="weighted_table_" + str(i),
             feature_names=["weighted_feature_" + str(i)],

@@ -147,6 +147,7 @@ def gen_model_and_input(
     long_indices: bool = True,
     global_constant_batch: bool = False,
     num_inputs: int = 1,
+    input_type: str = "kjt",  # "kjt" or "td"
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -177,9 +178,9 @@ def gen_model_and_input(
             feature_processor_modules=feature_processor_modules,
         )
     inputs = []
-    for _ in range(num_inputs):
-        inputs.append(
-            (
+    if input_type == "kjt" and generate == ModelInput.generate_variable_batch_input:
+        for _ in range(num_inputs):
+            inputs.append(
                 cast(VariableBatchModelInputCallable, generate)(
                     average_batch_size=batch_size,
                     world_size=world_size,
@@ -188,8 +189,26 @@ def gen_model_and_input(
                     weighted_tables=weighted_tables or [],
                     global_constant_batch=global_constant_batch,
                 )
-                if generate == ModelInput.generate_variable_batch_input
-                else cast(ModelInputCallable, generate)(
+            )
+    elif generate == ModelInput.generate:
+        for _ in range(num_inputs):
+            inputs.append(
+                ModelInput.generate(
+                    world_size=world_size,
+                    tables=tables,
+                    dedup_tables=dedup_tables,
+                    weighted_tables=weighted_tables or [],
+                    num_float_features=num_float_features,
+                    variable_batch_size=variable_batch_size,
+                    batch_size=batch_size,
+                    long_indices=long_indices,
+                    input_type=input_type,
+                )
+            )
+    else:
+        for _ in range(num_inputs):
+            inputs.append(
+                cast(ModelInputCallable, generate)(
                     world_size=world_size,
                     tables=tables,
                     dedup_tables=dedup_tables,
@@ -200,7 +219,6 @@ def gen_model_and_input(
                     long_indices=long_indices,
                 )
             )
-        )
     return (model, inputs)
 
 
@@ -297,6 +315,7 @@ def sharding_single_rank_test(
     global_constant_batch: bool = False,
     world_size_2D: Optional[int] = None,
     node_group_size: Optional[int] = None,
+    input_type: str = "kjt",  # "kjt" or "td"
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         # Generate model & inputs.
@@ -319,6 +338,7 @@ def sharding_single_rank_test(
             batch_size=batch_size,
             feature_processor_modules=feature_processor_modules,
             global_constant_batch=global_constant_batch,
+            input_type=input_type,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)
