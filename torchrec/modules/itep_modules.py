@@ -464,13 +464,13 @@ class GenericITEPModule(nn.Module):
             feature_offsets,
         ) = self.get_remap_info(sparse_features)
 
-        update_utils: bool = (
+        update_util: bool = (
             (cur_iter < 10)
             or (cur_iter < 100 and (cur_iter + 1) % 19 == 0)
             or ((cur_iter + 1) % 39 == 0)
         )
         full_values_list = None
-        if update_utils and sparse_features.variable_stride_per_key():
+        if update_util and sparse_features.variable_stride_per_key():
             if sparse_features.inverse_indices_or_none() is not None:
                 # full util update mode require reconstructing original input indicies from VBE input
                 full_values_list = self.get_full_values_list(sparse_features)
@@ -490,6 +490,7 @@ class GenericITEPModule(nn.Module):
             self.row_util,
             self.buffer_offsets,
             full_values_list=full_values_list,
+            update_util=update_util,
         )
 
         sparse_features._values = remapped_values
