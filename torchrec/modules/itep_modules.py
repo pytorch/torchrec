@@ -15,6 +15,8 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_types import ShardedEmbeddingTable
 from torchrec.modules.embedding_modules import reorder_inverse_indices
+from torchrec.modules.itep_logger import ITEPLogger, ITEPLoggerDefault
+
 from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJaggedTensor
 
 try:
@@ -63,8 +65,8 @@ class GenericITEPModule(nn.Module):
         lookups: Optional[List[nn.Module]] = None,
         enable_pruning: bool = True,
         pruning_interval: int = 1001,  # Default pruning interval 1001 iterations
+        itep_logger: Optional[ITEPLogger] = None,
     ) -> None:
-
         super(GenericITEPModule, self).__init__()
 
         # Construct in-training embedding pruning args
@@ -74,6 +76,11 @@ class GenericITEPModule(nn.Module):
         self.table_name_to_unpruned_hash_sizes: Dict[str, int] = (
             table_name_to_unpruned_hash_sizes
         )
+
+        self.itep_logger: ITEPLogger = (
+            itep_logger if itep_logger is not None else ITEPLoggerDefault()
+        )
+        self.itep_logger.log_run_info()
 
         # Map each feature to a physical address_lookup/row_util buffer
         self.feature_table_map: Dict[str, int] = {}
@@ -97,6 +104,8 @@ class GenericITEPModule(nn.Module):
         cur_iter: int,
     ) -> None:
         table_name_to_eviction_ratio = {}
+        buffer_idx_to_eviction_ratio = {}
+        buffer_idx_to_sizes = {}
 
         num_buffers = len(self.buffer_offsets_list) - 1
         for buffer_idx in range(num_buffers):
@@ -113,6 +122,8 @@ class GenericITEPModule(nn.Module):
                 table_name_to_eviction_ratio[self.idx_to_table_name[buffer_idx]] = (
                     eviction_ratio
                 )
+                buffer_idx_to_eviction_ratio[buffer_idx] = eviction_ratio
+                buffer_idx_to_sizes[buffer_idx] = (pruned_length.item(), buffer_length)
 
         # Sort the mapping by eviction ratio in descending order
         sorted_mapping = dict(
@@ -122,6 +133,34 @@ class GenericITEPModule(nn.Module):
                 reverse=True,
             )
         )
+
+        logged_eviction_mapping = {}
+        for idx in sorted_mapping.keys():
+            try:
+                logged_eviction_mapping[self.reversed_feature_table_map[idx]] = (
+                    sorted_mapping[idx]
+                )
+            except KeyError:
+                # in dummy mode, we don't have the feature_table_map or reversed_feature_table_map
+                pass
+
+        table_to_sizes_mapping = {}
+        for idx in buffer_idx_to_sizes.keys():
+            try:
+                table_to_sizes_mapping[self.reversed_feature_table_map[idx]] = (
+                    buffer_idx_to_sizes[idx]
+                )
+            except KeyError:
+                # in dummy mode, we don't have the feature_table_map or reversed_feature_table_map
+                pass
+
+        self.itep_logger.log_table_eviction_info(
+            iteration=None,
+            rank=None,
+            table_to_sizes_mapping=table_to_sizes_mapping,
+            eviction_tables=logged_eviction_mapping,
+        )
+
         # Print the sorted mapping
         logger.info(f"ITEP: table name to eviction ratio {sorted_mapping}")
 
@@ -263,8 +302,10 @@ class GenericITEPModule(nn.Module):
         if self.current_device is None:
             self.current_device = torch.device("cuda")
 
+        self.reversed_feature_table_map: Dict[int, str] = {
+            idx: feature_name for feature_name, idx in self.feature_table_map.items()
+        }
         self.buffer_offsets_list = buffer_offsets
-
         # Create buffers for address_lookup and row_util
         self.create_itep_buffers(
             buffer_size=buffer_size,
