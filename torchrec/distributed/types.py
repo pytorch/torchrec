@@ -879,6 +879,7 @@ class ShardingEnv2D(ShardingEnv):
         global_pg: dist.ProcessGroup,
         device_mesh: DeviceMesh,
         node_group_size: Optional[int] = None,
+        use_inter_host_allreduce: bool = False,
     ) -> None:
         assert device_mesh.ndim == 2, "DeviceMesh must be two dimensional!"
         self.world_size: int = dist.get_world_size(sharding_pg)
@@ -892,12 +893,39 @@ class ShardingEnv2D(ShardingEnv):
         self.device_mesh: DeviceMesh = device_mesh
         self.node_group_size: Optional[int] = node_group_size
         self.output_dtensor: bool = True
+        self.use_inter_host_allreduce: bool = use_inter_host_allreduce
 
     def num_sharding_groups(self) -> int:
         """
         Return number of sharding groups, also known as the number of times model parallel is replicated
         """
         return self.global_world_size // self.world_size
+
+    def remap_rank(self, rank: int, sharding_type: ShardingType) -> int:
+        """
+        Remap from current rank to the appropriate rank in a continuous [0, ..., world size] array for the given sharding type.
+
+        Args:
+            rank (int): rank to remap.
+            sharding_type (ShardingType): sharding type to remap to.
+
+        Returns:
+            int: remapped rank.
+        """
+        if sharding_type in (
+            ShardingType.COLUMN_WISE,
+            ShardingType.TABLE_WISE,
+            ShardingType.GRID_SHARD,
+        ):
+            return (
+                rank % self.world_size
+                if self.use_inter_host_allreduce
+                else rank // self.num_sharding_groups()
+            )
+        else:
+            raise ValueError(
+                f"Do not need 2D specific remapping logic for sharding type: {sharding_type}"
+            )
 
 
 class NullShardingContext(Multistreamable):

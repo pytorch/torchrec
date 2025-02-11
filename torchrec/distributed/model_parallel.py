@@ -690,6 +690,7 @@ class DMPCollection(DistributedModelParallel):
         init_data_parallel: bool = True,
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
+        use_inter_host_allreduce: bool = False,
     ) -> None:
         assert device.type == "cuda", "DMPCollection only supports CUDA"
         self._device = device
@@ -705,13 +706,16 @@ class DMPCollection(DistributedModelParallel):
                 global_rank=self._global_rank,
                 world_size=world_size,
                 local_size=sharding_group_size,
+                use_inter_host_allreduce=use_inter_host_allreduce,
             )
         )
 
         self._remap_sharding_plan(
             plan=plan,
             rank=self._global_rank,
-            num_nodes=world_size // sharding_group_size,
+            step=world_size // sharding_group_size,
+            sharding_group_size=sharding_group_size,
+            use_inter_host_allreduce=use_inter_host_allreduce,
         )
         super().__init__(
             module,
@@ -720,6 +724,7 @@ class DMPCollection(DistributedModelParallel):
                 sharding_pg=self._sharding_pg,
                 device_mesh=self._device_mesh,
                 node_group_size=node_group_size,
+                use_inter_host_allreduce=use_inter_host_allreduce,
             ),
             device,
             plan,
@@ -768,7 +773,11 @@ class DMPCollection(DistributedModelParallel):
                 handle.wait()
 
     def _create_process_groups(
-        self, global_rank: int, world_size: int, local_size: int
+        self,
+        global_rank: int,
+        world_size: int,
+        local_size: int,
+        use_inter_host_allreduce: bool = False,
     ) -> Tuple[DeviceMesh, dist.ProcessGroup, dist.ProcessGroup]:
         """
         Creates process groups for sharding and replication, the process groups
@@ -784,17 +793,29 @@ class DMPCollection(DistributedModelParallel):
                 replication process group, and allreduce process group.
         """
         peer_matrix = []
-        num_nodes = world_size // local_size
+        mesh, sharding_pg, replica_pg = None, None, None
 
-        for group_rank in range(world_size // local_size):
-            peers = [num_nodes * r + group_rank for r in range(local_size)]
-            peer_matrix.append(peers)
+        logger.warning(f"[2D] Use inter host all reduce: {use_inter_host_allreduce}")
+
+        if use_inter_host_allreduce:
+            # We shard on continuous set of ranks and nodes. Thereby forcing our all reduce to be inter host.
+            # Under this scheme sharding types such as TWRW and GRID will now take
+            # advantage of intra node comms as a result of the continuous set of ranks.
+            peer_matrix = [
+                list(range(i, i + local_size)) for i in range(0, world_size, local_size)
+            ]
+        else:
+            step = world_size // local_size
+            for group_rank in range(world_size // local_size):
+                peers = [step * r + group_rank for r in range(local_size)]
+                peer_matrix.append(peers)
 
         mesh = DeviceMesh(
             device_type=self._device.type,
             mesh=peer_matrix,
             mesh_dim_names=("replicate", "shard"),
         )
+
         logger.warning(f"[Connection] 2D Device Mesh created: {mesh}")
         sharding_pg = mesh.get_group(mesh_dim="shard")
         logger.warning(
@@ -808,7 +829,12 @@ class DMPCollection(DistributedModelParallel):
         return mesh, sharding_pg, replica_pg
 
     def _remap_sharding_plan(
-        self, plan: ShardingPlan, rank: int, num_nodes: int
+        self,
+        plan: ShardingPlan,
+        rank: int,
+        step: int,
+        sharding_group_size: int,
+        use_inter_host_allreduce: bool = False,
     ) -> None:
         """
         Remaps the sharding plan to the local replica process group ranks
@@ -822,20 +848,32 @@ class DMPCollection(DistributedModelParallel):
             global_rank (int): The global rank of the current process.
             num_nodes (int): The number of nodes.
         """
-
-        group_start = rank % num_nodes
+        group_start = rank % step
         for key in plan.plan:
             # pyre-ignore[16]
             for _, param_sharding in plan.plan[key].items():
                 new_ranks = []
-                for shard_rank in param_sharding.ranks:
-                    new_ranks.append(shard_rank * num_nodes + group_start)
+                if use_inter_host_allreduce:
+                    group = rank // sharding_group_size
+                    new_ranks = [
+                        shard_rank + (group * sharding_group_size)
+                        for shard_rank in param_sharding.ranks
+                    ]
+                else:
+                    for shard_rank in param_sharding.ranks:
+                        new_ranks.append(shard_rank * step + group_start)
                 param_sharding.ranks = new_ranks
+
                 if isinstance(param_sharding.sharding_spec, EnumerableShardingSpec):
                     shards = param_sharding.sharding_spec.shards
                     if shards is not None:
                         for shard in shards:
-                            shard_rank = shard.placement._rank * num_nodes + group_start
+                            if use_inter_host_allreduce:
+                                shard_rank = shard.placement._rank + (
+                                    (rank // sharding_group_size) * sharding_group_size
+                                )
+                            else:
+                                shard_rank = shard.placement._rank * step + group_start
                             shard.placement = _remote_device(
                                 f"rank:{shard_rank}/cuda:{shard_rank % get_local_size()}"
                             )
