@@ -264,6 +264,15 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             features_per_rank.append(num_features)
         return features_per_rank
 
+    def is_weighted_per_rank(self) -> List[List[bool]]:
+        is_weighted = []
+        for grouped_embedding_configs in self._grouped_embedding_configs_per_rank:
+            is_weighted_per_rank = []
+            for grouped_config in grouped_embedding_configs:
+                is_weighted_per_rank.extend(grouped_config.features_weighted())
+            is_weighted.append(is_weighted_per_rank)
+        return is_weighted
+
 
 class TwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
     """
