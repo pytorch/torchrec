@@ -13,7 +13,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
 import torch.distributed as dist
-from torch.distributed._tensor import Shard
+from torch.distributed._tensor import Replicate, Shard
 from torch.distributed.distributed_c10d import get_process_group_ranks
 from torchrec.distributed.comm import (
     get_local_size,
@@ -165,10 +165,11 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
 
             dtensor_metadata = None
             if self._env.output_dtensor:
-                placements = (Shard(0),)
                 dtensor_metadata = DTensorMetadata(
                     mesh=self._env.device_mesh,
-                    placements=placements,
+                    placements=(
+                        (Replicate(), Shard(1)) if self._is_2D_parallel else (Shard(1),)
+                    ),
                     size=(
                         info.embedding_config.num_embeddings,
                         info.embedding_config.embedding_dim,
