@@ -48,6 +48,7 @@ from torchrec.distributed.types import (
     ShardedTensorMetadata,
     ShardingEnv,
     ShardingEnv2D,
+    ShardingType,
     ShardMetadata,
 )
 from torchrec.distributed.utils import none_throws
@@ -128,7 +129,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             )
 
             dtensor_metadata = None
-            if info.fused_params.get("output_dtensor", False):  # pyre-ignore[16]
+            if self._env.output_dtensor:
                 dtensor_metadata = DTensorMetadata(
                     mesh=(
                         self._env.device_mesh["replicate"]  # pyre-ignore[16]
@@ -142,12 +143,12 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     ),
                     stride=info.param.stride(),
                 )
-            # to not pass onto TBE
-            info.fused_params.pop("output_dtensor", None)  # pyre-ignore[16]
 
             rank = (
                 # pyre-ignore [16]
-                info.param_sharding.ranks[0] // self._env.num_sharding_groups()
+                self._env.remap_rank(
+                    info.param_sharding.ranks[0], ShardingType.TABLE_WISE  # pyre-ignore[16]
+                )
                 if self._is_2D_parallel
                 else info.param_sharding.ranks[0]
             )

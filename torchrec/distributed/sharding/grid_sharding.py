@@ -250,7 +250,7 @@ class BaseGridEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             # pyre-fixme [6]
             for i, rank in enumerate(info.param_sharding.ranks):
                 rank = (
-                    rank // self._env.num_sharding_groups()  # pyre-ignore[16]
+                    self._env.remap_rank(rank, ShardingType.GRID_SHARD)  # pyre-ignore[16]
                     if self._is_2D_parallel
                     else rank
                 )

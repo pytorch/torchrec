@@ -226,9 +226,14 @@ def intra_and_cross_node_pg_2D(
 
     if _INTRA_PG_2D is None:
         for group_rank in range(step):
-            sharding_pg_peers = [
-                step * r + group_rank for r in range(sharding_group_size)
-            ]
+            if env.use_inter_host_allreduce:
+                # for inter host all reduce, we change the sharding group calculation to be continuous
+                ranks = group_rank * sharding_group_size
+                sharding_pg_peers = list(range(ranks, ranks + sharding_group_size))
+            else:
+                sharding_pg_peers = [
+                    step * r + group_rank for r in range(sharding_group_size)
+                ]
             for group in range(len(sharding_pg_peers) // devices_per_node):
                 intra_pg_peers = sharding_pg_peers[
                     group * devices_per_node : (group + 1) * devices_per_node

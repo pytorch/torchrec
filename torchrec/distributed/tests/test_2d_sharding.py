@@ -78,6 +78,7 @@ class Test2DSharding(ModelParallelTestShared):
             ]
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
+        use_inter_host_allreduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_cw_2D(
@@ -89,6 +90,7 @@ class Test2DSharding(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         pooling: PoolingType,
+        use_inter_host_allreduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -122,6 +124,7 @@ class Test2DSharding(ModelParallelTestShared):
             backend=self.backend,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
+            use_inter_host_allreduce=use_inter_host_allreduce,
         )
 
     @unittest.skipIf(
@@ -164,6 +167,7 @@ class Test2DSharding(ModelParallelTestShared):
             ]
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
+        use_inter_host_allreduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_tw_2D(
@@ -175,6 +179,7 @@ class Test2DSharding(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         pooling: PoolingType,
+        use_inter_host_allreduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -209,6 +214,7 @@ class Test2DSharding(ModelParallelTestShared):
             backend=self.backend,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
+            use_inter_host_allreduce=use_inter_host_allreduce,
         )
 
     @unittest.skipIf(
@@ -251,6 +257,7 @@ class Test2DSharding(ModelParallelTestShared):
             ]
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
+        use_inter_host_allreduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_grid_2D(
@@ -262,6 +269,7 @@ class Test2DSharding(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         pooling: PoolingType,
+        use_inter_host_allreduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -318,6 +326,7 @@ class Test2DSharding(ModelParallelTestShared):
             backend=self.backend,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
+            use_inter_host_allreduce=use_inter_host_allreduce,
         )
 
     @unittest.skipIf(
@@ -357,6 +366,7 @@ class Test2DSharding(ModelParallelTestShared):
         ),
         variable_batch_size=st.booleans(),
         pooling=st.sampled_from([PoolingType.SUM]),
+        use_inter_host_allreduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_rw_2D(
@@ -369,6 +379,7 @@ class Test2DSharding(ModelParallelTestShared):
         ],
         variable_batch_size: bool,
         pooling: PoolingType,
+        use_inter_host_allreduce: bool,
     ) -> None:
         if self.backend == "gloo":
             self.skipTest(
@@ -401,6 +412,7 @@ class Test2DSharding(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
             pooling=pooling,
+            use_inter_host_allreduce=use_inter_host_allreduce,
         )
 
     @unittest.skipIf(
@@ -443,6 +455,7 @@ class Test2DSharding(ModelParallelTestShared):
             ]
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
+        use_inter_host_allreduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_twrw_2D(
@@ -454,6 +467,7 @@ class Test2DSharding(ModelParallelTestShared):
             Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
         ],
         pooling: PoolingType,
+        use_inter_host_allreduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -488,4 +502,5 @@ class Test2DSharding(ModelParallelTestShared):
             backend=self.backend,
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
+            use_inter_host_allreduce=use_inter_host_allreduce,
         )
