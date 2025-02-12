@@ -274,6 +274,12 @@ class GroupedEmbeddingConfig:
                 embedding_shard_metadata.append(table.local_metadata)
         return embedding_shard_metadata
 
+    def features_weighted(self) -> List[bool]:
+        is_weighted = []
+        for table in self.embedding_tables:
+            is_weighted.extend([table.is_weighted] * table.num_features())
+        return is_weighted
+
 
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
