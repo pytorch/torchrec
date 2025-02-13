@@ -32,6 +32,7 @@ from torch.autograd.profiler import record_function
 from torch.distributed._shard.sharding_spec import EnumerableShardingSpec
 from torch.distributed._tensor import DTensor
 from torch.nn.parallel import DistributedDataParallel
+from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingInfo,
@@ -69,13 +70,16 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardedTensor,
     ShardingEnv,
+    ShardingEnv2D,
     ShardMetadata,
 )
 from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
     convert_to_fbgemm_types,
+    create_global_tensor_shape_stride_from_metadata,
     maybe_annotate_embedding_event,
     merge_fused_params,
+    none_throws,
     optimizer_type_to_emb_opt_type,
 )
 from torchrec.modules.embedding_configs import (
@@ -534,12 +538,9 @@ class ShardedEmbeddingCollection(
                 if table_name in self._table_names
             },
         )
-        # output parameters as DTensor in state dict
-        self._output_dtensor: bool = (
-            fused_params.get("output_dtensor", False) if fused_params else False
-        )
-
         self._env = env
+        # output parameters as DTensor in state dict
+        self._output_dtensor: bool = env.output_dtensor
         # TODO get rid of get_ec_index_dedup global flag
         self._use_index_dedup: bool = use_index_dedup or get_ec_index_dedup()
         sharding_type_to_sharding_infos = create_sharding_infos_by_sharding(
@@ -842,6 +843,14 @@ class ShardedEmbeddingCollection(
                         )
                     )
                 else:
+                    shape, stride = create_global_tensor_shape_stride_from_metadata(
+                        none_throws(self.module_sharding_plan[table_name]),
+                        (
+                            self._env.node_group_size
+                            if isinstance(self._env, ShardingEnv2D)
+                            else get_local_size(self._env.world_size)
+                        ),
+                    )
                     # empty shard case
                     self._model_parallel_name_to_dtensor[table_name] = (
                         DTensor.from_local(
@@ -851,6 +860,8 @@ class ShardedEmbeddingCollection(
                             ),
                             device_mesh=self._env.device_mesh,
                             run_check=False,
+                            shape=shape,
+                            stride=stride,
                         )
                     )
             else:
@@ -861,7 +872,11 @@ class ShardedEmbeddingCollection(
                     ShardedTensor._init_from_local_shards(
                         local_shards,
                         self._name_to_table_size[table_name],
-                        process_group=self._env.process_group,
+                        process_group=(
+                            self._env.sharding_pg
+                            if isinstance(self._env, ShardingEnv2D)
+                            else self._env.process_group
+                        ),
                     )
                 )
 

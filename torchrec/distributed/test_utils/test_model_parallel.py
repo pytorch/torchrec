@@ -149,6 +149,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
         global_constant_batch: bool = False,
         pooling: PoolingType = PoolingType.SUM,
         data_type: DataType = DataType.FP32,
+        use_inter_host_allreduce: bool = False,
     ) -> None:
         self._build_tables_and_groups(data_type=data_type)
         self._run_multi_process_test(
@@ -170,6 +171,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_per_feature=variable_batch_per_feature,
             global_constant_batch=global_constant_batch,
+            use_inter_host_allreduce=use_inter_host_allreduce,
         )
 
 

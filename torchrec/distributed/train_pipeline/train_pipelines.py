@@ -756,6 +756,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
+        strict: bool = False,
     ) -> None:
         super().__init__(
             model=model,
@@ -771,6 +772,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._stash_gradients = stash_gradients
         logger.debug(f"Starting semi-sync run at batch: {self._start_batch}")
         self._gradients: Dict[str, torch.Tensor] = {}
+        self._strict = strict
 
     def _grad_swap(self) -> None:
         for name, param in self._model.named_parameters():
@@ -784,9 +786,11 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             pipelined_params = set(pipelined_module.parameters())
             for group in self._optimizer.param_groups:
                 if not set(group["params"]).isdisjoint(pipelined_params):
-                    logger.warning(
-                        f"SemiSync pipelined {type(pipelined_module)} and optimizer share parameters"
-                    )
+                    error_msg = f"SemiSync pipelined {type(pipelined_module)} and optimizer share parameters. This could lead to convergence issues."
+                    if self._strict:
+                        raise Exception(error_msg)
+                    else:
+                        logger.warning(error_msg)
 
     def fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
         # pipeline is already filled

@@ -315,6 +315,7 @@ def sharding_single_rank_test(
     global_constant_batch: bool = False,
     world_size_2D: Optional[int] = None,
     node_group_size: Optional[int] = None,
+    use_inter_host_allreduce: bool = False,
     input_type: str = "kjt",  # "kjt" or "td"
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
@@ -432,6 +433,7 @@ def sharding_single_rank_test(
                 plan=plan,
                 sharders=sharders,
                 device=ctx.device,
+                use_inter_host_allreduce=use_inter_host_allreduce,
             )
         else:
             local_model = DistributedModelParallel(
