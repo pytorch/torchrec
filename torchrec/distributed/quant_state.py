@@ -441,6 +441,7 @@ def sharded_tbes_weights_spec(
                     shard_sizes: List[int] = [table.local_rows, table.local_cols]
                     shard_offsets: List[int] = table_metadata.shard_offsets
                     s: str = "embedding_bags" if is_sqebc else "embeddings"
+                    s = ("_embedding_module." if is_sqmcec else "") + s
                     unsharded_fqn_weight: str = f"{module_fqn}.{s}.{table_name}.weight"
 
                     sharded_fqn_weight: str = (
