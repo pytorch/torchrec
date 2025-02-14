@@ -1441,8 +1441,9 @@ class DataLoadingThread(Thread, Generic[In]):
         memcpy_stream_priority: int = 0,
         memcpy_stream: Optional[torch.Stream] = None,
     ) -> None:
-        super().__init__()
+        super().__init__(name="DataLoadingThread")
         self._stop: bool = False
+        self.daemon = True  # Mark as daemon thread so that Python will not wait for it at shutdown.
         self._dataloader_iter = dataloader_iter
         self._buffer_empty_event: Event = Event()
         self._buffer_filled_event: Event = Event()
