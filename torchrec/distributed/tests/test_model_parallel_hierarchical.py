@@ -232,6 +232,7 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
     def test_sharding_empty_rank(
         self, sharding_type: str, variable_batch_per_feature: bool
     ) -> None:
+        self._build_tables_and_groups()
         table = self.tables[0]
         embedding_groups = {"group_0": table.feature_names}
         self._run_multi_process_test(
