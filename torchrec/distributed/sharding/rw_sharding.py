@@ -659,11 +659,13 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
         self._world_size: int = world_size
         self._num_features = num_features
         self._feature_total_num_buckets: Optional[List[int]] = feature_total_num_buckets
-
         self.feature_block_sizes: List[int] = []
         for i, hash_size in enumerate(feature_hash_sizes):
             block_divisor = self._world_size
-            if feature_total_num_buckets is not None:
+            if (
+                feature_total_num_buckets is not None
+                and embedding_shard_metadata is None
+            ):
                 assert feature_total_num_buckets[i] % self._world_size == 0
                 block_divisor = feature_total_num_buckets[i]
             self.feature_block_sizes.append(
