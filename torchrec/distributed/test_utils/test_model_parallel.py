@@ -150,6 +150,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
         pooling: PoolingType = PoolingType.SUM,
         data_type: DataType = DataType.FP32,
         use_inter_host_allreduce: bool = False,
+        allow_zero_batch_size: bool = False,
     ) -> None:
         self._build_tables_and_groups(data_type=data_type)
         self._run_multi_process_test(
@@ -172,6 +173,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             variable_batch_per_feature=variable_batch_per_feature,
             global_constant_batch=global_constant_batch,
             use_inter_host_allreduce=use_inter_host_allreduce,
+            allow_zero_batch_size=allow_zero_batch_size,
         )
 
 
@@ -333,8 +335,9 @@ class ModelParallelBase(ModelParallelTestShared):
         ),
         variable_batch_size=st.booleans(),
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
+        allow_zero_batch_size=st.booleans(),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
     def test_sharding_cw(
         self,
         sharder_type: str,
@@ -345,6 +348,7 @@ class ModelParallelBase(ModelParallelTestShared):
         ],
         variable_batch_size: bool,
         data_type: DataType,
+        allow_zero_batch_size: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -377,6 +381,7 @@ class ModelParallelBase(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
             data_type=data_type,
+            allow_zero_batch_size=allow_zero_batch_size,
         )
 
     # pyre-fixme[56]
