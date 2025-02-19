@@ -210,7 +210,26 @@ def _build_args_kwargs(
                 arg_info.constants,
             ):
                 if obj is not None:
-                    arg = obj
+                    if isinstance(obj, list):
+                        arg = [
+                            (
+                                v
+                                if not isinstance(v, ArgInfo)
+                                else _build_args_kwargs(initial_input, [v])[0][0]
+                            )
+                            for v in obj
+                        ]
+                    elif isinstance(obj, dict):
+                        arg = {
+                            k: (
+                                v
+                                if not isinstance(v, ArgInfo)
+                                else _build_args_kwargs(initial_input, [v])[0][0]
+                            )
+                            for k, v in obj.items()
+                        }
+                    else:
+                        arg = obj
                     break
                 elif postproc_mod is not None:
                     # postproc will internally run the same logic recursively
@@ -908,6 +927,270 @@ def _swap_postproc_module_recursive(
     return module
 
 
+def _get_node_args_helper_inner(
+    model: torch.nn.Module,
+    # pyre-ignore
+    arg,
+    arg_info: ArgInfo,
+    num_found: int,
+    pipelined_postprocs: Set[PipelinedPostproc],
+    context: TrainPipelineContext,
+    pipeline_postproc: bool,
+    for_postproc_module: bool = False,
+    default_stream: Optional[torch.Stream] = None,
+    dist_stream: Optional[torch.Stream] = None,
+) -> int:
+    num_found = 0
+    while True:
+        if not isinstance(arg, torch.fx.Node):
+            if pipeline_postproc:
+                arg_info.input_attrs.insert(0, "")
+                arg_info.is_getitems.insert(0, False)
+                arg_info.postproc_modules.insert(0, None)
+
+                if isinstance(arg, fx_immutable_dict):
+                    fx_nested_dict = {}
+
+                    for k, v in arg.items():
+                        if isinstance(v, torch.fx.Node):
+                            arg_info_nested = ArgInfo([], [], [], [], None)
+                            _get_node_args_helper_inner(
+                                model,
+                                v,
+                                arg_info_nested,
+                                num_found,
+                                pipelined_postprocs,
+                                context,
+                                pipeline_postproc,
+                                for_postproc_module,
+                                default_stream=default_stream,
+                                dist_stream=dist_stream,
+                            )
+                            fx_nested_dict[k] = arg_info_nested
+                        else:
+                            fx_nested_dict[k] = v
+
+                    arg_info.constants.insert(0, fx_nested_dict)
+                elif isinstance(arg, fx_immutable_list):
+                    fx_nested_list = []
+                    for v in arg:
+                        if isinstance(v, torch.fx.Node):
+                            arg_info_nested = ArgInfo([], [], [], [], None)
+                            _get_node_args_helper_inner(
+                                model,
+                                v,
+                                arg_info_nested,
+                                num_found,
+                                pipelined_postprocs,
+                                context,
+                                pipeline_postproc,
+                                for_postproc_module,
+                                default_stream=default_stream,
+                                dist_stream=dist_stream,
+                            )
+                            fx_nested_list.append(arg_info_nested)
+                        else:
+                            fx_nested_list.append(v)
+
+                    arg_info.constants.insert(0, fx_nested_list)
+                else:
+                    arg_info.constants.insert(0, arg)
+                num_found += 1
+            break
+        child_node = arg
+
+        if child_node.op == "placeholder":
+            if hasattr(child_node, "ph_key"):
+                # pyre-ignore[16]
+                ph_key: str = child_node.ph_key
+                # example: ph_key = 'event_id_list_features_seqs[marketplace]'
+                ph_key = ph_key.replace("[", ".")
+                ph_keys = ph_key.split(".")
+                for key in ph_keys:
+                    if "]" in key:
+                        arg_info.input_attrs.append(key[:-1])
+                        arg_info.is_getitems.append(True)
+                    else:
+                        arg_info.input_attrs.append(key)
+                        arg_info.is_getitems.append(False)
+                    arg_info.postproc_modules.append(None)
+                    arg_info.constants.append(None)
+            else:
+                # no-op
+                arg_info.input_attrs.insert(0, "")
+                arg_info.is_getitems.insert(0, False)
+                arg_info.postproc_modules.insert(0, None)
+                arg_info.constants.insert(0, None)
+
+            num_found += 1
+            break
+        elif (
+            child_node.op == "call_function"
+            and child_node.target.__module__ == "builtins"
+            # pyre-ignore[16]
+            and child_node.target.__name__ == "getattr"
+        ):
+            # pyre-fixme[6]: For 2nd argument expected `str` but got
+            #  `Union[None, Dict[str, typing.Any], List[typing.Any], Node, bool,
+            #  complex, float, int, range, slice, str, device, dtype, layout,
+            #  memory_format, Tensor, typing.Tuple[typing.Any, ...]]`.
+            arg_info.input_attrs.insert(0, child_node.args[1])
+            arg_info.is_getitems.insert(0, False)
+            arg_info.postproc_modules.insert(0, None)
+            arg_info.constants.insert(0, None)
+            arg = child_node.args[0]
+        elif (
+            child_node.op == "call_function"
+            and child_node.target.__module__ == "_operator"
+            # pyre-ignore[16]
+            and child_node.target.__name__ == "getitem"
+        ):
+            # pyre-fixme[6]: For 2nd argument expected `str` but got
+            #  `Union[None, Dict[str, typing.Any], List[typing.Any], Node, bool,
+            #  complex, float, int, range, slice, str, device, dtype, layout,
+            #  memory_format, Tensor, typing.Tuple[typing.Any, ...]]`.
+            arg_info.input_attrs.insert(0, child_node.args[1])
+            arg_info.is_getitems.insert(0, True)
+            arg_info.postproc_modules.insert(0, None)
+            arg_info.constants.insert(0, None)
+            arg = child_node.args[0]
+        elif (
+            child_node.op == "call_function"
+            and child_node.target.__module__ == "torch.utils._pytree"
+            # pyre-ignore[16]
+            and child_node.target.__name__ == "tree_unflatten"
+        ):
+            """
+            This is for the PT2 export path where we unflatten the input to reconstruct
+            the structure with the recorded tree spec.
+            """
+            assert arg_info.is_getitems[0]
+            # pyre-fixme[16]
+            arg = child_node.args[0][arg_info.input_attrs[0]]
+        elif (
+            child_node.op == "call_function"
+            and child_node.target.__module__ == "torchrec.sparse.jagged_tensor"
+            # pyre-fixme[16]
+            and child_node.target.__name__ == "KeyedJaggedTensor"
+        ):
+            call_module_found = False
+
+            for arg_node in chain(child_node.args, child_node.kwargs.values()):
+                if isinstance(arg_node, torch.fx.Node) and _check_args_for_call_module(
+                    arg_node
+                ):
+                    call_module_found = True
+                    break
+
+            if call_module_found:
+                break
+
+            if "values" in child_node.kwargs:
+                arg = child_node.kwargs["values"]
+            else:
+                arg = child_node.args[1]
+        elif child_node.op == "call_method" and child_node.target == "get":
+            # pyre-ignore[6]
+            arg_info.input_attrs.insert(0, child_node.args[1])
+            arg_info.is_getitems.insert(0, True)
+            arg_info.postproc_modules.insert(0, None)
+            arg_info.constants.insert(0, None)
+            arg = child_node.args[0]
+        elif child_node.op == "call_module":
+            postproc_module_fqn = str(child_node.target)
+            postproc_module = _find_postproc_module_recursive(
+                model, postproc_module_fqn
+            )
+
+            if not pipeline_postproc:
+                logger.warning(
+                    f"Found module {postproc_module} that potentially modifies KJ. Train pipeline initialized with `pipeline_postproc=False` (default), so we assume KJT input modification. To allow torchrec to check if this module can be safely pipelined, please set `pipeline_postproc=True`"
+                )
+                break
+
+            if not postproc_module:
+                # Could not find such module, should not happen
+                break
+
+            if isinstance(postproc_module, PipelinedPostproc):
+                # Already did module swap and registered args, early exit
+                arg_info.input_attrs.insert(0, "")  # dummy value
+                arg_info.is_getitems.insert(0, False)
+                pipelined_postprocs.add(postproc_module)
+                arg_info.postproc_modules.insert(0, postproc_module)
+                arg_info.constants.insert(0, None)
+                num_found += 1
+                break
+
+            if not isinstance(postproc_module, torch.nn.Module):
+                logger.warning(
+                    f"Expected postproc_module to be nn.Module but was {type(postproc_module)}"
+                )
+                break
+
+            # check if module is safe to pipeline i.e.no trainable param
+            if not _check_postproc_pipelineable(postproc_module):
+                break
+
+            # For module calls, `self` isn't counted
+            total_num_args = len(child_node.args) + len(child_node.kwargs)
+            if total_num_args == 0:
+                # module call without any args, assume KJT modified
+                break
+
+            # recursive call to check that all inputs to this postproc module
+            # is either made of postproc module or non-modifying train batch input
+            # transformations
+            postproc_args, num_found_safe_postproc_args = _get_node_args(
+                model,
+                child_node,
+                pipelined_postprocs,
+                context,
+                pipeline_postproc,
+                True,
+                default_stream=default_stream,
+                dist_stream=dist_stream,
+            )
+            if num_found_safe_postproc_args == total_num_args:
+                logger.info(
+                    f"""Module {postproc_module} is a valid postproc module (no
+                    trainable params and inputs can be derived from train batch input
+                        via a series of either valid postproc modules or non-modifying
+                        transformations) and will be applied during sparse data dist
+                        stage"""
+                )
+
+                pipelined_postproc_module = PipelinedPostproc(
+                    postproc_module,
+                    postproc_module_fqn,
+                    postproc_args,
+                    context,
+                    default_stream=default_stream,
+                    dist_stream=dist_stream,
+                )
+
+                # module swap
+                _swap_postproc_module_recursive(
+                    model, pipelined_postproc_module, postproc_module_fqn
+                )
+
+                arg_info.input_attrs.insert(0, "")  # dummy value
+                arg_info.is_getitems.insert(0, False)
+                pipelined_postprocs.add(pipelined_postproc_module)
+                arg_info.postproc_modules.insert(0, pipelined_postproc_module)
+                arg_info.constants.insert(0, None)
+
+                num_found += 1
+
+            # we cannot set any other `arg` value here
+            # break to avoid infinite loop
+            break
+        else:
+            break
+
+    return num_found
+
+
 def _get_node_args_helper(
     model: torch.nn.Module,
     # pyre-ignore
@@ -931,209 +1214,18 @@ def _get_node_args_helper(
         if not for_postproc_module and arg is None:
             num_found += 1
             continue
-        while True:
-            if not isinstance(arg, torch.fx.Node):
-                if pipeline_postproc:
-                    arg_info.input_attrs.insert(0, "")
-                    arg_info.is_getitems.insert(0, False)
-                    arg_info.postproc_modules.insert(0, None)
-                    if isinstance(arg, (fx_immutable_dict, fx_immutable_list)):
-                        # Make them mutable again, in case in-place updates are made
-                        arg_info.constants.insert(0, arg.copy())
-                    else:
-                        arg_info.constants.insert(0, arg)
-                    num_found += 1
-                break
-            child_node = arg
-
-            if child_node.op == "placeholder":
-                if hasattr(child_node, "ph_key"):
-                    # pyre-ignore[16]
-                    ph_key: str = child_node.ph_key
-                    # example: ph_key = 'event_id_list_features_seqs[marketplace]'
-                    ph_key = ph_key.replace("[", ".")
-                    ph_keys = ph_key.split(".")
-                    for key in ph_keys:
-                        if "]" in key:
-                            arg_info.input_attrs.append(key[:-1])
-                            arg_info.is_getitems.append(True)
-                        else:
-                            arg_info.input_attrs.append(key)
-                            arg_info.is_getitems.append(False)
-                        arg_info.postproc_modules.append(None)
-                        arg_info.constants.append(None)
-                else:
-                    # no-op
-                    arg_info.input_attrs.insert(0, "")
-                    arg_info.is_getitems.insert(0, False)
-                    arg_info.postproc_modules.insert(0, None)
-                    arg_info.constants.insert(0, None)
-
-                num_found += 1
-                break
-            elif (
-                child_node.op == "call_function"
-                and child_node.target.__module__ == "builtins"
-                # pyre-ignore[16]
-                and child_node.target.__name__ == "getattr"
-            ):
-                # pyre-fixme[6]: For 2nd argument expected `str` but got
-                #  `Union[None, Dict[str, typing.Any], List[typing.Any], Node, bool,
-                #  complex, float, int, range, slice, str, device, dtype, layout,
-                #  memory_format, Tensor, typing.Tuple[typing.Any, ...]]`.
-                arg_info.input_attrs.insert(0, child_node.args[1])
-                arg_info.is_getitems.insert(0, False)
-                arg_info.postproc_modules.insert(0, None)
-                arg_info.constants.insert(0, None)
-                arg = child_node.args[0]
-            elif (
-                child_node.op == "call_function"
-                and child_node.target.__module__ == "_operator"
-                # pyre-ignore[16]
-                and child_node.target.__name__ == "getitem"
-            ):
-                # pyre-fixme[6]: For 2nd argument expected `str` but got
-                #  `Union[None, Dict[str, typing.Any], List[typing.Any], Node, bool,
-                #  complex, float, int, range, slice, str, device, dtype, layout,
-                #  memory_format, Tensor, typing.Tuple[typing.Any, ...]]`.
-                arg_info.input_attrs.insert(0, child_node.args[1])
-                arg_info.is_getitems.insert(0, True)
-                arg_info.postproc_modules.insert(0, None)
-                arg_info.constants.insert(0, None)
-                arg = child_node.args[0]
-            elif (
-                child_node.op == "call_function"
-                and child_node.target.__module__ == "torch.utils._pytree"
-                # pyre-ignore[16]
-                and child_node.target.__name__ == "tree_unflatten"
-            ):
-                """
-                This is for the PT2 export path where we unflatten the input to reconstruct
-                the structure with the recorded tree spec.
-                """
-                assert arg_info.is_getitems[0]
-                # pyre-fixme[16]
-                arg = child_node.args[0][arg_info.input_attrs[0]]
-            elif (
-                child_node.op == "call_function"
-                and child_node.target.__module__ == "torchrec.sparse.jagged_tensor"
-                # pyre-fixme[16]
-                and child_node.target.__name__ == "KeyedJaggedTensor"
-            ):
-                call_module_found = False
-
-                for arg_node in chain(child_node.args, child_node.kwargs.values()):
-                    if isinstance(
-                        arg_node, torch.fx.Node
-                    ) and _check_args_for_call_module(arg_node):
-                        call_module_found = True
-                        break
-
-                if call_module_found:
-                    break
-
-                if "values" in child_node.kwargs:
-                    arg = child_node.kwargs["values"]
-                else:
-                    arg = child_node.args[1]
-            elif child_node.op == "call_method" and child_node.target == "get":
-                # pyre-ignore[6]
-                arg_info.input_attrs.insert(0, child_node.args[1])
-                arg_info.is_getitems.insert(0, True)
-                arg_info.postproc_modules.insert(0, None)
-                arg_info.constants.insert(0, None)
-                arg = child_node.args[0]
-            elif child_node.op == "call_module":
-                postproc_module_fqn = str(child_node.target)
-                postproc_module = _find_postproc_module_recursive(
-                    model, postproc_module_fqn
-                )
-
-                if not pipeline_postproc:
-                    logger.warning(
-                        f"Found module {postproc_module} that potentially modifies KJ. Train pipeline initialized with `pipeline_postproc=False` (default), so we assume KJT input modification. To allow torchrec to check if this module can be safely pipelined, please set `pipeline_postproc=True`"
-                    )
-                    break
-
-                if not postproc_module:
-                    # Could not find such module, should not happen
-                    break
-
-                if isinstance(postproc_module, PipelinedPostproc):
-                    # Already did module swap and registered args, early exit
-                    arg_info.input_attrs.insert(0, "")  # dummy value
-                    arg_info.is_getitems.insert(0, False)
-                    pipelined_postprocs.add(postproc_module)
-                    arg_info.postproc_modules.insert(0, postproc_module)
-                    arg_info.constants.insert(0, None)
-                    num_found += 1
-                    break
-
-                if not isinstance(postproc_module, torch.nn.Module):
-                    logger.warning(
-                        f"Expected postproc_module to be nn.Module but was {type(postproc_module)}"
-                    )
-                    break
-
-                # check if module is safe to pipeline i.e.no trainable param
-                if not _check_postproc_pipelineable(postproc_module):
-                    break
-
-                # For module calls, `self` isn't counted
-                total_num_args = len(child_node.args) + len(child_node.kwargs)
-                if total_num_args == 0:
-                    # module call without any args, assume KJT modified
-                    break
-
-                # recursive call to check that all inputs to this postproc module
-                # is either made of postproc module or non-modifying train batch input
-                # transformations
-                postproc_args, num_found_safe_postproc_args = _get_node_args(
-                    model,
-                    child_node,
-                    pipelined_postprocs,
-                    context,
-                    pipeline_postproc,
-                    True,
-                    default_stream=default_stream,
-                    dist_stream=dist_stream,
-                )
-                if num_found_safe_postproc_args == total_num_args:
-                    logger.info(
-                        f"""Module {postproc_module} is a valid postproc module (no
-                        trainable params and inputs can be derived from train batch input
-                         via a series of either valid postproc modules or non-modifying
-                         transformations) and will be applied during sparse data dist
-                         stage"""
-                    )
-
-                    pipelined_postproc_module = PipelinedPostproc(
-                        postproc_module,
-                        postproc_module_fqn,
-                        postproc_args,
-                        context,
-                        default_stream=default_stream,
-                        dist_stream=dist_stream,
-                    )
-
-                    # module swap
-                    _swap_postproc_module_recursive(
-                        model, pipelined_postproc_module, postproc_module_fqn
-                    )
-
-                    arg_info.input_attrs.insert(0, "")  # dummy value
-                    arg_info.is_getitems.insert(0, False)
-                    pipelined_postprocs.add(pipelined_postproc_module)
-                    arg_info.postproc_modules.insert(0, pipelined_postproc_module)
-                    arg_info.constants.insert(0, None)
-
-                    num_found += 1
-
-                # we cannot set any other `arg` value here
-                # break to avoid infinite loop
-                break
-            else:
-                break
+        num_found += _get_node_args_helper_inner(
+            model,
+            arg,
+            arg_info,
+            num_found,
+            pipelined_postprocs,
+            context,
+            pipeline_postproc,
+            for_postproc_module,
+            default_stream=default_stream,
+            dist_stream=dist_stream,
+        )
     return arg_info_list, num_found
 
 
