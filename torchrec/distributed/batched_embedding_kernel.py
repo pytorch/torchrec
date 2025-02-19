@@ -216,6 +216,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         create_for_table: Optional[str] = None,
         param_weight_for_table: Optional[nn.Parameter] = None,
         embedding_weights_by_table: Optional[List[torch.Tensor]] = None,
+        all_optimizer_states: Optional[List[Dict[str, torch.Tensor]]] = None,
     ) -> None:
         """
         Implementation of a FusedOptimizer. Designed as a base class Embedding kernels
@@ -395,7 +396,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
             embedding_weights_by_table or emb_module.split_embedding_weights()
         )
 
-        all_optimizer_states = emb_module.get_optimizer_state()
+        all_optimizer_states = all_optimizer_states or emb_module.get_optimizer_state()
         optimizer_states_keys_by_table: Dict[str, List[torch.Tensor]] = {}
         for (
             table_config,
@@ -678,6 +679,8 @@ def _gen_named_parameters_by_table_fused(
     # TODO: move logic to FBGEMM to avoid accessing fbgemm internals
     # Cache embedding_weights_by_table
     embedding_weights_by_table = emb_module.split_embedding_weights()
+    # Cache all_optimizer_states
+    all_optimizer_states = emb_module.get_optimizer_state()
     for t_idx, (rows, dim, location, _) in enumerate(emb_module.embedding_specs):
         table_name = config.embedding_tables[t_idx].name
         if table_name not in table_name_to_count:
@@ -714,6 +717,7 @@ def _gen_named_parameters_by_table_fused(
                 create_for_table=table_name,
                 param_weight_for_table=weight,
                 embedding_weights_by_table=embedding_weights_by_table,
+                all_optimizer_states=all_optimizer_states,
             )
         ]
         yield (table_name, weight)

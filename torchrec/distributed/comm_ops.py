@@ -1290,6 +1290,7 @@ class All2All_Pooled_Wait(Function):
         outputs_by_rank = sharded_output_embeddings.split(
             [B_local * D_rank_sum for D_rank_sum in padded_dim_sum_per_rank]
         )
+        final_dim_sum_per_rank = padded_dim_sum_per_rank
         if (
             myreq.qcomm_ctx is not None
             and myreq.qcomm_ctx.padded_dim_sum_per_rank is not None
@@ -1298,8 +1299,14 @@ class All2All_Pooled_Wait(Function):
                 output.view(B_local, -1)[:, :dim_sum]
                 for output, dim_sum in zip(outputs_by_rank, dim_sum_per_rank)
             ]
+            final_dim_sum_per_rank = dim_sum_per_rank
+
         result = torch.cat(
-            [output.view(B_local, -1) for output in outputs_by_rank], dim=1
+            [
+                output.view(B_local, dim)
+                for output, dim in zip(outputs_by_rank, final_dim_sum_per_rank)
+            ],
+            dim=1,
         )
         return result
 

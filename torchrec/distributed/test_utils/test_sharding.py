@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import random
 from enum import Enum
 from typing import Any, cast, Dict, List, Optional, Protocol, Tuple, Type, Union
 
@@ -317,8 +318,12 @@ def sharding_single_rank_test(
     node_group_size: Optional[int] = None,
     use_inter_host_allreduce: bool = False,
     input_type: str = "kjt",  # "kjt" or "td"
+    allow_zero_batch_size: bool = False,
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        batch_size = (
+            random.randint(0, batch_size) if allow_zero_batch_size else batch_size
+        )
         # Generate model & inputs.
         (global_model, inputs) = gen_model_and_input(
             model_class=model_class,
@@ -464,34 +469,36 @@ def sharding_single_rank_test(
             local_input,
         )
 
-        all_local_pred = []
-        for _ in range(world_size):
-            all_local_pred.append(torch.empty_like(local_pred))
-        dist.all_gather(all_local_pred, local_pred, group=ctx.pg)
+        # TODO: support non-sharded forward with zero batch size KJT
+        if not allow_zero_batch_size:
+            all_local_pred = []
+            for _ in range(world_size):
+                all_local_pred.append(torch.empty_like(local_pred))
+            dist.all_gather(all_local_pred, local_pred, group=ctx.pg)
 
-        # Run second training step of the unsharded model.
-        assert optim == EmbOptimType.EXACT_SGD
-        global_opt = torch.optim.SGD(global_model.parameters(), lr=0.1)
+            # Run second training step of the unsharded model.
+            assert optim == EmbOptimType.EXACT_SGD
+            global_opt = torch.optim.SGD(global_model.parameters(), lr=0.1)
 
-        global_pred = gen_full_pred_after_one_step(
-            global_model, global_opt, global_input
-        )
-
-        # Compare predictions of sharded vs unsharded models.
-        if qcomms_config is None:
-            torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
-        else:
-            # With quantized comms, we can relax constraints a bit
-            rtol = 0.003
-            if CommType.FP8 in [
-                qcomms_config.forward_precision,
-                qcomms_config.backward_precision,
-            ]:
-                rtol = 0.05
-            atol = global_pred.max().item() * rtol
-            torch.testing.assert_close(
-                global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
+            global_pred = gen_full_pred_after_one_step(
+                global_model, global_opt, global_input
             )
+
+            # Compare predictions of sharded vs unsharded models.
+            if qcomms_config is None:
+                torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
+            else:
+                # With quantized comms, we can relax constraints a bit
+                rtol = 0.003
+                if CommType.FP8 in [
+                    qcomms_config.forward_precision,
+                    qcomms_config.backward_precision,
+                ]:
+                    rtol = 0.05
+                atol = global_pred.max().item() * rtol
+                torch.testing.assert_close(
+                    global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
+                )
 
 
 def gen_full_pred_after_one_step(
