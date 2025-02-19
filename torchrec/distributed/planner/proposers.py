@@ -913,7 +913,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
             )
             actual_increase_bytes = new_cache_size_bytes - cache_size_bytes
 
-            budget -= torch.sum(actual_increase_bytes)
+            budget -= torch.sum(actual_increase_bytes).item()  # pyre-ignore[58]
             cache_size_bytes = new_cache_size_bytes
             # TODO: consider trade off of using remaining budget to push >0.95 tables
             # to HBM vs spending that budget on improving hit rate on other tables in
@@ -930,7 +930,7 @@ class EmbeddingOffloadScaleupProposer(Proposer):
                 logger.debug(
                     f"[allocate_budget] {promotes.sum()} tables exceeded ceiling, promoting to save {budget_reclaimed} bytes"
                 )
-                budget += budget_reclaimed
+                budget += budget_reclaimed  # pyre-ignore[58]
                 # force these tables to 1.0 to ensure promotion
                 cache_size_bytes[promotes] = max_cache_size_bytes[promotes]
 
