@@ -81,7 +81,10 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
-from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
+from torchrec.modules.mc_embedding_modules import (
+    ManagedCollisionEmbeddingBagCollection,
+    ManagedCollisionEmbeddingCollection,
+)
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
     FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
@@ -89,6 +92,7 @@ from torchrec.quant.embedding_modules import (
     MODULE_ATTR_REGISTER_TBES_BOOL,
     quant_prep_enable_quant_state_dict_split_scale_bias_for_types,
     quant_prep_enable_register_tbes,
+    QuantManagedCollisionEmbeddingBagCollection,
     QuantManagedCollisionEmbeddingCollection,
 )
 
@@ -333,6 +337,7 @@ def quantize(
     module_types: List[Type[torch.nn.Module]] = [
         torchrec.modules.embedding_modules.EmbeddingBagCollection,
         torchrec.modules.embedding_modules.EmbeddingCollection,
+        torchrec.modules.mc_embedding_modules.ManagedCollisionEmbeddingBagCollection,
         torchrec.modules.mc_embedding_modules.ManagedCollisionEmbeddingCollection,
     ]
     if register_tbes:
@@ -359,11 +364,13 @@ def quantize(
         qconfig_spec={
             EmbeddingBagCollection: qconfig,
             EmbeddingCollection: qconfig,
+            ManagedCollisionEmbeddingBagCollection: qconfig,
             ManagedCollisionEmbeddingCollection: qconfig,
         },
         mapping={
             EmbeddingBagCollection: QuantEmbeddingBagCollection,
             EmbeddingCollection: QuantEmbeddingCollection,
+            ManagedCollisionEmbeddingBagCollection: QuantManagedCollisionEmbeddingBagCollection,
             ManagedCollisionEmbeddingCollection: QuantManagedCollisionEmbeddingCollection,
         },
         inplace=inplace,
