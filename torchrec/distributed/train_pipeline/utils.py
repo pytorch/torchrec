@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
+import abc
 import copy
 import itertools
 import logging
@@ -167,59 +168,83 @@ class PipelineStage:
     fill_callback: Optional[Callable[[], None]] = None
 
 
-@dataclass
-class ArgInfoStep:
-    """
-    Representation of args from a node.
+class BaseArgInfoStep(abc.ABC):
+    @abc.abstractmethod
+    # pyre-ignore
+    def process(self, arg) -> Any:
+        raise Exception("Not implemented in the BaseArgInfoStep")
 
-    Attributes:
-        input_attr (str): accessing an attribute (or index) from an input,
-        is_getitem (bool): is this a getattr (output = foo.input_attr) or getitem (output = foo[input_attr]) call
-        postproc_module (Optional[PipelinedPostproc]): torch.nn.Modules that transform the input
-            output = postproc_module(input)
-        constant: no transformation, just constant argument
-            output = constant
-    """
 
-    input_attr: str
-    is_getitem: bool
-    # recursive dataclass as postproc_modules.args -> arginfo.postproc_modules -> so on
-    postproc_module: Optional["PipelinedPostproc"]
-    constant: Optional[object]
-
-    # pyre-ignore[3]
-    def process(
-        self,
-        arg,  # pyre-ignore[2]
-    ) -> Any:
-        if self.constant is not None:
-            if isinstance(self.constant, list):
-                arg = [
-                    (v if not isinstance(v, ArgInfo) else v.process_steps(arg))
-                    for v in self.constant
-                ]
-            elif isinstance(self.constant, dict):
-                arg = {
-                    k: (v if not isinstance(v, ArgInfo) else v.process_steps(arg))
-                    for k, v in self.constant.items()
-                }
-            else:
-                arg = self.constant
-        elif self.postproc_module is not None:
-            # postproc will internally run the same logic recursively
-            # if its args are derived from other postproc modules
-            # we can get all inputs to postproc mod based on its recorded args_info + arg passed to it
-            arg = self.postproc_module(arg)
-        else:
-            if self.is_getitem:
-                arg = arg[self.input_attr]
-            elif self.input_attr != "":
-                arg = getattr(arg, self.input_attr)
-            else:
-                # neither is_getitem nor valid attr, no-op
-                arg = arg
-
+class NoopArgInfoStep(BaseArgInfoStep):
+    # pyre-ignore
+    def process(self, arg) -> Any:
         return arg
+
+
+class GetAttrArgInfoStep(BaseArgInfoStep):
+    def __init__(self, attr_name: str) -> None:
+        super().__init__()
+        self.attr_name = attr_name
+
+    # pyre-ignore
+    def process(self, arg) -> Any:
+        return getattr(arg, self.attr_name)
+
+
+class GetItemArgInfoStep(BaseArgInfoStep):
+    def __init__(self, item_index: Union[str, int]) -> None:
+        super().__init__()
+        self.item_index = item_index
+
+    # pyre-ignore
+    def process(self, arg) -> Any:
+        return arg[self.item_index]
+
+
+class PostprocArgInfoStep(BaseArgInfoStep):
+    def __init__(self, postproc_module: "PipelinedPostproc") -> None:
+        super().__init__()
+        self.postproc_module = postproc_module
+
+    # pyre-ignore
+    def process(self, arg) -> Any:
+        return self.postproc_module(arg)
+
+
+class ScalarArgInfoStep(BaseArgInfoStep):
+    def __init__(self, value: object) -> None:
+        super().__init__()
+        self.value = value
+
+    # pyre-ignore
+    def process(self, _arg) -> Any:
+        return self.value
+
+
+class ListArgInfoStep(BaseArgInfoStep):
+    def __init__(self, value: List[object]) -> None:
+        super().__init__()
+        self.value = value
+
+    # pyre-ignore
+    def process(self, arg) -> Any:
+        return [
+            (v if not isinstance(v, ArgInfo) else v.process_steps(arg))
+            for v in self.value
+        ]
+
+
+class DictArgInfoStep(BaseArgInfoStep):
+    def __init__(self, value: Dict[str, object]) -> None:
+        super().__init__()
+        self.value = value
+
+    # pyre-ignore
+    def process(self, arg) -> Any:
+        return {
+            k: (v if not isinstance(v, ArgInfo) else v.process_steps(arg))
+            for k, v in self.value.items()
+        }
 
 
 class ArgInfoStepFactory:
@@ -229,32 +254,34 @@ class ArgInfoStepFactory:
     """
 
     @classmethod
-    def noop(cls) -> ArgInfoStep:
-        return ArgInfoStep("", False, None, None)
+    def noop(cls) -> NoopArgInfoStep:
+        return NoopArgInfoStep()
 
     @classmethod
-    def get_attr(cls, name: str) -> ArgInfoStep:
-        return ArgInfoStep(name, False, None, None)
+    def get_attr(cls, name: str) -> GetAttrArgInfoStep:
+        return GetAttrArgInfoStep(name)
 
     @classmethod
-    def get_item(cls, index: str) -> ArgInfoStep:
-        return ArgInfoStep(index, True, None, None)
+    def get_item(cls, index: Union[str, int]) -> GetItemArgInfoStep:
+        return GetItemArgInfoStep(index)
 
     @classmethod
-    def postproc(cls, pipelined_postproc_module: "PipelinedPostproc") -> ArgInfoStep:
-        return ArgInfoStep("", False, pipelined_postproc_module, None)
+    def postproc(
+        cls, pipelined_postproc_module: "PipelinedPostproc"
+    ) -> PostprocArgInfoStep:
+        return PostprocArgInfoStep(pipelined_postproc_module)
 
     @classmethod
-    def from_scalar(cls, value: object) -> ArgInfoStep:
-        return ArgInfoStep("", False, None, value)
+    def from_scalar(cls, value: object) -> ScalarArgInfoStep:
+        return ScalarArgInfoStep(value)
 
     @classmethod
-    def from_list(cls, value: List[object]) -> ArgInfoStep:
-        return ArgInfoStep("", False, None, value)
+    def from_list(cls, value: List[object]) -> ListArgInfoStep:
+        return ListArgInfoStep(value)
 
     @classmethod
-    def from_dict(cls, value: Dict[str, object]) -> ArgInfoStep:
-        return ArgInfoStep("", False, None, value)
+    def from_dict(cls, value: Dict[str, object]) -> DictArgInfoStep:
+        return DictArgInfoStep(value)
 
 
 @dataclass
@@ -267,16 +294,16 @@ class ArgInfo:
             Steps can be thought of consequtive transformations on the input, with
             output of previous step used as an input for the next. I.e. for 3 steps
             it is similar to step3(step2(step1(input)))
-            See `ArgInfoStep` docstring for details on which transformations can be applied
+            See `BaseArgInfoStep` class hierearchy for supported transformations
     """
 
-    steps: List[ArgInfoStep]
+    steps: List[BaseArgInfoStep]
 
-    def add_step(self, step: ArgInfoStep) -> "ArgInfo":
+    def add_step(self, step: BaseArgInfoStep) -> "ArgInfo":
         self.steps.insert(0, step)
         return self
 
-    def append_step(self, step: ArgInfoStep) -> "ArgInfo":
+    def append_step(self, step: BaseArgInfoStep) -> "ArgInfo":
         self.steps.append(step)
         return self
 
@@ -302,15 +329,10 @@ class CallArgs:
     def build_args_kwargs(
         self, initial_input: Any  # pyre-ignore[2]
     ) -> Tuple[List[Any], Dict[str, Any]]:
-        """
-        Creates args and kwargs for given CallArgs and input
-        """
         args = [arg.process_steps(initial_input) for arg in self.args]
-
         kwargs = {
             key: arg.process_steps(initial_input) for key, arg in self.kwargs.items()
         }
-
         return args, kwargs
 
 
@@ -1180,9 +1202,10 @@ class NodeArgsHelper:
                     This is for the PT2 export path where we unflatten the input to reconstruct
                     the structure with the recorded tree spec.
                     """
-                    assert arg_info.steps[0].is_getitem
+                    step = arg_info.steps[0]
+                    assert isinstance(step, GetItemArgInfoStep)
                     # pyre-fixme[16]
-                    arg = child_node.args[0][arg_info.step[0].input_attr]
+                    arg = child_node.args[0][step.item_index]
                 elif (
                     fn_module == "torchrec.sparse.jagged_tensor"
                     and fn_name == "KeyedJaggedTensor"
@@ -1198,6 +1221,9 @@ class NodeArgsHelper:
 
                     if call_module_found:
                         break
+
+                if call_module_found:
+                    break
 
                 if call_module_found:
                     break
