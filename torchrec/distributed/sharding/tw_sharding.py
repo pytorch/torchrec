@@ -147,7 +147,8 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             rank = (
                 # pyre-ignore [16]
                 self._env.remap_rank(
-                    info.param_sharding.ranks[0], ShardingType.TABLE_WISE  # pyre-ignore[16]
+                    info.param_sharding.ranks[0],  # pyre-ignore[16]
+                    ShardingType.TABLE_WISE,
                 )
                 if self._is_2D_parallel
                 else info.param_sharding.ranks[0]
