@@ -13,7 +13,7 @@ import unittest
 from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, List, Optional, Tuple, Type, Union
+from typing import cast, Dict, List, Optional, Tuple, Type, Union
 from unittest.mock import MagicMock
 
 import torch
@@ -21,6 +21,7 @@ from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
 from torch._dynamo.testing import reduce_to_scalar_loss
 from torch._dynamo.utils import counters
+from torch.fx._symbolic_trace import is_fx_tracing
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -36,6 +37,7 @@ from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
     TestModelWithPreproc,
+    TestModelWithPreprocCollectionArgs,
     TestNegSamplingModule,
     TestPositionWeightedPreprocModule,
     TestSparseNN,
@@ -60,9 +62,12 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
 from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
     get_h2d_func,
+    GetAttrArgInfoStep,
+    GetItemArgInfoStep,
+    NoopArgInfoStep,
     PipelinedForward,
-    PipelinedPostproc,
     PipelineStage,
+    PostprocArgInfoStep,
     SparseDataDistUtil,
     StageOut,
     TrainPipelineContext,
@@ -1020,44 +1025,56 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         pipelined_weighted_ebc = pipeline._pipelined_modules[1]
 
         # Check pipelined args
-        for ebc in [pipelined_ebc, pipelined_weighted_ebc]:
-            self.assertEqual(len(ebc.forward._args), 1)
-            self.assertEqual(ebc.forward._args[0].input_attrs, ["", 0])
-            self.assertEqual(ebc.forward._args[0].is_getitems, [False, True])
-            self.assertEqual(len(ebc.forward._args[0].postproc_modules), 2)
-            self.assertIsInstance(
-                ebc.forward._args[0].postproc_modules[0], PipelinedPostproc
-            )
-            self.assertEqual(ebc.forward._args[0].postproc_modules[1], None)
-
+        self.assertEqual(len(pipelined_ebc.forward._args.args), 1)
+        self.assertEqual(len(pipelined_ebc.forward._args.kwargs), 0)
         self.assertEqual(
-            pipelined_ebc.forward._args[0].postproc_modules[0],
-            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `postproc_nonweighted`.
-            pipelined_model.module.postproc_nonweighted,
+            pipelined_ebc.forward._args.args[0].steps,
+            [
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `_postproc_module`.
+                PostprocArgInfoStep(pipelined_model.module.postproc_nonweighted),
+                GetItemArgInfoStep(0),
+            ],
         )
+        self.assertEqual(len(pipelined_weighted_ebc.forward._args.args), 1)
+        self.assertEqual(len(pipelined_weighted_ebc.forward._args.kwargs), 0)
         self.assertEqual(
-            pipelined_weighted_ebc.forward._args[0].postproc_modules[0],
-            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `postproc_weighted`.
-            pipelined_model.module.postproc_weighted,
+            pipelined_weighted_ebc.forward._args.args[0].steps,
+            [
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `_postproc_module`.
+                PostprocArgInfoStep(pipelined_model.module.postproc_weighted),
+                GetItemArgInfoStep(0),
+            ],
         )
 
         # postproc args
         self.assertEqual(len(pipeline._pipelined_postprocs), 2)
-        input_attr_names = {"idlist_features", "idscore_features"}
-        for i in range(len(pipeline._pipelined_postprocs)):
-            postproc_mod = pipeline._pipelined_postprocs[i]
-            self.assertEqual(len(postproc_mod._args), 1)
+        # postprocs can be added in any order, so we can't assert on exact steps structures
+        self.assertEqual(len(pipeline._pipelined_postprocs[0]._args.args), 1)
+        self.assertEqual(len(pipeline._pipelined_postprocs[0]._args.kwargs), 0)
+        self.assertEqual(len(pipeline._pipelined_postprocs[0]._args.args[0].steps), 2)
+        self.assertEqual(
+            pipeline._pipelined_postprocs[0]._args.args[0].steps[0], NoopArgInfoStep()
+        )
+        self.assertIsInstance(
+            pipeline._pipelined_postprocs[0]._args.args[0].steps[1], GetAttrArgInfoStep
+        )
 
-            input_attr_name = postproc_mod._args[0].input_attrs[1]
-            self.assertTrue(input_attr_name in input_attr_names)
-            self.assertEqual(postproc_mod._args[0].input_attrs, ["", input_attr_name])
-            input_attr_names.remove(input_attr_name)
+        self.assertEqual(len(pipeline._pipelined_postprocs[1]._args.args), 1)
+        self.assertEqual(len(pipeline._pipelined_postprocs[1]._args.kwargs), 0)
+        self.assertEqual(len(pipeline._pipelined_postprocs[1]._args.args[0].steps), 2)
+        self.assertEqual(
+            pipeline._pipelined_postprocs[1]._args.args[0].steps[0], NoopArgInfoStep()
+        )
+        self.assertIsInstance(
+            pipeline._pipelined_postprocs[1]._args.args[0].steps[1], GetAttrArgInfoStep
+        )
 
-            self.assertEqual(postproc_mod._args[0].is_getitems, [False, False])
-            # no parent postproc module in FX graph
-            self.assertEqual(postproc_mod._args[0].postproc_modules, [None, None])
+        get_arg_infos = {
+            # pyre-fixme[16]: assertions above ensure that steps[1] is a GetAttrArgInfoStep
+            postproc._args.args[0].steps[1].attr_name
+            for postproc in pipeline._pipelined_postprocs
+        }
+        self.assertEqual(get_arg_infos, {"idlist_features", "idscore_features"})
 
     # pyre-ignore
     @unittest.skipIf(
@@ -1103,69 +1120,63 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         pipelined_weighted_ebc = pipeline._pipelined_modules[1]
 
         # Check pipelined args
-        for ebc in [pipelined_ebc, pipelined_weighted_ebc]:
-            self.assertEqual(len(ebc.forward._args), 1)
-            self.assertEqual(ebc.forward._args[0].input_attrs, ["", 0])
-            self.assertEqual(ebc.forward._args[0].is_getitems, [False, True])
-            self.assertEqual(len(ebc.forward._args[0].postproc_modules), 2)
-            self.assertIsInstance(
-                ebc.forward._args[0].postproc_modules[0], PipelinedPostproc
-            )
-            self.assertEqual(ebc.forward._args[0].postproc_modules[1], None)
-
+        self.assertEqual(len(pipelined_ebc.forward._args.args), 1)
+        self.assertEqual(len(pipelined_ebc.forward._args.kwargs), 0)
         self.assertEqual(
-            pipelined_ebc.forward._args[0].postproc_modules[0],
-            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `postproc_nonweighted`.
-            pipelined_model.module.postproc_nonweighted,
+            pipelined_ebc.forward._args.args[0].steps,
+            [
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `_postproc_module`.
+                PostprocArgInfoStep(pipelined_model.module.postproc_nonweighted),
+                GetItemArgInfoStep(0),
+            ],
         )
+        self.assertEqual(len(pipelined_weighted_ebc.forward._args.args), 1)
+        self.assertEqual(len(pipelined_weighted_ebc.forward._args.kwargs), 0)
         self.assertEqual(
-            pipelined_weighted_ebc.forward._args[0].postproc_modules[0],
-            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-            #  `postproc_weighted`.
-            pipelined_model.module.postproc_weighted,
+            pipelined_weighted_ebc.forward._args.args[0].steps,
+            [
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `_postproc_module`.
+                PostprocArgInfoStep(pipelined_model.module.postproc_weighted),
+                GetItemArgInfoStep(0),
+            ],
         )
 
         # postproc args
         self.assertEqual(len(pipeline._pipelined_postprocs), 3)
 
-        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
-        #  `_postproc_module`.
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `_postproc_module`.
         parent_postproc_mod = pipelined_model.module._postproc_module
 
         for postproc_mod in pipeline._pipelined_postprocs:
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_nonweighted`.
             if postproc_mod == pipelined_model.module.postproc_nonweighted:
-                self.assertEqual(len(postproc_mod._args), 1)
-                args = postproc_mod._args[0]
-                self.assertEqual(args.input_attrs, ["", "idlist_features"])
-                self.assertEqual(args.is_getitems, [False, False])
-                self.assertEqual(len(args.postproc_modules), 2)
+                self.assertEqual(len(postproc_mod._args.args), 1)
+                self.assertEqual(len(postproc_mod._args.kwargs), 0)
                 self.assertEqual(
-                    args.postproc_modules[0],
-                    parent_postproc_mod,
+                    postproc_mod._args.args[0].steps,
+                    [
+                        PostprocArgInfoStep(parent_postproc_mod),
+                        GetAttrArgInfoStep("idlist_features"),
+                    ],
                 )
-                self.assertEqual(args.postproc_modules[1], None)
+
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_weighted`.
             elif postproc_mod == pipelined_model.module.postproc_weighted:
-                self.assertEqual(len(postproc_mod._args), 1)
-                args = postproc_mod._args[0]
-                self.assertEqual(args.input_attrs, ["", "idscore_features"])
-                self.assertEqual(args.is_getitems, [False, False])
-                self.assertEqual(len(args.postproc_modules), 2)
+                self.assertEqual(len(postproc_mod._args.args), 1)
+                self.assertEqual(len(postproc_mod._args.kwargs), 0)
                 self.assertEqual(
-                    args.postproc_modules[0],
-                    parent_postproc_mod,
+                    postproc_mod._args.args[0].steps,
+                    [
+                        PostprocArgInfoStep(parent_postproc_mod),
+                        GetAttrArgInfoStep("idscore_features"),
+                    ],
                 )
-                self.assertEqual(args.postproc_modules[1], None)
             elif postproc_mod == parent_postproc_mod:
-                self.assertEqual(len(postproc_mod._args), 1)
-                args = postproc_mod._args[0]
-                self.assertEqual(args.input_attrs, [""])
-                self.assertEqual(args.is_getitems, [False])
-                self.assertEqual(args.postproc_modules, [None])
+                self.assertEqual(len(postproc_mod._args.args), 1)
+                self.assertEqual(len(postproc_mod._args.kwargs), 0)
+                self.assertEqual(postproc_mod._args.args[0].steps, [NoopArgInfoStep()])
 
     # pyre-ignore
     @unittest.skipIf(
@@ -1447,6 +1458,81 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         # Check that both EC and EBC pipelined
         self.assertEqual(len(pipeline._pipelined_modules), 2)
         self.assertEqual(len(pipeline._pipelined_postprocs), 1)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_postproc_with_collection_args(self) -> None:
+        """
+        Exercises scenario when postproc module has an argument that is a list or dict
+        with some elements being:
+            * static scalars
+            * static tensors (e.g. torch.ones())
+            * tensors derived from input batch (e.g. input.idlist_features["feature_0"])
+            * tensors derived from input batch and other postproc module (e.g. other_postproc(input.idlist_features["feature_0"]))
+        """
+        test_runner = self
+
+        class PostprocOuter(nn.Module):
+            def __init__(
+                self,
+            ) -> None:
+                super().__init__()
+
+            def forward(
+                self,
+                model_input: ModelInput,
+            ) -> torch.Tensor:
+                return model_input.float_features * 0.1
+
+        class PostprocInner(nn.Module):
+            def __init__(
+                self,
+            ) -> None:
+                super().__init__()
+
+            def forward(
+                self,
+                model_input: ModelInput,
+                input_list: List[Union[torch.Tensor, int]],
+                input_dict: Dict[str, Union[torch.Tensor, int]],
+            ) -> ModelInput:
+                if not is_fx_tracing():
+                    for idx, value in enumerate(input_list):
+                        if isinstance(value, torch.fx.Node):
+                            test_runner.fail(
+                                f"input_list[{idx}] was a fx.Node: {value}"
+                            )
+                        model_input.float_features += value
+
+                    for key, value in input_dict.items():
+                        if isinstance(value, torch.fx.Node):
+                            test_runner.fail(
+                                f"input_dict[{key}] was a fx.Node: {value}"
+                            )
+                        model_input.float_features += value
+
+                return model_input
+
+        model = TestModelWithPreprocCollectionArgs(
+            tables=self.tables[:-1],  # ignore last table as postproc will remove
+            weighted_tables=self.weighted_tables[:-1],  # ignore last table
+            device=self.device,
+            postproc_module_outer=PostprocOuter(),
+            postproc_module_nested=PostprocInner(),
+        )
+
+        pipelined_model, pipeline = self._check_output_equal(
+            model,
+            self.sharding_type,
+        )
+
+        # both EC end EBC are pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+        # both outer and nested postproces are pipelined
+        self.assertEqual(len(pipeline._pipelined_postprocs), 4)
 
 
 class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
