@@ -87,6 +87,7 @@ jobs:
       with:
         name: Built-Docs
         path: docs/build/html/
+        overwrite: true
     - name: Get output time
       run: echo "The time was ${{ steps.build.outputs.time }}"
     - name: Deploy
@@ -109,6 +110,7 @@ jobs:
         with:
           name: Built-Docs
           path: docs
+          overwrite: true
       - name: Add no-index tag
         run: |
           find docs -name "*.html" -print0 | xargs -0 sed -i '/<head>/a \ \ <meta name="robots" content="noindex">';
