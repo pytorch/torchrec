@@ -193,6 +193,9 @@ class BaseEmbeddingConfig:
     # enable this flag to support rw_sharding
     need_pos: bool = False
 
+    # handle the special case
+    input_dim: Optional[int] = None
+
     def get_weight_init_max(self) -> float:
         if self.weight_init_max is None:
             return sqrt(1 / self.num_embeddings)
