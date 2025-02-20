@@ -1832,6 +1832,103 @@ class TestModelWithPreproc(nn.Module):
         return pred.sum(), pred
 
 
+class TestModelWithPreprocCollectionArgs(nn.Module):
+    """
+    Basic module with up to 3 postproc modules:
+    - postproc on idlist_features for non-weighted EBC
+    - postproc on idscore_features for weighted EBC
+    - postproc_inner on model input shared by both EBCs
+    - postproc_outer providing input to postproc_b (aka nested postproc)
+
+    Args:
+        tables,
+        weighted_tables,
+        device,
+        postproc_module_outer,
+        postproc_module_nested,
+        num_float_features,
+
+    Example:
+        >>> TestModelWithPreprocWithListArg(tables, weighted_tables, device)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]
+    """
+
+    CONST_DICT_KEY = "const"
+    INPUT_TENSOR_DICT_KEY = "tensor_from_input"
+    POSTPTOC_TENSOR_DICT_KEY = "tensor_from_postproc"
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        device: torch.device,
+        postproc_module_outer: nn.Module,
+        postproc_module_nested: nn.Module,
+        num_float_features: int = 10,
+    ) -> None:
+        super().__init__()
+        self.dense = TestDenseArch(num_float_features, device)
+
+        self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
+            tables=tables,
+            device=device,
+        )
+        self.weighted_ebc = EmbeddingBagCollection(
+            tables=weighted_tables,
+            is_weighted=True,
+            device=device,
+        )
+        self.postproc_nonweighted = TestPreprocNonWeighted()
+        self.postproc_weighted = TestPreprocWeighted()
+        self._postproc_module_outer = postproc_module_outer
+        self._postproc_module_nested = postproc_module_nested
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Runs preproc for EBC and weighted EBC, optionally runs postproc for input
+
+        Args:
+            input
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]
+        """
+        modified_input = input
+
+        outer_postproc_input = self._postproc_module_outer(modified_input)
+
+        preproc_input_list = [
+            1,
+            modified_input.float_features,
+            outer_postproc_input,
+        ]
+        preproc_input_dict = {
+            self.CONST_DICT_KEY: 1,
+            self.INPUT_TENSOR_DICT_KEY: modified_input.float_features,
+            self.POSTPTOC_TENSOR_DICT_KEY: outer_postproc_input,
+        }
+
+        modified_input = self._postproc_module_nested(
+            modified_input, preproc_input_list, preproc_input_dict
+        )
+
+        modified_idlist_features = self.postproc_nonweighted(
+            modified_input.idlist_features
+        )
+        modified_idscore_features = self.postproc_weighted(
+            modified_input.idscore_features
+        )
+        ebc_out = self.ebc(modified_idlist_features[0])
+        weighted_ebc_out = self.weighted_ebc(modified_idscore_features[0])
+
+        pred = torch.cat([ebc_out.values(), weighted_ebc_out.values()], dim=1)
+        return pred.sum(), pred
+
+
 class TestNegSamplingModule(torch.nn.Module):
     """
     Basic module to simulate feature augmentation postproc (e.g. neg sampling) for testing
