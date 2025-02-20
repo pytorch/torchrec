@@ -192,7 +192,11 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
             for i, rank in enumerate(info.param_sharding.ranks):
                 # Remap rank by number of replica groups if 2D parallelism is enabled
                 rank = (
-                    self._env.remap_rank(rank, ShardingType.COLUMN_WISE)  # pyre-ignore[16]
+                    # pyre-ignore[16]
+                    self._env.remap_rank(
+                        rank,
+                        ShardingType.COLUMN_WISE,
+                    )
                     if self._is_2D_parallel
                     else rank
                 )
