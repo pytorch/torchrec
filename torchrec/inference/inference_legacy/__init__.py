@@ -24,4 +24,4 @@ We implemented an example of how to use this library with the TorchRec DLRM mode
     - `examples/dlrm/inference/dlrm_predict.py`: this shows how to use `PredictModule` and `PredictFactory` based on an existing model.
 """
 
-from . import model_packager, modules  # noqa  # noqa
+from . import model_packager  # noqa

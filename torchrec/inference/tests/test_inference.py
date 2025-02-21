@@ -410,3 +410,4 @@ class InferenceTest(unittest.TestCase):
 
         # Make sure that overwrite of ebc_fused_params is not reflected in ec_fused_params
         self.assertEqual(ec_fused_params[FUSED_PARAM_REGISTER_TBE_BOOL], orig_value)
+        ebc_fused_params[FUSED_PARAM_REGISTER_TBE_BOOL] = orig_value

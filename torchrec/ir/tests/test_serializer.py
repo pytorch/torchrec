@@ -254,6 +254,9 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertTrue(torch.allclose(deserialized, orginal))
 
     def test_dynamic_shape_ebc(self) -> None:
+        if torch.cuda.device_count() == 0:
+            # skip this test in OSS (no GPU available) because torch.export uses training ir in OSS
+            return
         model = self.generate_model()
         feature1 = KeyedJaggedTensor.from_offsets_sync(
             keys=["f1", "f2", "f3"],
