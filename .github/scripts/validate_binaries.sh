@@ -80,6 +80,9 @@ conda run -n "${CONDA_ENV}" pip install fbgemm-gpu --index-url "$PYTORCH_URL"
 # install requirements from pypi
 conda run -n "${CONDA_ENV}" pip install torchmetrics==1.0.3
 
+# install tensordict from pypi
+conda run -n "${CONDA_ENV}" pip install tensordict==0.7.1
+
 # install torchrec
 conda run -n "${CONDA_ENV}" pip install torchrec --index-url "$PYTORCH_URL"
 
