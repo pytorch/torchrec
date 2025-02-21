@@ -11,7 +11,7 @@ import abc
 import copy
 import logging as logger
 from collections import OrderedDict
-from typing import Any, cast, Dict, Iterator, List, Optional, Set, Tuple, Type
+from typing import Any, Callable, cast, Dict, Iterator, List, Optional, Set, Tuple, Type
 
 import torch
 import torch.distributed as dist
@@ -691,6 +691,7 @@ class DMPCollection(DistributedModelParallel):
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
         use_inter_host_allreduce: bool = False,
+        custom_all_reduce: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
     ) -> None:
         assert device.type == "cuda", "DMPCollection only supports CUDA"
         self._device = device
@@ -700,6 +701,9 @@ class DMPCollection(DistributedModelParallel):
         self._sharding_pg: dist.ProcessGroup = None  # pyre-ignore[8]
         self._replica_pg: dist.ProcessGroup = None  # pyre-ignore[8]
         self._global_rank: int = dist.get_rank(global_pg)
+        self._custom_all_reduce: Optional[Callable[[torch.Tensor], torch.Tensor]] = (
+            custom_all_reduce
+        )
 
         self._device_mesh, self._sharding_pg, self._replica_pg = (
             self._create_process_groups(
@@ -748,29 +752,61 @@ class DMPCollection(DistributedModelParallel):
             include_optimizer_state (bool): Flag to include optimizer state syncing upon call
         """
         assert self._replica_pg is not None, "replica_pg is not initialized!"
-        opts = dist.AllreduceCoalescedOptions()
-        opts.reduceOp = dist.ReduceOp.AVG
-        all_weights = [
+        all_weights: List[torch.Tensor] = [
             w
             for emb_kernel in self._modules_to_sync
             # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             for w in emb_kernel.split_embedding_weights()
         ]
-        handle = self._replica_pg.allreduce_coalesced(all_weights, opts=opts)
-        handle.wait()
+
+        opts = None
+        if self._custom_all_reduce is None:
+            opts = dist.AllreduceCoalescedOptions()
+            opts.reduceOp = dist.ReduceOp.AVG
+        self._allreduce_tensors(all_weights, opts)
 
         if include_optimizer_state:
-            # Sync accumulated square of grad of local optimizer shards
-            optim_list = []
+            optimizer_tensors = []
             for emb_kernel in self._modules_to_sync:
                 # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
-                all_optimizer_states = emb_kernel.get_optimizer_state()
-                momentum1 = [optim["sum"] for optim in all_optimizer_states]
-                optim_list.extend(momentum1)
-            # Some optimizers do not have states to sync, we check if states exist before collective call
-            if optim_list:
-                handle = self._replica_pg.allreduce_coalesced(optim_list, opts=opts)
-                handle.wait()
+                optimizer_states = emb_kernel.get_optimizer_state()
+                optimizer_tensors.extend([state["sum"] for state in optimizer_states])
+            if optimizer_tensors:
+                self._allreduce_tensors(optimizer_tensors, opts)
+
+    def _allreduce_tensors(
+        self,
+        tensors: List[torch.Tensor],
+        opts: Optional[dist.AllreduceCoalescedOptions] = None,
+    ) -> None:
+        """
+        Helper to perform all reduce on given tensors, uses custom all reduce function if provided
+        """
+        if self._custom_all_reduce is not None:
+            # pyre-ignore[6]
+            self._custom_all_reduce(tensors)
+        else:
+            handle = self._replica_pg.allreduce_coalesced(tensors, opts=opts)
+            handle.wait()
+
+    def set_all_reduce_hook(
+        self, reduce_hook: Callable[[torch.Tensor], torch.Tensor]
+    ) -> None:
+        """
+        Allow users to call custom all reduce function instead. Instead of using
+        this function, users can alternatively pass in the custom all reduce function
+        through the constructor. The hook expects the user to handle distributed
+        communication call, associated process group, and additional details.
+
+        Args:
+            reduce_hook (Callable[[torch.Tensor], torch.Tensor]): The custom all reduce function to use for
+                embedding weights and optimizer states
+        """
+        if self._custom_all_reduce is not None:
+            logger.warning(
+                "[TorchRec 2D Parallel] Custom all reduce function already defined, overriding with new callable"
+            )
+        self._custom_all_reduce = reduce_hook
 
     def _create_process_groups(
         self,
