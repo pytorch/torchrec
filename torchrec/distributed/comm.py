@@ -239,7 +239,11 @@ def intra_and_cross_node_pg_2D(
                     group * devices_per_node : (group + 1) * devices_per_node
                 ]
                 intra_pg_groups[group_rank].append(intra_pg_peers)
-                curr_intra_pg = dist.new_group(backend=backend, ranks=intra_pg_peers)
+                curr_intra_pg = dist.new_group(
+                    backend=backend,
+                    ranks=intra_pg_peers,
+                    group_desc="sharding_intra_pg",
+                )
                 if my_rank in intra_pg_peers:
                     logger.warning(
                         f"[Connection] 2D rank {my_rank} -> intra_pg_peers {intra_pg_peers}"
@@ -256,7 +260,11 @@ def intra_and_cross_node_pg_2D(
                     intra_pg_group[j][cross_group_rank]
                     for j in range(len(intra_pg_group))
                 ]
-                curr_cross_pg = dist.new_group(backend=backend, ranks=cross_pg_peers)
+                curr_cross_pg = dist.new_group(
+                    backend=backend,
+                    ranks=cross_pg_peers,
+                    group_desc="sharding_cross_pg",
+                )
                 if my_rank in cross_pg_peers:
                     logger.warning(
                         f"[Connection] 2D rank {my_rank} -> cross_pg_peers {cross_pg_peers}"
