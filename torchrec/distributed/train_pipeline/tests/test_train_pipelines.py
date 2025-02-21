@@ -13,7 +13,7 @@ import unittest
 from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, List, Optional, Tuple, Type, Union
+from typing import cast, Dict, List, Optional, Tuple, Type, Union
 from unittest.mock import MagicMock
 
 import torch
@@ -21,6 +21,7 @@ from hypothesis import given, settings, strategies as st, Verbosity
 from torch import nn, optim
 from torch._dynamo.testing import reduce_to_scalar_loss
 from torch._dynamo.utils import counters
+from torch.fx._symbolic_trace import is_fx_tracing
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -36,6 +37,7 @@ from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
     TestModelWithPreproc,
+    TestModelWithPreprocCollectionArgs,
     TestNegSamplingModule,
     TestPositionWeightedPreprocModule,
     TestSparseNN,
@@ -1447,6 +1449,81 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         # Check that both EC and EBC pipelined
         self.assertEqual(len(pipeline._pipelined_modules), 2)
         self.assertEqual(len(pipeline._pipelined_postprocs), 1)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_postproc_with_collection_args(self) -> None:
+        """
+        Exercises scenario when postproc module has an argument that is a list or dict
+        with some elements being:
+            * static scalars
+            * static tensors (e.g. torch.ones())
+            * tensors derived from input batch (e.g. input.idlist_features["feature_0"])
+            * tensors derived from input batch and other postproc module (e.g. other_postproc(input.idlist_features["feature_0"]))
+        """
+        test_runner = self
+
+        class PostprocOuter(nn.Module):
+            def __init__(
+                self,
+            ) -> None:
+                super().__init__()
+
+            def forward(
+                self,
+                model_input: ModelInput,
+            ) -> torch.Tensor:
+                return model_input.float_features * 0.1
+
+        class PostprocInner(nn.Module):
+            def __init__(
+                self,
+            ) -> None:
+                super().__init__()
+
+            def forward(
+                self,
+                model_input: ModelInput,
+                input_list: List[Union[torch.Tensor, int]],
+                input_dict: Dict[str, Union[torch.Tensor, int]],
+            ) -> ModelInput:
+                if not is_fx_tracing():
+                    for idx, value in enumerate(input_list):
+                        if isinstance(value, torch.fx.Node):
+                            test_runner.fail(
+                                f"input_list[{idx}] was a fx.Node: {value}"
+                            )
+                        model_input.float_features += value
+
+                    for key, value in input_dict.items():
+                        if isinstance(value, torch.fx.Node):
+                            test_runner.fail(
+                                f"input_dict[{key}] was a fx.Node: {value}"
+                            )
+                        model_input.float_features += value
+
+                return model_input
+
+        model = TestModelWithPreprocCollectionArgs(
+            tables=self.tables[:-1],  # ignore last table as postproc will remove
+            weighted_tables=self.weighted_tables[:-1],  # ignore last table
+            device=self.device,
+            postproc_module_outer=PostprocOuter(),
+            postproc_module_nested=PostprocInner(),
+        )
+
+        pipelined_model, pipeline = self._check_output_equal(
+            model,
+            self.sharding_type,
+        )
+
+        # both EC end EBC are pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+        # both outer and nested postproces are pipelined
+        self.assertEqual(len(pipeline._pipelined_postprocs), 4)
 
 
 class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
