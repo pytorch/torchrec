@@ -9,6 +9,11 @@
 export PYTORCH_CUDA_PKG=""
 export CONDA_ENV="build_binary"
 
+if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
+    echo "Conda doesn't support 3.13t yet, you can just try \`conda create -n test python=3.13t\`"
+    exit 0
+fi
+
 conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
 
 conda run -n build_binary python --version
