@@ -9,13 +9,24 @@
 
 import random
 from enum import Enum
-from typing import Any, cast, Dict, List, Optional, Protocol, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    Type,
+    Union,
+)
 
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
-from torch.distributed._tensor import DTensor
+from torch.distributed._tensor import DeviceMesh, DTensor
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
@@ -314,11 +325,12 @@ def sharding_single_rank_test(
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
     variable_batch_per_feature: bool = False,  # VBE
     global_constant_batch: bool = False,
-    world_size_2D: Optional[int] = None,
-    node_group_size: Optional[int] = None,
-    use_inter_host_allreduce: bool = False,
+    world_size_2D: Optional[int] = None,  # 2D parallel
+    node_group_size: Optional[int] = None,  # 2D parallel
+    use_inter_host_allreduce: bool = False,  # 2D parallel
     input_type: str = "kjt",  # "kjt" or "td"
     allow_zero_batch_size: bool = False,
+    custom_all_reduce: bool = False,  # 2D parallel
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         batch_size = (
@@ -428,17 +440,37 @@ def sharding_single_rank_test(
                             )
 
         assert ctx.pg is not None
+        hook_called: bool = False
         if world_size_2D is not None:
+            all_reduce_func = None
+            if custom_all_reduce:
+                all_reduce_pg: dist.ProcessGroup = create_device_mesh_for_2D(
+                    use_inter_host_allreduce,
+                    world_size=ctx.world_size,
+                    local_size=world_size_2D,
+                ).get_group(mesh_dim="replicate")
+
+                def _custom_hook(input: List[torch.Tensor]) -> None:
+                    nonlocal hook_called
+                    opts = dist.AllreduceCoalescedOptions()
+                    opts.reduceOp = dist.ReduceOp.AVG
+                    handle = all_reduce_pg.allreduce_coalesced(input, opts=opts)
+                    handle.wait()
+                    hook_called = True
+
+                all_reduce_func = _custom_hook
+
             local_model = DMPCollection(
                 module=local_model,
                 sharding_group_size=world_size_2D,
                 world_size=ctx.world_size,
-                global_pg=ctx.pg,
+                global_pg=ctx.pg,  # pyre-ignore[6]
                 node_group_size=node_group_size,
                 plan=plan,
                 sharders=sharders,
                 device=ctx.device,
                 use_inter_host_allreduce=use_inter_host_allreduce,
+                custom_all_reduce=all_reduce_func,  # pyre-ignore[6]
             )
         else:
             local_model = DistributedModelParallel(
@@ -468,6 +500,9 @@ def sharding_single_rank_test(
             local_opt,
             local_input,
         )
+
+        if world_size_2D is not None and custom_all_reduce:
+            assert hook_called, "custom all reduce hook was not called"
 
         # TODO: support non-sharded forward with zero batch size KJT
         if not allow_zero_batch_size:
@@ -499,6 +534,28 @@ def sharding_single_rank_test(
                 torch.testing.assert_close(
                     global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
                 )
+
+
+def create_device_mesh_for_2D(
+    use_inter_host_allreduce: bool, world_size: int, local_size: int
+) -> DeviceMesh:
+    if use_inter_host_allreduce:
+        peer_matrix = [
+            list(range(i, i + local_size)) for i in range(0, world_size, local_size)
+        ]
+    else:
+        peer_matrix = []
+        step = world_size // local_size
+        for group_rank in range(world_size // local_size):
+            peer_matrix.append([step * r + group_rank for r in range(local_size)])
+
+    mesh = DeviceMesh(
+        device_type="cuda",
+        mesh=peer_matrix,
+        mesh_dim_names=("replicate", "shard"),
+    )
+
+    return mesh
 
 
 def gen_full_pred_after_one_step(
