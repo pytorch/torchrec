@@ -87,6 +87,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
         use_inter_host_allreduce=st.booleans(),
+        custom_all_reduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_cw_2D(
@@ -99,6 +100,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ],
         pooling: PoolingType,
         use_inter_host_allreduce: bool,
+        custom_all_reduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -133,6 +135,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
             use_inter_host_allreduce=use_inter_host_allreduce,
+            custom_all_reduce=custom_all_reduce,
         )
 
     @unittest.skipIf(
@@ -176,6 +179,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
         use_inter_host_allreduce=st.booleans(),
+        custom_all_reduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_tw_2D(
@@ -188,6 +192,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ],
         pooling: PoolingType,
         use_inter_host_allreduce: bool,
+        custom_all_reduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -223,6 +228,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
             use_inter_host_allreduce=use_inter_host_allreduce,
+            custom_all_reduce=custom_all_reduce,
         )
 
     @unittest.skipIf(
@@ -266,6 +272,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
         use_inter_host_allreduce=st.booleans(),
+        custom_all_reduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_grid_2D(
@@ -278,6 +285,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ],
         pooling: PoolingType,
         use_inter_host_allreduce: bool,
+        custom_all_reduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -335,6 +343,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
             use_inter_host_allreduce=use_inter_host_allreduce,
+            custom_all_reduce=custom_all_reduce,
         )
 
     @unittest.skipIf(
@@ -375,6 +384,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         variable_batch_size=st.booleans(),
         pooling=st.sampled_from([PoolingType.SUM]),
         use_inter_host_allreduce=st.booleans(),
+        custom_all_reduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_rw_2D(
@@ -388,6 +398,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         variable_batch_size: bool,
         pooling: PoolingType,
         use_inter_host_allreduce: bool,
+        custom_all_reduce: bool,
     ) -> None:
         if self.backend == "gloo":
             self.skipTest(
@@ -421,6 +432,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
             variable_batch_size=variable_batch_size,
             pooling=pooling,
             use_inter_host_allreduce=use_inter_host_allreduce,
+            custom_all_reduce=custom_all_reduce,
         )
 
     @unittest.skipIf(
@@ -464,6 +476,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ),
         pooling=st.sampled_from([PoolingType.SUM]),
         use_inter_host_allreduce=st.booleans(),
+        custom_all_reduce=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharding_twrw_2D(
@@ -476,6 +489,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
         ],
         pooling: PoolingType,
         use_inter_host_allreduce: bool,
+        custom_all_reduce: bool,
     ) -> None:
         if (
             self.device == torch.device("cpu")
@@ -511,6 +525,7 @@ class TestEmbeddingBagCollection2DParallel(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
             use_inter_host_allreduce=use_inter_host_allreduce,
+            custom_all_reduce=custom_all_reduce,
         )
 
 
