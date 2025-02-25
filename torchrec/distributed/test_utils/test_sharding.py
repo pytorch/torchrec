@@ -48,7 +48,11 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
+from torchrec.modules.embedding_configs import (
+    BaseEmbeddingConfig,
+    DataType,
+    EmbeddingBagConfig,
+)
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
 
@@ -485,9 +489,7 @@ def sharding_single_rank_test(
             )
 
             # Compare predictions of sharded vs unsharded models.
-            if qcomms_config is None:
-                torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
-            else:
+            if qcomms_config is not None:
                 # With quantized comms, we can relax constraints a bit
                 rtol = 0.003
                 if CommType.FP8 in [
@@ -499,6 +501,18 @@ def sharding_single_rank_test(
                 torch.testing.assert_close(
                     global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
                 )
+            elif (
+                weighted_tables is not None
+                and weighted_tables[0].data_type == DataType.FP16
+            ):  # https://www.internalfb.com/intern/diffing/?paste_number=1740410921
+                torch.testing.assert_close(
+                    global_pred,
+                    torch.cat(all_local_pred),
+                    atol=1e-4,  # relaxed atol due to FP16 in weights
+                    rtol=1e-4,  # relaxed rtol due to FP16 in weights
+                )
+            else:
+                torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
 
 
 def gen_full_pred_after_one_step(
