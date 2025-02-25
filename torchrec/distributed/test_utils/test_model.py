@@ -223,8 +223,7 @@ class ModelInput(Pipelineable):
         else:
             raise ValueError(f"For IdList features, unknown input type {input_type}")
 
-        for idx in range(len(idscore_ind_ranges)):
-            ind_range = idscore_ind_ranges[idx]
+        for idx, ind_range in enumerate(idscore_ind_ranges):
             lengths_ = torch.abs(
                 torch.randn(batch_size * world_size, device=device)
                 + (
