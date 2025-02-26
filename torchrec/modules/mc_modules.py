@@ -40,11 +40,13 @@ def apply_mc_method_to_jt_dict(
 def _update(
     base: Optional[Dict[str, JaggedTensor]], delta: Dict[str, JaggedTensor]
 ) -> Dict[str, JaggedTensor]:
-    if base is None:
-        base = delta
-    else:
-        base.update(delta)
-    return base
+    res: Dict[str, JaggedTensor] = {}
+    if base is not None:
+        for k, v in base.items():
+            res[k] = v
+    for k, v in delta.items():
+        res[k] = v
+    return res
 
 
 @torch.fx.wrap
