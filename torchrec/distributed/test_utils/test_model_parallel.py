@@ -151,6 +151,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
         data_type: DataType = DataType.FP32,
         use_inter_host_allreduce: bool = False,
         allow_zero_batch_size: bool = False,
+        custom_all_reduce: bool = False,
     ) -> None:
         self._build_tables_and_groups(data_type=data_type)
         self._run_multi_process_test(
@@ -174,6 +175,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             global_constant_batch=global_constant_batch,
             use_inter_host_allreduce=use_inter_host_allreduce,
             allow_zero_batch_size=allow_zero_batch_size,
+            custom_all_reduce=custom_all_reduce,
         )
 
 
