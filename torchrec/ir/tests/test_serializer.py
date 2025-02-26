@@ -253,7 +253,13 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(deserialized.shape, orginal.shape)
             self.assertTrue(torch.allclose(deserialized, orginal))
 
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() == 0,
+        "skip this test in OSS (no GPU available) because torch.export uses training ir in OSS",
+    )
     def test_dynamic_shape_ebc(self) -> None:
+        # TODO: https://fb.workplace.com/groups/1028545332188949/permalink/1138699244506890/
         model = self.generate_model()
         feature1 = KeyedJaggedTensor.from_offsets_sync(
             keys=["f1", "f2", "f3"],
