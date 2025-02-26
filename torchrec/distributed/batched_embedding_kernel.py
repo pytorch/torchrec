@@ -12,6 +12,7 @@ import copy
 import inspect
 import itertools
 import logging
+import os
 import tempfile
 from dataclasses import dataclass
 from typing import (
@@ -677,10 +678,19 @@ def _gen_named_parameters_by_table_fused(
     pg: Optional[dist.ProcessGroup] = None,
 ) -> Iterator[Tuple[str, TableBatchedEmbeddingSlice]]:
     # TODO: move logic to FBGEMM to avoid accessing fbgemm internals
-    # Cache embedding_weights_by_table
-    embedding_weights_by_table = emb_module.split_embedding_weights()
-    # Cache all_optimizer_states
-    all_optimizer_states = emb_module.get_optimizer_state()
+
+    # Enable the cache only when ENV_VAR_ENABLE_MODEL_SHARDING_IMPROVEMENT=1 to help
+    # set up an A/B test to evaluate the performance impact.
+    # TODO(T216413261): Clean up the environment variables after collecting latency
+    # improvement data in production.
+    embedding_weights_by_table = None
+    all_optimizer_states = None
+    if os.environ.get("ENV_VAR_ENABLE_MODEL_SHARDING_CACHING", "0") == "1":
+        # Cache embedding_weights_by_table
+        embedding_weights_by_table = emb_module.split_embedding_weights()
+        # Cache all_optimizer_states
+        all_optimizer_states = emb_module.get_optimizer_state()
+
     for t_idx, (rows, dim, location, _) in enumerate(emb_module.embedding_specs):
         table_name = config.embedding_tables[t_idx].name
         if table_name not in table_name_to_count:
