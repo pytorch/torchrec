@@ -28,6 +28,7 @@ class WarmupPolicy(Enum):
     STEP = "step"
     INVSQRT = "inv_sqrt"  # inverse square root
     COSINE_ANNEALING_WARM_RESTARTS = "cosine_annealing_warm_restarts"
+    WSD = "wsd"  # WSD: Warmup-Stable-Decay schedule
 
 
 @dataclass
@@ -42,6 +43,9 @@ class WarmupStage:
     # default to 1 if not set to value > 0
     decay_iters: int = -1
     sgdr_period: int = 1
+    # WSD-specific parameters
+    wsd_period: int = 1
+    warmup_iters: int = 0
 
 
 def _lr_stages(stages: List[WarmupStage]) -> List[WarmupStage]:
@@ -59,6 +63,10 @@ def _lr_stages(stages: List[WarmupStage]) -> List[WarmupStage]:
         if stage.decay_iters <= 0:
             if stage.policy == WarmupPolicy.STEP:
                 stage.decay_iters = 1
+            elif stage.policy == WarmupPolicy.WSD:
+                raise ValueError(
+                    "WSD policy requires decay_iters to be set to a positive value"
+                )
             else:
                 stage.decay_iters = stage.max_iters
     return stages + [last_stage]
@@ -86,6 +94,22 @@ def _get_multiplier(stage: WarmupStage, iter: int) -> float:
         t_cur = iter % t_0
         cos_iter = 0.5 * (1 + math.cos(math.pi * t_cur / t_0))
         multiplier = eta_min + (1.0 - eta_min) * cos_iter
+    elif stage.policy == WarmupPolicy.WSD:
+        stable_iters = stage.wsd_period - (stage.warmup_iters + stage.decay_iters)
+        assert stable_iters >= 0
+        cycle_position = iter % stage.wsd_period
+        if cycle_position < stage.warmup_iters:
+            # Warmup phase
+            multiplier = stage.value + (1.0 - stage.value) * (
+                cycle_position / stage.warmup_iters
+            )
+        elif cycle_position < stage.warmup_iters + stable_iters:
+            # Steady phase
+            multiplier = 1.0
+        else:
+            # Decay phase
+            decay_position = cycle_position - (stage.warmup_iters + stable_iters)
+            multiplier = 1.0 - (1.0 - stage.value) * decay_position / stage.decay_iters
     return multiplier * stage.lr_scale
 
 
