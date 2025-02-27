@@ -148,6 +148,7 @@ def gen_model_and_input(
     tables: List[EmbeddingTableConfig],
     embedding_groups: Dict[str, List[str]],
     world_size: int,
+    # pyre-ignore [9]
     generate: Union[
         ModelInputCallable, VariableBatchModelInputCallable
     ] = ModelInput.generate,
@@ -344,6 +345,7 @@ def sharding_single_rank_test(
         (global_model, inputs) = gen_model_and_input(
             model_class=model_class,
             tables=tables,
+            # pyre-ignore [6]
             generate=(
                 cast(
                     VariableBatchModelInputCallable,
