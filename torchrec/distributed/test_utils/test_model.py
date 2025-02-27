@@ -71,19 +71,30 @@ class ModelInput(Pipelineable):
             ]
         ] = None,
         variable_batch_size: bool = False,
-        long_indices: bool = True,
         tables_pooling: Optional[List[int]] = None,
         weighted_tables_pooling: Optional[List[int]] = None,
         randomize_indices: bool = True,
         device: Optional[torch.device] = None,
         max_feature_lengths: Optional[List[int]] = None,
         input_type: str = "kjt",
+        use_offsets: bool = False,
+        indices_dtype: torch.dtype = torch.int64,
+        offsets_dtype: torch.dtype = torch.int64,
+        lengths_dtype: torch.dtype = torch.int64,
+        long_indices: bool = True,  # TODO - remove this once code base is updated to support more than long_indices spec
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
         and a list of local (multi-rank training) batches of world_size.
         """
-
+        if long_indices:
+            indices_dtype = torch.int64
+            lengths_dtype = torch.int64
+            use_offsets = False
+        else:
+            indices_dtype = torch.int32
+            lengths_dtype = torch.int32
+            use_offsets = False
         batch_size_by_rank = [batch_size] * world_size
         if variable_batch_size:
             batch_size_by_rank = [
@@ -119,7 +130,6 @@ class ModelInput(Pipelineable):
                     if tables[idx].num_embeddings_post_pruning is not None
                     else tables[idx].num_embeddings
                 )
-
                 idlist_features_to_max_length[feature] = (
                     max_feature_lengths[feature_idx] if max_feature_lengths else None
                 )
@@ -144,18 +154,21 @@ class ModelInput(Pipelineable):
 
         idlist_pooling_factor = list(idlist_features_to_pooling_factor.values())
         idscore_pooling_factor = weighted_tables_pooling
-
         idlist_max_lengths = list(idlist_features_to_max_length.values())
 
         # Generate global batch.
         global_idlist_lengths = []
         global_idlist_indices = []
+        global_idlist_offsets = []
+
         global_idscore_lengths = []
         global_idscore_indices = []
+        global_idscore_offsets = []
         global_idscore_weights = []
 
         for idx in range(len(idlist_ind_ranges)):
             ind_range = idlist_ind_ranges[idx]
+
             if idlist_pooling_factor:
                 lengths_ = torch.max(
                     torch.normal(
@@ -165,17 +178,19 @@ class ModelInput(Pipelineable):
                         device=device,
                     ),
                     torch.tensor(1.0, device=device),
-                ).int()
+                ).to(lengths_dtype)
             else:
                 lengths_ = torch.abs(
                     torch.randn(batch_size * world_size, device=device) + pooling_avg,
-                ).int()
+                ).to(lengths_dtype)
 
             if idlist_max_lengths[idx]:
                 lengths_ = torch.clamp(lengths_, max=idlist_max_lengths[idx])
 
             if variable_batch_size:
-                lengths = torch.zeros(batch_size * world_size, device=device).int()
+                lengths = torch.zeros(batch_size * world_size, device=device).to(
+                    lengths_dtype
+                )
                 for r in range(world_size):
                     lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]] = (
                         lengths_[
@@ -186,28 +201,102 @@ class ModelInput(Pipelineable):
                 lengths = lengths_
 
             num_indices = cast(int, torch.sum(lengths).item())
+
             if randomize_indices:
                 indices = torch.randint(
                     0,
                     ind_range,
                     (num_indices,),
-                    dtype=torch.long if long_indices else torch.int32,
+                    dtype=indices_dtype,
                     device=device,
                 )
             else:
                 indices = torch.zeros(
-                    (num_indices),
-                    dtype=torch.long if long_indices else torch.int32,
+                    (num_indices,),
+                    dtype=indices_dtype,
                     device=device,
                 )
+
+            # Calculate offsets from lengths
+            offsets = torch.cat(
+                [torch.tensor([0], device=device), lengths.cumsum(0)]
+            ).to(offsets_dtype)
+
             global_idlist_lengths.append(lengths)
             global_idlist_indices.append(indices)
+            global_idlist_offsets.append(offsets)
+
+        for idx, ind_range in enumerate(idscore_ind_ranges):
+            lengths_ = torch.abs(
+                torch.randn(batch_size * world_size, device=device)
+                + (
+                    idscore_pooling_factor[idx]
+                    if idscore_pooling_factor
+                    else pooling_avg
+                )
+            ).to(lengths_dtype)
+
+            if variable_batch_size:
+                lengths = torch.zeros(batch_size * world_size, device=device).to(
+                    lengths_dtype
+                )
+                for r in range(world_size):
+                    lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]] = (
+                        lengths_[
+                            r * batch_size : r * batch_size + batch_size_by_rank[r]
+                        ]
+                    )
+            else:
+                lengths = lengths_
+
+            num_indices = cast(int, torch.sum(lengths).item())
+
+            if randomize_indices:
+                indices = torch.randint(
+                    0,
+                    # pyre-ignore [6]
+                    ind_range,
+                    (num_indices,),
+                    dtype=indices_dtype,
+                    device=device,
+                )
+            else:
+                indices = torch.zeros(
+                    (num_indices,),
+                    dtype=indices_dtype,
+                    device=device,
+                )
+            weights = torch.rand((num_indices,), device=device)
+            # Calculate offsets from lengths
+            offsets = torch.cat(
+                [torch.tensor([0], device=device), lengths.cumsum(0)]
+            ).to(offsets_dtype)
+
+            global_idscore_lengths.append(lengths)
+            global_idscore_indices.append(indices)
+            global_idscore_weights.append(weights)
+            global_idscore_offsets.append(offsets)
 
         if input_type == "kjt":
             global_idlist_input = KeyedJaggedTensor(
                 keys=idlist_features,
                 values=torch.cat(global_idlist_indices),
-                lengths=torch.cat(global_idlist_lengths),
+                offsets=torch.cat(global_idlist_offsets) if use_offsets else None,
+                lengths=torch.cat(global_idlist_lengths) if not use_offsets else None,
+            )
+
+            global_idscore_input = (
+                KeyedJaggedTensor(
+                    keys=idscore_features,
+                    values=torch.cat(global_idscore_indices),
+                    offsets=torch.cat(global_idscore_offsets) if use_offsets else None,
+                    lengths=(
+                        torch.cat(global_idscore_lengths) if not use_offsets else None
+                    ),
+                    weights=torch.cat(global_idscore_weights),
+                )
+                if global_idscore_indices
+                else None
             )
         elif input_type == "td":
             dict_of_nt = {
@@ -220,61 +309,7 @@ class ModelInput(Pipelineable):
                 )
             }
             global_idlist_input = TensorDict(source=dict_of_nt)
-        else:
-            raise ValueError(f"For IdList features, unknown input type {input_type}")
 
-        for idx, ind_range in enumerate(idscore_ind_ranges):
-            lengths_ = torch.abs(
-                torch.randn(batch_size * world_size, device=device)
-                + (
-                    idscore_pooling_factor[idx]
-                    if idscore_pooling_factor
-                    else pooling_avg
-                )
-            ).int()
-            if variable_batch_size:
-                lengths = torch.zeros(batch_size * world_size, device=device).int()
-                for r in range(world_size):
-                    lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]] = (
-                        lengths_[
-                            r * batch_size : r * batch_size + batch_size_by_rank[r]
-                        ]
-                    )
-            else:
-                lengths = lengths_
-            num_indices = cast(int, torch.sum(lengths).item())
-            if randomize_indices:
-                indices = torch.randint(
-                    0,
-                    # pyre-ignore [6]
-                    ind_range,
-                    (num_indices,),
-                    dtype=torch.long if long_indices else torch.int32,
-                    device=device,
-                )
-            else:
-                indices = torch.zeros(
-                    (num_indices),
-                    dtype=torch.long if long_indices else torch.int32,
-                    device=device,
-                )
-            weights = torch.rand((num_indices,), device=device)
-            global_idscore_lengths.append(lengths)
-            global_idscore_indices.append(indices)
-            global_idscore_weights.append(weights)
-
-        if input_type == "kjt":
-            global_idscore_input = (
-                KeyedJaggedTensor(
-                    keys=idscore_features,
-                    values=torch.cat(global_idscore_indices),
-                    lengths=torch.cat(global_idscore_lengths),
-                    weights=torch.cat(global_idscore_weights),
-                )
-                if global_idscore_indices
-                else None
-            )
-        elif input_type == "td":
             assert (
                 len(idscore_features) == 0
             ), "TensorDict does not support weighted features"
@@ -295,14 +330,20 @@ class ModelInput(Pipelineable):
 
         # Split global batch into local batches.
         local_inputs = []
+
         for r in range(world_size):
             local_idlist_lengths = []
             local_idlist_indices = []
+            local_idlist_offsets = []
+
             local_idscore_lengths = []
             local_idscore_indices = []
             local_idscore_weights = []
+            local_idscore_offsets = []
 
-            for lengths, indices in zip(global_idlist_lengths, global_idlist_indices):
+            for lengths, indices, offsets in zip(
+                global_idlist_lengths, global_idlist_indices, global_idlist_offsets
+            ):
                 local_idlist_lengths.append(
                     lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]]
                 )
@@ -312,9 +353,15 @@ class ModelInput(Pipelineable):
                 local_idlist_indices.append(
                     indices[lengths_cumsum[r] : lengths_cumsum[r + 1]]
                 )
+                local_idlist_offsets.append(
+                    offsets[r * batch_size : r * batch_size + batch_size_by_rank[r] + 1]
+                )
 
-            for lengths, indices, weights in zip(
-                global_idscore_lengths, global_idscore_indices, global_idscore_weights
+            for lengths, indices, weights, offsets in zip(
+                global_idscore_lengths,
+                global_idscore_indices,
+                global_idscore_weights,
+                global_idscore_offsets,
             ):
                 local_idscore_lengths.append(
                     lengths[r * batch_size : r * batch_size + batch_size_by_rank[r]]
@@ -329,18 +376,32 @@ class ModelInput(Pipelineable):
                     weights[lengths_cumsum[r] : lengths_cumsum[r + 1]]
                 )
 
+                local_idscore_offsets.append(
+                    offsets[r * batch_size : r * batch_size + batch_size_by_rank[r] + 1]
+                )
+
             if input_type == "kjt":
                 local_idlist_input = KeyedJaggedTensor(
                     keys=idlist_features,
                     values=torch.cat(local_idlist_indices),
-                    lengths=torch.cat(local_idlist_lengths),
+                    offsets=torch.cat(local_idlist_offsets) if use_offsets else None,
+                    lengths=(
+                        torch.cat(local_idlist_lengths) if not use_offsets else None
+                    ),
                 )
 
                 local_idscore_input = (
                     KeyedJaggedTensor(
                         keys=idscore_features,
                         values=torch.cat(local_idscore_indices),
-                        lengths=torch.cat(local_idscore_lengths),
+                        offsets=(
+                            torch.cat(local_idscore_offsets) if use_offsets else None
+                        ),
+                        lengths=(
+                            torch.cat(local_idscore_lengths)
+                            if not use_offsets
+                            else None
+                        ),
                         weights=torch.cat(local_idscore_weights),
                     )
                     if local_idscore_indices
@@ -353,7 +414,9 @@ class ModelInput(Pipelineable):
                         lengths=lengths,
                     )
                     for k, values, lengths in zip(
-                        idlist_features, local_idlist_indices, local_idlist_lengths
+                        idlist_features,
+                        local_idlist_indices,
+                        local_idlist_lengths,
                     )
                 }
                 local_idlist_input = TensorDict(source=dict_of_nt)
@@ -361,7 +424,6 @@ class ModelInput(Pipelineable):
                     len(idscore_features) == 0
                 ), "TensorDict does not support weighted features"
                 local_idscore_input = None
-
             else:
                 raise ValueError(
                     f"For weighted features, unknown input type {input_type}"
@@ -396,29 +458,42 @@ class ModelInput(Pipelineable):
         strides_per_rank_per_feature: Dict[int, Dict[str, int]],
         inverse_indices_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
         weights_per_rank_per_feature: Optional[Dict[int, Dict[str, torch.Tensor]]],
+        use_offsets: bool,
+        indices_dtype: torch.dtype,
+        offsets_dtype: torch.dtype,
+        lengths_dtype: torch.dtype,
     ) -> List[KeyedJaggedTensor]:
         local_kjts = []
         keys = list(feature_num_embeddings.keys())
+
         for rank in range(world_size):
             lengths_per_rank_per_feature[rank] = {}
             values_per_rank_per_feature[rank] = {}
             strides_per_rank_per_feature[rank] = {}
             inverse_indices_per_rank_per_feature[rank] = {}
+
             if weights_per_rank_per_feature is not None:
                 weights_per_rank_per_feature[rank] = {}
 
             for key, num_embeddings in feature_num_embeddings.items():
                 batch_size = random.randint(1, average_batch_size * dedup_factor - 1)
-                lengths = torch.randint(low=0, high=5, size=(batch_size,))
+                lengths = torch.randint(
+                    low=0, high=5, size=(batch_size,), dtype=lengths_dtype
+                )
                 lengths_per_rank_per_feature[rank][key] = lengths
                 lengths_sum = sum(lengths.tolist())
-                values = torch.randint(0, num_embeddings, (lengths_sum,))
+                values = torch.randint(
+                    0, num_embeddings, (lengths_sum,), dtype=indices_dtype
+                )
                 values_per_rank_per_feature[rank][key] = values
                 if weights_per_rank_per_feature is not None:
                     weights_per_rank_per_feature[rank][key] = torch.rand(lengths_sum)
                 strides_per_rank_per_feature[rank][key] = batch_size
                 inverse_indices_per_rank_per_feature[rank][key] = torch.randint(
-                    0, batch_size, (dedup_factor * average_batch_size,)
+                    0,
+                    batch_size,
+                    (dedup_factor * average_batch_size,),
+                    dtype=indices_dtype,
                 )
 
             values = torch.cat(list(values_per_rank_per_feature[rank].values()))
@@ -428,23 +503,40 @@ class ModelInput(Pipelineable):
                 if weights_per_rank_per_feature is not None
                 else None
             )
-            stride_per_key_per_rank = [
-                [stride] for stride in strides_per_rank_per_feature[rank].values()
-            ]
-            inverse_indices = (
-                keys,
-                torch.stack(list(inverse_indices_per_rank_per_feature[rank].values())),
-            )
-            local_kjts.append(
-                KeyedJaggedTensor(
-                    keys=keys,
-                    values=values,
-                    lengths=lengths,
-                    weights=weights,
-                    stride_per_key_per_rank=stride_per_key_per_rank,
-                    inverse_indices=inverse_indices,
+
+            if use_offsets:
+                offsets = torch.cat(
+                    [torch.tensor([0], dtype=offsets_dtype), lengths.cumsum(0)]
                 )
-            )
+                local_kjts.append(
+                    KeyedJaggedTensor(
+                        keys=keys,
+                        values=values,
+                        offsets=offsets,
+                        weights=weights,
+                    )
+                )
+            else:
+                stride_per_key_per_rank = [
+                    [stride] for stride in strides_per_rank_per_feature[rank].values()
+                ]
+                inverse_indices = (
+                    keys,
+                    torch.stack(
+                        list(inverse_indices_per_rank_per_feature[rank].values())
+                    ),
+                )
+                local_kjts.append(
+                    KeyedJaggedTensor(
+                        keys=keys,
+                        values=values,
+                        lengths=lengths,
+                        weights=weights,
+                        stride_per_key_per_rank=stride_per_key_per_rank,
+                        inverse_indices=inverse_indices,
+                    )
+                )
+
         return local_kjts
 
     @staticmethod
@@ -457,6 +549,10 @@ class ModelInput(Pipelineable):
         strides_per_rank_per_feature: Dict[int, Dict[str, int]],
         inverse_indices_per_rank_per_feature: Dict[int, Dict[str, torch.Tensor]],
         weights_per_rank_per_feature: Optional[Dict[int, Dict[str, torch.Tensor]]],
+        use_offsets: bool,
+        indices_dtype: torch.dtype,
+        offsets_dtype: torch.dtype,
+        lengths_dtype: torch.dtype,
     ) -> KeyedJaggedTensor:
         global_values = []
         global_lengths = []
@@ -476,31 +572,41 @@ class ModelInput(Pipelineable):
                 inverse_indices_per_feature_per_rank.append(
                     inverse_indices_per_rank_per_feature[rank][key]
                 )
+
             global_stride_per_key_per_rank.append([sum_stride])
 
         inverse_indices_list: List[torch.Tensor] = []
+
         for key in keys:
             accum_batch_size = 0
             inverse_indices = []
+
             for rank in range(world_size):
                 inverse_indices.append(
                     inverse_indices_per_rank_per_feature[rank][key] + accum_batch_size
                 )
                 accum_batch_size += strides_per_rank_per_feature[rank][key]
+
             inverse_indices_list.append(torch.cat(inverse_indices))
+
         global_inverse_indices = (keys, torch.stack(inverse_indices_list))
 
         if global_constant_batch:
             global_offsets = []
+
             for length in global_lengths:
                 global_offsets.append(_to_offsets(length))
+
             reindexed_lengths = []
+
             for length, indices in zip(
                 global_lengths, inverse_indices_per_feature_per_rank
             ):
                 reindexed_lengths.append(torch.index_select(length, 0, indices))
+
             lengths = torch.cat(reindexed_lengths)
             reindexed_values, reindexed_weights = [], []
+
             for i, (values, offsets, indices) in enumerate(
                 zip(global_values, global_offsets, inverse_indices_per_feature_per_rank)
             ):
@@ -510,25 +616,40 @@ class ModelInput(Pipelineable):
                         reindexed_weights.append(
                             global_weights[i][offsets[idx] : offsets[idx + 1]]
                         )
+
             values = torch.cat(reindexed_values)
             weights = (
                 torch.cat(reindexed_weights) if global_weights is not None else None
             )
             global_stride_per_key_per_rank = None
             global_inverse_indices = None
+
         else:
             values = torch.cat(global_values)
             lengths = torch.cat(global_lengths)
             weights = torch.cat(global_weights) if global_weights is not None else None
 
-        return KeyedJaggedTensor(
-            keys=keys,
-            values=values,
-            lengths=lengths,
-            weights=weights,
-            stride_per_key_per_rank=global_stride_per_key_per_rank,
-            inverse_indices=global_inverse_indices,
-        )
+        if use_offsets:
+            offsets = torch.cat(
+                [torch.tensor([0], dtype=offsets_dtype), lengths.cumsum(0)]
+            )
+            return KeyedJaggedTensor(
+                keys=keys,
+                values=values,
+                offsets=offsets,
+                weights=weights,
+                stride_per_key_per_rank=global_stride_per_key_per_rank,
+                inverse_indices=global_inverse_indices,
+            )
+        else:
+            return KeyedJaggedTensor(
+                keys=keys,
+                values=values,
+                lengths=lengths,
+                weights=weights,
+                stride_per_key_per_rank=global_stride_per_key_per_rank,
+                inverse_indices=global_inverse_indices,
+            )
 
     @staticmethod
     def _generate_variable_batch_features(
@@ -539,11 +660,17 @@ class ModelInput(Pipelineable):
         world_size: int,
         dedup_factor: int,
         global_constant_batch: bool,
+        use_offsets: bool,
+        indices_dtype: torch.dtype,
+        offsets_dtype: torch.dtype,
+        lengths_dtype: torch.dtype,
     ) -> Tuple[KeyedJaggedTensor, List[KeyedJaggedTensor]]:
         is_weighted = (
             True if tables and getattr(tables[0], "is_weighted", False) else False
         )
+
         feature_num_embeddings = {}
+
         for table in tables:
             for feature_name in table.feature_names:
                 feature_num_embeddings[feature_name] = (
@@ -553,6 +680,7 @@ class ModelInput(Pipelineable):
                 )
 
         local_kjts = []
+
         values_per_rank_per_feature = {}
         lengths_per_rank_per_feature = {}
         strides_per_rank_per_feature = {}
@@ -560,26 +688,34 @@ class ModelInput(Pipelineable):
         weights_per_rank_per_feature = {} if is_weighted else None
 
         local_kjts = ModelInput._generate_variable_batch_local_features(
-            feature_num_embeddings,
-            average_batch_size,
-            world_size,
-            dedup_factor,
-            values_per_rank_per_feature,
-            lengths_per_rank_per_feature,
-            strides_per_rank_per_feature,
-            inverse_indices_per_rank_per_feature,
-            weights_per_rank_per_feature,
+            feature_num_embeddings=feature_num_embeddings,
+            average_batch_size=average_batch_size,
+            world_size=world_size,
+            dedup_factor=dedup_factor,
+            values_per_rank_per_feature=values_per_rank_per_feature,
+            lengths_per_rank_per_feature=lengths_per_rank_per_feature,
+            strides_per_rank_per_feature=strides_per_rank_per_feature,
+            inverse_indices_per_rank_per_feature=inverse_indices_per_rank_per_feature,
+            weights_per_rank_per_feature=weights_per_rank_per_feature,
+            use_offsets=use_offsets,
+            indices_dtype=indices_dtype,
+            offsets_dtype=offsets_dtype,
+            lengths_dtype=lengths_dtype,
         )
 
         global_kjt = ModelInput._generate_variable_batch_global_features(
-            list(feature_num_embeddings.keys()),
-            world_size,
-            global_constant_batch,
-            values_per_rank_per_feature,
-            lengths_per_rank_per_feature,
-            strides_per_rank_per_feature,
-            inverse_indices_per_rank_per_feature,
-            weights_per_rank_per_feature,
+            keys=list(feature_num_embeddings.keys()),
+            world_size=world_size,
+            global_constant_batch=global_constant_batch,
+            values_per_rank_per_feature=values_per_rank_per_feature,
+            lengths_per_rank_per_feature=lengths_per_rank_per_feature,
+            strides_per_rank_per_feature=strides_per_rank_per_feature,
+            inverse_indices_per_rank_per_feature=inverse_indices_per_rank_per_feature,
+            weights_per_rank_per_feature=weights_per_rank_per_feature,
+            use_offsets=use_offsets,
+            indices_dtype=indices_dtype,
+            offsets_dtype=offsets_dtype,
+            lengths_dtype=lengths_dtype,
         )
 
         return (global_kjt, local_kjts)
@@ -601,30 +737,51 @@ class ModelInput(Pipelineable):
         ] = None,
         pooling_avg: int = 10,
         global_constant_batch: bool = False,
+        use_offsets: bool = False,
+        indices_dtype: torch.dtype = torch.int64,
+        offsets_dtype: torch.dtype = torch.int64,
+        lengths_dtype: torch.dtype = torch.int64,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         torch.manual_seed(100)
         random.seed(100)
         dedup_factor = 2
+
         global_kjt, local_kjts = ModelInput._generate_variable_batch_features(
-            tables, average_batch_size, world_size, dedup_factor, global_constant_batch
+            tables=tables,
+            average_batch_size=average_batch_size,
+            world_size=world_size,
+            dedup_factor=dedup_factor,
+            global_constant_batch=global_constant_batch,
+            use_offsets=use_offsets,
+            indices_dtype=indices_dtype,
+            offsets_dtype=offsets_dtype,
+            lengths_dtype=lengths_dtype,
         )
+
         if weighted_tables:
             global_score_kjt, local_score_kjts = (
                 ModelInput._generate_variable_batch_features(
-                    weighted_tables,
-                    average_batch_size,
-                    world_size,
-                    dedup_factor,
-                    global_constant_batch,
+                    tables=weighted_tables,
+                    average_batch_size=average_batch_size,
+                    world_size=world_size,
+                    dedup_factor=dedup_factor,
+                    global_constant_batch=global_constant_batch,
+                    use_offsets=use_offsets,
+                    indices_dtype=indices_dtype,
+                    offsets_dtype=offsets_dtype,
+                    lengths_dtype=lengths_dtype,
                 )
             )
         else:
             global_score_kjt, local_score_kjts = None, []
+
         global_float = torch.rand(
             (dedup_factor * average_batch_size * world_size, num_float_features)
         )
+
         local_model_input = []
         label_per_rank = []
+
         for rank in range(world_size):
             label_per_rank.append(torch.rand(dedup_factor * average_batch_size))
             local_float = global_float[
@@ -644,12 +801,14 @@ class ModelInput(Pipelineable):
                     float_features=local_float,
                 ),
             )
+
         global_model_input = ModelInput(
             idlist_features=global_kjt,
             idscore_features=global_score_kjt,
             label=torch.cat(label_per_rank),
             float_features=global_float,
         )
+
         return (global_model_input, local_model_input)
 
     def to(self, device: torch.device, non_blocking: bool = False) -> "ModelInput":

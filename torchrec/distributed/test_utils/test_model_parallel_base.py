@@ -93,6 +93,7 @@ class InferenceModelParallelTestBase(unittest.TestCase):
         dedup_tables: Optional[List[EmbeddingTableConfig]] = None,
         weighted_tables: Optional[List[EmbeddingTableConfig]] = None,
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        # pyre-ignore [9]
         generate: ModelInputCallable = ModelInput.generate,
     ) -> None:
         default_rank = 0
