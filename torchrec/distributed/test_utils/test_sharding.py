@@ -126,6 +126,10 @@ class ModelInputCallable(Protocol):
             Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]]
         ] = None,
         variable_batch_size: bool = False,
+        use_offsets: bool = False,
+        indices_dtype: torch.dtype = torch.int64,
+        offsets_dtype: torch.dtype = torch.int64,
+        lengths_dtype: torch.dtype = torch.int64,
         long_indices: bool = True,
     ) -> Tuple["ModelInput", List["ModelInput"]]: ...
 
@@ -140,6 +144,10 @@ class VariableBatchModelInputCallable(Protocol):
         weighted_tables: Union[List[EmbeddingTableConfig], List[EmbeddingBagConfig]],
         pooling_avg: int = 10,
         global_constant_batch: bool = False,
+        use_offsets: bool = False,
+        indices_dtype: torch.dtype = torch.int64,
+        offsets_dtype: torch.dtype = torch.int64,
+        lengths_dtype: torch.dtype = torch.int64,
     ) -> Tuple["ModelInput", List["ModelInput"]]: ...
 
 
@@ -161,10 +169,14 @@ def gen_model_and_input(
     variable_batch_size: bool = False,
     batch_size: int = 4,
     feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
-    long_indices: bool = True,
+    use_offsets: bool = False,
+    indices_dtype: torch.dtype = torch.int64,
+    offsets_dtype: torch.dtype = torch.int64,
+    lengths_dtype: torch.dtype = torch.int64,
     global_constant_batch: bool = False,
     num_inputs: int = 1,
     input_type: str = "kjt",  # "kjt" or "td"
+    long_indices: bool = True,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -205,6 +217,10 @@ def gen_model_and_input(
                     tables=tables,
                     weighted_tables=weighted_tables or [],
                     global_constant_batch=global_constant_batch,
+                    use_offsets=use_offsets,
+                    indices_dtype=indices_dtype,
+                    offsets_dtype=offsets_dtype,
+                    lengths_dtype=lengths_dtype,
                 )
             )
     elif generate == ModelInput.generate:
@@ -218,8 +234,12 @@ def gen_model_and_input(
                     num_float_features=num_float_features,
                     variable_batch_size=variable_batch_size,
                     batch_size=batch_size,
-                    long_indices=long_indices,
                     input_type=input_type,
+                    use_offsets=use_offsets,
+                    indices_dtype=indices_dtype,
+                    offsets_dtype=offsets_dtype,
+                    lengths_dtype=lengths_dtype,
+                    long_indices=long_indices,
                 )
             )
     else:
@@ -233,6 +253,10 @@ def gen_model_and_input(
                     num_float_features=num_float_features,
                     variable_batch_size=variable_batch_size,
                     batch_size=batch_size,
+                    use_offsets=use_offsets,
+                    indices_dtype=indices_dtype,
+                    offsets_dtype=offsets_dtype,
+                    lengths_dtype=lengths_dtype,
                     long_indices=long_indices,
                 )
             )
@@ -336,6 +360,10 @@ def sharding_single_rank_test(
     input_type: str = "kjt",  # "kjt" or "td"
     allow_zero_batch_size: bool = False,
     custom_all_reduce: bool = False,  # 2D parallel
+    use_offsets: bool = False,
+    indices_dtype: torch.dtype = torch.int64,
+    offsets_dtype: torch.dtype = torch.int64,
+    lengths_dtype: torch.dtype = torch.int64,
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         batch_size = (
@@ -363,6 +391,10 @@ def sharding_single_rank_test(
             feature_processor_modules=feature_processor_modules,
             global_constant_batch=global_constant_batch,
             input_type=input_type,
+            use_offsets=use_offsets,
+            indices_dtype=indices_dtype,
+            offsets_dtype=offsets_dtype,
+            lengths_dtype=lengths_dtype,
         )
         global_model = global_model.to(ctx.device)
         global_input = inputs[0][0].to(ctx.device)
