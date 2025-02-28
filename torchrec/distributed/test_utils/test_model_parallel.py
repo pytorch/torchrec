@@ -152,6 +152,10 @@ class ModelParallelTestShared(MultiProcessTestBase):
         use_inter_host_allreduce: bool = False,
         allow_zero_batch_size: bool = False,
         custom_all_reduce: bool = False,
+        use_offsets: bool = False,
+        indices_dtype: torch.dtype = torch.int64,
+        offsets_dtype: torch.dtype = torch.int64,
+        lengths_dtype: torch.dtype = torch.int64,
     ) -> None:
         self._build_tables_and_groups(data_type=data_type)
         self._run_multi_process_test(
@@ -176,6 +180,10 @@ class ModelParallelTestShared(MultiProcessTestBase):
             use_inter_host_allreduce=use_inter_host_allreduce,
             allow_zero_batch_size=allow_zero_batch_size,
             custom_all_reduce=custom_all_reduce,
+            use_offsets=use_offsets,
+            indices_dtype=indices_dtype,
+            offsets_dtype=offsets_dtype,
+            lengths_dtype=lengths_dtype,
         )
 
 
@@ -900,4 +908,59 @@ class ModelParallelBase(ModelParallelTestShared):
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             pooling=pooling,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-fixme[56]
+    @given(
+        dtype=st.sampled_from([torch.int32, torch.int64]),
+        use_offsets=st.booleans(),
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ],
+        ),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
+    def test_sharding_diff_table_index_type(
+        self,
+        dtype: torch.dtype,
+        use_offsets: bool,
+        sharder_type: str,
+        kernel_type: str,
+    ) -> None:
+        """
+        Test that the model correctly handles input indices and offsets
+        with both int32 and int64 data types.
+        """
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type=sharder_type,
+                    sharding_type=ShardingType.ROW_WISE.value,  # or any other relevant sharding type
+                    kernel_type=kernel_type,
+                    device=self.device,
+                ),
+            ),
+        ]
+        # TODO - how to pass dtype so that sampled data uses different type indices/offsets?
+        self._test_sharding(
+            sharders=sharders,
+            backend=self.backend,
+            apply_optimizer_in_backward_config=None,
+            variable_batch_size=False,
+            pooling=PoolingType.SUM,
+            use_offsets=use_offsets,
+            indices_dtype=dtype,
+            offsets_dtype=dtype,
+            lengths_dtype=dtype,
         )
