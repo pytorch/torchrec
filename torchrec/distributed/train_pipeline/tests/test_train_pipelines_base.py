@@ -21,6 +21,7 @@ from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
+    TestEBCSharderMCH,
     TestSparseNN,
 )
 from torchrec.distributed.train_pipeline.train_pipelines import TrainPipelineSparseDist
@@ -96,6 +97,7 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
         model_type: Type[nn.Module] = TestSparseNN,
         enable_fsdp: bool = False,
         postproc_module: Optional[nn.Module] = None,
+        zch: bool = False,
     ) -> nn.Module:
         unsharded_model = model_type(
             tables=self.tables,
@@ -103,6 +105,7 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
             dense_device=self.device,
             sparse_device=torch.device("meta"),
             postproc_module=postproc_module,
+            zch=zch,
         )
         if enable_fsdp:
             unsharded_model.over.dhn_arch.linear0 = FSDP(
@@ -135,6 +138,11 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
             kernel_type=kernel_type,
             fused_params=fused_params,
         )
+        mc_sharder = TestEBCSharderMCH(
+            sharding_type=sharding_type,
+            kernel_type=kernel_type,
+            fused_params=fused_params,
+        )
         sharded_model = DistributedModelParallel(
             module=copy.deepcopy(model),
             env=ShardingEnv.from_process_group(self.pg),
@@ -144,7 +152,11 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
                 cast(
                     ModuleSharder[nn.Module],
                     sharder,
-                )
+                ),
+                cast(
+                    ModuleSharder[nn.Module],
+                    mc_sharder,
+                ),
             ],
         )
         # default fused optimizer is SGD w/ lr=0.1; we need to drop params
