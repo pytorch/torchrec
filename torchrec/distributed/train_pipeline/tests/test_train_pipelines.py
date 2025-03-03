@@ -17,7 +17,7 @@ from typing import cast, Dict, List, Optional, Tuple, Type, Union
 from unittest.mock import MagicMock
 
 import torch
-from hypothesis import given, settings, strategies as st, Verbosity
+from hypothesis import assume, given, settings, strategies as st, Verbosity
 from torch import nn, optim
 from torch._dynamo.testing import reduce_to_scalar_loss
 from torch._dynamo.utils import counters
@@ -1531,7 +1531,7 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    @settings(max_examples=4, deadline=None)
+    @settings(max_examples=8, deadline=None)
     # pyre-ignore[56]
     @given(
         start_batch=st.sampled_from([0, 6]),
@@ -1547,6 +1547,7 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 EmbeddingComputeKernel.FUSED.value,
             ]
         ),
+        zch=st.booleans(),
     )
     def test_equal_to_non_pipelined(
         self,
@@ -1554,10 +1555,13 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
         stash_gradients: bool,
         sharding_type: str,
         kernel_type: str,
+        zch: bool,
     ) -> None:
         """
         Checks that pipelined training is equivalent to non-pipelined training.
         """
+        # ZCH only supports row-wise currently
+        assume(not zch or (zch and sharding_type != ShardingType.TABLE_WISE.value))
         torch.autograd.set_detect_anomaly(True)
         data = self._generate_data(
             num_batches=12,
@@ -1572,7 +1576,7 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
             **fused_params,
         }
 
-        model = self._setup_model()
+        model = self._setup_model(zch=zch)
         sharded_model, optim = self._generate_sharded_model_and_optimizer(
             model, sharding_type, kernel_type, fused_params
         )

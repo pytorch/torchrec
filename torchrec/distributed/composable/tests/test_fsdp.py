@@ -83,11 +83,13 @@ class FullyShardTest(MultiProcessTestBase):
                 m.sparse.parameters(),
                 {"lr": 0.01},
             )
+            # pyre-ignore
             m.sparse.ebc = trec_shard(
                 module=m.sparse.ebc,
                 device=ctx.device,
                 plan=row_wise(),
             )
+            # pyre-ignore
             m.sparse.weighted_ebc = trec_shard(
                 module=m.sparse.weighted_ebc,
                 device=ctx.device,

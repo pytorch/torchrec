@@ -138,9 +138,16 @@ class PrefetchTrainPipelineContext(TrainPipelineContext):
 
 @dataclass
 class EmbeddingTrainPipelineContext(TrainPipelineContext):
-    embedding_a2a_requests: Dict[str, LazyAwaitable[Multistreamable]] = field(
-        default_factory=dict
-    )
+    embedding_a2a_requests: Dict[
+        str,
+        Union[
+            LazyAwaitable[Multistreamable],
+            # ManagedCollisionEC/EBC returns tuple of awaitables
+            Tuple[
+                LazyAwaitable[KeyedTensor], LazyAwaitable[Optional[KeyedJaggedTensor]]
+            ],
+        ],
+    ] = field(default_factory=dict)
     embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
     embedding_features: List[List[Union[str, List[str]]]] = field(default_factory=list)
     detached_embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
@@ -493,6 +500,8 @@ class PipelinedPostproc(torch.nn.Module):
 
 TForwardContext = TypeVar("TForwardContext", bound=TrainPipelineContext)
 
+EmbeddingModuleRetType = Union[Dict[str, JaggedTensor], KeyedTensor]
+
 
 class BaseForward(Generic[TForwardContext]):
     def __init__(
@@ -559,8 +568,18 @@ class PipelinedForward(BaseForward[TrainPipelineContext]):
 
 
 class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
-    # pyre-ignore [2, 24]
-    def __call__(self, *input, **kwargs) -> Awaitable:
+    def __call__(
+        self,
+        # pyre-ignore
+        *input,
+        # pyre-ignore
+        **kwargs,
+    ) -> Union[
+        Awaitable[EmbeddingModuleRetType],
+        Tuple[
+            Awaitable[EmbeddingModuleRetType], Awaitable[Optional[KeyedJaggedTensor]]
+        ],
+    ]:
         assert (
             self._name in self._context.embedding_a2a_requests
         ), "Invalid EmbeddingPipelinedForward usage, please do not directly call model.forward()"
@@ -574,7 +593,15 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             )
             ctx.record_stream(cur_stream)
         awaitable = self._context.embedding_a2a_requests.pop(self._name)
-        embeddings = awaitable.wait()  # trigger awaitable manually for type checking
+        remapped_kjts: Optional[KeyedJaggedTensor] = None
+        if isinstance(awaitable, Iterable):
+            embeddings = awaitable[0].wait()
+            remapped_kjts = awaitable[1].wait()
+        else:
+            assert isinstance(awaitable, Awaitable)
+            embeddings = (
+                awaitable.wait()
+            )  # trigger awaitable manually for type checking
         tensors = []
         detached_tensors = []
         if isinstance(embeddings, Dict):
@@ -608,7 +635,10 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             self._context.embedding_features.append([list(embeddings.keys())])
             self._context.detached_embedding_tensors.append(detached_tensors)
 
-        return LazyNoWait(embeddings)
+        if isinstance(awaitable, Iterable):
+            return (LazyNoWait(embeddings), LazyNoWait(remapped_kjts))
+        else:
+            return LazyNoWait(embeddings)
 
 
 class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
@@ -821,8 +851,8 @@ def _start_embedding_lookup(
     if target_stream is not None:
         kjt.record_stream(target_stream)
         module_context.record_stream(target_stream)
-    a2a_awaitable = module.compute_and_output_dist(module_context, kjt)
-    context.embedding_a2a_requests[module.forward.name] = a2a_awaitable
+    output_dist_out = module.compute_and_output_dist(module_context, kjt)
+    context.embedding_a2a_requests[module.forward.name] = output_dist_out
 
 
 def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
