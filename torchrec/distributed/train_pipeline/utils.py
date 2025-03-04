@@ -270,6 +270,30 @@ class DictArgInfoStep(BaseArgInfoStep):
         }
 
 
+class ModuleAttributeArgInfoStep(BaseArgInfoStep):
+    def __init__(self, module: torch.nn.Module, fqn: str) -> None:
+        super().__init__()
+        self.module = module
+        self.fqn = fqn
+
+    @classmethod
+    def validate(cls, module: torch.nn.Module, fqn: str) -> None:
+        fqn_parts = fqn.split(".")
+        current = module
+        for step in fqn_parts:
+            if not hasattr(current, step):
+                raise ValueError(f"Module {module} does not have attribute {fqn}")
+            current = getattr(current, step)
+
+    # pyre-ignore
+    def process(self, _arg) -> Any:
+        fqn_parts = self.fqn.split(".")
+        current = self.module
+        for step in fqn_parts:
+            current = getattr(current, step)
+        return current
+
+
 class ArgInfoStepFactory:
     """
     Convenience class to reduce the amount of imports the external uses will have.
@@ -305,6 +329,13 @@ class ArgInfoStepFactory:
     @classmethod
     def from_dict(cls, value: Dict[str, object]) -> DictArgInfoStep:
         return DictArgInfoStep(value)
+
+    @classmethod
+    def from_module_attr(
+        cls, module: torch.nn.Module, fqn: str
+    ) -> ModuleAttributeArgInfoStep:
+        ModuleAttributeArgInfoStep.validate(module, fqn)
+        return ModuleAttributeArgInfoStep(module, fqn)
 
 
 @dataclass
@@ -1134,6 +1165,19 @@ class NodeArgsHelper:
             arg_info.add_step(ArgInfoStepFactory.noop())
         return arg_info
 
+    def _handle_module_get_attr(
+        self,
+        fqn: str,
+        arg_info: ArgInfo,
+    ) -> ArgInfo:
+        # get_attr calls always carry FQN from model root
+        # NOTE: the first argument essentially creates a "closure" over the model
+        # so things might get hairy if the model kept in self._model is
+        # later discarded; however so far no training pipeline do that.
+        step = ArgInfoStepFactory.from_module_attr(self._model, fqn)
+        arg_info.add_step(step)
+        return arg_info
+
     def _handle_module(
         self, child_node: torch.fx.Node, arg_info: ArgInfo
     ) -> Optional[ArgInfo]:
@@ -1227,6 +1271,10 @@ class NodeArgsHelper:
                 return self._handle_placeholder(arg, arg_info)
             elif child_node.op == "call_module":
                 return self._handle_module(arg, arg_info)
+            elif child_node.op == "get_attr":
+                # pyre-fixme[9]: arg.target is a fqn string for get_attr op
+                module_fqn: str = arg.target
+                return self._handle_module_get_attr(module_fqn, arg_info)
             elif (
                 child_node.op == "call_function"
                 and child_node.target.__module__ == "builtins"
