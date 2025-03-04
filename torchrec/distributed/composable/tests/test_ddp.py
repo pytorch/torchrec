@@ -105,11 +105,13 @@ class DDPTest(MultiProcessTestBase):
                 weighted_tables=weighted_tables,
                 dense_device=ctx.device,
             )
+            # pyre-ignore
             m.sparse.ebc = trec_shard(
                 module=m.sparse.ebc,
                 device=ctx.device,
                 plan=column_wise(ranks=list(range(world_size))),
             )
+            # pyre-ignore
             m.sparse.weighted_ebc = trec_shard(
                 module=m.sparse.weighted_ebc,
                 device=ctx.device,

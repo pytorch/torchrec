@@ -26,7 +26,18 @@ from torchrec.distributed.embeddingbag import (
 )
 from torchrec.distributed.fused_embedding import FusedEmbeddingCollectionSharder
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
-from torchrec.distributed.types import QuantizedCommCodecs
+from torchrec.distributed.mc_embedding_modules import (
+    BaseManagedCollisionEmbeddingCollectionSharder,
+)
+from torchrec.distributed.mc_embeddingbag import (
+    ShardedManagedCollisionEmbeddingBagCollection,
+)
+from torchrec.distributed.mc_modules import ManagedCollisionCollectionSharder
+from torchrec.distributed.types import (
+    ParameterSharding,
+    QuantizedCommCodecs,
+    ShardingEnv,
+)
 from torchrec.distributed.utils import CopyableMixin
 from torchrec.modules.activation import SwishLayerNorm
 from torchrec.modules.embedding_configs import (
@@ -39,6 +50,12 @@ from torchrec.modules.embedding_tower import EmbeddingTower, EmbeddingTowerColle
 from torchrec.modules.feature_processor import PositionWeightedProcessor
 from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
+from torchrec.modules.mc_modules import (
+    DistanceLFU_EvictionPolicy,
+    ManagedCollisionCollection,
+    MCHManagedCollisionModule,
+)
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
@@ -1351,6 +1368,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
         over_arch_clazz: Type[nn.Module] = TestOverArch,
         postproc_module: Optional[nn.Module] = None,
+        zch: bool = False,
     ) -> None:
         super().__init__(
             tables=cast(List[BaseEmbeddingConfig], tables),
@@ -1362,12 +1380,20 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         if weighted_tables is None:
             weighted_tables = []
         self.dense = TestDenseArch(num_float_features, dense_device)
-        self.sparse = TestSparseArch(
-            tables,
-            weighted_tables,
-            sparse_device,
-            max_feature_lengths,
-        )
+        if zch:
+            self.sparse: nn.Module = TestSparseArchZCH(
+                tables,
+                weighted_tables,
+                torch.device("meta"),
+                return_remapped=True,
+            )
+        else:
+            self.sparse = TestSparseArch(
+                tables,
+                weighted_tables,
+                sparse_device,
+                max_feature_lengths,
+            )
 
         embedding_names = (
             list(embedding_groups.values())[0] if embedding_groups else None
@@ -1685,6 +1711,64 @@ class TestEBCSharder(EmbeddingBagCollectionSharder):
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
         return [self._kernel_type]
+
+
+class TestMCSharder(ManagedCollisionCollectionSharder):
+    def __init__(
+        self,
+        sharding_type: str,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+        self._sharding_type = sharding_type
+        super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+
+class TestEBCSharderMCH(
+    BaseManagedCollisionEmbeddingCollectionSharder[
+        ManagedCollisionEmbeddingBagCollection
+    ]
+):
+    def __init__(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+        super().__init__(
+            TestEBCSharder(
+                sharding_type, kernel_type, fused_params, qcomm_codecs_registry
+            ),
+            TestMCSharder(sharding_type, qcomm_codecs_registry),
+            qcomm_codecs_registry=qcomm_codecs_registry,
+        )
+
+    @property
+    def module_type(self) -> Type[ManagedCollisionEmbeddingBagCollection]:
+        return ManagedCollisionEmbeddingBagCollection
+
+    def shard(
+        self,
+        module: ManagedCollisionEmbeddingBagCollection,
+        params: Dict[str, ParameterSharding],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+        module_fqn: Optional[str] = None,
+    ) -> ShardedManagedCollisionEmbeddingBagCollection:
+        if device is None:
+            device = torch.device("cuda")
+        return ShardedManagedCollisionEmbeddingBagCollection(
+            module,
+            params,
+            # pyre-ignore [6]
+            ebc_sharder=self._e_sharder,
+            mc_sharder=self._mc_sharder,
+            env=env,
+            device=device,
+        )
 
 
 class TestFusedEBCSharder(FusedEmbeddingBagCollectionSharder):
@@ -2188,3 +2272,122 @@ class TestPositionWeightedPreprocModule(torch.nn.Module):
         modified_input = copy.deepcopy(input)
         modified_input.idlist_features = self.fp_proc(modified_input.idlist_features)
         return modified_input
+
+
+class TestSparseArchZCH(nn.Module):
+    """
+    Basic nn.Module for testing MCH EmbeddingBagCollection
+
+    Args:
+        tables
+        weighted_tables
+        device
+        return_remapped
+
+    Call Args:
+        features
+        weighted_features
+        batch_size
+
+    Returns:
+        KeyedTensor
+
+    Example::
+
+        TestSparseArch()
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        device: torch.device,
+        return_remapped: bool = False,
+    ) -> None:
+        super().__init__()
+        self._return_remapped = return_remapped
+
+        mc_modules = {}
+        for table in tables:
+            mc_modules[table.name] = MCHManagedCollisionModule(
+                zch_size=table.num_embeddings,
+                input_hash_size=4000,
+                device=device,
+                # TODO: If eviction interval is set to
+                # a low number (e.g. 2), semi-sync pipeline test will
+                # fail with in-place modification error during
+                # loss.backward(). This is because during semi-sync training,
+                # we run embedding module forward after autograd graph
+                # is constructed, but if MCH eviction happens, the
+                # variable used in autograd will have been modified
+                eviction_interval=1000,
+                eviction_policy=DistanceLFU_EvictionPolicy(),
+            )
+
+        self.ebc: ManagedCollisionEmbeddingBagCollection = (
+            ManagedCollisionEmbeddingBagCollection(
+                EmbeddingBagCollection(
+                    tables=tables,
+                    device=device,
+                ),
+                ManagedCollisionCollection(
+                    managed_collision_modules=mc_modules,
+                    embedding_configs=tables,
+                ),
+                return_remapped_features=self._return_remapped,
+            )
+        )
+
+        self.weighted_ebc: Optional[ManagedCollisionEmbeddingBagCollection] = None
+        if weighted_tables:
+            weighted_mc_modules = {}
+            for table in weighted_tables:
+                weighted_mc_modules[table.name] = MCHManagedCollisionModule(
+                    zch_size=table.num_embeddings,
+                    input_hash_size=4000,
+                    device=device,
+                    # TODO: Support MCH evictions during semi-sync
+                    eviction_interval=1000,
+                    eviction_policy=DistanceLFU_EvictionPolicy(),
+                )
+            self.weighted_ebc: ManagedCollisionEmbeddingBagCollection = (
+                ManagedCollisionEmbeddingBagCollection(
+                    EmbeddingBagCollection(
+                        tables=weighted_tables,
+                        device=device,
+                        is_weighted=True,
+                    ),
+                    ManagedCollisionCollection(
+                        managed_collision_modules=weighted_mc_modules,
+                        embedding_configs=weighted_tables,
+                    ),
+                    return_remapped_features=self._return_remapped,
+                )
+            )
+
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+        weighted_features: Optional[KeyedJaggedTensor] = None,
+        batch_size: Optional[int] = None,
+    ) -> KeyedTensor:
+        """
+        Runs forward and MC EBC and optionally, weighted MC EBC,
+        then merges the results into one KeyedTensor
+
+        Args:
+            features
+            weighted_features
+            batch_size
+        Returns:
+            KeyedTensor
+        """
+        ebc, _ = self.ebc(features)
+        ebc = _post_ebc_test_wrap_function(ebc)
+        w_ebc, _ = (
+            self.weighted_ebc(weighted_features)
+            if self.weighted_ebc is not None and weighted_features is not None
+            else None
+        )
+        result = _post_sparsenn_forward(ebc, None, w_ebc, batch_size)
+        return result
