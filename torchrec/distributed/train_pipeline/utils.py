@@ -6,7 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
-
 import copy
 import itertools
 import logging
@@ -195,6 +194,75 @@ class ArgInfoStep:
     postproc_module: Optional["PipelinedPostproc"]
     constant: Optional[object]
 
+    # pyre-ignore[3]
+    def process(
+        self,
+        arg,  # pyre-ignore[2]
+    ) -> Any:
+        if self.constant is not None:
+            if isinstance(self.constant, list):
+                arg = [
+                    (v if not isinstance(v, ArgInfo) else v.process_steps(arg))
+                    for v in self.constant
+                ]
+            elif isinstance(self.constant, dict):
+                arg = {
+                    k: (v if not isinstance(v, ArgInfo) else v.process_steps(arg))
+                    for k, v in self.constant.items()
+                }
+            else:
+                arg = self.constant
+        elif self.postproc_module is not None:
+            # postproc will internally run the same logic recursively
+            # if its args are derived from other postproc modules
+            # we can get all inputs to postproc mod based on its recorded args_info + arg passed to it
+            arg = self.postproc_module(arg)
+        else:
+            if self.is_getitem:
+                arg = arg[self.input_attr]
+            elif self.input_attr != "":
+                arg = getattr(arg, self.input_attr)
+            else:
+                # neither is_getitem nor valid attr, no-op
+                arg = arg
+
+        return arg
+
+
+class ArgInfoStepFactory:
+    """
+    Convenience class to reduce the amount of imports the external uses will have.
+    Should closely follow the constructor interfaces for the corresponding classes.
+    """
+
+    @classmethod
+    def noop(cls) -> ArgInfoStep:
+        return ArgInfoStep("", False, None, None)
+
+    @classmethod
+    def get_attr(cls, name: str) -> ArgInfoStep:
+        return ArgInfoStep(name, False, None, None)
+
+    @classmethod
+    def get_item(cls, index: str) -> ArgInfoStep:
+        return ArgInfoStep(index, True, None, None)
+
+    @classmethod
+    def postproc(cls, pipelined_postproc_module: "PipelinedPostproc") -> ArgInfoStep:
+        return ArgInfoStep("", False, pipelined_postproc_module, None)
+
+    @classmethod
+    def from_scalar(cls, value: object) -> ArgInfoStep:
+        return ArgInfoStep("", False, None, value)
+
+    @classmethod
+    def from_list(cls, value: List[object]) -> ArgInfoStep:
+        return ArgInfoStep("", False, None, value)
+
+    @classmethod
+    def from_dict(cls, value: Dict[str, object]) -> ArgInfoStep:
+        return ArgInfoStep("", False, None, value)
+
 
 @dataclass
 class ArgInfo:
@@ -202,8 +270,6 @@ class ArgInfo:
     Representation of args from a node.
 
     Attributes:
-        name (Optional[str]): name for kwarg of pipelined forward() call or None for a
-            positional arg.
         steps (List[ArgInfoStep]): sequence of transformations from input batch.
             Steps can be thought of consequtive transformations on the input, with
             output of previous step used as an input for the next. I.e. for 3 steps
@@ -211,102 +277,48 @@ class ArgInfo:
             See `ArgInfoStep` docstring for details on which transformations can be applied
     """
 
-    name: Optional[str]
     steps: List[ArgInfoStep]
 
-    def add_noop(self) -> "ArgInfo":
-        return self._insert_step("")
-
-    def add_input_attr(self, name: str, is_getitem: bool) -> "ArgInfo":
-        return self._insert_step(name, is_getitem)
-
-    def append_input_attr(self, name: str, is_getitem: bool) -> "ArgInfo":
-        return self._append_step(name, is_getitem)
-
-    def add_postproc(self, pipelined_postproc_module: "PipelinedPostproc") -> "ArgInfo":
-        return self._insert_step(postproc=pipelined_postproc_module)
-
-    def add_constant(self, value: object) -> "ArgInfo":
-        return self._insert_step(constant=value)
-
-    def _insert_step(
-        self,
-        name: str = "",
-        is_getitem: bool = False,
-        postproc: Optional["PipelinedPostproc"] = None,
-        constant: Optional[object] = None,
-    ) -> "ArgInfo":
-        self.steps.insert(0, ArgInfoStep(name, is_getitem, postproc, constant))
+    def add_step(self, step: ArgInfoStep) -> "ArgInfo":
+        self.steps.insert(0, step)
         return self
 
-    def _append_step(
-        self,
-        name: str = "",
-        is_getitem: bool = False,
-        postproc: Optional["PipelinedPostproc"] = None,
-        constant: Optional[object] = None,
-    ) -> "ArgInfo":
-        self.steps.append(ArgInfoStep(name, is_getitem, postproc, constant))
+    def append_step(self, step: ArgInfoStep) -> "ArgInfo":
+        self.steps.append(step)
         return self
 
+    # pyre-ignore[3]
+    def process_steps(
+        self,
+        arg: Any,  # pyre-ignore[2]
+    ) -> Any:
+        if not self.steps:
+            return None
+        for step in self.steps:
+            arg = step.process(arg)
 
-# pyre-ignore
-def _build_args_kwargs(
-    # pyre-ignore
-    initial_input: Any,
-    fwd_args: List[ArgInfo],
-) -> Tuple[List[Any], Dict[str, Any]]:
-    args = []
-    kwargs = {}
-    for arg_info in fwd_args:
-        if arg_info.steps:
-            arg = initial_input
-            for step in arg_info.steps:
-                if step.constant is not None:
-                    if isinstance(step.constant, list):
-                        arg = [
-                            (
-                                v
-                                if not isinstance(v, ArgInfo)
-                                else _build_args_kwargs(initial_input, [v])[0][0]
-                            )
-                            for v in step.constant
-                        ]
-                    elif isinstance(step.constant, dict):
-                        arg = {
-                            k: (
-                                v
-                                if not isinstance(v, ArgInfo)
-                                else _build_args_kwargs(initial_input, [v])[0][0]
-                            )
-                            for k, v in step.constant.items()
-                        }
-                    else:
-                        arg = step.constant
-                    break
-                elif step.postproc_module is not None:
-                    # postproc will internally run the same logic recursively
-                    # if its args are derived from other postproc modules
-                    # we can get all inputs to postproc mod based on its recorded args_info + arg passed to it
-                    arg = step.postproc_module(arg)
-                else:
-                    if step.is_getitem:
-                        arg = arg[step.input_attr]
-                    elif step.input_attr != "":
-                        arg = getattr(arg, step.input_attr)
-                    else:
-                        # neither is_getitem nor valid attr, no-op
-                        arg = arg
-            if arg_info.name:
-                kwargs[arg_info.name] = arg
-            else:
-                args.append(arg)
-        else:
-            if arg_info.name:
-                kwargs[arg_info.name] = None
-            else:
-                args.append(None)
-    return args, kwargs
+        return arg
+
+
+@dataclass
+class CallArgs:
+    args: List[ArgInfo]
+    kwargs: Dict[str, ArgInfo]
+
+    # pyre-ignore[3]
+    def build_args_kwargs(
+        self, initial_input: Any  # pyre-ignore[2]
+    ) -> Tuple[List[Any], Dict[str, Any]]:
+        """
+        Creates args and kwargs for given CallArgs and input
+        """
+        args = [arg.process_steps(initial_input) for arg in self.args]
+
+        kwargs = {
+            key: arg.process_steps(initial_input) for key, arg in self.kwargs.items()
+        }
+
+        return args, kwargs
 
 
 def recursive_record_stream(
@@ -350,7 +362,7 @@ class PipelinedPostproc(torch.nn.Module):
     Args:
         postproc_module (torch.nn.Module): postproc module to run
         fqn (str): fqn of the postproc module in the model being pipelined
-        args (List[ArgInfo]): list of ArgInfo for the postproc module
+        args (CallArgs): CallArgs for the postproc module
         context (TrainPipelineContext): Training context for the next iteration / batch
 
     Returns:
@@ -368,7 +380,7 @@ class PipelinedPostproc(torch.nn.Module):
         self,
         postproc_module: torch.nn.Module,
         fqn: str,
-        args: List[ArgInfo],
+        args: CallArgs,
         context: TrainPipelineContext,
         # TODO: make streams non-optional - skipping now to avoid ripple effect
         default_stream: Optional[torch.Stream],
@@ -441,7 +453,7 @@ class PipelinedPostproc(torch.nn.Module):
         # of another postproc module call, as long as module is pipelineable
 
         # Use input[0] as _start_data_dist only passes 1 arg
-        args, kwargs = _build_args_kwargs(input[0], self._args)
+        args, kwargs = self._args.build_args_kwargs(input[0])
 
         with record_function(f"## sdd_input_postproc {self._context.index} ##"):
             # should be no-op as we call this in dist stream
@@ -474,7 +486,7 @@ class PipelinedPostproc(torch.nn.Module):
             return res
 
     @property
-    def args(self) -> List[ArgInfo]:
+    def args(self) -> CallArgs:
         return self._args
 
     def set_context(self, context: TrainPipelineContext) -> None:
@@ -553,7 +565,7 @@ class BaseForward(Generic[TForwardContext]):
     def __init__(
         self,
         name: str,
-        args: List[ArgInfo],
+        args: CallArgs,
         module: ShardedModule,
         context: TForwardContext,
         stream: Optional[torch.Stream] = None,
@@ -570,7 +582,7 @@ class BaseForward(Generic[TForwardContext]):
         return self._name
 
     @property
-    def args(self) -> List[ArgInfo]:
+    def args(self) -> CallArgs:
         return self._args
 
     def set_context(self, context: TForwardContext) -> None:
@@ -691,7 +703,7 @@ class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
     def __init__(
         self,
         name: str,
-        args: List[ArgInfo],
+        args: CallArgs,
         module: ShardedModule,
         context: PrefetchTrainPipelineContext,
         prefetch_stream: Optional[torch.Stream] = None,
@@ -868,7 +880,7 @@ def _start_data_dist(
         # False means this argument is getting while getattr
         # and this info was done in the _rewrite_model by tracing the
         # entire model to get the arg_info_list
-        args, kwargs = _build_args_kwargs(batch, forward.args)
+        args, kwargs = forward.args.build_args_kwargs(batch)
 
         # Start input distribution.
         module_ctx = module.create_context()
@@ -1025,8 +1037,7 @@ class NodeArgsHelper:
 
     def _handle_constant(
         self,
-        # pyre-ignore
-        arg,
+        arg: Any,  # pyre-ignore
         arg_info: ArgInfo,
         for_postproc_module: bool = False,
     ) -> Optional[ArgInfo]:
@@ -1034,18 +1045,19 @@ class NodeArgsHelper:
             return None
 
         if isinstance(arg, fx_immutable_dict):
-            arg_info.add_constant(
+            step = ArgInfoStepFactory.from_dict(
                 {
                     k: self._handle_collection_element(v, for_postproc_module)
                     for k, v in arg.items()
                 }
             )
         elif isinstance(arg, fx_immutable_list):
-            arg_info.add_constant(
+            step = ArgInfoStepFactory.from_list(
                 [self._handle_collection_element(v, for_postproc_module) for v in arg]
             )
         else:
-            arg_info.add_constant(arg)
+            step = ArgInfoStepFactory.from_scalar(arg)
+        arg_info.add_step(step)
         return arg_info
 
     # pyre-ignore[3]
@@ -1076,12 +1088,12 @@ class NodeArgsHelper:
             ph_keys = ph_key.split(".")
             for key in ph_keys:
                 if "]" in key:
-                    arg_info.append_input_attr(key[:-1], True)
+                    arg_info.append_step(ArgInfoStepFactory.get_item(key[:-1]))
                 else:
-                    arg_info.append_input_attr(key, False)
+                    arg_info.append_step(ArgInfoStepFactory.get_attr(key))
         else:
             # no-op
-            arg_info.add_noop()
+            arg_info.add_step(ArgInfoStepFactory.noop())
         return arg_info
 
     def _handle_module(
@@ -1105,7 +1117,7 @@ class NodeArgsHelper:
         if isinstance(postproc_module, PipelinedPostproc):
             # Already did module swap and registered args, early exit
             self._pipelined_postprocs.add(postproc_module)
-            arg_info.add_postproc(postproc_module)
+            arg_info.add_step(ArgInfoStepFactory.postproc(postproc_module))
             return arg_info
 
         if not isinstance(postproc_module, torch.nn.Module):
@@ -1155,7 +1167,7 @@ class NodeArgsHelper:
             )
 
             self._pipelined_postprocs.add(pipelined_postproc_module)
-            arg_info.add_postproc(pipelined_postproc_module)
+            arg_info.add_step(ArgInfoStepFactory.postproc(pipelined_postproc_module))
             return arg_info
 
         return None
@@ -1166,7 +1178,7 @@ class NodeArgsHelper:
         arg,
         for_postproc_module: bool = False,
     ) -> Optional[ArgInfo]:
-        arg_info = ArgInfo(None, [])
+        arg_info = ArgInfo([])
         while True:
             if not isinstance(arg, torch.fx.Node):
                 return self._handle_constant(arg, arg_info, for_postproc_module)
@@ -1183,8 +1195,10 @@ class NodeArgsHelper:
                 # pyre-fixme[16]
                 and child_node.target.__name__ == "getattr"
             ):
-                # pyre-fixme[6]: For 2nd argument expected `str` but got Unknown
-                arg_info.add_input_attr(child_node.args[1], False)
+                arg_info.add_step(
+                    # pyre-fixme[6]: For 2nd argument expected `str` but got Unknown
+                    ArgInfoStepFactory.get_attr(child_node.args[1])
+                )
                 arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
@@ -1192,8 +1206,10 @@ class NodeArgsHelper:
                 # pyre-fixme[16]
                 and child_node.target.__name__ == "getitem"
             ):
-                # pyre-fixme[6]: For 2nd argument expected `str` but got Unknown
-                arg_info.add_input_attr(child_node.args[1], True)
+                arg_info.add_step(
+                    # pyre-fixme[6]: For 2nd argument expected `str` but got Unknown
+                    ArgInfoStepFactory.get_item(child_node.args[1])
+                )
                 arg = child_node.args[0]
             elif (
                 child_node.op == "call_function"
@@ -1233,7 +1249,7 @@ class NodeArgsHelper:
 
             elif child_node.op == "call_method" and child_node.target == "get":
                 # pyre-ignore[6]
-                arg_info.add_input_attr(child_node.args[1], True)
+                arg_info.add_step(ArgInfoStepFactory.get_item(child_node.args[1]))
                 arg = child_node.args[0]
             else:
                 break
@@ -1272,7 +1288,7 @@ class NodeArgsHelper:
         self,
         node: Node,
         for_postproc_module: bool = False,
-    ) -> Tuple[List[ArgInfo], int]:
+    ) -> Tuple[CallArgs, int]:
         pos_arg_info_list, args_found = self._get_node_args_helper(
             node.args,
             for_postproc_module,
@@ -1283,12 +1299,9 @@ class NodeArgsHelper:
         )
 
         # Replace with proper names for kwargs
-        for name, arg_info_list in zip(node.kwargs, kwargs_arg_info_list):
-            arg_info_list.name = name
+        kwargs_info_list = dict(zip(node.kwargs, kwargs_arg_info_list))
 
-        arg_info_list = pos_arg_info_list + kwargs_arg_info_list
-
-        return (arg_info_list, args_found + kwargs_found)
+        return CallArgs(pos_arg_info_list, kwargs_info_list), args_found + kwargs_found
 
 
 def _get_leaf_module_names_helper(
