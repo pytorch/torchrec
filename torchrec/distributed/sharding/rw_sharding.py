@@ -603,7 +603,7 @@ def get_total_num_buckets_runtime_device(
 
 @torch.fx.wrap
 def get_block_sizes_runtime_device(
-    block_sizes: List[int],
+    block_sizes: torch.Tensor,
     runtime_device: torch.device,
     tensor_cache: Dict[
         str,
@@ -615,11 +615,7 @@ def get_block_sizes_runtime_device(
     cache_key: str = "__block_sizes"
     if cache_key not in tensor_cache:
         tensor_cache[cache_key] = (
-            torch.tensor(
-                block_sizes,
-                device=runtime_device,
-                dtype=dtype,
-            ),
+            block_sizes.to(device=runtime_device, dtype=dtype),
             (
                 []
                 if embedding_shard_metadata is None
@@ -659,7 +655,7 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
         self._world_size: int = world_size
         self._num_features = num_features
         self._feature_total_num_buckets: Optional[List[int]] = feature_total_num_buckets
-        self.feature_block_sizes: List[int] = []
+        feature_block_sizes: List[int] = []
         for i, hash_size in enumerate(feature_hash_sizes):
             block_divisor = self._world_size
             if (
@@ -668,9 +664,14 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
             ):
                 assert feature_total_num_buckets[i] % self._world_size == 0
                 block_divisor = feature_total_num_buckets[i]
-            self.feature_block_sizes.append(
-                (hash_size + block_divisor - 1) // block_divisor
-            )
+            feature_block_sizes.append((hash_size + block_divisor - 1) // block_divisor)
+        # creating this tensor just for avoiding constant folding in fx
+        self.register_buffer(
+            "feature_block_sizes",
+            torch.tensor(
+                feature_block_sizes,
+            ),
+        )
         self.tensor_cache: Dict[
             str, Tuple[torch.Tensor, Optional[List[torch.Tensor]]]
         ] = {}
