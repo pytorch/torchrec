@@ -176,67 +176,77 @@ class PipelineStage:
 
 
 @dataclass
+class ArgInfoStep:
+    """
+    Representation of args from a node.
+
+    Attributes:
+        input_attr (str): accessing an attribute (or index) from an input,
+        is_getitem (bool): is this a getattr (output = foo.input_attr) or getitem (output = foo[input_attr]) call
+        postproc_module (Optional[PipelinedPostproc]): torch.nn.Modules that transform the input
+            output = postproc_module(input)
+        constant: no transformation, just constant argument
+            output = constant
+    """
+
+    input_attr: str
+    is_getitem: bool
+    # recursive dataclass as postproc_modules.args -> arginfo.postproc_modules -> so on
+    postproc_module: Optional["PipelinedPostproc"]
+    constant: Optional[object]
+
+
+@dataclass
 class ArgInfo:
     """
     Representation of args from a node.
 
     Attributes:
-        input_attrs (List[str]): attributes of input batch,
-            e.g. `batch.attr1.attr2` will produce ["attr1", "attr2"].
-        is_getitems (List[bool]): `batch[attr1].attr2` will produce [True, False].
-        postproc_modules (List[Optional[PipelinedPostproc]]): list of torch.nn.Modules that
-            transform the input batch.
-        constants: constant arguments that are passed to postproc modules.
         name (Optional[str]): name for kwarg of pipelined forward() call or None for a
             positional arg.
+        steps (List[ArgInfoStep]): sequence of transformations from input batch.
+            Steps can be thought of consequtive transformations on the input, with
+            output of previous step used as an input for the next. I.e. for 3 steps
+            it is similar to step3(step2(step1(input)))
+            See `ArgInfoStep` docstring for details on which transformations can be applied
     """
 
-    input_attrs: List[str]
-    is_getitems: List[bool]
-    # recursive dataclass as postproc_modules.args -> arginfo.postproc_modules -> so on
-    postproc_modules: List[Optional["PipelinedPostproc"]]
-    constants: List[Optional[object]]
     name: Optional[str]
+    steps: List[ArgInfoStep]
 
     def add_noop(self) -> "ArgInfo":
-        return self._insert_arg("")
+        return self._insert_step("")
 
     def add_input_attr(self, name: str, is_getitem: bool) -> "ArgInfo":
-        return self._insert_arg(name, is_getitem)
+        return self._insert_step(name, is_getitem)
 
     def append_input_attr(self, name: str, is_getitem: bool) -> "ArgInfo":
-        return self._append_arg(name, is_getitem)
+        return self._append_step(name, is_getitem)
 
     def add_postproc(self, pipelined_postproc_module: "PipelinedPostproc") -> "ArgInfo":
-        return self._insert_arg(postproc=pipelined_postproc_module)
+        return self._insert_step(postproc=pipelined_postproc_module)
 
     def add_constant(self, value: object) -> "ArgInfo":
-        return self._insert_arg(constant=value)
+        return self._insert_step(constant=value)
 
-    def _insert_arg(
+    def _insert_step(
         self,
         name: str = "",
         is_getitem: bool = False,
         postproc: Optional["PipelinedPostproc"] = None,
         constant: Optional[object] = None,
     ) -> "ArgInfo":
-        self.input_attrs.insert(0, name)
-        self.is_getitems.insert(0, is_getitem)
-        self.postproc_modules.insert(0, postproc)
-        self.constants.insert(0, constant)
+        self.steps.insert(0, ArgInfoStep(name, is_getitem, postproc, constant))
         return self
 
-    def _append_arg(
+    def _append_step(
         self,
         name: str = "",
         is_getitem: bool = False,
         postproc: Optional["PipelinedPostproc"] = None,
         constant: Optional[object] = None,
     ) -> "ArgInfo":
-        self.input_attrs.append(name)
-        self.is_getitems.append(is_getitem)
-        self.postproc_modules.append(postproc)
-        self.constants.append(constant)
+        self.steps.append(ArgInfoStep(name, is_getitem, postproc, constant))
         return self
 
 
@@ -249,46 +259,41 @@ def _build_args_kwargs(
     args = []
     kwargs = {}
     for arg_info in fwd_args:
-        if arg_info.input_attrs:
+        if arg_info.steps:
             arg = initial_input
-            for attr, is_getitem, postproc_mod, obj in zip(
-                arg_info.input_attrs,
-                arg_info.is_getitems,
-                arg_info.postproc_modules,
-                arg_info.constants,
-            ):
-                if obj is not None:
-                    if isinstance(obj, list):
+            for step in arg_info.steps:
+                if step.constant is not None:
+                    if isinstance(step.constant, list):
                         arg = [
                             (
                                 v
                                 if not isinstance(v, ArgInfo)
                                 else _build_args_kwargs(initial_input, [v])[0][0]
                             )
-                            for v in obj
+                            for v in step.constant
                         ]
-                    elif isinstance(obj, dict):
+                    elif isinstance(step.constant, dict):
                         arg = {
                             k: (
                                 v
                                 if not isinstance(v, ArgInfo)
                                 else _build_args_kwargs(initial_input, [v])[0][0]
                             )
-                            for k, v in obj.items()
+                            for k, v in step.constant.items()
                         }
                     else:
-                        arg = obj
+                        arg = step.constant
                     break
-                elif postproc_mod is not None:
+                elif step.postproc_module is not None:
                     # postproc will internally run the same logic recursively
                     # if its args are derived from other postproc modules
                     # we can get all inputs to postproc mod based on its recorded args_info + arg passed to it
-                    arg = postproc_mod(arg)
+                    arg = step.postproc_module(arg)
                 else:
-                    if is_getitem:
-                        arg = arg[attr]
-                    elif attr != "":
-                        arg = getattr(arg, attr)
+                    if step.is_getitem:
+                        arg = arg[step.input_attr]
+                    elif step.input_attr != "":
+                        arg = getattr(arg, step.input_attr)
                     else:
                         # neither is_getitem nor valid attr, no-op
                         arg = arg
@@ -1161,7 +1166,7 @@ class NodeArgsHelper:
         arg,
         for_postproc_module: bool = False,
     ) -> Optional[ArgInfo]:
-        arg_info = ArgInfo([], [], [], [], None)
+        arg_info = ArgInfo(None, [])
         while True:
             if not isinstance(arg, torch.fx.Node):
                 return self._handle_constant(arg, arg_info, for_postproc_module)
@@ -1200,9 +1205,9 @@ class NodeArgsHelper:
                 This is for the PT2 export path where we unflatten the input to reconstruct
                 the structure with the recorded tree spec.
                 """
-                assert arg_info.is_getitems[0]
+                assert arg_info.steps[0].is_getitem
                 # pyre-fixme[16]
-                arg = child_node.args[0][arg_info.input_attrs[0]]
+                arg = child_node.args[0][arg_info.steps[0].input_attr]
             elif (
                 child_node.op == "call_function"
                 and child_node.target.__module__ == "torchrec.sparse.jagged_tensor"
