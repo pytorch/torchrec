@@ -23,10 +23,11 @@ from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import 
     TrainPipelineSparseDistTestBase,
 )
 from torchrec.distributed.train_pipeline.utils import (
-    _build_args_kwargs,
-    _get_node_args,
     _rewrite_model,
     ArgInfo,
+    ArgInfoStepFactory,
+    CallArgs,
+    NodeArgsHelper,
     PipelinedForward,
     PipelinedPostproc,
     TrainPipelineContext,
@@ -110,7 +111,9 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `sparse`.
-            sharded_model.module.sparse.ebc.forward._args[0].postproc_modules[0],
+            sharded_model.module.sparse.ebc.forward._args.args[0]
+            .steps[0]
+            .postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_module`.
             sharded_model.module.postproc_module,
@@ -118,9 +121,9 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `sparse`.
-            sharded_model.module.sparse.weighted_ebc.forward._args[0].postproc_modules[
-                0
-            ],
+            sharded_model.module.sparse.weighted_ebc.forward._args.args[0]
+            .steps[0]
+            .postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_module`.
             sharded_model.module.postproc_module,
@@ -154,7 +157,7 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         rewritten_model.test_module = PipelinedPostproc(
             postproc_module=rewritten_model.test_module,
             fqn="test_module",
-            args=[],
+            args=CallArgs(args=[], kwargs={}),
             context=TrainPipelineContext(),
             default_stream=MagicMock(),
             dist_stream=MagicMock(),
@@ -260,71 +263,41 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
     @parameterized.expand(
         [
             (
-                [
-                    # Empty attrs to ignore any attr based logic.
-                    ArgInfo(
-                        input_attrs=[
-                            "",
-                        ],
-                        is_getitems=[False],
-                        postproc_modules=[None],
-                        constants=[None],
-                        name="id_list_features",
-                    ),
-                    ArgInfo(
-                        input_attrs=[],
-                        is_getitems=[],
-                        postproc_modules=[],
-                        constants=[],
-                        name="id_score_list_features",
-                    ),
-                ],
+                CallArgs(
+                    args=[],
+                    kwargs={
+                        "id_list_features": ArgInfo(steps=[ArgInfoStepFactory.noop()]),
+                        # Empty attrs to ignore any attr based logic.
+                        "id_score_list_features": ArgInfo(
+                            steps=[ArgInfoStepFactory.noop()]
+                        ),
+                    },
+                ),
                 0,
                 ["id_list_features", "id_score_list_features"],
             ),
             (
-                [
-                    # Empty attrs to ignore any attr based logic.
-                    ArgInfo(
-                        input_attrs=[
-                            "",
-                        ],
-                        is_getitems=[False],
-                        postproc_modules=[None],
-                        constants=[None],
-                        name=None,
-                    ),
-                    ArgInfo(
-                        input_attrs=[],
-                        is_getitems=[],
-                        postproc_modules=[],
-                        constants=[],
-                        name=None,
-                    ),
-                ],
+                CallArgs(
+                    args=[
+                        # Empty attrs to ignore any attr based logic.
+                        ArgInfo(steps=[ArgInfoStepFactory.noop()]),
+                        ArgInfo(steps=[]),
+                    ],
+                    kwargs={},
+                ),
                 2,
                 [],
             ),
             (
-                [
-                    # Empty attrs to ignore any attr based logic.
-                    ArgInfo(
-                        input_attrs=[
-                            "",
-                        ],
-                        is_getitems=[False],
-                        postproc_modules=[None],
-                        constants=[None],
-                        name=None,
-                    ),
-                    ArgInfo(
-                        input_attrs=[],
-                        is_getitems=[],
-                        postproc_modules=[],
-                        constants=[],
-                        name="id_score_list_features",
-                    ),
-                ],
+                CallArgs(
+                    args=[
+                        # Empty attrs to ignore any attr based logic.
+                        ArgInfo(
+                            steps=[ArgInfoStepFactory.noop()],
+                        )
+                    ],
+                    kwargs={"id_score_list_features": ArgInfo(steps=[])},
+                ),
                 1,
                 ["id_score_list_features"],
             ),
@@ -332,11 +305,11 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
     )
     def test_build_args_kwargs(
         self,
-        fwd_args: List[ArgInfo],
+        fwd_args: CallArgs,
         args_len: int,
         kwarges_keys: List[str],
     ) -> None:
-        args, kwargs = _build_args_kwargs("initial_input", fwd_args)
+        args, kwargs = fwd_args.build_args_kwargs("initial_input")
         self.assertEqual(len(args), args_len)
         self.assertEqual(list(kwargs.keys()), kwarges_keys)
 
@@ -367,10 +340,9 @@ class TestUtils(unittest.TestCase):
             {},
         )
 
-        num_found = 0
-        _, num_found = _get_node_args(
-            MagicMock(), kjt_node, set(), TrainPipelineContext(), False
-        )
+        node_args_helper = NodeArgsHelper(MagicMock(), TrainPipelineContext(), False)
+
+        _, num_found = node_args_helper.get_node_args(kjt_node)
 
         # Weights is call_module node, so we should only find 2 args unmodified
         self.assertEqual(num_found, len(kjt_args) - 1)
