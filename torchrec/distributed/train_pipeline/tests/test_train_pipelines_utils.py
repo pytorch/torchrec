@@ -26,6 +26,7 @@ from torchrec.distributed.train_pipeline.utils import (
     _build_args_kwargs,
     _rewrite_model,
     ArgInfo,
+    ArgInfoStep,
     NodeArgsHelper,
     PipelinedForward,
     PipelinedPostproc,
@@ -110,7 +111,7 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `sparse`.
-            sharded_model.module.sparse.ebc.forward._args[0].postproc_modules[0],
+            sharded_model.module.sparse.ebc.forward._args[0].steps[0].postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_module`.
             sharded_model.module.postproc_module,
@@ -118,9 +119,9 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         self.assertEqual(
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `sparse`.
-            sharded_model.module.sparse.weighted_ebc.forward._args[0].postproc_modules[
-                0
-            ],
+            sharded_model.module.sparse.weighted_ebc.forward._args[0]
+            .steps[0]
+            .postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_module`.
             sharded_model.module.postproc_module,
@@ -263,19 +264,18 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
                 [
                     # Empty attrs to ignore any attr based logic.
                     ArgInfo(
-                        input_attrs=[
-                            "",
+                        steps=[
+                            ArgInfoStep(
+                                input_attr="",
+                                is_getitem=False,
+                                postproc_module=None,
+                                constant=None,
+                            )
                         ],
-                        is_getitems=[False],
-                        postproc_modules=[None],
-                        constants=[None],
                         name="id_list_features",
                     ),
                     ArgInfo(
-                        input_attrs=[],
-                        is_getitems=[],
-                        postproc_modules=[],
-                        constants=[],
+                        steps=[],
                         name="id_score_list_features",
                     ),
                 ],
@@ -286,19 +286,18 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
                 [
                     # Empty attrs to ignore any attr based logic.
                     ArgInfo(
-                        input_attrs=[
-                            "",
+                        steps=[
+                            ArgInfoStep(
+                                input_attr="",
+                                is_getitem=False,
+                                postproc_module=None,
+                                constant=None,
+                            )
                         ],
-                        is_getitems=[False],
-                        postproc_modules=[None],
-                        constants=[None],
                         name=None,
                     ),
                     ArgInfo(
-                        input_attrs=[],
-                        is_getitems=[],
-                        postproc_modules=[],
-                        constants=[],
+                        steps=[],
                         name=None,
                     ),
                 ],
@@ -309,19 +308,18 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
                 [
                     # Empty attrs to ignore any attr based logic.
                     ArgInfo(
-                        input_attrs=[
-                            "",
+                        steps=[
+                            ArgInfoStep(
+                                input_attr="",
+                                is_getitem=False,
+                                postproc_module=None,
+                                constant=None,
+                            )
                         ],
-                        is_getitems=[False],
-                        postproc_modules=[None],
-                        constants=[None],
                         name=None,
                     ),
                     ArgInfo(
-                        input_attrs=[],
-                        is_getitems=[],
-                        postproc_modules=[],
-                        constants=[],
+                        steps=[],
                         name="id_score_list_features",
                     ),
                 ],
