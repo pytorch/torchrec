@@ -1989,6 +1989,126 @@ class TestPreprocWeighted(nn.Module):
         ]
 
 
+class TestPreprocForModelWithBuffer(nn.Module):
+    """
+    Basic module for testing
+
+    Args: None
+    Examples:
+        >>> TestPreprocForModelWithBuffer()
+    Returns:
+        List[KeyedJaggedTensor
+    """
+
+    def forward(
+        self, kjt: KeyedJaggedTensor, buffer: torch.Tensor
+    ) -> List[KeyedJaggedTensor]:
+        """
+        Selects 3 features from a specific KJT and concatenates
+        them with KJT derived from a given buffer
+        """
+        # split
+        jt_0 = kjt["feature_0"]
+        jt_1 = kjt["feature_1"]
+        jt_2 = kjt["feature_2"]
+
+        kjt_from_buffer = KeyedJaggedTensor.from_lengths_sync(
+            ["feature_0"],
+            buffer,
+            torch.ones(buffer.size(), dtype=torch.int32, device=buffer.device),
+        )
+
+        # merge only features 0,1,2, removing feature 3
+        kjt_projection = KeyedJaggedTensor.from_jt_dict(
+            {
+                "feature_0": jt_0,
+                "feature_1": jt_1,
+                "feature_2": jt_2,
+            }
+        )
+
+        return [
+            KeyedJaggedTensor.concat(
+                [
+                    kjt_projection,
+                    kjt_from_buffer,
+                ]
+            )
+        ]
+
+
+class TestModelWithBuffer(nn.Module):
+    """
+    Basic module that has a postproc that takes a buffer as input
+
+
+    Args:
+        tables,
+        weighted_tables,
+        device,
+        buffer_size,
+        num_float_features,
+
+    Example:
+        >>> TestModelWithBuffer(tables, weighted_tables, device, 100)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        device: torch.device,
+        buffer_size: int,
+        num_float_features: int = 10,
+    ) -> None:
+        super().__init__()
+        self.dense = TestDenseArch(num_float_features, device)
+
+        self.ebc: EmbeddingBagCollection = EmbeddingBagCollection(
+            tables=tables,
+            device=device,
+        )
+        self.weighted_ebc = EmbeddingBagCollection(
+            tables=weighted_tables,
+            is_weighted=True,
+            device=device,
+        )
+        max_index = tables[0].num_embeddings
+        self._postproc_module = TestPreprocForModelWithBuffer()
+        self.register_buffer(
+            "_buffer",
+            torch.randint(0, max_index, (buffer_size,), device=device),
+            persistent=False,
+        )
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Runs preprco for EBC and weighted EBC, optionally runs postproc for input
+
+        Args:
+            input
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]
+        """
+        modified_input = input
+
+        modified_input.idlist_features = self._postproc_module(
+            modified_input.idlist_features, self._buffer
+        )
+
+        ebc_out = self.ebc(modified_input.idlist_features[0])
+        weighted_ebc_out = self.weighted_ebc(modified_input.idscore_features)
+
+        pred = torch.cat([ebc_out.values(), weighted_ebc_out.values()], dim=1)
+        return pred.sum(), pred
+
+
 class TestModelWithPreproc(nn.Module):
     """
     Basic module with up to 3 postproc modules:
