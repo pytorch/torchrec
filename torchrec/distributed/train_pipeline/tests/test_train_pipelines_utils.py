@@ -24,9 +24,9 @@ from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import 
 )
 from torchrec.distributed.train_pipeline.utils import (
     _build_args_kwargs,
-    _get_node_args,
     _rewrite_model,
     ArgInfo,
+    NodeArgsHelper,
     PipelinedForward,
     PipelinedPostproc,
     TrainPipelineContext,
@@ -367,10 +367,9 @@ class TestUtils(unittest.TestCase):
             {},
         )
 
-        num_found = 0
-        _, num_found = _get_node_args(
-            MagicMock(), kjt_node, set(), TrainPipelineContext(), False
-        )
+        node_args_helper = NodeArgsHelper(MagicMock(), TrainPipelineContext(), False)
+
+        _, num_found = node_args_helper.get_node_args(kjt_node)
 
         # Weights is call_module node, so we should only find 2 args unmodified
         self.assertEqual(num_found, len(kjt_args) - 1)
