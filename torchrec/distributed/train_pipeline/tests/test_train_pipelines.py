@@ -1024,9 +1024,10 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # Check pipelined args
         for ebc in [pipelined_ebc, pipelined_weighted_ebc]:
-            self.assertEqual(len(ebc.forward._args), 1)
-            self.assertEqual(len(ebc.forward._args[0].steps), 2)
-            [step1, step2] = ebc.forward._args[0].steps
+            self.assertEqual(len(ebc.forward._args.args), 1)
+            self.assertEqual(len(ebc.forward._args.kwargs), 0)
+            self.assertEqual(len(ebc.forward._args.args[0].steps), 2)
+            [step1, step2] = ebc.forward._args.args[0].steps
 
             self.assertEqual(step1.input_attr, "")
             self.assertEqual(step1.is_getitem, False)
@@ -1036,13 +1037,13 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             self.assertIsNone(step2.postproc_module)
 
         self.assertEqual(
-            pipelined_ebc.forward._args[0].steps[0].postproc_module,
+            pipelined_ebc.forward._args.args[0].steps[0].postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_nonweighted`.
             pipelined_model.module.postproc_nonweighted,
         )
         self.assertEqual(
-            pipelined_weighted_ebc.forward._args[0].steps[0].postproc_module,
+            pipelined_weighted_ebc.forward._args.args[0].steps[0].postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_weighted`.
             pipelined_model.module.postproc_weighted,
@@ -1053,9 +1054,10 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         input_attr_names = {"idlist_features", "idscore_features"}
         for i in range(len(pipeline._pipelined_postprocs)):
             postproc_mod = pipeline._pipelined_postprocs[i]
-            self.assertEqual(len(postproc_mod._args), 1)
-            self.assertEqual(len(postproc_mod._args[0].steps), 2)
-            [step1, step2] = postproc_mod._args[0].steps
+            self.assertEqual(len(postproc_mod._args.args), 1)
+            self.assertEqual(len(postproc_mod._args.kwargs), 0)
+            self.assertEqual(len(postproc_mod._args.args[0].steps), 2)
+            [step1, step2] = postproc_mod._args.args[0].steps
 
             self.assertTrue(step2.input_attr in input_attr_names)
 
@@ -1112,9 +1114,10 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
 
         # Check pipelined args
         for ebc in [pipelined_ebc, pipelined_weighted_ebc]:
-            self.assertEqual(len(ebc.forward._args), 1)
-            self.assertEqual(len(ebc.forward._args[0].steps), 2)
-            [step1, step2] = ebc.forward._args[0].steps
+            self.assertEqual(len(ebc.forward._args.args), 1)
+            self.assertEqual(len(ebc.forward._args.kwargs), 0)
+            self.assertEqual(len(ebc.forward._args.args[0].steps), 2)
+            [step1, step2] = ebc.forward._args.args[0].steps
 
             self.assertEqual(step1.input_attr, "")
             self.assertEqual(step1.is_getitem, False)
@@ -1124,13 +1127,13 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             self.assertIsNone(step2.postproc_module)
 
         self.assertEqual(
-            pipelined_ebc.forward._args[0].steps[0].postproc_module,
+            pipelined_ebc.forward._args.args[0].steps[0].postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_nonweighted`.
             pipelined_model.module.postproc_nonweighted,
         )
         self.assertEqual(
-            pipelined_weighted_ebc.forward._args[0].steps[0].postproc_module,
+            pipelined_weighted_ebc.forward._args.args[0].steps[0].postproc_module,
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_weighted`.
             pipelined_model.module.postproc_weighted,
@@ -1147,8 +1150,9 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_nonweighted`.
             if postproc_mod == pipelined_model.module.postproc_nonweighted:
-                self.assertEqual(len(postproc_mod._args), 1)
-                args = postproc_mod._args[0]
+                self.assertEqual(len(postproc_mod._args.args), 1)
+                self.assertEqual(len(postproc_mod._args.kwargs), 0)
+                args = postproc_mod._args.args[0]
                 self.assertEqual(len(args.steps), 2)
                 self.assertEqual(
                     [step.input_attr for step in args.steps], ["", "idlist_features"]
@@ -1161,8 +1165,9 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `postproc_weighted`.
             elif postproc_mod == pipelined_model.module.postproc_weighted:
-                self.assertEqual(len(postproc_mod._args), 1)
-                args = postproc_mod._args[0]
+                self.assertEqual(len(postproc_mod._args.args), 1)
+                self.assertEqual(len(postproc_mod._args.kwargs), 0)
+                args = postproc_mod._args.args[0]
                 self.assertEqual(len(args.steps), 2)
                 self.assertEqual(
                     [step.input_attr for step in args.steps], ["", "idscore_features"]
@@ -1173,8 +1178,9 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
                 self.assertEqual(args.steps[0].postproc_module, parent_postproc_mod)
                 self.assertIsNone(args.steps[1].postproc_module)
             elif postproc_mod == parent_postproc_mod:
-                self.assertEqual(len(postproc_mod._args), 1)
-                args = postproc_mod._args[0]
+                self.assertEqual(len(postproc_mod._args.args), 1)
+                self.assertEqual(len(postproc_mod._args.kwargs), 0)
+                args = postproc_mod._args.args[0]
                 self.assertEqual(len(args.steps), 1)
                 self.assertEqual(args.steps[0].input_attr, "")
                 self.assertFalse(args.steps[0].is_getitem)
