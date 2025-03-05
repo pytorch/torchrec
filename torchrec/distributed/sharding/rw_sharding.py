@@ -121,9 +121,11 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         need_pos: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
         device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = None,
+        independent_emb_key_pg: Optional[dist.ProcessGroup] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env = env
+        self._independent_emb_key_pg: Optional[dist.ProcessGroup] = independent_emb_key_pg if independent_emb_key_pg else self._pg
         self._is_2D_parallel: bool = isinstance(env, ShardingEnv2D)
         self._pg: Optional[dist.ProcessGroup] = (
             self._env.sharding_pg  # pyre-ignore[16]
@@ -540,7 +542,7 @@ class RwPooledEmbeddingSharding(
         return RwSparseFeaturesDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
-            pg=self._pg,
+            pg=self._independent_emb_key_pg,
             num_features=num_features,
             feature_hash_sizes=feature_hash_sizes,
             device=device if device is not None else self._device,
