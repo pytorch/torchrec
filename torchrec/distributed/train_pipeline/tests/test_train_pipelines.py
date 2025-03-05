@@ -36,6 +36,7 @@ from torchrec.distributed.sharding_plan import (
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
+    TestModelWithBuffer,
     TestModelWithPreproc,
     TestModelWithPreprocCollectionArgs,
     TestNegSamplingModule,
@@ -1464,12 +1465,35 @@ class TrainPipelinePreprocTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
+    def test_postproc_with_buffer_arg(self) -> None:
+        """
+        If postproc module is nested, we should still be able to pipeline it
+        """
+        model = TestModelWithBuffer(
+            tables=self.tables[:-1],  # ignore last table as postproc will remove
+            weighted_tables=self.weighted_tables[:-1],  # ignore last table
+            device=self.device,
+            buffer_size=self.batch_size,
+        )
+        pipelined_model, pipeline = self._check_output_equal(
+            model,
+            self.sharding_type,
+        )
+
+        # Check that both EC and EBC pipelined
+        self.assertEqual(len(pipeline._pipelined_modules), 2)
+        self.assertEqual(len(pipeline._pipelined_postprocs), 1)
+
+    # pyre-ignore
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
     def test_pipeline_postproc_with_collection_args(self) -> None:
         """
         Exercises scenario when postproc module has an argument that is a list or dict
         with some elements being:
             * static scalars
-            * static tensors (e.g. torch.ones())
             * tensors derived from input batch (e.g. input.idlist_features["feature_0"])
             * tensors derived from input batch and other postproc module (e.g. other_postproc(input.idlist_features["feature_0"]))
         """
