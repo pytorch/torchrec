@@ -808,10 +808,16 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
             )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        return self.emb_module(
-            indices=features.values().long(),
-            offsets=features.offsets().long(),
-        )
+        indices, offsets = features.values(), features.offsets()
+
+        # If the data types of indices and offsets differ, cast the smaller type to the larger type
+        if indices.dtype != offsets.dtype:
+            if indices.element_size() < offsets.element_size():
+                indices = indices.to(offsets.dtype)
+            else:
+                offsets = offsets.to(indices.dtype)
+
+        return self.emb_module(indices=indices, offsets=offsets)
 
     # pyre-fixme[14]: `state_dict` overrides method defined in `Module` inconsistently.
     def state_dict(
@@ -1265,6 +1271,13 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
         weights = features.weights_or_none()
         if weights is not None and not torch.is_floating_point(weights):
             weights = None
+        indices, offsets = features.values(), features.offsets()
+        # If the data types of indices and offsets differ, cast the smaller type to the larger type
+        if indices.dtype != offsets.dtype:
+            if indices.element_size() < offsets.element_size():
+                indices = indices.to(offsets.dtype)
+            else:
+                offsets = offsets.to(indices.dtype)
         if features.variable_stride_per_key() and isinstance(
             self.emb_module,
             (
@@ -1274,15 +1287,15 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
             ),
         ):
             return self.emb_module(
-                indices=features.values().long(),
-                offsets=features.offsets().long(),
+                indices=indices,
+                offsets=offsets,
                 per_sample_weights=weights,
                 batch_size_per_feature_per_rank=features.stride_per_key_per_rank(),
             )
         else:
             return self.emb_module(
-                indices=features.values().long(),
-                offsets=features.offsets().long(),
+                indices=indices,
+                offsets=offsets,
                 per_sample_weights=weights,
             )
 
