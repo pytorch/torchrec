@@ -577,64 +577,48 @@ class RwPooledEmbeddingSharding(
 
 
 @torch.fx.wrap
+def convert_tensor_avoid_constant_folding(
+    nums: List[int],
+    sparse_features: KeyedJaggedTensor,
+) -> torch.Tensor:
+    return torch.tensor(
+        nums,
+        device=sparse_features.device(),
+        dtype=sparse_features.values().dtype,
+    )
+
+
 def get_total_num_buckets_runtime_device(
     total_num_buckets: Optional[List[int]],
-    runtime_device: torch.device,
-    tensor_cache: Dict[
-        str,
-        Tuple[torch.Tensor, List[torch.Tensor]],
-    ],
-    dtype: torch.dtype = torch.int32,
+    sparse_features: KeyedJaggedTensor,
 ) -> Optional[torch.Tensor]:
     if total_num_buckets is None:
         return None
-    cache_key: str = "__total_num_buckets"
-    if cache_key not in tensor_cache:
-        tensor_cache[cache_key] = (
-            torch.tensor(
-                total_num_buckets,
-                device=runtime_device,
-                dtype=dtype,
-            ),
-            [],
-        )
-    return tensor_cache[cache_key][0]
+    return convert_tensor_avoid_constant_folding(
+        nums=total_num_buckets, sparse_features=sparse_features
+    )
 
 
-@torch.fx.wrap
 def get_block_sizes_runtime_device(
     block_sizes: List[int],
-    runtime_device: torch.device,
-    tensor_cache: Dict[
-        str,
-        Tuple[torch.Tensor, List[torch.Tensor]],
-    ],
+    sparse_features: KeyedJaggedTensor,
     embedding_shard_metadata: Optional[List[List[int]]] = None,
-    dtype: torch.dtype = torch.int32,
 ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
-    cache_key: str = "__block_sizes"
-    if cache_key not in tensor_cache:
-        tensor_cache[cache_key] = (
-            torch.tensor(
-                block_sizes,
-                device=runtime_device,
-                dtype=dtype,
-            ),
-            (
-                []
-                if embedding_shard_metadata is None
-                else [
-                    torch.tensor(
-                        row_pos,
-                        device=runtime_device,
-                        dtype=dtype,
-                    )
-                    for row_pos in embedding_shard_metadata
-                ]
-            ),
-        )
-
-    return tensor_cache[cache_key]
+    return (
+        convert_tensor_avoid_constant_folding(
+            nums=block_sizes, sparse_features=sparse_features
+        ),
+        (
+            []
+            if embedding_shard_metadata is None
+            else [
+                convert_tensor_avoid_constant_folding(
+                    nums=row_pos, sparse_features=sparse_features
+                )
+                for row_pos in embedding_shard_metadata
+            ]
+        ),
+    )
 
 
 class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
@@ -671,9 +655,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
             self.feature_block_sizes.append(
                 (hash_size + block_divisor - 1) // block_divisor
             )
-        self.tensor_cache: Dict[
-            str, Tuple[torch.Tensor, Optional[List[torch.Tensor]]]
-        ] = {}
 
         self._dist = KJTOneToAll(
             splits=self._world_size * [self._num_features],
@@ -691,17 +672,13 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
 
     def forward(self, sparse_features: KeyedJaggedTensor) -> InputDistOutputs:
         block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
-            self.feature_block_sizes,
-            sparse_features.device(),
-            self.tensor_cache,
-            self._embedding_shard_metadata,
-            sparse_features.values().dtype,
+            block_sizes=self.feature_block_sizes,
+            sparse_features=sparse_features,
+            embedding_shard_metadata=self._embedding_shard_metadata,
         )
         total_num_buckets = get_total_num_buckets_runtime_device(
             self._feature_total_num_buckets,
-            sparse_features.device(),
-            self.tensor_cache,
-            sparse_features.values().dtype,
+            sparse_features=sparse_features,
         )
 
         (
