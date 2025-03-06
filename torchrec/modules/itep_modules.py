@@ -7,13 +7,19 @@
 
 # pyre-strict
 
+import copy
 import logging
-from typing import Dict, List, Optional, Tuple
+import math
+from collections import OrderedDict
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
-from torch import nn
+from torch import distributed as dist, nn
+from torch.distributed._shard.metadata import ShardMetadata
+from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
-from torchrec.distributed.embedding_types import ShardedEmbeddingTable
+from torchrec.distributed.embedding_types import ShardedEmbeddingTable, ShardingType
+from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
 from torchrec.modules.embedding_modules import reorder_inverse_indices
 from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJaggedTensor
 
@@ -63,17 +69,24 @@ class GenericITEPModule(nn.Module):
         lookups: Optional[List[nn.Module]] = None,
         enable_pruning: bool = True,
         pruning_interval: int = 1001,  # Default pruning interval 1001 iterations
+        pg: Optional[dist.ProcessGroup] = None,
+        table_name_to_sharding_type: Optional[Dict[str, str]] = None,
     ) -> None:
 
         super(GenericITEPModule, self).__init__()
 
+        if not table_name_to_sharding_type:
+            table_name_to_sharding_type = {}
+
         # Construct in-training embedding pruning args
         self.enable_pruning: bool = enable_pruning
+        self.rank_to_virtual_index_mapping: Dict[str, Dict[int, int]] = {}
         self.pruning_interval: int = pruning_interval
-        self.lookups: Optional[List[nn.Module]] = lookups
+        self.lookups: Optional[List[nn.Module]] = None if not lookups else lookups
         self.table_name_to_unpruned_hash_sizes: Dict[str, int] = (
             table_name_to_unpruned_hash_sizes
         )
+        self.table_name_to_sharding_type = table_name_to_sharding_type
 
         # Map each feature to a physical address_lookup/row_util buffer
         self.feature_table_map: Dict[str, int] = {}
@@ -82,6 +95,7 @@ class GenericITEPModule(nn.Module):
         self.idx_to_table_name: Dict[int, str] = {}
         # Prevent multi-pruning, after moving iteration counter to outside.
         self.last_pruned_iter = -1
+        self.pg = pg
 
         if self.lookups is not None:
             self.init_itep_state()
@@ -495,3 +509,289 @@ class GenericITEPModule(nn.Module):
         sparse_features._values = remapped_values
 
         return sparse_features
+
+
+class RowwiseShardedITEPModule(GenericITEPModule):
+    def _get_local_metadata_idx(self, table: ShardedEmbeddingTable) -> int:
+        # pyre-ignore Undefined attribute [16]: `Optional` has no attribute `shards_metadata`
+        for i, metadata in enumerate(table.global_metadata.shards_metadata):
+            if metadata == table.local_metadata:
+                return i
+        return -1
+
+    def _get_local_unpruned_hash_sizes_and_offsets(
+        self, table: ShardedEmbeddingTable, sharding_type: str
+    ) -> Tuple[List[int], List[int]]:
+        """
+        Returns a tuples of 2 lists: local_unpruned_hash_sizes, local_offsets. They are used
+        to create itep buffers and set checkpoint local/global metadata.
+        """
+        # pyre-ignore Undefined attribute [16]: `Optional` has no attribute `shards_metadata`
+        num_devices = len(table.global_metadata.shards_metadata)
+
+        if sharding_type == ShardingType.TABLE_ROW_WISE.value:
+            i = 0
+            for shard in table.global_metadata.shards_metadata:
+                if table.name not in self.rank_to_virtual_index_mapping:
+                    self.rank_to_virtual_index_mapping[table.name] = {}
+                self.rank_to_virtual_index_mapping[table.name][
+                    shard.placement.rank()
+                ] = i
+                i += 1
+
+        global_hash_size = self.table_name_to_unpruned_hash_sizes[table.name]
+
+        block_size: int = math.ceil(global_hash_size / num_devices)
+        last_rank: int = global_hash_size // block_size
+        # last_block_size: int = global_hash_size - block_size * last_rank
+        shard_sizes: List[int] = []
+        shard_offsets: List[int] = [0]
+
+        for rank in range(num_devices):
+            if sharding_type == ShardingType.ROW_WISE.value:
+                if rank < last_rank:
+                    local_row: int = block_size
+                elif rank == last_rank:
+                    local_row: int = global_hash_size - block_size * last_rank
+                else:
+                    local_row: int = 0
+            else:
+                if rank <= last_rank:
+                    local_row: int = block_size
+                else:
+                    local_row: int = 0
+            shard_sizes.append(local_row)
+        shard_offsets = [0]
+
+        for i in range(num_devices - 1):
+            shard_offsets.append(shard_sizes[i] + shard_offsets[i])
+
+        return shard_sizes, shard_offsets
+
+    def get_table_hash_sizes(
+        self, table: ShardedEmbeddingTable, num_gpus: int = 8
+    ) -> Tuple[int, int]:
+        # calculate local unpruned and pruned hash sizes
+        local_rows = table.local_rows
+        assert (
+            self.table_name_to_sharding_type is not None
+            and len(self.table_name_to_sharding_type) > 0
+        ), "No sharding type to feature mapping found"
+        sharding_type = self.table_name_to_sharding_type[table.name]
+
+        if table.name in self.table_name_to_unpruned_hash_sizes:
+            (
+                local_unpruned_shard_sizes,
+                _,
+            ) = self._get_local_unpruned_hash_sizes_and_offsets(table, sharding_type)
+
+            if sharding_type == ShardingType.ROW_WISE.value:
+
+                local_unpruned_rows = local_unpruned_shard_sizes[
+                    # pyre-ignore Undefined attribute [16]: `Optional` has no attribute `placement`
+                    table.local_metadata.placement.rank()
+                ]
+            else:
+
+                local_unpruned_rows = local_unpruned_shard_sizes[
+                    self.rank_to_virtual_index_mapping[table.name][
+                        table.local_metadata.placement.rank()
+                    ]
+                ]
+
+        else:
+            # Tables are not pruned by ITEP if table.name not in table_name_to_unpruned_hash_sizes
+            local_unpruned_rows = local_rows
+            logger.info(
+                f"ITEP: table {table.name} not pruned, because table name is not present in table_name_to_unpruned_hash_sizes."
+            )
+
+        return (local_rows, local_unpruned_rows)
+
+    def get_buffer_param(self, buffer_params: torch.Tensor, idx: int) -> torch.Tensor:
+        start = self.buffer_offsets_list[idx]
+        end = self.buffer_offsets_list[idx + 1]
+        length = end - start
+        return buffer_params.detach()[start:end].view(length, 1)
+
+    def get_itp_state_dict(
+        self,
+        embedding_tables: List[ShardedEmbeddingTable],
+        params: torch.Tensor,
+        pg: Optional[dist.ProcessGroup] = None,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        suffix: str = "",
+        dtype: torch.dtype = torch.float32,
+    ) -> Dict[str, Any]:
+        def get_param(params: torch.Tensor, idx: int) -> torch.Tensor:
+            start = self.buffer_offsets_list[idx]
+            end = self.buffer_offsets_list[idx + 1]
+            length = end - start
+            return params.detach()[start:end].view(length)
+
+        def get_key_from_table_name_and_suffix(
+            table_name: str, prefix: str, buffer_suffix: str
+        ) -> str:
+            return prefix + f"{table_name}{buffer_suffix}"
+
+        if destination is None:
+            destination = OrderedDict()
+            # pyre-ignore [16]
+            destination._metadata = OrderedDict()
+
+        ckp_tables: List[str] = []
+        skipped_tables: List[str] = []
+
+        assert (
+            self.table_name_to_sharding_type is not None
+            and len(self.table_name_to_sharding_type) > 0
+        ), "No sharding type to feature mapping found"
+
+        for table in embedding_tables:
+            # Skip tables that are not wrapped with itep
+            if table.name not in self.table_name_to_idx.keys():
+                skipped_tables.append(table.name)
+                continue
+            ckp_tables.append(table.name)
+            # Create buffer key and param slice
+            key = get_key_from_table_name_and_suffix(table.name, prefix, suffix)
+            param_idx = self.table_name_to_idx[table.name]
+            buffer_param: torch.Tensor = get_param(params, param_idx)
+            sharding_type = self.table_name_to_sharding_type[table.name]  # pyre-ignore
+
+            # For inference there is no pg, all tensors are local
+            if table.global_metadata is not None and pg is not None:
+                # Get unpruned global and local hashsizes
+                (
+                    unpruned_row_sizes,
+                    unpruned_row_offsets,
+                ) = self._get_local_unpruned_hash_sizes_and_offsets(
+                    table, sharding_type
+                )
+                global_unpruned_hash_size = self.table_name_to_unpruned_hash_sizes[
+                    table.name
+                ]
+                # Build global shards metadata
+                global_shards_metadata: List[ShardMetadata] = []
+                for i, table_global_metadata in enumerate(
+                    # pyre-ignore Undefined attribute [16]: `Optional` has no attribute `shards_metadata`
+                    table.global_metadata.shards_metadata
+                ):
+                    shard_sizes = [unpruned_row_sizes[i]]
+                    shard_offsets = [unpruned_row_offsets[i]]
+                    placement = copy.deepcopy(table_global_metadata.placement)
+                    global_shards_metadata.append(
+                        ShardMetadata(
+                            shard_sizes=shard_sizes,
+                            shard_offsets=shard_offsets,
+                            placement=placement,
+                        )
+                    )
+                itp_global_metadata = ShardedTensorMetadata(
+                    shards_metadata=global_shards_metadata,
+                    size=torch.Size([global_unpruned_hash_size]),
+                )
+                itp_global_metadata.tensor_properties.dtype = dtype
+                itp_global_metadata.tensor_properties.requires_grad = False
+                # Build local shard metadata
+                local_idx = self._get_local_metadata_idx(table)
+                itp_local_medadata = global_shards_metadata[local_idx]
+
+                destination[key] = (
+                    ShardedTensor._init_from_local_shards_and_global_metadata(
+                        local_shards=[Shard(buffer_param, itp_local_medadata)],
+                        sharded_tensor_metadata=itp_global_metadata,
+                        process_group=pg,
+                    )
+                )
+            else:
+                destination[key] = buffer_param
+
+        logger.info(
+            f"ITEP: get_itp_state_dict for {suffix}), got {ckp_tables}, skippped {skipped_tables}"
+        )
+        return destination
+
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module` inconsistently.
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        missing_keys = []
+        loaded_keys = []
+        unexpected_keys = list(state_dict.keys())
+        for key, dst_param in self.state_dict().items():
+            if key in state_dict:
+                src_param = state_dict[key]
+                if isinstance(dst_param, ShardedTensor):
+                    assert isinstance(src_param, ShardedTensor)
+                    assert len(dst_param.local_shards()) == len(
+                        src_param.local_shards()
+                    )
+                    for dst_local_shard, src_local_shard in zip(
+                        dst_param.local_shards(), src_param.local_shards()
+                    ):
+                        assert (
+                            dst_local_shard.metadata.shard_offsets
+                            == src_local_shard.metadata.shard_offsets
+                        )
+                        assert (
+                            dst_local_shard.metadata.shard_sizes
+                            == src_local_shard.metadata.shard_sizes
+                        )
+
+                        dst_local_shard.tensor.detach().copy_(src_local_shard.tensor)
+                else:
+                    assert isinstance(src_param, torch.Tensor) and isinstance(
+                        dst_param, torch.Tensor
+                    )
+                    dst_param.detach().copy_(src_param)
+                unexpected_keys.remove(key)
+                loaded_keys.append(key)
+            else:
+                missing_keys.append(key)
+
+        logger.info(
+            f"ITEP: load_state_dict, loaded {loaded_keys}, missed {missing_keys}, , unexpected {unexpected_keys}"
+        )
+        return _IncompatibleKeys(missing_keys, unexpected_keys)
+
+    # pyre-fixme[14]: `state_dict` overrides method defined in `nn.modules.module.Module` inconsistently.
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+    ) -> Dict[str, Any]:
+        if destination is None:
+            destination = OrderedDict()
+            # pyre-ignore [16]
+            destination._metadata = OrderedDict()
+        if self.lookups is not None:
+            # pyre-ignore [16]
+            for lookup in self.lookups:
+                list_of_tables: List[ShardedEmbeddingTable] = []
+                for emb_config in lookup.grouped_configs:
+                    list_of_tables.extend(emb_config.embedding_tables)
+
+                destination = self.get_itp_state_dict(
+                    list_of_tables,
+                    self.address_lookup,  # pyre-ignore
+                    self.pg,
+                    destination,
+                    prefix,
+                    suffix="_itp_address_lookup",
+                    dtype=torch.int64,
+                )
+                destination = self.get_itp_state_dict(
+                    list_of_tables,
+                    self.row_util,  # pyre-ignore
+                    self.pg,
+                    destination,
+                    prefix,
+                    suffix="_itp_row_util",
+                    dtype=torch.float32,
+                )
+        return destination
