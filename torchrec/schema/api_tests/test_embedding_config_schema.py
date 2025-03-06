@@ -38,6 +38,7 @@ class StableEmbeddingBagConfig:
     # when the position_weighted feature is in this table config,
     # enable this flag to support rw_sharding
     need_pos: bool = False
+    input_dim: Optional[int] = None
     pooling: PoolingType = PoolingType.SUM
 
 
@@ -56,6 +57,7 @@ class StableEmbeddingConfig:
     # when the position_weighted feature is in this table config,
     # enable this flag to support rw_sharding
     need_pos: bool = False
+    input_dim: Optional[int] = None
 
 
 class TestEmbeddingConfigSchema(unittest.TestCase):
