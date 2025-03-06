@@ -220,24 +220,24 @@ class TestProposers(unittest.TestCase):
 
         expected_output = [
             [
+                ("table_0", "data_parallel", "dense"),
+                ("table_1", "data_parallel", "dense"),
+            ],
+            [
+                ("table_1", "data_parallel", "dense"),
                 ("table_0", "row_wise", "fused"),
-                ("table_1", "row_wise", "fused"),
             ],
             [
+                ("table_1", "data_parallel", "dense"),
                 ("table_0", "table_row_wise", "fused"),
-                ("table_1", "row_wise", "fused"),
             ],
             [
+                ("table_1", "data_parallel", "dense"),
                 ("table_0", "grid_shard", "fused"),
-                ("table_1", "row_wise", "fused"),
             ],
             [
-                ("table_1", "row_wise", "fused"),
-                ("table_0", "data_parallel", "dense"),
-            ],
-            [
-                ("table_1", "table_row_wise", "fused"),
-                ("table_0", "data_parallel", "dense"),
+                ("table_1", "data_parallel", "dense"),
+                ("table_0", "table_wise", "fused"),
             ],
         ]
 
