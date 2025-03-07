@@ -7,10 +7,15 @@
 
 # pyre-strict
 
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Type, Union
+from enum import Enum
+from typing import Dict, List, Optional, OrderedDict, Tuple, Type, Union
 
 import torch
+from torch import nn
+from torch.nn.modules.module import _IncompatibleKeys
+from torch.nn.parallel import DistributedDataParallel
 
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -30,14 +35,28 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
+from torchrec.distributed.utils import filter_state_dict
 from torchrec.modules.itep_embedding_modules import ITEPEmbeddingBagCollection
-from torchrec.modules.itep_modules import GenericITEPModule
+from torchrec.modules.itep_modules import GenericITEPModule, RowwiseShardedITEPModule
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 
 
 @dataclass
 class ITEPEmbeddingBagCollectionContext(EmbeddingBagCollectionContext):
     is_reindexed: bool = False
+
+
+class ShardingTypeGroup(Enum):
+    CW_GROUP = "column_wise_group"
+    RW_GROUP = "row_wise_group"
+
+
+SHARDING_TYPE_TO_GROUP: Dict[str, ShardingTypeGroup] = {
+    ShardingType.ROW_WISE.value: ShardingTypeGroup.RW_GROUP,
+    ShardingType.TABLE_ROW_WISE.value: ShardingTypeGroup.RW_GROUP,
+    ShardingType.COLUMN_WISE.value: ShardingTypeGroup.CW_GROUP,
+    ShardingType.TABLE_WISE.value: ShardingTypeGroup.CW_GROUP,
+}
 
 
 class ShardedITEPEmbeddingBagCollection(
@@ -75,10 +94,34 @@ class ShardedITEPEmbeddingBagCollection(
             )
         )
 
+        self.table_name_to_sharding_type: Dict[str, str] = {}
+        for table_name in table_name_to_parameter_sharding.keys():
+            self.table_name_to_sharding_type[table_name] = (
+                table_name_to_parameter_sharding[table_name].sharding_type
+            )
+
+        # Group lookups, table_name_to_unpruned_hash_sizes by sharding type and pass to separate itep modules
+        (grouped_lookups, grouped_table_unpruned_size_map) = (
+            self._group_lookups_and_table_unpruned_size_map(
+                module._itep_module.table_name_to_unpruned_hash_sizes,
+            )
+        )
+
         # Instantiate ITEP Module in sharded case, re-using metadata from non-sharded case
         self._itep_module: GenericITEPModule = GenericITEPModule(
-            table_name_to_unpruned_hash_sizes=module._itep_module.table_name_to_unpruned_hash_sizes,
-            lookups=self._embedding_bag_collection._lookups,
+            table_name_to_unpruned_hash_sizes=grouped_table_unpruned_size_map[
+                ShardingTypeGroup.CW_GROUP
+            ],
+            lookups=grouped_lookups[ShardingTypeGroup.CW_GROUP],
+            pruning_interval=module._itep_module.pruning_interval,
+            enable_pruning=module._itep_module.enable_pruning,
+        )
+        self._rowwise_itep_module: RowwiseShardedITEPModule = RowwiseShardedITEPModule(
+            table_name_to_sharding_type=self.table_name_to_sharding_type,
+            table_name_to_unpruned_hash_sizes=grouped_table_unpruned_size_map[
+                ShardingTypeGroup.RW_GROUP
+            ],
+            lookups=grouped_lookups[ShardingTypeGroup.RW_GROUP],
             pruning_interval=module._itep_module.pruning_interval,
             enable_pruning=module._itep_module.enable_pruning,
         )
@@ -106,8 +149,16 @@ class ShardedITEPEmbeddingBagCollection(
         return self._embedding_bag_collection.input_dist(ctx, features)
 
     def _reindex(self, dist_input: KJTList) -> KJTList:
-        for i in range(len(dist_input)):
-            remapped_kjt = self._itep_module(dist_input[i], self._iter.item())
+        for i, (sharding, features) in enumerate(
+            zip(
+                self._embedding_bag_collection._sharding_types,
+                dist_input,
+            )
+        ):
+            if SHARDING_TYPE_TO_GROUP[sharding] == ShardingTypeGroup.CW_GROUP:
+                remapped_kjt = self._itep_module(features, self._iter.item())
+            else:
+                remapped_kjt = self._rowwise_itep_module(features, self._iter.item())
             dist_input[i] = remapped_kjt
         return dist_input
 
@@ -136,8 +187,16 @@ class ShardedITEPEmbeddingBagCollection(
         self, ctx: ITEPEmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
         # Insert forward() function of GenericITEPModule into compute_and_output_dist()
-        for i in range(len(input)):
-            remapped_kjt = self._itep_module(input[i], self._iter.item())
+        for i, (sharding, features) in enumerate(
+            zip(
+                self._embedding_bag_collection._sharding_types,
+                input,
+            )
+        ):
+            if SHARDING_TYPE_TO_GROUP[sharding] == ShardingTypeGroup.CW_GROUP:
+                remapped_kjt = self._itep_module(features, self._iter.item())
+            else:
+                remapped_kjt = self._rowwise_itep_module(features, self._iter.item())
             input[i] = remapped_kjt
         self._iter += 1
         ebc_awaitable = self._embedding_bag_collection.compute_and_output_dist(
@@ -147,6 +206,63 @@ class ShardedITEPEmbeddingBagCollection(
 
     def create_context(self) -> ITEPEmbeddingBagCollectionContext:
         return ITEPEmbeddingBagCollectionContext()
+
+    # pyre-fixme[14]: `load_state_dict` overrides method defined in `Module`
+    #  inconsistently.
+    def load_state_dict(
+        self,
+        state_dict: "OrderedDict[str, torch.Tensor]",
+        strict: bool = True,
+    ) -> _IncompatibleKeys:
+        missing_keys = []
+        unexpected_keys = []
+        self._iter = state_dict["_iter"]
+        for name, child_module in self._modules.items():
+            if child_module is not None:
+                missing, unexpected = child_module.load_state_dict(
+                    filter_state_dict(state_dict, name),
+                    strict,
+                )
+                missing_keys.extend(missing)
+                unexpected_keys.extend(unexpected)
+        return _IncompatibleKeys(
+            missing_keys=missing_keys, unexpected_keys=unexpected_keys
+        )
+
+    def _group_lookups_and_table_unpruned_size_map(
+        self, table_name_to_unpruned_hash_sizes: Dict[str, int]
+    ) -> Tuple[
+        Dict[ShardingTypeGroup, List[nn.Module]],
+        Dict[ShardingTypeGroup, Dict[str, int]],
+    ]:
+        """
+        Group ebc lookups and table_name_to_unpruned_hash_sizes by sharding types.
+        CW and TW are grouped into CW_GROUP, RW and TWRW are grouped into RW_GROUP.
+
+        Return a tuple of (grouped_lookups, grouped _table_unpruned_size_map)
+        """
+        grouped_lookups: Dict[ShardingTypeGroup, List[nn.Module]] = defaultdict(list)
+        grouped_table_unpruned_size_map: Dict[ShardingTypeGroup, Dict[str, int]] = (
+            defaultdict(dict)
+        )
+        for sharding_type, lookup in zip(
+            self._embedding_bag_collection._sharding_types,
+            self._embedding_bag_collection._lookups,
+        ):
+            sharding_group = SHARDING_TYPE_TO_GROUP[sharding_type]
+            # group lookups
+            grouped_lookups[sharding_group].append(lookup)
+            # group table_name_to_unpruned_hash_sizes
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            for emb_config in lookup.grouped_configs:
+                for table in emb_config.embedding_tables:
+                    if table.name in table_name_to_unpruned_hash_sizes.keys():
+                        grouped_table_unpruned_size_map[sharding_group][table.name] = (
+                            table_name_to_unpruned_hash_sizes[table.name]
+                        )
+
+        return grouped_lookups, grouped_table_unpruned_size_map
 
 
 class ITEPEmbeddingBagCollectionSharder(
@@ -196,8 +312,5 @@ class ITEPEmbeddingBagCollectionSharder(
         return ITEPEmbeddingBagCollection
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
-        types = [
-            ShardingType.COLUMN_WISE.value,
-            ShardingType.TABLE_WISE.value,
-        ]
+        types = list(SHARDING_TYPE_TO_GROUP.keys())
         return types
