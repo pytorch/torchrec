@@ -13,8 +13,10 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 
 MAX_SIZE: int = (1 << 63) - 1
 
-INTRA_NODE_BANDWIDTH: float = 600 * 1024 * 1024 * 1024 / 1000  # bytes/ms
-CROSS_NODE_BANDWIDTH: float = 12.5 * 1024 * 1024 * 1024 / 1000  # bytes/ms
+# TODO - move to a bandwidth file that contains info on bandwidth per size and per hardware.
+# Re-design perf estimators to use the more granular data
+INTRA_NODE_BANDWIDTH: float = 300 * 1024 * 1024 * 1024 / 1000  # bytes/ms
+CROSS_NODE_BANDWIDTH: float = 40 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 
 MIN_CW_DIM: int = 128
 POOLING_FACTOR: float = 1.0

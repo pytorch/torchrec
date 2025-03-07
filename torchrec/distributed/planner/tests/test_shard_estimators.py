@@ -94,212 +94,212 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
                     fwd_compute=9.356002212235228e-05,
                     fwd_comms=0,
                     bwd_compute=0.00018712004424470456,
-                    bwd_comms=0.000225593945387348,
+                    bwd_comms=0.00012314846217964537,
                 ),
                 Perf(
                     fwd_compute=9.356002212235228e-05,
                     fwd_comms=0,
                     bwd_compute=0.00018712004424470456,
-                    bwd_comms=0.000225593945387348,
+                    bwd_comms=0.00012314846217964537,
                 ),
             ],
             ("fused", "table_wise"): [
                 Perf(
                     fwd_compute=0.000327460077428233,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.000654920154856466,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused_uvm", "table_wise"): [
                 Perf(
                     fwd_compute=0.09179115295410156,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.18358230590820312,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused_uvm_caching", "table_wise"): [
                 Perf(
                     fwd_compute=0.01432837509527439,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.02865675019054878,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused", "column_wise"): [
                 Perf(
                     fwd_compute=0.000327460077428233,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.000654920154856466,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused_uvm", "column_wise"): [
                 Perf(
                     fwd_compute=0.09179115295410156,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.18358230590820312,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused_uvm_caching", "column_wise"): [
                 Perf(
                     fwd_compute=0.01432837509527439,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.02865675019054878,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused", "table_column_wise"): [
                 Perf(
                     fwd_compute=0.000327460077428233,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.000654920154856466,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused_uvm", "table_column_wise"): [
                 Perf(
                     fwd_compute=0.09179115295410156,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.18358230590820312,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused_uvm_caching", "table_column_wise"): [
                 Perf(
                     fwd_compute=0.01432837509527439,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.02865675019054878,
-                    bwd_comms=6.357828776041667e-05,
+                    bwd_comms=0.00012715657552083334,
                 )
             ],
             ("fused", "row_wise"): [
                 Perf(
                     fwd_compute=6.804365245261984e-05,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0001360873049052397,
-                    bwd_comms=0.00016798276699240525,
+                    bwd_comms=0.00023156105475282193,
                 ),
                 Perf(
                     fwd_compute=6.804365245261984e-05,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0001360873049052397,
-                    bwd_comms=0.00016798276699240525,
+                    bwd_comms=0.00023156105475282193,
                 ),
             ],
             ("fused_uvm", "row_wise"): [
                 Perf(
                     fwd_compute=0.019073486328125,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.03814697265625,
-                    bwd_comms=0.029329458872477215,
+                    bwd_comms=0.02939303716023763,
                 ),
                 Perf(
                     fwd_compute=0.019073486328125,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.03814697265625,
-                    bwd_comms=0.029329458872477215,
+                    bwd_comms=0.02939303716023763,
                 ),
             ],
             ("fused_uvm_caching", "row_wise"): [
                 Perf(
                     fwd_compute=0.0029773246951219513,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0059546493902439025,
-                    bwd_comms=0.004631910866838161,
+                    bwd_comms=0.004695489154598577,
                 ),
                 Perf(
                     fwd_compute=0.0029773246951219513,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0059546493902439025,
-                    bwd_comms=0.004631910866838161,
+                    bwd_comms=0.004695489154598577,
                 ),
             ],
             ("fused", "table_row_wise"): [
                 Perf(
                     fwd_compute=6.804365245261984e-05,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0001360873049052397,
-                    bwd_comms=0.00016798276699240525,
+                    bwd_comms=0.00023156105475282193,
                 ),
                 Perf(
                     fwd_compute=6.804365245261984e-05,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0001360873049052397,
-                    bwd_comms=0.00016798276699240525,
+                    bwd_comms=0.00023156105475282193,
                 ),
             ],
             ("fused_uvm", "table_row_wise"): [
                 Perf(
                     fwd_compute=0.019073486328125,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.03814697265625,
-                    bwd_comms=0.029329458872477215,
+                    bwd_comms=0.02939303716023763,
                 ),
                 Perf(
                     fwd_compute=0.019073486328125,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.03814697265625,
-                    bwd_comms=0.029329458872477215,
+                    bwd_comms=0.02939303716023763,
                 ),
             ],
             ("fused_uvm_caching", "table_row_wise"): [
                 Perf(
                     fwd_compute=0.0029773246951219513,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0059546493902439025,
-                    bwd_comms=0.004631910866838161,
+                    bwd_comms=0.004695489154598577,
                 ),
                 Perf(
                     fwd_compute=0.0029773246951219513,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0059546493902439025,
-                    bwd_comms=0.004631910866838161,
+                    bwd_comms=0.004695489154598577,
                 ),
             ],
             # grid_shard is the same as table_row_wise
             ("fused", "grid_shard"): [
                 Perf(
                     fwd_compute=6.804365245261984e-05,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0001360873049052397,
-                    bwd_comms=0.00016798276699240525,
+                    bwd_comms=0.00023156105475282193,
                 ),
                 Perf(
                     fwd_compute=6.804365245261984e-05,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0001360873049052397,
-                    bwd_comms=0.00016798276699240525,
+                    bwd_comms=0.00023156105475282193,
                 ),
             ],
             ("fused_uvm", "grid_shard"): [
                 Perf(
                     fwd_compute=0.019073486328125,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.03814697265625,
-                    bwd_comms=0.029329458872477215,
+                    bwd_comms=0.02939303716023763,
                 ),
                 Perf(
                     fwd_compute=0.019073486328125,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.03814697265625,
-                    bwd_comms=0.029329458872477215,
+                    bwd_comms=0.02939303716023763,
                 ),
             ],
             ("fused_uvm_caching", "grid_shard"): [
                 Perf(
                     fwd_compute=0.0029773246951219513,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0059546493902439025,
-                    bwd_comms=0.004631910866838161,
+                    bwd_comms=0.004695489154598577,
                 ),
                 Perf(
                     fwd_compute=0.0029773246951219513,
-                    fwd_comms=6.357828776041667e-05,
+                    fwd_comms=0.00012715657552083334,
                     bwd_compute=0.0059546493902439025,
-                    bwd_comms=0.004631910866838161,
+                    bwd_comms=0.004695489154598577,
                 ),
             ],
         }
@@ -356,33 +356,36 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_total_perfs = {
-            ("dense", "data_parallel"): [0.0005062740117544049, 0.0005062740117544049],
-            ("fused", "table_wise"): [0.000846718200207288],
-            ("fused_uvm", "table_wise"): [0.22846659024556476],
-            ("fused_uvm_caching", "table_wise"): [0.03568990443780169],
-            ("fused", "column_wise"): [0.000846718200207288],
-            ("fused_uvm", "column_wise"): [0.22846659024556476],
-            ("fused_uvm_caching", "column_wise"): [0.03568990443780169],
-            ("fused", "table_column_wise"): [0.000846718200207288],
-            ("fused_uvm", "table_column_wise"): [0.22846659024556476],
-            ("fused_uvm_caching", "table_column_wise"): [0.03568990443780169],
-            ("fused", "row_wise"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "row_wise"): [0.05403558413187663, 0.05403558413187663],
+            ("dense", "data_parallel"): [
+                0.00040382852854670224,
+                0.00040382852854670224,
+            ],
+            ("fused", "table_wise"): [0.0008785073440874965],
+            ("fused_uvm", "table_wise"): [0.228498379389445],
+            ("fused_uvm_caching", "table_wise"): [0.03572169358168191],
+            ("fused", "column_wise"): [0.0008785073440874965],
+            ("fused_uvm", "column_wise"): [0.228498379389445],
+            ("fused_uvm_caching", "column_wise"): [0.03572169358168191],
+            ("fused", "table_column_wise"): [0.0008785073440874965],
+            ("fused_uvm", "table_column_wise"): [0.228498379389445],
+            ("fused_uvm_caching", "table_column_wise"): [0.03572169358168191],
+            ("fused", "row_wise"): [0.0003196988483203561, 0.0003196988483203561],
+            ("fused_uvm", "row_wise"): [0.05409916241963704, 0.05409916241963704],
             ("fused_uvm_caching", "row_wise"): [
-                0.008488476760988312,
-                0.008488476760988312,
+                0.008552055048748728,
+                0.008552055048748728,
             ],
-            ("fused", "table_row_wise"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "table_row_wise"): [0.05403558413187663, 0.05403558413187663],
+            ("fused", "table_row_wise"): [0.0003196988483203561, 0.0003196988483203561],
+            ("fused_uvm", "table_row_wise"): [0.05409916241963704, 0.05409916241963704],
             ("fused_uvm_caching", "table_row_wise"): [
-                0.008488476760988312,
-                0.008488476760988312,
+                0.008552055048748728,
+                0.008552055048748728,
             ],
-            ("fused", "grid_shard"): [0.0002561205605599394, 0.0002561205605599394],
-            ("fused_uvm", "grid_shard"): [0.05403558413187663, 0.05403558413187663],
+            ("fused", "grid_shard"): [0.0003196988483203561, 0.0003196988483203561],
+            ("fused_uvm", "grid_shard"): [0.05409916241963704, 0.05409916241963704],
             ("fused_uvm_caching", "grid_shard"): [
-                0.008488476760988312,
-                0.008488476760988312,
+                0.008552055048748728,
+                0.008552055048748728,
             ],
         }
 
@@ -420,18 +423,18 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_total_perfs = {
-            ("dense", "data_parallel"): [0.0026901057997143255, 0.0026901057997143255],
-            ("fused", "table_wise"): [0.001880471390093715],
-            ("fused_uvm", "table_wise"): [0.41346708933512366],
-            ("fused_uvm_caching", "table_wise"): [0.06488458897040142],
-            ("fused", "column_wise"): [0.001880471390093715],
-            ("fused_uvm", "column_wise"): [0.41346708933512366],
-            ("fused_uvm_caching", "column_wise"): [0.06488458897040142],
-            ("fused", "row_wise"): [0.0007915177871551004, 0.0007915177871551004],
-            ("fused_uvm", "row_wise"): [0.16504605611165366, 0.16504605611165366],
+            ("dense", "data_parallel"): [0.0018508724012768255, 0.0018508724012768255],
+            ("fused", "table_wise"): [0.002287372431760382],
+            ("fused_uvm", "table_wise"): [0.4138739903767904],
+            ("fused_uvm_caching", "table_wise"): [0.0652914900120681],
+            ("fused", "column_wise"): [0.002287372431760382],
+            ("fused_uvm", "column_wise"): [0.4138739903767904],
+            ("fused_uvm_caching", "column_wise"): [0.0652914900120681],
+            ("fused", "row_wise"): [0.0009949683079884337, 0.0009949683079884337],
+            ("fused_uvm", "row_wise"): [0.16524950663248697, 0.16524950663248697],
             ("fused_uvm_caching", "row_wise"): [
-                0.025934979198424798,
-                0.025934979198424798,
+                0.026138429719258126,
+                0.026138429719258126,
             ],
         }
 
@@ -473,18 +476,18 @@ class TestEmbeddingPerfEstimator(unittest.TestCase):
         )
 
         expected_total_perfs = {
-            ("quant", "table_wise"): [0.0001296231579222408],
-            ("quant_uvm", "table_wise"): [0.029231707255045574],
-            ("quant_uvm_caching", "table_wise"): [0.004584459754509654],
-            ("quant", "row_wise"): [5.5200413052187844e-05, 5.5200413052187844e-05],
-            ("quant_uvm", "row_wise"): [0.008370081583658854, 0.008370081583658854],
+            ("quant", "table_wise"): [0.00015505447302640747],
+            ("quant_uvm", "table_wise"): [0.02925713857014974],
+            ("quant_uvm_caching", "table_wise"): [0.00460989106961382],
+            ("quant", "row_wise"): [8.063172815635452e-05, 8.063172815635452e-05],
+            ("quant_uvm", "row_wise"): [0.008395512898763021, 0.008395512898763021],
             ("quant_uvm_caching", "row_wise"): [
-                0.0013280108692200203,
-                0.0013280108692200203,
+                0.0013534421843241868,
+                0.0013534421843241868,
             ],
-            ("quant", "column_wise"): [0.0001296231579222408],
-            ("quant_uvm", "column_wise"): [0.029231707255045574],
-            ("quant_uvm_caching", "column_wise"): [0.004584459754509654],
+            ("quant", "column_wise"): [0.00015505447302640747],
+            ("quant_uvm", "column_wise"): [0.02925713857014974],
+            ("quant_uvm_caching", "column_wise"): [0.00460989106961382],
         }
 
         total_perfs = {
