@@ -580,61 +580,44 @@ class RwPooledEmbeddingSharding(
 def get_total_num_buckets_runtime_device(
     total_num_buckets: Optional[List[int]],
     runtime_device: torch.device,
-    tensor_cache: Dict[
-        str,
-        Tuple[torch.Tensor, List[torch.Tensor]],
-    ],
     dtype: torch.dtype = torch.int32,
 ) -> Optional[torch.Tensor]:
     if total_num_buckets is None:
         return None
-    cache_key: str = "__total_num_buckets"
-    if cache_key not in tensor_cache:
-        tensor_cache[cache_key] = (
-            torch.tensor(
-                total_num_buckets,
-                device=runtime_device,
-                dtype=dtype,
-            ),
-            [],
-        )
-    return tensor_cache[cache_key][0]
+
+    return torch.tensor(
+        total_num_buckets,
+        device=runtime_device,
+        dtype=dtype,
+    )
 
 
 @torch.fx.wrap
 def get_block_sizes_runtime_device(
     block_sizes: List[int],
     runtime_device: torch.device,
-    tensor_cache: Dict[
-        str,
-        Tuple[torch.Tensor, List[torch.Tensor]],
-    ],
     embedding_shard_metadata: Optional[List[List[int]]] = None,
     dtype: torch.dtype = torch.int32,
 ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
-    cache_key: str = "__block_sizes"
-    if cache_key not in tensor_cache:
-        tensor_cache[cache_key] = (
-            torch.tensor(
-                block_sizes,
-                device=runtime_device,
-                dtype=dtype,
-            ),
-            (
-                []
-                if embedding_shard_metadata is None
-                else [
-                    torch.tensor(
-                        row_pos,
-                        device=runtime_device,
-                        dtype=dtype,
-                    )
-                    for row_pos in embedding_shard_metadata
-                ]
-            ),
-        )
-
-    return tensor_cache[cache_key]
+    return (
+        torch.tensor(
+            block_sizes,
+            device=runtime_device,
+            dtype=dtype,
+        ),
+        (
+            []
+            if embedding_shard_metadata is None
+            else [
+                torch.tensor(
+                    row_pos,
+                    device=runtime_device,
+                    dtype=dtype,
+                )
+                for row_pos in embedding_shard_metadata
+            ]
+        ),
+    )
 
 
 class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
@@ -671,9 +654,6 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
             self.feature_block_sizes.append(
                 (hash_size + block_divisor - 1) // block_divisor
             )
-        self.tensor_cache: Dict[
-            str, Tuple[torch.Tensor, Optional[List[torch.Tensor]]]
-        ] = {}
 
         self._dist = KJTOneToAll(
             splits=self._world_size * [self._num_features],
@@ -693,14 +673,12 @@ class InferRwSparseFeaturesDist(BaseSparseFeaturesDist[InputDistOutputs]):
         block_sizes, block_bucketize_row_pos = get_block_sizes_runtime_device(
             self.feature_block_sizes,
             sparse_features.device(),
-            self.tensor_cache,
             self._embedding_shard_metadata,
             sparse_features.values().dtype,
         )
         total_num_buckets = get_total_num_buckets_runtime_device(
             self._feature_total_num_buckets,
             sparse_features.device(),
-            self.tensor_cache,
             sparse_features.values().dtype,
         )
 
