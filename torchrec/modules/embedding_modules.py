@@ -182,6 +182,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
         self._embedding_bag_configs = tables
         self._lengths_per_embedding: List[int] = []
+        self._datatype_per_embedding: List[DataType] = []
 
         table_names = set()
         for embedding_config in tables:
@@ -193,6 +194,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 if embedding_config.data_type == DataType.FP32
                 else torch.float16
             )
+            self._datatype_per_embedding.append(embedding_config.data_type)
             self.embedding_bags[embedding_config.name] = nn.EmbeddingBag(
                 num_embeddings=embedding_config.num_embeddings,
                 embedding_dim=embedding_config.embedding_dim,
@@ -243,12 +245,19 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
         pooled_embeddings: List[torch.Tensor] = []
         feature_dict = features.to_dict()
         for i, embedding_bag in enumerate(self.embedding_bags.values()):
+            dtype = (
+                torch.float32
+                if self._datatype_per_embedding[i] == DataType.FP32
+                else torch.float16
+            )
             for feature_name in self._feature_names[i]:
                 f = feature_dict[feature_name]
                 res = embedding_bag(
                     input=f.values(),
                     offsets=f.offsets(),
-                    per_sample_weights=f.weights() if self._is_weighted else None,
+                    per_sample_weights=(
+                        f.weights().to(dtype) if self._is_weighted else None
+                    ),
                 ).float()
                 pooled_embeddings.append(res)
         return KeyedTensor(
