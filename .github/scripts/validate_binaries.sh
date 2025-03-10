@@ -27,20 +27,18 @@ if [[ ${MATRIX_GPU_ARCH_TYPE} = 'rocm' ]]; then
     exit 0
 fi
 
-if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
-    export CUDA_VERSION="cu124"
-else
-    export CUDA_VERSION="cpu"
-fi
-
 # figure out CUDA VERSION
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
     if [[ ${MATRIX_GPU_ARCH_VERSION} = '11.8' ]]; then
         export CUDA_VERSION="cu118"
     elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.1' ]]; then
         export CUDA_VERSION="cu121"
+    elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.6' ]]; then
+        export CUDA_VERSION="cu126"
+    elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.8' ]]; then
+        export CUDA_VERSION="cu128"
     else
-        export CUDA_VERSION="cu124"
+        export CUDA_VERSION="cu126"
     fi
 else
     export CUDA_VERSION="cpu"
