@@ -66,6 +66,7 @@ from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
     FeatureProcessedEmbeddingBagCollection as QuantFeatureProcessedEmbeddingBagCollection,
     MODULE_ATTR_EMB_CONFIG_NAME_TO_NUM_ROWS_POST_PRUNING_DICT,
+    quant_prep_enable_cache_features_order,
     quant_prep_enable_register_tbes,
 )
 
@@ -428,6 +429,9 @@ def quantize_inference_model(
         """
 
         quant_prep_enable_register_tbes(model, [FeatureProcessedEmbeddingBagCollection])
+        quant_prep_enable_cache_features_order(
+            model, [FeatureProcessedEmbeddingBagCollection]
+        )
         # pyre-fixme[16]: `FeatureProcessedEmbeddingBagCollection` has no attribute
         #  `qconfig`.
         fp_module.qconfig = QuantConfig(
@@ -466,6 +470,9 @@ def quantize_inference_model(
             )
 
     quant_prep_enable_register_tbes(model, list(additional_mapping.keys()))
+    quant_prep_enable_cache_features_order(
+        model, [EmbeddingBagCollection, EmbeddingCollection]
+    )
     quantize_embeddings(
         model,
         dtype=quantization_dtype,
