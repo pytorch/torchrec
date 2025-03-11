@@ -11,7 +11,7 @@ import abc
 import copy
 from collections import defaultdict
 from dataclasses import dataclass
-from itertools import filterfalse
+from itertools import filterfalse, zip_longest
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
 import torch
@@ -662,12 +662,9 @@ def _set_sharding_context_post_a2a(
             and kjt.variable_stride_per_key()
             and kjt.stride_per_key_per_rank()
         ):
+            strides = kjt.stride_per_key_per_rank()
             sharding_context.batch_size_per_rank_per_feature = [
-                [
-                    kjt.stride_per_key_per_rank()[i][j]
-                    for i in range(len(kjt.stride_per_key_per_rank()))
-                ]
-                for j in range(len(kjt.stride_per_key_per_rank()[0]))
+                [x for x in col if x is not None] for col in zip_longest(*strides)
             ]
 
 
