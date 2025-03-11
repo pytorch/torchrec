@@ -35,18 +35,12 @@ from torchrec.distributed.sharding.rw_sharding import (
     RwSparseFeaturesDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import (
+    InferSequenceEmbeddingDist,
     InferSequenceShardingContext,
     SequenceShardingContext,
 )
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
-from torchrec.modules.utils import (
-    _fx_trec_get_feature_length,
-    _get_batching_hinted_output,
-)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
-
-torch.fx.wrap("_get_batching_hinted_output")
-torch.fx.wrap("_fx_trec_get_feature_length")
 
 
 class RwSequenceEmbeddingDist(
@@ -164,84 +158,6 @@ class RwSequenceEmbeddingSharding(
         )
 
 
-class InferRwSequenceEmbeddingDist(
-    BaseEmbeddingDist[
-        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
-    ]
-):
-    def __init__(
-        self,
-        device: torch.device,
-        world_size: int,
-        device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = None,
-    ) -> None:
-        super().__init__()
-        self._device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = (
-            device_type_from_sharding_infos
-        )
-        num_cpu_ranks = 0
-        if self._device_type_from_sharding_infos and isinstance(
-            self._device_type_from_sharding_infos, tuple
-        ):
-            for device_type in self._device_type_from_sharding_infos:
-                if device_type == "cpu":
-                    num_cpu_ranks += 1
-        elif self._device_type_from_sharding_infos == "cpu":
-            num_cpu_ranks = world_size
-
-        self._device_dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(
-            device, world_size - num_cpu_ranks
-        )
-
-    def forward(
-        self,
-        local_embs: List[torch.Tensor],
-        sharding_ctx: Optional[InferSequenceShardingContext] = None,
-    ) -> List[torch.Tensor]:
-        assert (
-            self._device_type_from_sharding_infos is not None
-        ), "_device_type_from_sharding_infos should always be set for InferRwSequenceEmbeddingDist"
-        if isinstance(self._device_type_from_sharding_infos, tuple):
-            assert sharding_ctx is not None
-            assert sharding_ctx.embedding_names_per_rank is not None
-            assert len(self._device_type_from_sharding_infos) == len(
-                local_embs
-            ), "For heterogeneous sharding, the number of local_embs should be equal to the number of device types"
-            non_cpu_local_embs = []
-            # Here looping through local_embs is also compatible with tracing
-            # given the number of looks up / shards withing ShardedQuantEmbeddingCollection
-            # are fixed and local_embs is the output of those looks ups. However, still
-            # using _device_type_from_sharding_infos to iterate on local_embs list as
-            # that's a better practice.
-            for i, device_type in enumerate(self._device_type_from_sharding_infos):
-                if device_type != "cpu":
-                    non_cpu_local_embs.append(
-                        _get_batching_hinted_output(
-                            _fx_trec_get_feature_length(
-                                sharding_ctx.features[i],
-                                # pyre-fixme [16]
-                                sharding_ctx.embedding_names_per_rank[i],
-                            ),
-                            local_embs[i],
-                        )
-                    )
-            non_cpu_local_embs_dist = self._device_dist(non_cpu_local_embs)
-            index = 0
-            result = []
-            for i, device_type in enumerate(self._device_type_from_sharding_infos):
-                if device_type == "cpu":
-                    result.append(local_embs[i])
-                else:
-                    result.append(non_cpu_local_embs_dist[index])
-                    index += 1
-            return result
-        elif self._device_type_from_sharding_infos == "cpu":
-            # for cpu sharder, output dist should be a no-op
-            return local_embs
-        else:
-            return self._device_dist(local_embs)
-
-
 class InferRwSequenceEmbeddingSharding(
     BaseRwEmbeddingSharding[
         InferSequenceShardingContext,
@@ -297,7 +213,7 @@ class InferRwSequenceEmbeddingSharding(
     ) -> BaseEmbeddingDist[
         InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
     ]:
-        return InferRwSequenceEmbeddingDist(
+        return InferSequenceEmbeddingDist(
             device if device is not None else self._device,
             self._world_size,
             self._device_type_from_sharding_infos,
