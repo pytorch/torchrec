@@ -57,7 +57,7 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main
       build-matrix: ${{ needs.filter-matrix.outputs.matrix }}
-      pre-script: ""
+      pre-script: .github/scripts/validate_binaries.sh
       post-script: .github/scripts/install_fbgemm.sh
       package-name: torchrec
       smoke-test-script: ""
