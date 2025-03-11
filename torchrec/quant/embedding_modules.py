@@ -73,6 +73,7 @@ from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 from torchrec.types import ModuleNoCopyMixin
 
 torch.fx.wrap("_get_batching_hinted_output")
+torch.fx.wrap("len")
 
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
@@ -106,6 +107,8 @@ MODULE_ATTR_USE_UNFLATTENED_LENGTHS_FOR_BATCHING: str = (
 
 MODULE_ATTR_USE_BATCHING_HINTED_OUTPUT: str = "__use_batching_hinted_output"
 
+MODULE_ATTR_CACHE_FEATURES_ORDER: str = "__cache_features_order"
+
 DEFAULT_ROW_ALIGNMENT = 16
 
 
@@ -118,6 +121,17 @@ def _get_feature_length(feature: KeyedJaggedTensor) -> Tensor:
 def _get_kjt_keys(feature: KeyedJaggedTensor) -> List[str]:
     # this is a fx rule to help with batching hinting jagged sequence tensor coalescing.
     return feature.keys()
+
+
+@torch.fx.wrap
+def _permute_kjt(
+    features: KeyedJaggedTensor,
+    permute_order: List[int],
+    permute_order_tensor: Optional[Tensor] = None,
+) -> KeyedJaggedTensor:
+    if permute_order == list(range(len(permute_order))):
+        return features.flatten_lengths()
+    return features.permute(permute_order, permute_order_tensor)
 
 
 @torch.fx.wrap
@@ -174,6 +188,16 @@ def quant_prep_customize_row_alignment(
         module,
         module_types,
         lambda m: setattr(m, MODULE_ATTR_ROW_ALIGNMENT_INT, row_alignment),
+    )
+
+
+def quant_prep_enable_cache_features_order(
+    module: nn.Module, module_types: List[Type[torch.nn.Module]]
+) -> None:
+    for_each_module_of_type_do(
+        module,
+        module_types,
+        lambda m: setattr(m, MODULE_ATTR_CACHE_FEATURES_ORDER, True),
     )
 
 
@@ -323,6 +347,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         register_tbes: bool = False,
         quant_state_dict_split_scale_bias: bool = False,
         row_alignment: int = DEFAULT_ROW_ALIGNMENT,
+        cache_features_order: bool = False,
     ) -> None:
         super().__init__()
         self._is_weighted = is_weighted
@@ -333,6 +358,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._feature_names: List[str] = []
         self._feature_splits: List[int] = []
         self._length_per_key: List[int] = []
+        self._features_order: List[int] = []
         # Registering in a List instead of ModuleList because we want don't want them to be auto-registered.
         # Their states will be modified via self.embedding_bags
         self._emb_modules: List[nn.Module] = []
@@ -458,6 +484,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
+        setattr(self, MODULE_ATTR_CACHE_FEATURES_ORDER, cache_features_order)
 
     def forward(
         self,
@@ -473,8 +500,26 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
 
         embeddings = []
         kjt_keys = _get_kjt_keys(features)
-        kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
-        kjt_permute = features.permute(kjt_permute_order)
+        # Cache the features order since the features will always have the same order of keys in inference.
+        if getattr(self, MODULE_ATTR_CACHE_FEATURES_ORDER, False):
+            if self._features_order == []:
+                for k in self._feature_names:
+                    self._features_order.append(kjt_keys.index(k))
+                self.register_buffer(
+                    "_features_order_tensor",
+                    torch.tensor(
+                        data=self._features_order,
+                        device=features.device(),
+                        dtype=torch.int32,
+                    ),
+                    persistent=False,
+                )
+            kjt_permute = _permute_kjt(
+                features, self._features_order, self._features_order_tensor
+            )
+        else:
+            kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
+            kjt_permute = _permute_kjt(features, kjt_permute_order)
         kjts_per_key = kjt_permute.split(self._feature_splits)
 
         for i, (emb_op, _) in enumerate(
@@ -550,6 +595,9 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             row_alignment=getattr(
                 module, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
             ),
+            cache_features_order=getattr(
+                module, MODULE_ATTR_CACHE_FEATURES_ORDER, False
+            ),
         )
 
     def embedding_bag_configs(
@@ -584,6 +632,7 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
         # feature processor is Optional only for the sake of the last position in constructor
         # Enforcing it to be non-None, for None case EmbeddingBagCollection must be used.
         feature_processor: Optional[FeatureProcessorsCollection] = None,
+        cache_features_order: bool = False,
     ) -> None:
         super().__init__(
             tables,
@@ -594,6 +643,7 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
             register_tbes,
             quant_state_dict_split_scale_bias,
             row_alignment,
+            cache_features_order,
         )
         assert (
             feature_processor is not None
@@ -661,6 +711,9 @@ class FeatureProcessedEmbeddingBagCollection(EmbeddingBagCollection):
             ),
             # pyre-ignore
             feature_processor=fp_ebc._feature_processors,
+            cache_features_order=getattr(
+                module, MODULE_ATTR_CACHE_FEATURES_ORDER, False
+            ),
         )
 
 
@@ -687,6 +740,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         register_tbes: bool = False,
         quant_state_dict_split_scale_bias: bool = False,
         row_alignment: int = DEFAULT_ROW_ALIGNMENT,
+        cache_features_order: bool = False,
     ) -> None:
         super().__init__()
         self._emb_modules: List[IntNBitTableBatchedEmbeddingBagsCodegen] = []
@@ -698,6 +752,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self.row_alignment = row_alignment
         self._key_to_tables: Dict[DataType, List[EmbeddingConfig]] = defaultdict(list)
         self._feature_names: List[str] = []
+        self._features_order: List[int] = []
 
         self._table_name_to_quantized_weights: Optional[
             Dict[str, Tuple[Tensor, Tensor]]
@@ -808,6 +863,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self.register_tbes = register_tbes
         if register_tbes:
             self.tbes: torch.nn.ModuleList = torch.nn.ModuleList(self._emb_modules)
+        setattr(self, MODULE_ATTR_CACHE_FEATURES_ORDER, cache_features_order)
 
     def forward(
         self,
@@ -823,9 +879,28 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
 
         feature_embeddings: Dict[str, JaggedTensor] = {}
         kjt_keys = _get_kjt_keys(features)
-        kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
-        kjt_permute = features.permute(kjt_permute_order)
+        # Cache the features order since the features will always have the same order of keys in inference.
+        if getattr(self, MODULE_ATTR_CACHE_FEATURES_ORDER, False):
+            if self._features_order == []:
+                for k in self._feature_names:
+                    self._features_order.append(kjt_keys.index(k))
+                self.register_buffer(
+                    "_features_order_tensor",
+                    torch.tensor(
+                        data=self._features_order,
+                        device=features.device(),
+                        dtype=torch.int32,
+                    ),
+                    persistent=False,
+                )
+            kjt_permute = _permute_kjt(
+                features, self._features_order, self._features_order_tensor
+            )
+        else:
+            kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
+            kjt_permute = _permute_kjt(features, kjt_permute_order)
         kjts_per_key = kjt_permute.split(self._feature_splits)
+
         for i, (emb_module, key) in enumerate(
             zip(self._emb_modules, self._key_to_tables.keys())
         ):
@@ -896,6 +971,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
             row_alignment=getattr(
                 module, MODULE_ATTR_ROW_ALIGNMENT_INT, DEFAULT_ROW_ALIGNMENT
             ),
+            cache_features_order=getattr(
+                module, MODULE_ATTR_CACHE_FEATURES_ORDER, False
+            ),
         )
 
     def _get_name(self) -> str:
@@ -953,6 +1031,7 @@ class QuantManagedCollisionEmbeddingCollection(EmbeddingCollection):
         row_alignment: int = DEFAULT_ROW_ALIGNMENT,
         managed_collision_collection: Optional[ManagedCollisionCollection] = None,
         return_remapped_features: bool = False,
+        cache_features_order: bool = False,
     ) -> None:
         super().__init__(
             tables,
@@ -963,6 +1042,7 @@ class QuantManagedCollisionEmbeddingCollection(EmbeddingCollection):
             register_tbes,
             quant_state_dict_split_scale_bias,
             row_alignment,
+            cache_features_order,
         )
         assert (
             managed_collision_collection
@@ -1062,4 +1142,5 @@ class QuantManagedCollisionEmbeddingCollection(EmbeddingCollection):
             ),
             managed_collision_collection=mc_ec._managed_collision_collection,
             return_remapped_features=mc_ec._return_remapped_features,
+            cache_features_order=getattr(ec, MODULE_ATTR_CACHE_FEATURES_ORDER, False),
         )
