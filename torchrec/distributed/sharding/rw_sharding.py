@@ -576,9 +576,9 @@ def convert_tensor(t: None, feature: KeyedJaggedTensor) -> None: ...
 
 
 def convert_tensor(
-    t: torch.Tensor | None,
+    t: Union[torch.Tensor, None],
     feature: KeyedJaggedTensor,
-) -> torch.Tensor | None:
+) -> Union[torch.Tensor, None]:
     # comparing to Optional[Tensor], this solution will keep output as Tensor when input is not None
     if t is None:
         return None
