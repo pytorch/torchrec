@@ -163,7 +163,7 @@ conda run -n "${CONDA_ENV}" python -c "import torch; print(torch.version.cuda)"
 conda run -n "${CONDA_ENV}" pip install torchx-nightly iopath
 
 # python 3.9 needs import-metadata
-conda run -n "${CONDA_ENV}" pip install importlib_metadata
+conda run -n "${CONDA_ENV}" pip install importlib-metadata
 
 
 # Finally run smoke test
