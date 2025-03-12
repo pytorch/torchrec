@@ -199,6 +199,7 @@ class ThroughputMetricTest(unittest.TestCase):
             {
                 "throughput-throughput|total_examples": total_examples,
                 "throughput-throughput|attempt_examples": total_examples,
+                "throughput-throughput|batch_size": 256,
             },
         )
 
@@ -209,5 +210,6 @@ class ThroughputMetricTest(unittest.TestCase):
             {
                 "throughput-throughput|total_examples": total_examples,
                 "throughput-throughput|attempt_examples": total_examples,
+                "throughput-throughput|batch_size": 512,
             },
         )

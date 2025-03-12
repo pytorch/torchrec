@@ -46,6 +46,7 @@ class MetricName(MetricNameBase):
     THROUGHPUT = "throughput"
     TOTAL_EXAMPLES = "total_examples"
     ATTEMPT_EXAMPLES = "attempt_examples"
+    BATCH_SIZE = "batch_size"
     CTR = "ctr"
     CALIBRATION = "calibration"
     MSE = "mse"
