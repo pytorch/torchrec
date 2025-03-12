@@ -74,6 +74,7 @@ class ThroughputMetric(nn.Module):
     _attempt_throughput_key: str
     _total_examples_key: str
     _attempt_examples_key: str
+    _batch_size_key: str
     _steps: int
 
     def __init__(
@@ -167,6 +168,11 @@ class ThroughputMetric(nn.Module):
             str(self._namespace),
             MetricName.ATTEMPT_EXAMPLES,
         )
+        self._batch_size_key = compose_metric_key(
+            self._namespace,
+            str(self._namespace),
+            MetricName.BATCH_SIZE,
+        )
         self._steps = 0
 
     def _get_batch_size(self) -> int:
@@ -258,4 +264,15 @@ class ThroughputMetric(nn.Module):
                         self._attempt_throughput_key: attempt_throughput.clone().detach(),
                     }
                 )
+        # If using batch_size_stages, also report the current batch size
+        # that was used for the throughput calculation
+        if self._batch_size_stages is not None:
+            ret.update(
+                {
+                    self._batch_size_key: torch.tensor(
+                        self._get_batch_size(), dtype=torch.int32
+                    ),
+                }
+            )
+
         return ret
