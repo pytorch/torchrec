@@ -1116,7 +1116,7 @@ class InferGroupedEmbeddingsLookup(
             self._embedding_lookups_per_rank.append(
                 MetaInferGroupedEmbeddingsLookup(
                     grouped_configs=grouped_configs_per_rank[rank],
-                    device=rank_device(device_type, rank),
+                    device=device,
                     fused_params=fused_params,
                     shard_index=shard_index,
                 )
