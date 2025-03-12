@@ -26,3 +26,6 @@ if [ "$CHANNEL" = "nightly" ]; then
 elif [ "$CHANNEL" = "test" ]; then
     ${CONDA_RUN} pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/test/"$CU_VERSION"
 fi
+
+
+${CONDA_RUN} pip install importlib-metadata
