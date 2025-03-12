@@ -162,5 +162,9 @@ conda run -n "${CONDA_ENV}" python -c "import torch; print(torch.version.cuda)"
 # python 3.11 needs torchx-nightly
 conda run -n "${CONDA_ENV}" pip install torchx-nightly iopath
 
+# python 3.9 needs import-metadata
+conda run -n "${CONDA_ENV}" pip install importlib_metadata
+
+
 # Finally run smoke test
 conda run -n "${CONDA_ENV}" torchx run -s local_cwd dist.ddp -j 1 --gpu 2 --script test_installation.py
