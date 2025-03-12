@@ -229,7 +229,9 @@ def quantize_state_dict(
                         tensor = tensor.half()
                     quant_res = tensor.view(torch.uint8)
                 elif data_type == DataType.FP32:
-                    quant_res = tensor.float().view(torch.uint8)
+                    if tensor.dtype == torch.float16:
+                        tensor = tensor.float()
+                    quant_res = tensor.view(torch.uint8)
                 else:
                     quant_res = (
                         torch.ops.fbgemm.FloatOrHalfToFusedNBitRowwiseQuantizedSBHalf(
