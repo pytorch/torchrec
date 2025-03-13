@@ -631,9 +631,14 @@ class KeyValueParams:
             relavant to rocksdb compaction frequency
         ssd_rocksdb_shards: Optional[int]: rocksdb shards number
         gather_ssd_cache_stats: bool: whether enable ssd stats collection, std reporter and ods reporter
-        report_interval: int: report interval in train iteration if gather_ssd_cache_stats is enabled
-        ods_prefix: str: ods prefix for ods reporting
+        stats_reporter_config
+            report_interval: int: report interval in train iteration if gather_ssd_cache_stats is enabled
+        use_passed_in_path: bool: whether to use passed in path for rocksdb shard or default one on SSD mount path
+        l2_cache_size: Optional[int]: size in GB for l2 cache size per tbe
+        max_l1_cache_size: Optional[int]: size in MB for max allocated l1 cache size per tbe
+        enable_async_update: Optional[bool]: whether to enable async update for l2 cache
         bulk_init_chunk_size: int: number of rows to insert into rocksdb in each chunk
+        lazy_bulk_init_enabled: bool: whether to enable lazy(async) bulk init for SSD TBE
 
         # Parameter Server (PS) Attributes
         ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
@@ -652,8 +657,9 @@ class KeyValueParams:
     use_passed_in_path: bool = True
     l2_cache_size: Optional[int] = None  # size in GB
     max_l1_cache_size: Optional[int] = None  # size in MB
-    enable_async_update: Optional[bool] = None
+    enable_async_update: Optional[bool] = None  # enable L2 cache async update
     bulk_init_chunk_size: Optional[int] = None  # number of rows
+    lazy_bulk_init_enabled: Optional[bool] = None  # enable lazy bulk init
 
     # Parameter Server (PS) Attributes
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -679,6 +685,7 @@ class KeyValueParams:
                 self.max_l1_cache_size,
                 self.enable_async_update,
                 self.bulk_init_chunk_size,
+                self.lazy_bulk_init_enabled,
             )
         )
 
