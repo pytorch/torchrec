@@ -46,6 +46,7 @@ from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
 )
+from torchrec.distributed.train_pipeline import TorchCompileConfig
 from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
     TrainPipelineSparseDistTestBase,
 )
@@ -134,6 +135,7 @@ class Tracer(torch.fx.Tracer):
 class TrainPipelineBaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.device = torch.device("cuda:0")
+        self.optimizer_compile_config = TorchCompileConfig()
         torch.backends.cudnn.allow_tf32 = False
         torch.backends.cuda.matmul.allow_tf32 = False
 
@@ -156,7 +158,43 @@ class TrainPipelineBaseTest(unittest.TestCase):
             for b in range(5)
         ]
         dataloader = iter(data)
-        pipeline = TrainPipelineBase(model_gpu, optimizer_gpu, self.device)
+        pipeline = TrainPipelineBase(
+            model_gpu, optimizer=optimizer_gpu, device=self.device
+        )
+
+        for batch in data[:-1]:
+            optimizer_cpu.zero_grad()
+            loss, pred = model_cpu(batch)
+            loss.backward()
+            optimizer_cpu.step()
+
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(pred_gpu.device, self.device)
+            # Results will be close but not exactly equal as one model is on CPU and other on GPU
+            # If both were on GPU, the results will be exactly the same
+            self.assertTrue(torch.isclose(pred_gpu.cpu(), pred))
+
+    def test_equal_to_non_pipelined_compiled(self) -> None:
+        model_cpu = TestModule()
+        model_gpu = TestModule().to(self.device)
+        model_gpu.load_state_dict(model_cpu.state_dict())
+        optimizer_cpu = optim.SGD(model_cpu.model.parameters(), lr=0.01)
+        optimizer_gpu = optim.SGD(model_gpu.model.parameters(), lr=0.01)
+        data = [
+            ModelInputSimple(
+                float_features=torch.rand((10,)),
+                label=torch.randint(2, (1,), dtype=torch.float32),
+            )
+            for b in range(5)
+        ]
+        dataloader = iter(data)
+        pipeline = TrainPipelineBase(
+            model=model_gpu,
+            optimizer=optimizer_gpu,
+            device=self.device,
+            optimizer_compile_config=self.optimizer_compile_config,
+        )
 
         for batch in data[:-1]:
             optimizer_cpu.zero_grad()
@@ -175,6 +213,7 @@ class TrainPipelineBaseTest(unittest.TestCase):
 class TrainPipelinePT2Test(unittest.TestCase):
     def setUp(self) -> None:
         self.device = torch.device("cuda:0")
+        self.optimizer_compile_config = TorchCompileConfig()
         torch.backends.cudnn.allow_tf32 = False
         torch.backends.cuda.matmul.allow_tf32 = False
 
@@ -234,7 +273,41 @@ class TrainPipelinePT2Test(unittest.TestCase):
             for b in range(5)
         ]
         dataloader = iter(data)
-        pipeline = TrainPipelinePT2(model_gpu, optimizer_gpu, self.device)
+        pipeline = TrainPipelinePT2(
+            model_gpu, optimizer=optimizer_gpu, device=self.device
+        )
+
+        for batch in data[:-1]:
+            optimizer_cpu.zero_grad()
+            loss, pred = model_cpu(batch)
+            loss.backward()
+            optimizer_cpu.step()
+
+            pred_gpu = pipeline.progress(dataloader)
+
+            self.assertEqual(pred_gpu.device, self.device)
+            self.assertTrue(torch.isclose(pred_gpu.cpu(), pred))
+
+    def test_equal_to_non_pipelined_compiled(self) -> None:
+        model_cpu = TestModule()
+        model_gpu = TestModule().to(self.device)
+        model_gpu.load_state_dict(model_cpu.state_dict())
+        optimizer_cpu = optim.SGD(model_cpu.model.parameters(), lr=0.01)
+        optimizer_gpu = optim.SGD(model_gpu.model.parameters(), lr=0.01)
+        data = [
+            ModelInputSimple(
+                float_features=torch.rand((10,)),
+                label=torch.randint(2, (1,), dtype=torch.float32),
+            )
+            for b in range(5)
+        ]
+        dataloader = iter(data)
+        pipeline = TrainPipelinePT2(
+            model=model_gpu,
+            optimizer=optimizer_gpu,
+            device=self.device,
+            optimizer_compile_config=self.optimizer_compile_config,
+        )
 
         for batch in data[:-1]:
             optimizer_cpu.zero_grad()
@@ -271,7 +344,10 @@ class TrainPipelinePT2Test(unittest.TestCase):
 
         dataloader = iter(data)
         pipeline = TrainPipelinePT2(
-            model_gpu, optimizer_gpu, self.device, pre_compile_fn=pre_compile_fn
+            model=model_gpu,
+            optimizer=optimizer_gpu,
+            device=self.device,
+            pre_compile_fn=pre_compile_fn,
         )
         self.assertEqual(model_gpu._dummy_setting, "dummy")
         for _ in range(len(data)):
@@ -315,7 +391,10 @@ class TrainPipelinePT2Test(unittest.TestCase):
         ]
         dataloader = iter(data)
         pipeline = TrainPipelinePT2(
-            model_gpu, optimizer_gpu, self.device, input_transformer=kjt_for_pt2_tracing
+            model=model_gpu,
+            optimizer=optimizer_gpu,
+            device=self.device,
+            input_transformer=kjt_for_pt2_tracing,
         )
 
         for batch in data[:-1]:
@@ -527,6 +606,83 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=execute_all_batches,
+        )
+        if not execute_all_batches:
+            data = data[:-2]
+
+        for batch in data:
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+            torch.testing.assert_close(pred, pred_pipeline)
+
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    @settings(max_examples=4, deadline=None)
+    # pyre-ignore[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ]
+        ),
+        execute_all_batches=st.booleans(),
+    )
+    def test_equal_to_non_pipelined_compiled(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        execute_all_batches: bool,
+    ) -> None:
+        """
+        Checks that pipelined training is equivalent to non-pipelined training.
+        """
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        fused_params = {}
+        fused_params_pipelined = {}
+
+        model = self._setup_model()
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = self.pipeline_class(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=execute_all_batches,
+            optimizer_compile_config=self.optimizer_compile_config,
         )
         if not execute_all_batches:
             data = data[:-2]
@@ -1669,6 +1825,149 @@ class EmbeddingTrainPipelineTest(TrainPipelineSparseDistTestBase):
         pred_pipeline = pipeline.progress(dataloader)
         self.assertRaises(StopIteration, pipeline.progress, dataloader)
 
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    @settings(max_examples=8, deadline=None)
+    # pyre-ignore[56]
+    @given(
+        start_batch=st.sampled_from([0, 6]),
+        stash_gradients=st.booleans(),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.ROW_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED.value,
+            ]
+        ),
+        zch=st.booleans(),
+    )
+    def test_equal_to_non_pipelined_compiled(
+        self,
+        start_batch: int,
+        stash_gradients: bool,
+        sharding_type: str,
+        kernel_type: str,
+        zch: bool,
+    ) -> None:
+        """
+        Checks that pipelined training is equivalent to non-pipelined training.
+        """
+        # ZCH only supports row-wise currently
+        assume(not zch or (zch and sharding_type != ShardingType.TABLE_WISE.value))
+        torch.autograd.set_detect_anomaly(True)
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        fused_params = {
+            "stochastic_rounding": False,
+        }
+        fused_params_pipelined = {
+            **fused_params,
+        }
+
+        model = self._setup_model(zch=zch)
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = TrainPipelineSemiSync(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            start_batch=start_batch,
+            stash_gradients=stash_gradients,
+            optimizer_compile_config=self.optimizer_compile_config,
+        )
+
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+        #  `sparse_forward`.
+        prior_sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(
+            data[0].to(self.device)
+        )
+        prior_batch = data[0].to(self.device)
+        prior_stashed_grads = None
+        batch_index = 0
+        sparse_out = None
+        for batch in data[1:]:
+            batch_index += 1
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `dense_forward`.
+            loss, pred = sharded_model._dmp_wrapped_module.dense_forward(
+                prior_batch, prior_sparse_out
+            )
+            if batch_index - 1 >= start_batch:
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse_forward`.
+                sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
+
+            loss.backward()
+
+            stashed_grads = None
+            if batch_index - 1 >= start_batch and stash_gradients:
+                stashed_grads = []
+                for param in optim.param_groups[0]["params"]:
+                    stashed_grads.append(
+                        param.grad.clone() if param.grad is not None else None
+                    )
+                    param.grad = None
+
+            if prior_stashed_grads is not None:
+                for param, stashed_grad in zip(
+                    optim.param_groups[0]["params"], prior_stashed_grads
+                ):
+                    param.grad = stashed_grad
+            optim.step()
+            optim.zero_grad()
+
+            if batch_index - 1 < start_batch:
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `sparse_forward`.
+                sparse_out = sharded_model._dmp_wrapped_module.sparse_forward(batch)
+
+            prior_stashed_grads = stashed_grads
+            prior_batch = batch
+            prior_sparse_out = sparse_out
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+
+            if batch_index >= start_batch:
+                self.assertTrue(
+                    pipeline.is_semi_sync(), msg="pipeline is not semi_sync"
+                )
+            else:
+                self.assertFalse(pipeline.is_semi_sync(), msg="pipeline is semi_sync")
+            self.assertTrue(
+                torch.equal(pred, pred_pipeline),
+                msg=f"batch {batch_index} doesn't match",
+            )
+
+        # one more batch
+        pred_pipeline = pipeline.progress(dataloader)
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+
 
 class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
     @unittest.skipIf(
@@ -1761,6 +2060,119 @@ class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             optimizer=optim_pipelined,
             device=self.device,
             execute_all_batches=execute_all_batches,
+        )
+
+        if not execute_all_batches:
+            data = data[:-3]
+
+        for batch in data:
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+
+            if not mixed_precision:
+                # Rounding error is expected when using different precisions for weights and cache
+                self.assertTrue(torch.equal(pred, pred_pipeline))
+            else:
+                torch.testing.assert_close(pred, pred_pipeline)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    @settings(max_examples=4, deadline=None)
+    # pyre-ignore[56]
+    @given(
+        execute_all_batches=st.booleans(),
+        weight_precision=st.sampled_from(
+            [
+                DataType.FP16,
+                DataType.FP32,
+            ]
+        ),
+        cache_precision=st.sampled_from(
+            [
+                DataType.FP16,
+                DataType.FP32,
+            ]
+        ),
+        load_factor=st.sampled_from(
+            [
+                0.2,
+                0.4,
+                0.6,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            ]
+        ),
+    )
+    def test_equal_to_non_pipelined_compiled(
+        self,
+        execute_all_batches: bool,
+        weight_precision: DataType,
+        cache_precision: DataType,
+        load_factor: float,
+        sharding_type: str,
+        kernel_type: str,
+    ) -> None:
+        """
+        Checks that pipelined training is equivalent to non-pipelined training.
+        """
+        mixed_precision: bool = weight_precision != cache_precision
+        self._set_table_weights_precision(weight_precision)
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        fused_params = {
+            "cache_load_factor": load_factor,
+            "cache_precision": cache_precision,
+            "stochastic_rounding": False,  # disable non-deterministic behavior when converting fp32<->fp16
+        }
+        fused_params_pipelined = {
+            **fused_params,
+            "prefetch_pipeline": True,
+        }
+
+        model = self._setup_model()
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = PrefetchTrainPipelineSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=execute_all_batches,
+            optimizer_compile_config=self.optimizer_compile_config,
         )
 
         if not execute_all_batches:
@@ -2365,3 +2777,14 @@ class TrainPipelineSparseDistCompAutogradTest(TrainPipelineSparseDistTest):
         execute_all_batches: bool,
     ) -> None:
         super().test_equal_to_non_pipelined()
+
+    @unittest.skip(
+        "TrainPipelineSparseDistTest.test_equal_to_non_pipelined_compiled was called from multiple different executors, which fails hypothesis HealthChek, so we skip it here"
+    )
+    def test_equal_to_non_pipelined_compiled(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        execute_all_batches: bool,
+    ) -> None:
+        super().test_equal_to_non_pipelined_compiled()
