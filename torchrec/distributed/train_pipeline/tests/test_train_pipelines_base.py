@@ -24,6 +24,7 @@ from torchrec.distributed.test_utils.test_model import (
     TestEBCSharderMCH,
     TestSparseNN,
 )
+from torchrec.distributed.train_pipeline import TorchCompileConfig
 from torchrec.distributed.train_pipeline.train_pipelines import TrainPipelineSparseDist
 from torchrec.distributed.types import ModuleSharder, ShardingEnv
 from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig
@@ -62,6 +63,7 @@ class TrainPipelineSparseDistTestBase(unittest.TestCase):
 
         self.device = torch.device("cuda:0")
         self.pipeline_class = TrainPipelineSparseDist
+        self.optimizer_compile_config = TorchCompileConfig()
 
     def tearDown(self) -> None:
         super().tearDown()
