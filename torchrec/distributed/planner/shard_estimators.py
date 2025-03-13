@@ -715,20 +715,34 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
         # inter host comm
         if world_size > local_world_size:
-            inter_host_fwd_fwd_output_write_size = (
-                batch_outputs * world_size * emb_dim * fwd_a2a_comm_data_type_size
+            inter_host_fwd_output_write_size = (
+                batch_outputs
+                * (
+                    world_size / local_world_size
+                )  # this is the size of the procress group.
+                * emb_dim
+                * fwd_a2a_comm_data_type_size
             )
-            fwd_comms += (
-                inter_host_fwd_fwd_output_write_size
-                * (local_world_size / world_size)
-                / inter_host_bw
-            )
+            fwd_comms += inter_host_fwd_output_write_size / inter_host_bw
 
         fwd_compute = (
             input_read_size + embedding_lookup_size + fwd_output_write_size
         ) / device_bw
 
+        # intra host comm (i.e. all gather)
         bwd_comms = bwd_output_write_size / intra_host_bw
+
+        # inter host comm (i.e. all to all)
+        if world_size > local_world_size:
+            inter_host_bwd_output_write_size = (
+                batch_outputs
+                * (
+                    world_size / local_world_size
+                )  # this is the size of the procress group.
+                * emb_dim
+                * bwd_a2a_comm_data_type_size
+            )
+            bwd_comms += inter_host_bwd_output_write_size / inter_host_bw
 
         bwd_grad_indice_weights_kernel = (
             fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
