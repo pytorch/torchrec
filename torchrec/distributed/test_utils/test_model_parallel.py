@@ -916,8 +916,7 @@ class ModelParallelBase(ModelParallelTestShared):
     )
     # pyre-fixme[56]
     @given(
-        index_dtype=st.sampled_from([torch.int32, torch.int64]),
-        offsets_dtype=st.sampled_from([torch.int32, torch.int64]),
+        dtype=st.sampled_from([torch.int32, torch.int64]),
         use_offsets=st.booleans(),
         sharder_type=st.sampled_from(
             [
@@ -933,8 +932,7 @@ class ModelParallelBase(ModelParallelTestShared):
     @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_diff_table_index_type(
         self,
-        index_dtype: torch.dtype,
-        offsets_dtype: torch.dtype,
+        dtype: torch.dtype,
         use_offsets: bool,
         sharder_type: str,
         kernel_type: str,
@@ -962,7 +960,7 @@ class ModelParallelBase(ModelParallelTestShared):
             variable_batch_size=False,
             pooling=PoolingType.SUM,
             use_offsets=use_offsets,
-            indices_dtype=index_dtype,
-            offsets_dtype=offsets_dtype,
-            lengths_dtype=index_dtype,
+            indices_dtype=dtype,
+            offsets_dtype=dtype,
+            lengths_dtype=dtype,
         )
