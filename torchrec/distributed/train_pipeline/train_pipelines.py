@@ -392,6 +392,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._model_fwd: Callable[[Optional[In]], Tuple[torch.Tensor, Out]] = (
             custom_model_fwd if custom_model_fwd else model
         )
+        self._pipelined_forward_type = PipelinedForward
 
         # DEPRECATED FIELDS
         self._batch_i: Optional[In] = None
@@ -410,9 +411,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
         if self._pipelined_modules:
             _pipeline_detach_model(
+                model=self._model,
                 pipelined_modules=self._pipelined_modules,
                 original_forwards=self._original_forwards,
                 original_kjt_dist_forwards=self._original_kjt_dist_forwards,
+                pipelined_postprocs=self._pipelined_postprocs,
             )
 
         self._model_attached = False
@@ -429,13 +432,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._pipeline_model(
                 batch=self.batches[0] if sparse_dist else None,
                 context=self.contexts[0],
-                pipelined_forward=PipelinedForward,
+                pipelined_forward=self._pipelined_forward_type,
             )
         else:
             # attaching the model after end of train pipeline
             # model rewrite for SDD needs context but self.contexts is empty
             # reset _pipelined_modules so _fill_pipeline will rewrite model on progress()
             self._pipelined_modules = []
+            self._pipelined_postprocs = []
 
     def _set_module_context(self, context: TrainPipelineContext) -> None:
         for module in self._pipelined_modules:
@@ -768,6 +772,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
         )
+        self._pipelined_forward_type = EmbeddingPipelinedForward
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
         logger.debug(f"Starting semi-sync run at batch: {self._start_batch}")
@@ -839,6 +844,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._optimizer.step()
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        if not self._model_attached:
+            self.attach(self._model)
+
         self.fill_pipeline(dataloader_iter)
         if not self.batches:
             raise StopIteration
