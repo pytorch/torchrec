@@ -414,9 +414,16 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
         self._fused_params = fused_params
 
     def sharding_types(self, compute_device_type: str) -> List[str]:
-        # For MTIA, sharding types are restricted to TW, CW.
+
         if compute_device_type in {"mtia"}:
-            return [ShardingType.TABLE_WISE.value, ShardingType.COLUMN_WISE.value]
+            return [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+                ShardingType.TABLE_COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                ShardingType.GRID_SHARD.value,
+            ]
 
         types = [
             ShardingType.DATA_PARALLEL.value,
