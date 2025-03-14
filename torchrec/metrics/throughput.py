@@ -14,7 +14,7 @@ import logging
 import math
 import time
 from collections import deque
-from typing import Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Mapping, NamedTuple, Optional
 
 import torch
 import torch.nn as nn
@@ -112,12 +112,12 @@ class ThroughputMetric(nn.Module):
             batch_size_stages
         )
 
+        if self._batch_size_stages is not None:
+            # Keep track of the number of batches if using batch_size_stages
+            self.num_batch: int = 0
+
         self.register_buffer("total_examples", torch.tensor(0, dtype=torch.long))
         self.register_buffer("warmup_examples", torch.tensor(0, dtype=torch.long))
-        if batch_size_stages is not None:
-            # only load num_batch when batch_size_stages is set.
-            # So ckpt can be backward compatible -> non-existing key won't be loaded and crash
-            self.register_buffer("num_batch", torch.tensor(0, dtype=torch.long))
         self.register_buffer(
             "time_lapse_after_warmup", torch.tensor(0, dtype=torch.double)
         )
@@ -181,6 +181,7 @@ class ThroughputMetric(nn.Module):
             return self._batch_size
 
         # Get batch size from batch_size_stages
+        assert self.num_batch is not None, "num_batch should not be None"
         batch_size_stages = none_throws(self._batch_size_stages)
         while self._batch_size_stages:
             stage = self._batch_size_stages[0]
@@ -276,3 +277,39 @@ class ThroughputMetric(nn.Module):
             )
 
         return ret
+
+    def state_dict(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        if self._batch_size_stages is None:
+            return super().state_dict(*args, **kwargs)
+
+        # Add `num_batch` to the state_dict when the module is saved for checkpointing
+        # `num_batch` cannot be stored as part of the module since it causes a performance issue
+        # when the module is moved to GPU.
+        state_dict_snapshot = super().state_dict(*args, **kwargs)
+        state_dict_snapshot["num_batch"] = torch.tensor(
+            self.num_batch, dtype=torch.int64
+        )
+        return state_dict_snapshot
+
+    def load_state_dict(
+        self, state_dict: Mapping[str, Any], *args: Any, **kwargs: Any
+    ) -> NamedTuple:
+        if self._batch_size_stages is None:
+            return super().load_state_dict(state_dict, *args, **kwargs)
+
+        assert isinstance(state_dict, dict), "state_dict must be a dict"
+        if "num_batch" in state_dict:
+            self.num_batch = int(state_dict.pop("num_batch").item())
+
+        state_dict_key_status = super().load_state_dict(state_dict, *args, **kwargs)
+        if self._batch_size_stages is None:
+            return state_dict_key_status
+
+        # Retrieve num_batch from state_dict when the module is loaded from a checkpoint
+        # and save its value to `self.num_batch` as a non-tensor integer
+
+        if state_dict is not None and "num_batch" in state_dict:
+            num_batch_tensor: torch.Tensor = state_dict.pop("num_batch")
+            self.num_batch = int(num_batch_tensor.item())
+
+        return state_dict_key_status

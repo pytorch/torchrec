@@ -10,6 +10,7 @@
 # pyre-ignore-all-errors[56]
 
 import unittest
+from typing import Any, Dict
 from unittest.mock import Mock, patch
 
 import torch
@@ -212,4 +213,69 @@ class ThroughputMetricTest(unittest.TestCase):
                 "throughput-throughput|attempt_examples": total_examples,
                 "throughput-throughput|batch_size": 512,
             },
+        )
+
+    def test_num_batch_without_batch_size_stages(self) -> None:
+        # Create the module without the batch_size_stages
+        throughput_metric = ThroughputMetric(
+            batch_size=self.batch_size,
+            world_size=self.world_size,
+            window_seconds=100,
+            batch_size_stages=None,
+        )
+
+        # Make sure num_batch is not present as an argument of the class
+        self.assertFalse(hasattr(throughput_metric, "num_batch"))
+
+    def test_state_dict_load_module_lifecycle(self) -> None:
+        """
+        A test to ensure that the state_dict() and load_state_dict() methods correctly handle
+        the num_batch attribute that keeps track of the number of batches processed by the module.
+        """
+
+        throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+        # Make sure num_batch is present as an argument of the class after initialization
+        self.assertTrue(hasattr(throughput_metric, "num_batch"))
+
+        # Stage 1: create metric and update the state_dict before persisting it
+        # Update metric, expecting num_batch to be incremented to 1
+        throughput_metric.update()
+        # Ensure num_batch is 1
+        self.assertEqual(throughput_metric.num_batch, 1)
+        # Ensure num_batch is included in the state_dict
+        state_dict: Dict[str, Any] = throughput_metric.state_dict()
+        self.assertIn("num_batch", state_dict)
+        # Ensure num_batch was saved to state_dict with the correct value
+        self.assertEqual(state_dict["num_batch"].item(), throughput_metric.num_batch)
+
+        # Stage 2: load the state_dict and ensure num_batch is loaded correctly
+
+        # Create a new metric instance
+        new_throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+        # Ensure num_batch is 0
+        self.assertEqual(new_throughput_metric.num_batch, 0)
+        # Load the state_dict
+        new_throughput_metric.load_state_dict(state_dict)
+        # Ensure num_batch is loaded from the state_dict with the correct value
+        self.assertEqual(new_throughput_metric.num_batch, 1)
+
+        # Stage 3: update the metric after loading the state and resave the state_dict
+
+        # Save the state_dict
+        state_dict = new_throughput_metric.state_dict()
+        # Ensure num_batch is included in the state_dict
+        self.assertIn("num_batch", state_dict)
+        # Ensure num_batch was saved to state_dict with the correct value
+        self.assertEqual(
+            state_dict["num_batch"].item(), new_throughput_metric.num_batch
         )
