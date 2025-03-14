@@ -358,7 +358,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._feature_names: List[str] = []
         self._feature_splits: List[int] = []
         self._length_per_key: List[int] = []
-        self._features_order: List[int] = []
+        self._features_order: Optional[List[int]] = None
         # Registering in a List instead of ModuleList because we want don't want them to be auto-registered.
         # Their states will be modified via self.embedding_bags
         self._emb_modules: List[nn.Module] = []
@@ -502,20 +502,22 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         kjt_keys = _get_kjt_keys(features)
         # Cache the features order since the features will always have the same order of keys in inference.
         if getattr(self, MODULE_ATTR_CACHE_FEATURES_ORDER, False):
-            if self._features_order == []:
-                for k in self._feature_names:
-                    self._features_order.append(kjt_keys.index(k))
-                self.register_buffer(
-                    "_features_order_tensor",
-                    torch.tensor(
-                        data=self._features_order,
-                        device=features.device(),
-                        dtype=torch.int32,
-                    ),
-                    persistent=False,
-                )
+            if self._features_order is None:
+                self._features_order = [kjt_keys.index(k) for k in self._feature_names]
+                if self._features_order:
+                    self.register_buffer(
+                        "_features_order_tensor",
+                        torch.tensor(
+                            data=self._features_order,
+                            device=features.device(),
+                            dtype=torch.int32,
+                        ),
+                        persistent=False,
+                    )
             kjt_permute = _permute_kjt(
-                features, self._features_order, self._features_order_tensor
+                features,
+                self._features_order,
+                getattr(self, "_features_order_tensor", None),
             )
         else:
             kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
@@ -752,7 +754,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self.row_alignment = row_alignment
         self._key_to_tables: Dict[DataType, List[EmbeddingConfig]] = defaultdict(list)
         self._feature_names: List[str] = []
-        self._features_order: List[int] = []
+        self._features_order: Optional[List[int]] = None
 
         self._table_name_to_quantized_weights: Optional[
             Dict[str, Tuple[Tensor, Tensor]]
@@ -881,20 +883,22 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         kjt_keys = _get_kjt_keys(features)
         # Cache the features order since the features will always have the same order of keys in inference.
         if getattr(self, MODULE_ATTR_CACHE_FEATURES_ORDER, False):
-            if self._features_order == []:
-                for k in self._feature_names:
-                    self._features_order.append(kjt_keys.index(k))
-                self.register_buffer(
-                    "_features_order_tensor",
-                    torch.tensor(
-                        data=self._features_order,
-                        device=features.device(),
-                        dtype=torch.int32,
-                    ),
-                    persistent=False,
-                )
+            if self._features_order is None:
+                self._features_order = [kjt_keys.index(k) for k in self._feature_names]
+                if self._features_order:
+                    self.register_buffer(
+                        "_features_order_tensor",
+                        torch.tensor(
+                            data=self._features_order,
+                            device=features.device(),
+                            dtype=torch.int32,
+                        ),
+                        persistent=False,
+                    )
             kjt_permute = _permute_kjt(
-                features, self._features_order, self._features_order_tensor
+                features,
+                self._features_order,
+                getattr(self, "_features_order_tensor", None),
             )
         else:
             kjt_permute_order = [kjt_keys.index(k) for k in self._feature_names]
