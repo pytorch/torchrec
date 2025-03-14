@@ -691,7 +691,7 @@ class DMPCollection(DistributedModelParallel):
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
         use_inter_host_allreduce: bool = False,
-        custom_all_reduce: Optional[Callable[[torch.Tensor], None]] = None,
+        custom_all_reduce: Optional[Callable[[List[torch.Tensor]], None]] = None,
     ) -> None:
         assert device.type == "cuda", "DMPCollection only supports CUDA"
         self._device = device
@@ -701,9 +701,7 @@ class DMPCollection(DistributedModelParallel):
         self._sharding_pg: dist.ProcessGroup = None  # pyre-ignore[8]
         self._replica_pg: dist.ProcessGroup = None  # pyre-ignore[8]
         self._global_rank: int = dist.get_rank(global_pg)
-        self._custom_all_reduce: Optional[Callable[[torch.Tensor], None]] = (
-            custom_all_reduce
-        )
+        self._custom_all_reduce = custom_all_reduce
 
         self._device_mesh, self._sharding_pg, self._replica_pg = (
             self._create_process_groups(
@@ -790,25 +788,23 @@ class DMPCollection(DistributedModelParallel):
         We perform all reduce per tensor dtype per collective constraints.
         """
 
-        def custom_all_reduce(tensors: List[torch.Tensor]) -> None:
-            # pyre-ignore[29]
-            self._custom_all_reduce(tensors)
+        custom_all_reduce = self._custom_all_reduce
+        if custom_all_reduce is not None:
 
-        def default_allreduce(tensor_list: List[torch.Tensor]) -> None:
-            self._replica_pg.allreduce_coalesced(tensor_list, opts=opts).wait()
+            def _all_reduce(tensors: List[torch.Tensor]) -> None:
+                custom_all_reduce(tensors)
 
-        allreduce = (
-            custom_all_reduce
-            if self._custom_all_reduce is not None
-            else default_allreduce
-        )
+        else:
+
+            def _all_reduce(tensors: List[torch.Tensor]) -> None:
+                self._replica_pg.allreduce_coalesced(tensors, opts=opts).wait()
 
         for tensor_list in tensors_dict.values():
-            allreduce(tensor_list)
+            _all_reduce(tensor_list)
 
     def set_all_reduce_hook(
         self,
-        reduce_hook: Callable[[torch.Tensor], None],
+        reduce_hook: Callable[[List[torch.Tensor]], None],
     ) -> None:
         """
         Replace default all reduce with custom callable. Users can alternatively
@@ -817,7 +813,7 @@ class DMPCollection(DistributedModelParallel):
         process group, and stream synchronization.
 
         Args:
-            reduce_hook (Callable[[torch.Tensor], torch.Tensor]): The custom all reduce function to use for
+            reduce_hook (Callable[[List[torch.Tensor]], torch.Tensor]): The custom all reduce function to use for
                 embedding weights and optimizer states
         """
         if self._custom_all_reduce is not None:

@@ -504,7 +504,7 @@ def sharding_single_rank_test(
                 sharders=sharders,
                 device=ctx.device,
                 use_inter_host_allreduce=use_inter_host_allreduce,
-                custom_all_reduce=all_reduce_func,  # pyre-ignore[6]
+                custom_all_reduce=all_reduce_func,
             )
         else:
             local_model = DistributedModelParallel(
