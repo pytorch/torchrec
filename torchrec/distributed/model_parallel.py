@@ -19,6 +19,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
+from torch.autograd.profiler import record_function
 from torch.distributed.algorithms.ddp_comm_hooks import (
     default_hooks as ddp_default_hooks,
 )
@@ -763,7 +764,7 @@ class DMPCollection(DistributedModelParallel):
         if self._custom_all_reduce is None:
             opts = dist.AllreduceCoalescedOptions()
             opts.reduceOp = dist.ReduceOp.AVG
-        self._allreduce_tensors(all_weights_by_dtype, opts)
+        self._allreduce_tensors(all_weights_by_dtype, "## 2d_weight_sync ##", opts)
 
         if include_optimizer_state:
             optimizer_tensors_by_dtype: Dict[torch.dtype, List[torch.Tensor]] = (
@@ -776,11 +777,14 @@ class DMPCollection(DistributedModelParallel):
                     opt_tensor = state["sum"]
                     optimizer_tensors_by_dtype[opt_tensor.dtype].append(opt_tensor)
             if optimizer_tensors_by_dtype:
-                self._allreduce_tensors(optimizer_tensors_by_dtype, opts)
+                self._allreduce_tensors(
+                    optimizer_tensors_by_dtype, "## 2d_optimizer_sync ##", opts
+                )
 
     def _allreduce_tensors(
         self,
         tensors_dict: Dict[torch.dtype, List[torch.Tensor]],
+        annotation: str,
         opts: Optional[dist.AllreduceCoalescedOptions] = None,
     ) -> None:
         """
@@ -792,12 +796,14 @@ class DMPCollection(DistributedModelParallel):
         if custom_all_reduce is not None:
 
             def _all_reduce(tensors: List[torch.Tensor]) -> None:
-                custom_all_reduce(tensors)
+                with record_function(f"{annotation}_custom_hook"):
+                    custom_all_reduce(tensors)
 
         else:
 
             def _all_reduce(tensors: List[torch.Tensor]) -> None:
-                self._replica_pg.allreduce_coalesced(tensors, opts=opts).wait()
+                with record_function(annotation):
+                    self._replica_pg.allreduce_coalesced(tensors, opts=opts).wait()
 
         for tensor_list in tensors_dict.values():
             _all_reduce(tensor_list)
