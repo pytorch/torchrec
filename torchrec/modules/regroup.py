@@ -20,6 +20,17 @@ from torchrec.sparse.jagged_tensor import (
 from torchrec.types import CacheMixin
 
 
+try:
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_gpu"
+    )
+    torch.ops.load_library(
+        "//deeplearning/fbgemm/fbgemm_gpu:permute_pooled_embedding_ops_cpu"
+    )
+except OSError:
+    pass
+
+
 @torch.fx.wrap
 def _get_kts_values(kts: List[KeyedTensor]) -> List[torch.Tensor]:
     return [kt.values() for kt in kts]
