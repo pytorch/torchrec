@@ -12,9 +12,17 @@ C++ 17 is a requirement. GCC version has to be >= 9, with initial testing done o
 <br>
 
 ### **1. Install Dependencies**
-1. [GRPC for C++][https://grpc.io/docs/languages/cpp/quickstart/] needs to be installed, with the resulting installation directory being `$HOME/.local`
+1. [GRPC for C++](https://grpc.io/docs/languages/cpp/quickstart/) needs to be installed, with the resulting installation directory being `$HOME/.local`
 2. Ensure that **the protobuf compiler (protoc) binary being used is from the GRPC installation above**. The protoc binary will live in `$HOME/.local/bin`, which may not match with the system protoc binary, can check with `which protoc`.
-3. Install PyTorch, FBGEMM, and TorchRec (ideally in a virtual environment):
+3. Create a Python virtual environment (this example uses miniconda):
+```
+conda create -n inference python='3.11'
+```
+4. Instal grpc tooling for proto files
+```
+pip install grpcio-tools
+```
+4. Install PyTorch, FBGEMM, and TorchRec:
 ```
 pip install torch --index-url https://download.pytorch.org/whl/cu121
 pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/cu121
@@ -27,12 +35,27 @@ pip install torchrec --index-url https://download.pytorch.org/whl/cu121
 
 Replace these variables with the relevant paths in your system. Check `CMakeLists.txt` and `server.cpp` to see how they're used throughout the build and runtime.
 
+1. Set up FBGEMM library path:
 ```
 # provide fbgemm_gpu_py.so to enable fbgemm_gpu c++ operators
 find $HOME -name fbgemm_gpu_py.so
 
-# Use path from correct virtual environment above and set environment variable $FBGEMM_LIB to it
-export FBGEMM_LIB=""
+# Use path from your current virtual environment above and set environment variable $FBGEMM_LIB to it.
+# WARNING: Below is just an example path, your path will be different! Replace the example path.
+export FBGEMM_LIB="/home/paulzhan/miniconda3/envs/inference/lib/python3.11/site-packages/fbgemm_gpu/fbgemm_gpu_py.so"""
+```
+
+2. Set GRPC github repository path:
+In setting up [GRPC for C++](https://grpc.io/docs/languages/cpp/quickstart/), you will have cloned the GRPC github repository.
+Let's set a variable for the our GRPC repository path to make things easier later on.
+
+```
+# Find the common.cmake file from grpc
+find $HOME -name common.cmake
+
+# Use the absolute path from result above, usually only 1 result but will be path that contains "/grpc/examples/cpp/cmake/common.cmake"
+# WARNING: Below is just an example path, your path will be different! Replace the example path.
+export GRPC_COMMON_CMAKE_PATH="/home/paulzhan/grpc/examples/cpp/cmake/common.cmake"
 ```
 
 ### **3. Generate TorchScripted DLRM model**
@@ -73,7 +96,7 @@ Start the server, loading in the model saved previously
 ./server /tmp/model.pt
 ```
 
-**output**
+**Output**
 
 In the logs, you should see:
 
@@ -96,9 +119,13 @@ Server listening on 0.0.0.0:50051
 +-----------------------------------------------------------------------------+
 ```
 
-In another terminal instance, make a request to the server via the client:
+In another terminal instance, make a request to the server via the client.
 
 ```
+# Revisit the TorchRec inference folder
+cd ~/torchrec/torchrec/inference/
+
+# Run the client to make requests to server
 python client.py
 ```
 

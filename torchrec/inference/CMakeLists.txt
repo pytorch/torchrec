@@ -8,11 +8,10 @@ cmake_minimum_required(VERSION 3.8)
 
 project(inference C CXX)
 
-include(/home/paulzhan/grpc/examples/cpp/cmake/common.cmake)
-
+include(${GRPC_COMMON_CMAKE_PATH})
 
 # Proto file
-get_filename_component(hw_proto "/home/paulzhan/torchrec/torchrec/inference/protos/predictor.proto" ABSOLUTE)
+get_filename_component(hw_proto "${CMAKE_CURRENT_BINARY_DIR}/../protos/predictor.proto" ABSOLUTE)
 get_filename_component(hw_proto_path "${hw_proto}" PATH)
 
 # Generated sources
