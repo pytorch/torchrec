@@ -1378,13 +1378,16 @@ def _jit_modules(module: torch.nn.Module, path: str, optional: bool = True) -> b
 
 
 def _pipeline_detach_model(
+    model: torch.nn.Module,
     pipelined_modules: List[ShardedModule],
     # pyre-ignore[2]
     original_forwards: List[Callable[..., Any]],
     original_kjt_dist_forwards: List[
         Callable[[KeyedJaggedTensor], Awaitable[KJTAllToAllTensorsAwaitable]]
     ],
+    pipelined_postprocs: List[PipelinedPostproc],
 ) -> None:
+    # Replace pipelined module forward and input dist forward with original forward
     kjt_dists = []
     for mod, original_fwd in zip(pipelined_modules, original_forwards):
         # pyre-ignore
@@ -1405,6 +1408,14 @@ def _pipeline_detach_model(
         original_kjt_dist_forwards,
     ):
         kjt_dist.forward = original_kjt_dist_fwd
+
+    # Get underlying nn.Module
+    if isinstance(model, DistributedModelParallel):
+        model = model.module
+
+    # Replace pipelined postproc modules with original postproc modules
+    for postproc_mod in pipelined_postprocs:
+        setattr(model, postproc_mod.fqn, postproc_mod.postproc_module)
 
 
 # pyre-ignore[3]
@@ -1754,6 +1765,7 @@ class SparseDataDistUtil(Generic[In]):
         )
         self.initialized = False
         self._pipelined_modules: List[ShardedModule] = []
+        self._pipelined_postprocs: List[PipelinedPostproc] = []
         # pyre-ignore
         self.fwd_hook = None
         self._device: torch.device = data_dist_stream.device
@@ -1793,9 +1805,11 @@ class SparseDataDistUtil(Generic[In]):
             self.fwd_hook.remove()
 
             _pipeline_detach_model(
+                model=self.model,
                 pipelined_modules=self._pipelined_modules,
                 original_forwards=self._original_forwards,
                 original_kjt_dist_forwards=self._original_kjt_dist_forwards,
+                pipelined_postprocs=self._pipelined_postprocs,
             )
 
         self.initialized = False
@@ -1809,7 +1823,7 @@ class SparseDataDistUtil(Generic[In]):
                 self._pipelined_modules,
                 self.model,
                 self._original_forwards,
-                _,
+                self._pipelined_postprocs,
                 _,
             ) = _rewrite_model(
                 model=self.model,
