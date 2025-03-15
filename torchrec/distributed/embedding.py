@@ -127,9 +127,10 @@ def get_device_from_parameter_sharding(
     if len(set(device_type_list)) == 1:
         return device_type_list[0]
     else:
-        assert (
-            ps.sharding_type == "row_wise"
-        ), "Only row_wise sharding supports sharding across multiple device types for a table"
+        assert ps.sharding_type in [
+            ShardingType.ROW_WISE.value,
+            ShardingType.COLUMN_WISE.value,
+        ], "Only row_wise or column_wise sharding supports sharding across multiple device types for a table"
         return device_type_list
 
 

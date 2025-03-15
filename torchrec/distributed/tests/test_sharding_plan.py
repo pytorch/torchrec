@@ -883,6 +883,86 @@ class ConstructParameterShardingTest(unittest.TestCase):
         }
         self.assertDictEqual(expected, module_sharding_plan)
 
+    # pyre-fixme[56]
+    @given(data_type=st.sampled_from([DataType.FP32, DataType.FP16]))
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_column_wise_set_heterogenous_device(self, data_type: DataType) -> None:
+
+        embedding_bag_config = [
+            EmbeddingBagConfig(
+                name=f"table_{idx}",
+                feature_names=[f"feature_{idx}"],
+                embedding_dim=96,
+                num_embeddings=4096,
+                data_type=data_type,
+            )
+            for idx in range(2)
+        ]
+        module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding={
+                "table_0": column_wise(
+                    ranks=[0, 1, 1],
+                    table_placements=["cpu", "cuda", "cpu"],
+                ),
+                "table_1": column_wise(
+                    ranks=[0, 1],
+                ),
+            },
+            local_size=2,
+            world_size=2,
+            device_type="cuda",
+        )
+
+        expected = {
+            "table_0": ParameterSharding(
+                sharding_type="column_wise",
+                compute_kernel="dense",
+                ranks=[0, 1, 1],
+                sharding_spec=EnumerableShardingSpec(
+                    shards=[
+                        ShardMetadata(
+                            shard_offsets=[0, 0],
+                            shard_sizes=[4096, 32],
+                            placement="rank:0/cpu",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[0, 32],
+                            shard_sizes=[4096, 32],
+                            placement="rank:1/cuda:1",
+                        ),
+                        # cpu always has rank 0
+                        ShardMetadata(
+                            shard_offsets=[0, 64],
+                            shard_sizes=[4096, 32],
+                            placement="rank:0/cpu",
+                        ),
+                    ]
+                ),
+            ),
+            "table_1": ParameterSharding(
+                sharding_type="column_wise",
+                compute_kernel="dense",
+                ranks=[0, 1],
+                sharding_spec=EnumerableShardingSpec(
+                    shards=[
+                        ShardMetadata(
+                            shard_offsets=[0, 0],
+                            shard_sizes=[4096, 48],
+                            placement="rank:0/cuda:0",
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[0, 48],
+                            shard_sizes=[4096, 48],
+                            placement="rank:1/cuda:1",
+                        ),
+                    ]
+                ),
+            ),
+        }
+
+        self.assertDictEqual(module_sharding_plan, expected)
+
 
 class ShardingPlanTest(unittest.TestCase):
     def test_str(self) -> None:
