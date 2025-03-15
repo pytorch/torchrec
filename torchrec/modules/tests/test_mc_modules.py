@@ -11,6 +11,7 @@ import unittest
 from typing import Dict
 
 import torch
+from torchrec.fx import Tracer
 from torchrec.modules.mc_modules import (
     average_threshold_filter,
     DistanceLFU_EvictionPolicy,
@@ -425,5 +426,6 @@ class TestEvictionPolicy(unittest.TestCase):
         )
 
         model.train(False)
-        gm = torch.fx.symbolic_trace(model)
-        torch.jit.script(gm)
+        gm = torch.fx.GraphModule(model, Tracer().trace(model))
+        # TODO: Causes std::bad_alloc in OSS env
+        # torch.jit.script(gm)
