@@ -8,6 +8,7 @@
 # pyre-strict
 
 import copy
+import logging
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Dict, List, Mapping, Optional, Tuple, TypeVar, Union
@@ -32,6 +33,9 @@ from torchrec.distributed.types import ParameterSharding, ShardingType
 from torchrec.modules.embedding_configs import DataType
 from torchrec.streamable import Multistreamable
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
+
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 Out = TypeVar("Out")
 CompIn = TypeVar("CompIn")
@@ -314,54 +318,64 @@ class ShardedQuantEmbeddingModuleState(
                 continue
 
             src_tensor = state_dict[src_state_dict_name]
-            if isinstance(dst_tensor, ShardedTensorBase) and isinstance(
-                src_tensor, ShardedTensorBase
-            ):
-                # sharded to sharded model, only identically sharded
-                for dst_local_shard in dst_tensor.local_shards():
-                    copied: bool = False
-                    for src_local_shard in src_tensor.local_shards():
-                        if (
-                            dst_local_shard.metadata.shard_offsets
-                            == src_local_shard.metadata.shard_offsets
-                            and dst_local_shard.metadata.shard_sizes
-                            == src_local_shard.metadata.shard_sizes
-                        ):
-                            dst_local_shard.tensor.copy_(src_local_shard.tensor)
-                            copied = True
-                            break
-                    assert copied, "Incompatible state_dict"
-            elif isinstance(dst_tensor, ShardedTensorBase) and isinstance(
-                src_tensor, torch.Tensor
-            ):
-                # non_sharded to sharded model
-                for dst_local_shard in dst_tensor.local_shards():
-                    dst_tensor = dst_local_shard.tensor
-                    assert src_tensor.ndim == dst_tensor.ndim
-                    meta = dst_local_shard.metadata
-                    t = src_tensor.detach()
-                    rows_from = meta.shard_offsets[0]
-                    rows_to = rows_from + meta.shard_sizes[0]
-                    if t.ndim == 1:
-                        dst_tensor.copy_(t[rows_from:rows_to])
-                    elif t.ndim == 2:
-                        cols_from = meta.shard_offsets[1]
-                        cols_to = cols_from + meta.shard_sizes[1]
-                        dst_tensor.copy_(
-                            t[
-                                rows_from:rows_to,
-                                cols_from:cols_to,
-                            ]
-                        )
-                    else:
-                        raise RuntimeError("Tensors with ndim > 2 are not supported")
-            elif isinstance(dst_tensor, list) and isinstance(src_tensor, torch.Tensor):
-                # non_sharded to CW columns qscale, qbias (one to many)
-                for t in dst_tensor:
-                    assert isinstance(t, torch.Tensor)
-                    t.copy_(src_tensor)
-            else:
-                dst_tensor.copy_(src_tensor)
+            try:
+                if isinstance(dst_tensor, ShardedTensorBase) and isinstance(
+                    src_tensor, ShardedTensorBase
+                ):
+                    # sharded to sharded model, only identically sharded
+                    for dst_local_shard in dst_tensor.local_shards():
+                        copied: bool = False
+                        for src_local_shard in src_tensor.local_shards():
+                            if (
+                                dst_local_shard.metadata.shard_offsets
+                                == src_local_shard.metadata.shard_offsets
+                                and dst_local_shard.metadata.shard_sizes
+                                == src_local_shard.metadata.shard_sizes
+                            ):
+                                dst_local_shard.tensor.copy_(src_local_shard.tensor)
+                                copied = True
+                                break
+                        assert copied, "Incompatible state_dict"
+                elif isinstance(dst_tensor, ShardedTensorBase) and isinstance(
+                    src_tensor, torch.Tensor
+                ):
+                    # non_sharded to sharded model
+                    for dst_local_shard in dst_tensor.local_shards():
+                        dst_tensor = dst_local_shard.tensor
+                        assert src_tensor.ndim == dst_tensor.ndim
+                        meta = dst_local_shard.metadata
+                        t = src_tensor.detach()
+                        rows_from = meta.shard_offsets[0]
+                        rows_to = rows_from + meta.shard_sizes[0]
+                        if t.ndim == 1:
+                            dst_tensor.copy_(t[rows_from:rows_to])
+                        elif t.ndim == 2:
+                            cols_from = meta.shard_offsets[1]
+                            cols_to = cols_from + meta.shard_sizes[1]
+                            dst_tensor.copy_(
+                                t[
+                                    rows_from:rows_to,
+                                    cols_from:cols_to,
+                                ]
+                            )
+                        else:
+                            raise RuntimeError(
+                                "Tensors with ndim > 2 are not supported"
+                            )
+                elif isinstance(dst_tensor, list) and isinstance(
+                    src_tensor, torch.Tensor
+                ):
+                    # non_sharded to CW columns qscale, qbias (one to many)
+                    for t in dst_tensor:
+                        assert isinstance(t, torch.Tensor)
+                        t.copy_(src_tensor)
+                else:
+                    dst_tensor.copy_(src_tensor)
+            except Exception as e:
+                logger.error(
+                    f"Error loading tensor {src_state_dict_name} from state dict"
+                )
+                raise e
 
             _unexpected_keys.remove(src_state_dict_name)
         missing_keys.extend(_missing_keys)
