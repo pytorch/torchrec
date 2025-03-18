@@ -121,6 +121,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         custom_model_fwd: Optional[
             Callable[[In], Tuple[torch.Tensor, List[torch.Tensor]]]
         ] = None,
+        optimizer_compile_config: Optional[TorchCompileConfig] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -139,6 +140,16 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         )
         self._cur_batch: Optional[In] = None
         self._connected = False
+
+        if optimizer_compile_config is not None:
+            self._optimizer_step: Callable[[], None] = torch.compile(
+                lambda: self._optimizer.step(),
+                fullgraph=optimizer_compile_config.fullgraph,
+                dynamic=optimizer_compile_config.dynamic,
+                backend=optimizer_compile_config.backend,
+            )
+        else:
+            self._optimizer_step: Callable[[], None] = self._optimizer.step
 
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         cur_batch = next(dataloader_iter)
@@ -193,7 +204,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         # Update
         if self._model.training:
             with record_function("## optimizer ##"):
-                self._optimizer.step()
+                self._optimizer_step()
 
         return output
 
@@ -221,6 +232,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
         pre_compile_fn: Optional[Callable[[torch.nn.Module], None]] = None,
         post_compile_fn: Optional[Callable[[torch.nn.Module], None]] = None,
         input_transformer: Optional[Callable[[In], In]] = None,
+        optimizer_compile_config: Optional[TorchCompileConfig] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -236,6 +248,16 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
         )
         self._iter = 0
         self._cur_batch: Optional[In] = None
+
+        if optimizer_compile_config is not None:
+            self._optimizer_step: Callable[[], None] = torch.compile(
+                lambda: self._optimizer.step(),
+                fullgraph=optimizer_compile_config.fullgraph,
+                dynamic=optimizer_compile_config.dynamic,
+                backend=optimizer_compile_config.backend,
+            )
+        else:
+            self._optimizer_step: Callable[[], None] = self._optimizer.step
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         if self._iter == 0:
@@ -292,7 +314,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
                 torch.sum(losses).backward()
 
             with record_function("## optimizer ##"):
-                self._optimizer.step()
+                self._optimizer_step()
 
         return output
 
@@ -337,6 +359,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
+        optimizer_compile_config: Optional[TorchCompileConfig] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -398,6 +421,16 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._batch_ip1: Optional[In] = None
         self._batch_ip2: Optional[In] = None
         self._context: TrainPipelineContext = context_type(version=0)
+
+        if optimizer_compile_config is not None:
+            self._optimizer_step: Callable[[], None] = torch.compile(
+                lambda: self._optimizer.step(),
+                fullgraph=optimizer_compile_config.fullgraph,
+                dynamic=optimizer_compile_config.dynamic,
+                backend=optimizer_compile_config.backend,
+            )
+        else:
+            self._optimizer_step: Callable[[], None] = self._optimizer.step
 
     def detach(self) -> torch.nn.Module:
         """
@@ -530,7 +563,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
             # update
             with record_function("## optimizer ##"):
-                self._optimizer.step()
+                self._optimizer_step()
 
         self.dequeue_batch()
         return output
@@ -757,6 +790,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
         strict: bool = False,
+        optimizer_compile_config: Optional[TorchCompileConfig] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -767,6 +801,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             context_type=EmbeddingTrainPipelineContext,
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
+            optimizer_compile_config=optimizer_compile_config,
         )
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
@@ -836,7 +871,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         # special case: not all optimizers support optim.step() on null gradidents
         if current_batch == self._start_batch and self._stash_gradients:
             return
-        self._optimizer.step()
+        self._optimizer_step()
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         self.fill_pipeline(dataloader_iter)
@@ -1056,6 +1091,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
+        optimizer_compile_config: Optional[TorchCompileConfig] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -1066,6 +1102,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             context_type=PrefetchTrainPipelineContext,
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
+            optimizer_compile_config=optimizer_compile_config,
         )
         self._context = PrefetchTrainPipelineContext(version=0)
         self._prefetch_stream: Optional[torch.Stream] = (
@@ -1133,7 +1170,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
 
             # update
             with record_function("## optimizer ##"):
-                self._optimizer.step()
+                self._optimizer_step()
 
         self._start_sparse_data_dist(self._batch_ip2)
 
@@ -1568,16 +1605,18 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
+        optimizer_compile_config: Optional[TorchCompileConfig] = None,
     ) -> None:
         super().__init__(
-            model,
-            optimizer,
-            device,
-            execute_all_batches,
-            apply_jit,
-            context_type,
-            pipeline_postproc,
-            custom_model_fwd,
+            model=model,
+            optimizer=optimizer,
+            device=device,
+            execute_all_batches=execute_all_batches,
+            apply_jit=apply_jit,
+            context_type=context_type,
+            pipeline_postproc=pipeline_postproc,
+            custom_model_fwd=custom_model_fwd,
+            optimizer_compile_config=optimizer_compile_config,
         )
 
         torch._logging.set_logs(compiled_autograd_verbose=True)
@@ -1665,7 +1704,7 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
 
             # update
             with record_function("## optimizer ##"):
-                self._optimizer.step()
+                self._optimizer_step()
 
         self.dequeue_batch()
         return output
