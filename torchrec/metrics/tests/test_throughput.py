@@ -10,6 +10,8 @@
 # pyre-ignore-all-errors[56]
 
 import unittest
+from collections import OrderedDict
+from typing import Any, Dict
 from unittest.mock import Mock, patch
 
 import torch
@@ -213,3 +215,125 @@ class ThroughputMetricTest(unittest.TestCase):
                 "throughput-throughput|batch_size": 512,
             },
         )
+
+    def test_num_batch_without_batch_size_stages(self) -> None:
+        # Create the module without the batch_size_stages
+        throughput_metric = ThroughputMetric(
+            batch_size=self.batch_size,
+            world_size=self.world_size,
+            window_seconds=100,
+            batch_size_stages=None,
+        )
+
+        # Make sure num_batch is not present as an argument of the class
+        self.assertFalse(hasattr(throughput_metric, "num_batch"))
+
+        throughput_metric.update()
+        state_dict: Dict[str, Any] = throughput_metric.state_dict()
+        # Ensure num_batch is not included in the state_dict for the module without batch_size_stages
+        self.assertNotIn("num_batch", state_dict)
+
+    def test_state_dict_load_module_lifecycle(self) -> None:
+        """
+        A test to ensure that the load_state_dict and state_dict hooks correctly handle the num_batch attribute
+        through the module lifecycle.
+        """
+
+        throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+
+        self.assertTrue(hasattr(throughput_metric, "_num_batch"))
+
+        # Stage 1: create metric and update the state_dict before persisting it
+        # Update metric, expecting num_batch to be incremented to 1
+        throughput_metric.update()
+        # Ensure num_batch is 1
+        self.assertEqual(throughput_metric._num_batch, 1)
+        # Ensure num_batch is included in the state_dict and has the correct value
+        state_dict: Dict[str, Any] = throughput_metric.state_dict()
+        self.assertIn("num_batch", state_dict)
+        # Ensure num_batch was saved to state_dict with the correct value
+        self.assertEqual(state_dict["num_batch"].item(), throughput_metric._num_batch)
+
+        # Stage 2: load the state_dict and ensure num_batch is loaded correctly
+
+        # Create a new metric instance
+        new_throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+        # Ensure num_batch is 0
+        self.assertEqual(new_throughput_metric._num_batch, 0)
+        # Load the state_dict
+        new_throughput_metric.load_state_dict(state_dict)
+        # Ensure num_batch is loaded from the state_dict with the correct value
+        self.assertEqual(new_throughput_metric._num_batch, 1)
+
+        # Stage 3: update the metric after loading the state and resave the state_dict
+
+        # Save the state_dict
+        state_dict = new_throughput_metric.state_dict()
+        # Ensure num_batch is included in the state_dict
+        self.assertIn("num_batch", state_dict)
+        # Ensure num_batch was saved to state_dict with the correct value
+        self.assertEqual(
+            state_dict["num_batch"].item(), new_throughput_metric._num_batch
+        )
+
+    def test_state_dict_hook_adds_key(self) -> None:
+        """
+        Ensures that the state_dict_hook adds the 'num_batch' key to the state_dict
+        when batch_size_stages is True.
+        """
+        throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+        for _ in range(5):
+            throughput_metric.update()
+        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
+        prefix: str = "test_prefix_"
+        ThroughputMetric.state_dict_hook(throughput_metric, state_dict, prefix, {})
+        self.assertIn(f"{prefix}num_batch", state_dict)
+        self.assertEqual(state_dict[f"{prefix}num_batch"].item(), 5)
+
+    def test_state_dict_hook_no_batch_size_stages(self) -> None:
+        """
+        Verifies that the state_dict_hook does not add the 'num_batch' key when
+        batch_size_stages is None.
+        """
+        throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=None,
+        )
+        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
+        prefix: str = "test_prefix_"
+        ThroughputMetric.state_dict_hook(throughput_metric, state_dict, prefix, {})
+        self.assertNotIn(f"{prefix}num_batch", state_dict)
+
+    def test_load_state_dict_hook_restores_value(self) -> None:
+        """
+        Checks that load_state_dict_hook correctly restores the 'num_batch' value
+        from the state_dict.
+        """
+        throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
+        prefix: str = "test_prefix_"
+        state_dict[f"{prefix}num_batch"] = torch.tensor(10, dtype=torch.long)
+        throughput_metric.load_state_dict_hook(state_dict, prefix, {}, True, [], [], [])
+        self.assertEqual(throughput_metric._num_batch, 10)
