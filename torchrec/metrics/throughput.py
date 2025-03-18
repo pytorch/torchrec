@@ -13,8 +13,8 @@ import copy
 import logging
 import math
 import time
-from collections import deque
-from typing import Deque, Dict, List, Optional
+from collections import deque, OrderedDict
+from typing import Any, Deque, Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -112,12 +112,14 @@ class ThroughputMetric(nn.Module):
             batch_size_stages
         )
 
+        if self._batch_size_stages is not None:
+            # Keep track of the number of batches if using batch_size_stages
+            self._num_batch: int = 0
+            self._register_load_state_dict_pre_hook(self.load_state_dict_hook)
+            self.register_state_dict_post_hook(self.state_dict_hook)
+
         self.register_buffer("total_examples", torch.tensor(0, dtype=torch.long))
         self.register_buffer("warmup_examples", torch.tensor(0, dtype=torch.long))
-        if batch_size_stages is not None:
-            # only load num_batch when batch_size_stages is set.
-            # So ckpt can be backward compatible -> non-existing key won't be loaded and crash
-            self.register_buffer("num_batch", torch.tensor(0, dtype=torch.long))
         self.register_buffer(
             "time_lapse_after_warmup", torch.tensor(0, dtype=torch.double)
         )
@@ -181,6 +183,7 @@ class ThroughputMetric(nn.Module):
             return self._batch_size
 
         # Get batch size from batch_size_stages
+        assert self._num_batch is not None, "num_batch should not be None"
         batch_size_stages = none_throws(self._batch_size_stages)
         while self._batch_size_stages:
             stage = self._batch_size_stages[0]
@@ -189,7 +192,7 @@ class ThroughputMetric(nn.Module):
                 assert len(batch_size_stages) == 1
                 return stage.batch_size
             # This stage finished
-            if stage.max_iters < self.num_batch:
+            if stage.max_iters < self._num_batch:
                 batch_size_stages.pop(0)
                 # Move to the next stage
                 continue
@@ -208,7 +211,7 @@ class ThroughputMetric(nn.Module):
         ts = time.monotonic()
         self._steps += 1
         if self._batch_size_stages is not None:
-            self.num_batch += 1
+            self._num_batch += 1
         batch_examples = self._batch_examples()
         self.total_examples += batch_examples
         self.attempt_examples += batch_examples
@@ -276,3 +279,33 @@ class ThroughputMetric(nn.Module):
             )
 
         return ret
+
+    @staticmethod
+    def state_dict_hook(
+        module: nn.Module,
+        state_dict: OrderedDict[str, torch.Tensor],
+        prefix: str,
+        local_metadata: Dict[str, Any],
+    ) -> None:
+        if module._batch_size_stages is not None:
+            # Save the number of batches used for the throughput calculation to the state dict
+            num_batch_key = f"{prefix}num_batch"
+            state_dict[num_batch_key] = torch.tensor(
+                module._num_batch, dtype=torch.long
+            )
+
+    def load_state_dict_hook(
+        self,
+        state_dict: OrderedDict[str, torch.Tensor],
+        prefix: str,
+        local_metadata: Dict[str, Any],
+        strict: bool,
+        missing_keys: List[str],
+        unexpected_keys: List[str],
+        error_msgs: List[str],
+    ) -> None:
+        key = f"{prefix}num_batch"
+        if key in state_dict and self._batch_size_stages is not None:
+            # Restore the number of batches used for the throughput calculation from the state dict
+            num_batch_tensor = state_dict.pop(key)
+            self._num_batch = int(num_batch_tensor.item())
