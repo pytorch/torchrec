@@ -17,7 +17,7 @@ include(FetchContent)
 
 option(BUILD_TEST "Build C++ test binaries (need gtest and gbenchmark)" OFF)
 
-add_definitions("-D_GLIBCXX_USE_CXX11_ABI=0")
+add_definitions("-D_GLIBCXX_USE_CXX11_ABI=1")
 
 add_subdirectory(torchrec/csrc)
 
