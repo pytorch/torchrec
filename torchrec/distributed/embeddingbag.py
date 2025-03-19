@@ -113,9 +113,27 @@ def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     )
 
 
-def get_device_from_parameter_sharding(ps: ParameterSharding) -> str:
-    # pyre-ignore
-    return ps.sharding_spec.shards[0].placement.device().type
+def get_device_from_parameter_sharding(
+    ps: ParameterSharding,
+) -> Union[str, Tuple[str, ...]]:
+    """
+    Returns list of device type per shard if table is sharded across different
+    device type, else reutrns single device type for the table parameter
+    """
+    if not isinstance(ps.sharding_spec, EnumerableShardingSpec):
+        raise ValueError("Expected EnumerableShardingSpec as input to the function")
+
+    device_type_list: Tuple[str, ...] = tuple(
+        # pyre-fixme[16]: `Optional` has no attribute `device`
+        [shard.placement.device().type for shard in ps.sharding_spec.shards]
+    )
+    if len(set(device_type_list)) == 1:
+        return device_type_list[0]
+    else:
+        assert (
+            ps.sharding_type == "row_wise"
+        ), "Only row_wise sharding supports sharding across multiple device types for a table"
+        return device_type_list
 
 
 def replace_placement_with_meta_device(
@@ -319,7 +337,7 @@ def create_sharding_infos_by_sharding_device_group(
     prefix: str,
     fused_params: Optional[Dict[str, Any]],
     suffix: Optional[str] = "weight",
-) -> Dict[Tuple[str, str], List[EmbeddingShardingInfo]]:
+) -> Dict[Tuple[str, Union[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]]:
 
     if fused_params is None:
         fused_params = {}
@@ -335,7 +353,7 @@ def create_sharding_infos_by_sharding_device_group(
                 shared_feature[feature_name] = True
 
     sharding_type_device_group_to_sharding_infos: Dict[
-        Tuple[str, str], List[EmbeddingShardingInfo]
+        Tuple[str, Union[str, Tuple[str, ...]]], List[EmbeddingShardingInfo]
     ] = {}
 
     # state_dict returns parameter.Tensor, which loses parameter level attributes
