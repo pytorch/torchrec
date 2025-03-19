@@ -39,6 +39,7 @@ from torchrec.distributed.types import LazyAwaitable
 
 if not torch._running_with_deploy():
     from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
+    from torch.distributed.fb.simple_fsdp import SimpleFSDPModule as SimpleFSDP
 else:
 
     class FSDP2:
@@ -743,6 +744,7 @@ class Tracer(torch.fx.Tracer):
             or module_qualified_name in self._leaf_modules
             or isinstance(m, FSDP)
             or isinstance(m, FSDP2)
+            or isinstance(m, SimpleFSDP)
         ):
             return True
         return super().is_leaf_module(m, module_qualified_name)
