@@ -14,8 +14,10 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 import hypothesis.strategies as st
+import torch
 
 from hypothesis import given, settings
+from torchrec.distributed.embedding import EmbeddingCollectionContext
 
 from torchrec.distributed.embedding_lookup import EmbeddingComputeKernel
 
@@ -24,6 +26,7 @@ from torchrec.distributed.embedding_sharding import (
     _get_grouping_fused_params,
     _get_weighted_avg_cache_load_factor,
     _prefetch_and_cached,
+    _set_sharding_context_post_a2a,
     group_tables,
 )
 
@@ -31,7 +34,9 @@ from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
     ShardedEmbeddingTable,
 )
+from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.modules.embedding_configs import DataType, PoolingType
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 class TestGetWeightedAverageCacheLoadFactor(unittest.TestCase):
@@ -489,3 +494,41 @@ class TestGroupTablesPerRank(unittest.TestCase):
             _get_table_names_by_groups(tables),
             [["table_0", "table_2", "table_4"], ["table_1", "table_1"], ["table_3"]],
         )
+
+    def test_set_sharding_context_post_a2a(self) -> None:
+        kjts = [
+            KeyedJaggedTensor(
+                keys=["dummy_id", "video_id", "owner_id", "xray_concepts", "dummy_id2"],
+                values=torch.IntTensor([1] * 10),
+                lengths=torch.IntTensor([1] * 10),
+                stride_per_key_per_rank=[
+                    [1, 2],
+                    [1, 2],
+                    [2, 3],
+                    [5, 7],
+                    [3, 4],
+                ],
+            ),
+            KeyedJaggedTensor(
+                keys=["dummy_id", "video_id", "owner_id", "xray_concepts", "dummy_id2"],
+                values=torch.IntTensor([1] * 10),
+                lengths=torch.IntTensor([1] * 10),
+                stride_per_key_per_rank=[[3, 1], [5, 2], [7, 3], [1, 2], [6, 8]],
+            ),
+        ]
+        for kjt in kjts:
+            kjt._variable_stride_per_key = True
+
+        ctx = EmbeddingCollectionContext(
+            sharding_contexts=[
+                SequenceShardingContext(batch_size_per_rank_per_feature=[]),
+                SequenceShardingContext(batch_size_per_rank_per_feature=[]),
+            ]
+        )
+        results = [
+            [[1, 1, 2, 5, 3], [2, 2, 3, 7, 4]],
+            [[3, 5, 7, 1, 6], [1, 2, 3, 2, 8]],
+        ]
+        _set_sharding_context_post_a2a(kjts, ctx)
+        for context, result in zip(ctx.sharding_contexts, results):
+            self.assertEqual(context.batch_size_per_rank_per_feature, result)
