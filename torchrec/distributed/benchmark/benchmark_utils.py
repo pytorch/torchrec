@@ -135,6 +135,8 @@ class BenchmarkResult:
 
     def __str__(self) -> str:
         runtime = f"Runtime (P90): {self.runtime_percentile(90):.2f} ms"
+        if len(self.mem_stats) == 0:
+            return f"{self.short_name: <{35}} |  {runtime}"
         mem_alloc = (
             f"Peak Memory alloc (P90): {self.max_mem_alloc_percentile(90)/1000:.2f} GB"
         )
@@ -749,11 +751,18 @@ def benchmark_func(
             func_to_benchmark(bench_inputs, **benchmark_func_kwargs)
             end[i].record()
     elif device_type == "cpu":
-        times = timeit.repeat(
-            lambda: func_to_benchmark(bench_inputs, **benchmark_func_kwargs),
-            number=1,
-            repeat=num_benchmarks,
-        )
+        if bench_inputs is None or len(bench_inputs) == 0:
+            times = timeit.repeat(
+                lambda: func_to_benchmark(**benchmark_func_kwargs),
+                number=1,
+                repeat=num_benchmarks,
+            )
+        else:
+            times = timeit.repeat(
+                lambda: func_to_benchmark(bench_inputs, **benchmark_func_kwargs),
+                number=1,
+                repeat=num_benchmarks,
+            )
 
     if device_type == "cuda":
         if rank == -1:
