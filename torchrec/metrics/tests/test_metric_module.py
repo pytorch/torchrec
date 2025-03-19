@@ -29,6 +29,7 @@ from torchrec.metrics.metric_module import (
 )
 from torchrec.metrics.metrics_config import (
     _DEFAULT_WINDOW_SIZE,
+    BatchSizeStage,
     DefaultMetricsConfig,
     DefaultTaskInfo,
     EmptyMetricsConfig,
@@ -536,3 +537,52 @@ class MetricModuleTest(unittest.TestCase):
             min_interval=1.0,
             max_interval=30.0,
         )
+
+    def test_save_and_load_state_dict(self) -> None:
+        # Test without batch_size_stages
+        metric_module = generate_metric_module(
+            TestMetricModule,
+            metrics_config=DefaultMetricsConfig,
+            batch_size=128,
+            world_size=1,
+            my_rank=0,
+            state_metrics_mapping={},
+            device=torch.device("cpu"),
+        )
+        metric_module.update(gen_test_batch(128))
+
+        state_dict_without_bss = metric_module.state_dict()
+        # Make sure state loading works and doesn't throw an error
+        metric_module.load_state_dict(state_dict_without_bss)
+        # Make sure num_batch in the throughput module is not in state_dict
+        self.assertFalse("throughput_metric.num_batch" in state_dict_without_bss)
+
+        # Test with batch_size_stages
+        metric_module = generate_metric_module(
+            TestMetricModule,
+            metrics_config=DefaultMetricsConfig,
+            batch_size=128,
+            world_size=1,
+            my_rank=0,
+            state_metrics_mapping={},
+            device=torch.device("cpu"),
+            batch_size_stages=[BatchSizeStage(256, 100), BatchSizeStage(512, None)],
+        )
+
+        # Update metric 100 times
+        for _ in range(100):
+            metric_module.update(gen_test_batch(128))
+
+        # Simulate a checkpoint save
+        state_dict = metric_module.state_dict()
+        # Make sure num_batch is updated correctly to 100
+        self.assertEqual(state_dict["throughput_metric.num_batch"], 100)
+
+        # Simulate a checkpoint load
+        metric_module.load_state_dict(state_dict)
+        # Make sure num_batch is correctly restored
+        throughput_metric = metric_module.throughput_metric
+        self.assertIsNotNone(throughput_metric)
+        self.assertEqual(throughput_metric._num_batch, 100)
+        # Make sure num_batch is correctly synchronized
+        self.assertEqual(throughput_metric._num_batch, 100)
