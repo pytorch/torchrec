@@ -822,12 +822,14 @@ class MetaInferGroupedPooledEmbeddingsLookup(
         device: Optional[torch.device] = None,
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
         fused_params: Optional[Dict[str, Any]] = None,
+        shard_index: Optional[int] = None,
     ) -> None:
         # TODO rename to _create_embedding_kernel
         def _create_lookup(
             config: GroupedEmbeddingConfig,
             device: Optional[torch.device] = None,
             fused_params: Optional[Dict[str, Any]] = None,
+            shard_index: Optional[int] = None,
         ) -> BaseBatchedEmbeddingBag[
             Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]
         ]:
@@ -835,12 +837,15 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 config=config,
                 device=device,
                 fused_params=fused_params,
+                shard_index=shard_index,
             )
 
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config, device, fused_params))
+            self._emb_modules.append(
+                _create_lookup(config, device, fused_params, shard_index)
+            )
 
         self._feature_splits: List[int] = [
             config.num_features() for config in grouped_configs
@@ -1030,6 +1035,7 @@ class InferGroupedPooledEmbeddingsLookup(
         world_size: int,
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
+        device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = None,
     ) -> None:
         super().__init__()
         self._embedding_lookups_per_rank: List[
@@ -1047,6 +1053,11 @@ class InferGroupedPooledEmbeddingsLookup(
         self._is_empty_rank: List[bool] = []
         for rank in range(world_size):
             empty_rank = len(grouped_configs_per_rank[rank]) == 0
+            # Propagate shard index to get the correct runtime_device based on shard metadata
+            # in case of heterogenous sharding of a single table across different device types
+            shard_index = (
+                rank if isinstance(device_type_from_sharding_infos, tuple) else None
+            )
             self._is_empty_rank.append(empty_rank)
             if not empty_rank:
                 self._embedding_lookups_per_rank.append(
@@ -1055,6 +1066,7 @@ class InferGroupedPooledEmbeddingsLookup(
                         grouped_configs=grouped_configs_per_rank[rank],
                         device=rank_device(device_type, rank),
                         fused_params=fused_params,
+                        shard_index=shard_index,
                     )
                 )
 
