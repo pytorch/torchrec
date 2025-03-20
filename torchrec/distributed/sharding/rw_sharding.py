@@ -752,6 +752,7 @@ class InferRwPooledEmbeddingSharding(
             world_size=self._world_size,
             fused_params=fused_params,
             device=device if device is not None else self._device,
+            device_type_from_sharding_infos=self._device_type_from_sharding_infos,
         )
 
     def create_output_dist(

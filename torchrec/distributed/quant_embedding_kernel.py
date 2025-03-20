@@ -232,6 +232,7 @@ class QuantBatchedEmbeddingBag(
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         fused_params: Optional[Dict[str, Any]] = None,
+        shard_index: Optional[int] = None,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -253,7 +254,9 @@ class QuantBatchedEmbeddingBag(
             fused_params
         )
 
-        self._runtime_device: torch.device = _get_runtime_device(device, config)
+        self._runtime_device: torch.device = _get_runtime_device(
+            device, config, shard_index
+        )
         # 16 for CUDA, 1 for others like CPU and MTIA.
         self._tbe_row_alignment: int = 16 if self._runtime_device.type == "cuda" else 1
         embedding_specs = []
