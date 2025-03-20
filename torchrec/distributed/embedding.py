@@ -7,7 +7,6 @@
 
 # pyre-strict
 
-
 import copy
 import logging
 import warnings
@@ -416,6 +415,7 @@ class EmbeddingCollectionContext(Multistreamable):
         self.input_features: List[KeyedJaggedTensor] = input_features or []
         self.reverse_indices: List[torch.Tensor] = reverse_indices or []
         self.seq_vbe_ctx: List[SequenceVBEContext] = seq_vbe_ctx or []
+        self.table_name_to_unpruned_hash_sizes: Dict[str, int] = {}
 
     def record_stream(self, stream: torch.Stream) -> None:
         for ctx in self.sharding_contexts:
@@ -548,6 +548,9 @@ class ShardedEmbeddingCollection(
             table_name_to_parameter_sharding,
             fused_params,
         )
+
+        self._sharding_types: List[str] = list(sharding_type_to_sharding_infos.keys())
+
         self._sharding_type_to_sharding: Dict[
             str,
             EmbeddingSharding[
@@ -1018,14 +1021,25 @@ class ShardedEmbeddingCollection(
     def _create_hash_size_info(
         self,
         feature_names: List[str],
+        ctx: Optional[EmbeddingCollectionContext] = None,
     ) -> None:
         feature_index = 0
+        table_to_unpruned_size_mapping: Optional[Dict[str, int]] = None
+        if (
+            ctx is not None
+            and getattr(ctx, "table_name_to_unpruned_hash_sizes", None)
+            and len(ctx.table_name_to_unpruned_hash_sizes) > 0
+        ):
+            table_to_unpruned_size_mapping = ctx.table_name_to_unpruned_hash_sizes
         for i, sharding in enumerate(self._sharding_type_to_sharding.values()):
             feature_hash_size: List[int] = []
             feature_hash_size_lengths: List[int] = []
             for table in sharding.embedding_tables():
                 table_hash_size = [0] * table.num_features()
-                table_hash_size[-1] = table.num_embeddings
+                if table_to_unpruned_size_mapping and table.name:
+                    table_hash_size[-1] = table_to_unpruned_size_mapping[table.name]
+                else:
+                    table_hash_size[-1] = table.num_embeddings
                 feature_hash_size.extend(table_hash_size)
 
                 table_hash_size = [0] * table.num_features()
@@ -1063,6 +1077,7 @@ class ShardedEmbeddingCollection(
     def _create_input_dist(
         self,
         input_feature_names: List[str],
+        ctx: Optional[EmbeddingCollectionContext] = None,
     ) -> None:
         feature_names: List[str] = []
         self._feature_splits: List[int] = []
@@ -1085,7 +1100,7 @@ class ShardedEmbeddingCollection(
         )
 
         if self._use_index_dedup:
-            self._create_hash_size_info(feature_names)
+            self._create_hash_size_info(feature_names, ctx)
 
     def _create_lookups(self) -> None:
         for sharding in self._sharding_type_to_sharding.values():
@@ -1225,7 +1240,7 @@ class ShardedEmbeddingCollection(
                 need_permute = False
             features = maybe_td_to_kjt(features, feature_keys)  # pyre-ignore[6]
         if self._has_uninitialized_input_dist:
-            self._create_input_dist(input_feature_names=features.keys())
+            self._create_input_dist(input_feature_names=features.keys(), ctx=ctx)
             self._has_uninitialized_input_dist = False
         with torch.no_grad():
             unpadded_features = None
