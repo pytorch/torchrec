@@ -11,6 +11,7 @@ import argparse
 import contextlib
 import logging
 import random
+import sys
 import time
 from typing import Any, Generator
 
@@ -18,8 +19,15 @@ import torch
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-torch.ops.load_library("//caffe2/torch/fb/retrieval:faster_hash_cpu")
-torch.ops.load_library("//caffe2/torch/fb/retrieval:faster_hash_cuda")
+
+def load_required_libraries() -> bool:
+    try:
+        torch.ops.load_library("//torchrec/ops:faster_hash_cpu")
+        torch.ops.load_library("//torchrec/ops:faster_hash_cuda")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to load faster_hash libraries, skipping test: {e}")
+        return False
 
 
 @contextlib.contextmanager
@@ -347,6 +355,9 @@ def _run_benchmark_with_eviction(
 
 
 if __name__ == "__main__":
+    if not load_required_libraries():
+        print("Skipping test because libraries were not loaded")
+        sys.exit(0)
     logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
     handler.setLevel(logging.INFO)
