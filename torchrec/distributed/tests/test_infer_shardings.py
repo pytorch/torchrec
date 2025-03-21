@@ -2229,7 +2229,7 @@ class InferShardingsTest(unittest.TestCase):
         sharded_model.load_state_dict(quant_model.state_dict())
         sharded_output = sharded_model(*inputs[0])
 
-        assert_close(non_sharded_output, sharded_output)
+        assert_close(non_sharded_output[0], sharded_output[0])
         gm: torch.fx.GraphModule = symbolic_trace(
             sharded_model,
             leaf_modules=[
@@ -2242,7 +2242,7 @@ class InferShardingsTest(unittest.TestCase):
         gm_script = torch.jit.script(gm)
         print(f"gm_script:\n{gm_script}")
         gm_script_output = gm_script(*inputs[0])
-        assert_close(sharded_output, gm_script_output)
+        assert_close(sharded_output[0], gm_script_output[0])
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,

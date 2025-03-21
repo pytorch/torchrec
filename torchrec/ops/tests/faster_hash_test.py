@@ -13,8 +13,15 @@ from enum import IntEnum
 import torch
 from hypothesis import settings
 
-torch.ops.load_library("//torchrec/ops:faster_hash_cpu")
-torch.ops.load_library("//torchrec/ops:faster_hash_cuda")
+
+def load_required_libraries() -> bool:
+    try:
+        torch.ops.load_library("//torchrec/ops:faster_hash_cpu")
+        torch.ops.load_library("//torchrec/ops:faster_hash_cuda")
+        return True
+    except Exception as e:
+        print(f"Skipping tests because libraries were not loaded: {e}")
+        return False
 
 
 class HashZchKernelEvictionPolicy(IntEnum):
@@ -23,6 +30,14 @@ class HashZchKernelEvictionPolicy(IntEnum):
 
 
 class FasterHashTest(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        if not load_required_libraries():
+            raise unittest.SkipTest(
+                "Libraries not loaded, skipping all tests in MyTestCase"
+            )
+
     @unittest.skipIf(not torch.cuda.is_available(), "Skip when CUDA is not available")
     @settings(deadline=None)
     def test_simple_zch_no_evict(self) -> None:
