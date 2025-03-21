@@ -47,10 +47,12 @@ class BaseManagedCollisionEmbeddingCollection(nn.Module):
         embedding_module: Union[EmbeddingBagCollection, EmbeddingCollection],
         managed_collision_collection: ManagedCollisionCollection,
         return_remapped_features: bool = False,
+        enable_in_place_data_overwrite: bool = False,
     ) -> None:
         super().__init__()
         self._managed_collision_collection = managed_collision_collection
         self._return_remapped_features = return_remapped_features
+        self._enable_in_place_data_overwrite = enable_in_place_data_overwrite
         self._embedding_module: Union[EmbeddingBagCollection, EmbeddingCollection] = (
             embedding_module
         )
@@ -109,9 +111,13 @@ class ManagedCollisionEmbeddingCollection(BaseManagedCollisionEmbeddingCollectio
         embedding_collection: EmbeddingCollection,
         managed_collision_collection: ManagedCollisionCollection,
         return_remapped_features: bool = False,
+        enable_in_place_data_overwrite: bool = False,
     ) -> None:
         super().__init__(
-            embedding_collection, managed_collision_collection, return_remapped_features
+            embedding_collection,
+            managed_collision_collection,
+            return_remapped_features,
+            enable_in_place_data_overwrite,
         )
 
     # For consistency with embedding bag collection
@@ -140,11 +146,13 @@ class ManagedCollisionEmbeddingBagCollection(BaseManagedCollisionEmbeddingCollec
         embedding_bag_collection: EmbeddingBagCollection,
         managed_collision_collection: ManagedCollisionCollection,
         return_remapped_features: bool = False,
+        enable_in_place_data_overwrite: bool = False,
     ) -> None:
         super().__init__(
             embedding_bag_collection,
             managed_collision_collection,
             return_remapped_features,
+            enable_in_place_data_overwrite,
         )
 
     # For backwards compat, as references existed in tests
