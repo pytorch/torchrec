@@ -29,7 +29,10 @@ def state_dict_gather(
     for key, dst_tensor in dst.items():
         src_tensor = src[key]
         if isinstance(src_tensor, ShardedTensor):
-            src_tensor.gather(out=dst_tensor if (dist.get_rank() == 0) else None)
+            src_tensor.gather(
+                out=dst_tensor if (dist.get_rank() == 0) else None,
+                dtype=dst_tensor.dtype,
+            )
         elif isinstance(src_tensor, torch.Tensor):
             dst_tensor.copy_(src_tensor)
         else:
