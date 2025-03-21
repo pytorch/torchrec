@@ -305,7 +305,9 @@ class ThroughputMetric(nn.Module):
         error_msgs: List[str],
     ) -> None:
         key = f"{prefix}num_batch"
-        if key in state_dict and self._batch_size_stages is not None:
-            # Restore the number of batches used for the throughput calculation from the state dict
+        if key in state_dict:
+            # If present, pop the number of batches used for the throughput calculation from the state dict
             num_batch_tensor = state_dict.pop(key)
-            self._num_batch = int(num_batch_tensor.item())
+            # Apply the number of batches to the module if using batch_size_stages
+            if self._batch_size_stages is not None:
+                self._num_batch = int(num_batch_tensor.item())
