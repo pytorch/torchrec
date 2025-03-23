@@ -75,6 +75,9 @@ conda env config vars set -n ${CONDA_ENV}  \
 # if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
 #     export PYTORCH_CUDA_PKG="pytorch-cuda=${MATRIX_GPU_ARCH_VERSION}"
 # fi
+
+conda run -n "${CONDA_ENV}" pip install importlib-metadata
+
 conda run -n "${CONDA_ENV}" pip install torch --index-url "$PYTORCH_URL"
 
 # install fbgemm
