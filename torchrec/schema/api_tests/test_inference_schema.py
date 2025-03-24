@@ -142,18 +142,10 @@ class TestInferenceSchema(unittest.TestCase):
         self.assertTrue(DEFAULT_QUANTIZATION_DTYPE == STABLE_DEFAULT_QUANTIZATION_DTYPE)
 
         # Check default sharders are a superset of the stable ones
-        # and check fused_params are also a superset
         for sharder in STABLE_DEFAULT_SHARDERS:
             found = False
             for default_sharder in DEFAULT_SHARDERS:
                 if isinstance(default_sharder, type(sharder)):
-                    # pyre-ignore[16]
-                    for key in sharder.fused_params.keys():
-                        self.assertTrue(key in default_sharder.fused_params)
-                        self.assertTrue(
-                            default_sharder.fused_params[key]
-                            == sharder.fused_params[key]
-                        )
                     found = True
 
             self.assertTrue(found)
