@@ -11,9 +11,9 @@ import os
 
 def main():
     """
-    Since FBGEMM doesn't publish CUDA 12.6 binaries yet, torchrec will not work with
-    CUDA 12.6. As a result, we filter out CUDA 12.6 from the build matrix that
-    determines with nightly builds are run.
+    For filtering out certain cuda versions in the build matrix that
+    determines with nightly builds are run. This ensures TorchRec is
+    always consistent in version compatibility with FBGEMM.
     """
 
     full_matrix_string = os.environ["MAT"]
@@ -22,8 +22,7 @@ def main():
     new_matrix_entries = []
 
     for entry in full_matrix["include"]:
-        if entry["gpu_arch_version"] != "12.6":
-            new_matrix_entries.append(entry)
+        new_matrix_entries.append(entry)
 
     new_matrix = {"include": new_matrix_entries}
     print(json.dumps(new_matrix))
