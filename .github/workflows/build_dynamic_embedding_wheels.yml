@@ -21,7 +21,7 @@ jobs:
       matrix:
         os: [ ubuntu-latest ]
         pyver: [ cp39, cp310, cp311, cp312 ]
-        cuver: [ "12.1", "12.4"]
+        cuver: [ "12.1", "12.4", "12.6", "12.8"]
 
     steps:
       -
