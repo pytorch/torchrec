@@ -323,7 +323,7 @@ class ThroughputMetricTest(unittest.TestCase):
 
     def test_load_state_dict_hook_restores_value(self) -> None:
         """
-        Checks that load_state_dict_hook correctly restores the 'num_batch' value
+        Checks that the load_state_dict_hook correctly restores the 'num_batch' value
         from the state_dict.
         """
         throughput_metric = ThroughputMetric(
@@ -337,3 +337,43 @@ class ThroughputMetricTest(unittest.TestCase):
         state_dict[f"{prefix}num_batch"] = torch.tensor(10, dtype=torch.long)
         throughput_metric.load_state_dict_hook(state_dict, prefix, {}, True, [], [], [])
         self.assertEqual(throughput_metric._num_batch, 10)
+
+    def test_load_state_dict_hook_resumes_from_checkpoint_without_bss(self) -> None:
+        """
+        Verifies that the load_state_dict_hook correctly handles the case where a
+        previously checkpointed job used the batch_size_stages, but a subsequent job,
+        restored from a checkpoint, isn't using them.
+        """
+        throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=None,  # No batch_size_stages
+        )
+        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
+        prefix: str = "test_prefix_"
+        state_dict[f"{prefix}num_batch"] = torch.tensor(10, dtype=torch.long)
+        throughput_metric.load_state_dict_hook(state_dict, prefix, {}, True, [], [], [])
+
+        self.assertFalse(hasattr(throughput_metric, "_num_batch"))
+
+    def test_load_state_dict_hook_resumes_from_checkpoint_with_bss_without_key(
+        self,
+    ) -> None:
+        """
+        Verifies that the load_state_dict_hook correctly handles the case where a
+        previously checkpointed job didn't use batch_size_stages, but a subsequent job,
+        restored from a checkpoint, is using them.
+        """
+        throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+        # Empty state_dict
+        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
+        prefix: str = "test_prefix_"
+        throughput_metric.load_state_dict_hook(state_dict, prefix, {}, True, [], [], [])
+        # Expecting 0
+        self.assertEqual(throughput_metric._num_batch, 0)

@@ -1716,6 +1716,7 @@ def _create_mean_pooling_divisor(
             lengths = torch.index_select(input=lengths, dim=0, index=indices)
 
         # only convert the sum pooling features to be 1 lengths
+        lengths = lengths.clone()
         for feature in pooling_type_to_rs_features[PoolingType.SUM.value]:
             feature_index = kjt_key_indices[feature]
             feature_index = feature_index * batch_size
