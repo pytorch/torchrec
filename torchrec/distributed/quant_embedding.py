@@ -300,6 +300,15 @@ def _construct_jagged_tensors_tw(
     return ret
 
 
+@torch.fx.wrap
+def _fx_marker_construct_jagged_tensor(
+    values: torch.Tensor,
+    lengths: torch.Tensor,
+    weights: Optional[torch.Tensor],
+) -> JaggedTensor:
+    return JaggedTensor(values=values, lengths=lengths, weights=weights)
+
+
 def _construct_jagged_tensors_rw(
     embeddings: List[torch.Tensor],
     feature_keys: List[str],
@@ -326,7 +335,7 @@ def _construct_jagged_tensors_rw(
             length_per_key,
         )
     for i, key in enumerate(feature_keys):
-        ret[key] = JaggedTensor(
+        ret[key] = _fx_marker_construct_jagged_tensor(
             values=embs_split_per_key[i],
             lengths=lengths_list[i],
             weights=values_list[i] if need_indices else None,
@@ -455,6 +464,7 @@ def _construct_jagged_tensors(
                 rw_bucket_mapping_tensor,
             ),
         )
+
     elif sharding_type == ShardingType.COLUMN_WISE.value:
         return _construct_jagged_tensors_cw(
             embeddings,
@@ -1112,6 +1122,7 @@ class ShardedQuantEcInputDist(torch.nn.Module):
         List[Optional[torch.Tensor]],
         List[Optional[torch.Tensor]],
     ]:
+
         with torch.no_grad():
             ret: List[KJTList] = []
             unbucketize_permute_tensor = []
