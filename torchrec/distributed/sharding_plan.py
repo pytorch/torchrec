@@ -608,6 +608,7 @@ def row_wise(
 
 def column_wise(
     ranks: List[int],
+    table_placements: Optional[List[str]] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::COLUMN_WISE` for construct_module_sharding_plan.
@@ -626,6 +627,10 @@ def column_wise(
             },
         )
     """
+    if table_placements is not None:
+        assert len(ranks) == len(
+            table_placements
+        ), "Args ranks and table_placements (in case of sharding across HBM and CPU host) must have the same length"
 
     def _parameter_sharding_generator(
         param: nn.Parameter,
@@ -651,6 +656,12 @@ def column_wise(
         for (size, offset), rank in zip(size_and_offsets, ranks):
             size_offset_ranks.append((size, offset, rank))
 
+        placements = []
+        if table_placements:
+            for rank, placement in zip(ranks, table_placements):
+                cuda_device_index = rank % local_size
+                placements.append(placement_helper(placement, cuda_device_index, rank))
+
         return _get_parameter_sharding(
             param,
             ShardingType.COLUMN_WISE.value,
@@ -658,6 +669,7 @@ def column_wise(
             local_size,
             device_type,
             sharder,
+            placements=placements if table_placements else None,
         )
 
     return _parameter_sharding_generator

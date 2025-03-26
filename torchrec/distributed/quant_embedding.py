@@ -164,9 +164,10 @@ def get_device_from_parameter_sharding(
     if len(set(device_type_list)) == 1:
         return device_type_list[0]
     else:
-        assert (
-            ps.sharding_type == "row_wise"
-        ), "Only row_wise sharding supports sharding across multiple device types for a table"
+        assert ps.sharding_type in [
+            ShardingType.ROW_WISE.value,
+            ShardingType.COLUMN_WISE.value,
+        ], "Only row_wise or column_wise sharding supports sharding across multiple device types for a table"
         return device_type_list
 
 
@@ -209,7 +210,12 @@ def create_infer_embedding_sharding(
         if sharding_type == ShardingType.TABLE_WISE.value:
             return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
         elif sharding_type == ShardingType.COLUMN_WISE.value:
-            return InferCwSequenceEmbeddingSharding(sharding_infos, env, device)
+            return InferCwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                device_type_from_sharding_infos=device_type_from_sharding_infos,
+            )
         elif sharding_type == ShardingType.ROW_WISE.value:
             return InferRwSequenceEmbeddingSharding(
                 sharding_infos=sharding_infos,
@@ -226,6 +232,13 @@ def create_infer_embedding_sharding(
     ):
         if sharding_type == ShardingType.ROW_WISE.value:
             return InferRwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                device_type_from_sharding_infos=device_type_from_sharding_infos,
+            )
+        elif sharding_type == ShardingType.COLUMN_WISE.value:
+            return InferCwSequenceEmbeddingSharding(
                 sharding_infos=sharding_infos,
                 env=env,
                 device=device,
