@@ -47,6 +47,30 @@ jobs:
         conda create -y --name build_binary python=${{ matrix.python-version }}
         conda info
         python --version
+        conda run -n build_binary python --version
+        conda run -n build_binary \
+          pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary \
+          python -c "import torch"
+        echo "torch succeeded"
+        conda run -n build_binary \
+          python -c "import torch.distributed"
+        conda run -n build_binary \
+          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary \
+          python -c "import fbgemm_gpu"
+        echo "fbgemm_gpu succeeded"
+        conda run -n build_binary \
+          pip install -r requirements.txt
+        conda run -n build_binary \
+          python setup.py bdist_wheel \
+          --python-tag=${{ matrix.python-tag }}
+        conda run -n build_binary \
+          python -c "import torchrec"
+        echo "torch.distributed succeeded"
+        conda run -n build_binary \
+          python -c "import numpy"
+        echo "numpy succeeded"
         echo "Starting C++ Tests"
         conda install -n build_binary -y gxx_linux-64
         conda run -n build_binary \
@@ -58,6 +82,8 @@ jobs:
         conda run -n build_binary cmake \
             -DBUILD_TEST=ON \
             -DBUILD_REDIS_IO=ON \
+            -D_GLIBCXX_USE_CXX11_ABI=0 \
+            -DCMAKE_EXE_LINKER_FLAGS=-Wl,--allow-shlib-undefined \
             -DCMAKE_PREFIX_PATH=/opt/conda/envs/build_binary/lib/python${{ matrix.python-version }}/site-packages/torch/share/cmake ..
         conda run -n build_binary make -j
         conda run -n build_binary ctest -V .
