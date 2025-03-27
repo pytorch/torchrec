@@ -139,17 +139,24 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         )
         self._cur_batch: Optional[In] = None
         self._connected = False
+        self._data_iter_stopped = False
 
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         cur_batch = next(dataloader_iter)
         self._cur_batch = cur_batch
-        with self._stream_context(self._memcpy_stream):
-            self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
+        if cur_batch is not None:
+            with self._stream_context(self._memcpy_stream):
+                self._cur_batch = _to_device(cur_batch, self._device, non_blocking=True)
         self._connected = True
 
-    def _next_batch(self, dataloader_iter: Iterator[In]) -> In:
+    def _next_batch(self, dataloader_iter: Iterator[In]) -> Optional[In]:
         with record_function("## next_batch ##"):
-            next_batch = next(dataloader_iter)
+            try:
+                next_batch = next(dataloader_iter)
+            except StopIteration:
+                self._data_iter_stopped = True
+                return None
+
         return next_batch
 
     def _wait_for_batch(self, cur_batch: In) -> None:
@@ -168,18 +175,26 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         if not self._connected:
             self._connect(dataloader_iter)
+        if self._data_iter_stopped:
+            raise StopIteration()
 
-        # Fetch next batch
+        # Fetch next batch, if depleted, raise at start of next progress
         next_batch = self._next_batch(dataloader_iter)
         cur_batch = self._cur_batch
-        assert cur_batch is not None
+
+        # for exhaustive data iter, some ranks will first depletes data,
+        # but we still need progress the train pipeline for other ranks;
+        # cur_batch could be None
 
         if self._model.training:
             with record_function("## zero_grad ##"):
                 self._optimizer.zero_grad()
 
-        self._wait_for_batch(cur_batch)
+        if cur_batch is not None:
+            self._wait_for_batch(cur_batch)
 
+        # model will need to handle if cur_batch is empty; this is needed if there's
+        # communicative ops
         with record_function("## forward ##"):
             (losses, output) = self._model(cur_batch)
 
@@ -188,7 +203,8 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
         # Copy the next batch to GPU
         self._cur_batch = cur_batch = next_batch
-        self._copy_batch_to_gpu(cur_batch)
+        if cur_batch is not None:
+            self._copy_batch_to_gpu(cur_batch)
 
         # Update
         if self._model.training:
