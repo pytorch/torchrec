@@ -9,7 +9,7 @@
 
 import copy
 import unittest
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Final, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -43,12 +43,103 @@ from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
 
 
+# Global constants for testing ShardedManagedCollisionEmbeddingBagCollection
+
+WORLD_SIZE = 2
+
+# Input KeyedJaggedTensors for each rank in distributed tests
+embedding_bag_config: Final[List[EmbeddingBagConfig]] = [
+    EmbeddingBagConfig(
+        name="table_0",
+        feature_names=["feature_0"],
+        embedding_dim=8,
+        num_embeddings=16,
+    ),
+    EmbeddingBagConfig(
+        name="table_1",
+        feature_names=["feature_1"],
+        embedding_dim=8,
+        num_embeddings=32,
+    ),
+]
+
+# Expected remapped outputs per iteration per rank for validation
+kjt_input_per_rank: Final[List[KeyedJaggedTensor]] = [
+    KeyedJaggedTensor.from_lengths_sync(
+        keys=["feature_0", "feature_1", "feature_2"],
+        values=torch.LongTensor(
+            [1000, 2000, 1001, 2000, 2001, 2002, 1, 1, 1],
+        ),
+        lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 1, 1, 1]),
+        weights=None,
+    ),
+    KeyedJaggedTensor.from_lengths_sync(
+        keys=["feature_0", "feature_1", "feature_2"],
+        values=torch.LongTensor(
+            [
+                1000,
+                1002,
+                1004,
+                2000,
+                2002,
+                2004,
+                1,
+                1,
+                1,
+            ],
+        ),
+        lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 1, 1, 1]),
+        weights=None,
+    ),
+]
+
+kjt_out_per_iter_per_rank: Final[List[List[KeyedJaggedTensor]]] = [
+    [
+        KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0", "feature_1"],
+            values=torch.LongTensor(
+                [7, 15, 7, 31, 31, 31],
+            ),
+            lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
+            weights=None,
+        ),
+        KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0", "feature_1"],
+            values=torch.LongTensor(
+                [7, 7, 7, 31, 31, 31],
+            ),
+            lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
+            weights=None,
+        ),
+    ],
+    [
+        KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0", "feature_1"],
+            values=torch.LongTensor(
+                [3, 14, 4, 27, 29, 28],
+            ),
+            lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
+            weights=None,
+        ),
+        KeyedJaggedTensor.from_lengths_sync(
+            keys=["feature_0", "feature_1"],
+            values=torch.LongTensor(
+                [3, 5, 6, 27, 28, 30],
+            ),
+            lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
+            weights=None,
+        ),
+    ],
+]
+
+
 class SparseArch(nn.Module):
     def __init__(
         self,
         tables: List[EmbeddingBagConfig],
         device: torch.device,
         return_remapped: bool = False,
+        allow_in_place_embed_weight_update: bool = False,
     ) -> None:
         super().__init__()
         self._return_remapped = return_remapped
@@ -81,6 +172,7 @@ class SparseArch(nn.Module):
                     embedding_configs=tables,
                 ),
                 return_remapped_features=self._return_remapped,
+                allow_in_place_embed_weight_update=allow_in_place_embed_weight_update,
             )
         )
 
@@ -268,6 +360,87 @@ def _test_sharding_and_remapping(  # noqa C901
         # TODO: validate embedding rows, and eviction
 
 
+def _test_in_place_embd_weight_update(  # noqa C901
+    output_keys: List[str],
+    tables: List[EmbeddingBagConfig],
+    rank: int,
+    world_size: int,
+    kjt_input_per_rank: List[KeyedJaggedTensor],
+    kjt_out_per_iter_per_rank: List[List[KeyedJaggedTensor]],
+    sharder: ModuleSharder[nn.Module],
+    backend: str,
+    local_size: Optional[int] = None,
+    allow_in_place_embed_weight_update: bool = True,
+) -> None:
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        kjt_input = kjt_input_per_rank[rank].to(ctx.device)
+        kjt_out_per_iter = [
+            kjt[rank].to(ctx.device) for kjt in kjt_out_per_iter_per_rank
+        ]
+        return_remapped: bool = True
+        sparse_arch = SparseArch(
+            tables,
+            torch.device("meta"),
+            return_remapped=return_remapped,
+            allow_in_place_embed_weight_update=allow_in_place_embed_weight_update,
+        )
+        apply_optimizer_in_backward(
+            RowWiseAdagrad,
+            [
+                sparse_arch._mc_ebc._embedding_bag_collection.embedding_bags[
+                    "table_0"
+                ].weight,
+                sparse_arch._mc_ebc._embedding_bag_collection.embedding_bags[
+                    "table_1"
+                ].weight,
+            ],
+            {"lr": 0.01},
+        )
+        module_sharding_plan = construct_module_sharding_plan(
+            sparse_arch._mc_ebc,
+            per_param_sharding={"table_0": row_wise(), "table_1": row_wise()},
+            local_size=local_size,
+            world_size=world_size,
+            device_type="cuda" if torch.cuda.is_available() else "cpu",
+            sharder=sharder,
+        )
+
+        sharded_sparse_arch = _shard_modules(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"_mc_ebc": module_sharding_plan}),
+            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            env=ShardingEnv.from_process_group(ctx.pg),
+            sharders=[sharder],
+            device=ctx.device,
+        )
+
+        test_state_dict = sharded_sparse_arch.state_dict()
+        sharded_sparse_arch.load_state_dict(test_state_dict)
+
+        # sharded model
+        # each rank gets a subbatch
+        loss1, remapped_ids1 = sharded_sparse_arch(kjt_input)
+        loss2, remapped_ids2 = sharded_sparse_arch(kjt_input)
+        if not allow_in_place_embed_weight_update:
+            # Without in-place overwrite the backward pass will fail due to tensor version mismatch
+            with unittest.TestCase().assertRaisesRegex(
+                RuntimeError,
+                "one of the variables needed for gradient computation has been modified by an inplace operation",
+            ):
+                loss1.backward()
+        else:
+            loss1.backward()
+            loss2.backward()
+            remapped_ids = [remapped_ids1, remapped_ids2]
+            for key in output_keys:
+                for i, kjt_out in enumerate(kjt_out_per_iter):
+                    assert torch.equal(
+                        remapped_ids[i][key].values(),
+                        kjt_out[key].values(),
+                    ), f"feature {key} on {ctx.rank} iteration {i} does not match, got {remapped_ids[i][key].values()}, expect {kjt_out[key].values()}"
+
+
 @skip_if_asan_class
 class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     @unittest.skipIf(
@@ -311,22 +484,6 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
     def test_even_sharding(self, backend: str) -> None:
-        WORLD_SIZE = 2
-
-        embedding_bag_config = [
-            EmbeddingBagConfig(
-                name="table_0",
-                feature_names=["feature_0"],
-                embedding_dim=8,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_1",
-                feature_names=["feature_1"],
-                embedding_dim=8,
-                num_embeddings=32,
-            ),
-        ]
 
         self._run_multi_process_test(
             callable=_test_sharding,
@@ -344,97 +501,6 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
     @given(backend=st.sampled_from(["nccl"]))
     @settings(deadline=None)
     def test_sharding_zch_mc_ebc(self, backend: str) -> None:
-
-        WORLD_SIZE = 2
-
-        embedding_bag_config = [
-            EmbeddingBagConfig(
-                name="table_0",
-                feature_names=["feature_0"],
-                embedding_dim=8,
-                num_embeddings=16,
-            ),
-            EmbeddingBagConfig(
-                name="table_1",
-                feature_names=["feature_1"],
-                embedding_dim=8,
-                num_embeddings=32,
-            ),
-        ]
-
-        kjt_input_per_rank = [  # noqa
-            KeyedJaggedTensor.from_lengths_sync(
-                keys=["feature_0", "feature_1", "feature_2"],
-                values=torch.LongTensor(
-                    [1000, 2000, 1001, 2000, 2001, 2002, 1, 1, 1],
-                ),
-                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 1, 1, 1]),
-                weights=None,
-            ),
-            KeyedJaggedTensor.from_lengths_sync(
-                keys=["feature_0", "feature_1", "feature_2"],
-                values=torch.LongTensor(
-                    [
-                        1000,
-                        1002,
-                        1004,
-                        2000,
-                        2002,
-                        2004,
-                        1,
-                        1,
-                        1,
-                    ],
-                ),
-                lengths=torch.LongTensor([1, 1, 1, 1, 1, 1, 1, 1, 1]),
-                weights=None,
-            ),
-        ]
-
-        kjt_out_per_iter_per_rank: List[List[KeyedJaggedTensor]] = []
-        kjt_out_per_iter_per_rank.append(
-            [
-                KeyedJaggedTensor.from_lengths_sync(
-                    keys=["feature_0", "feature_1"],
-                    values=torch.LongTensor(
-                        [7, 15, 7, 31, 31, 31],
-                    ),
-                    lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
-                    weights=None,
-                ),
-                KeyedJaggedTensor.from_lengths_sync(
-                    keys=["feature_0", "feature_1"],
-                    values=torch.LongTensor(
-                        [7, 7, 7, 31, 31, 31],
-                    ),
-                    lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
-                    weights=None,
-                ),
-            ]
-        )
-        # TODO: cleanup sorting so more dedugable/logical initial fill
-
-        kjt_out_per_iter_per_rank.append(
-            [
-                KeyedJaggedTensor.from_lengths_sync(
-                    keys=["feature_0", "feature_1"],
-                    values=torch.LongTensor(
-                        [3, 14, 4, 27, 29, 28],
-                    ),
-                    lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
-                    weights=None,
-                ),
-                KeyedJaggedTensor.from_lengths_sync(
-                    keys=["feature_0", "feature_1"],
-                    values=torch.LongTensor(
-                        [3, 5, 6, 27, 28, 30],
-                    ),
-                    lengths=torch.LongTensor([1, 1, 1, 1, 1, 1]),
-                    weights=None,
-                ),
-            ]
-        )
-
         self._run_multi_process_test(
             callable=_test_sharding_and_remapping,
             output_keys=["feature_0", "feature_1"],
@@ -444,4 +510,30 @@ class ShardedMCEmbeddingBagCollectionParallelTest(MultiProcessTestBase):
             kjt_out_per_iter_per_rank=kjt_out_per_iter_per_rank,
             sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
             backend=backend,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    # pyre-ignore
+    @given(
+        backend=st.sampled_from(["nccl"]),
+        allow_in_place_embed_weight_update=st.booleans(),
+    )
+    @settings(deadline=None)
+    def test_in_place_embd_weight_update(
+        self, backend: str, allow_in_place_embed_weight_update: bool
+    ) -> None:
+
+        self._run_multi_process_test(
+            callable=_test_in_place_embd_weight_update,
+            output_keys=["feature_0", "feature_1"],
+            world_size=WORLD_SIZE,
+            tables=embedding_bag_config,
+            kjt_input_per_rank=kjt_input_per_rank,
+            kjt_out_per_iter_per_rank=kjt_out_per_iter_per_rank,
+            sharder=ManagedCollisionEmbeddingBagCollectionSharder(),
+            backend=backend,
+            allow_in_place_embed_weight_update=allow_in_place_embed_weight_update,
         )
