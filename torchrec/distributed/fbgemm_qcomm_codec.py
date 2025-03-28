@@ -80,8 +80,8 @@ class QCommsConfig:
                 or self.fp8_quantize_dim_bwd is not None
             )
         ):
-            raise ValueError(
-                f"fp8_quantize_dim is set to {self.fp8_quantize_dim} and fp8_quantize_dim_bwd is set to {self.fp8_quantize_dim_bwd} but no FP8 precision is found in forward or backward precisions"
+            logger.warning(
+                f"fp8_quantize_dim is set to {self.fp8_quantize_dim} and fp8_quantize_dim_bwd is set to {self.fp8_quantize_dim_bwd} but no FP8 precision is found in forward or backward precisions, resetting to None"
             )
         if (
             self.backward_precision == CommType.FP8
@@ -100,7 +100,9 @@ class QCommsConfig:
                 or self.mx4_quantize_dim_bwd is not None
             )
         ):
-            raise ValueError(
+            self.mx4_quantize_dim = None
+            self.mx4_quantize_dim_bwd = None
+            logger.warning(
                 f"mx4_quantize_dim is set to {self.mx4_quantize_dim} and mx4_quantize_dim_bwd is set to {self.mx4_quantize_dim_bwd} but no MX4 precision is found in forward or backward precisions"
             )
         if (
