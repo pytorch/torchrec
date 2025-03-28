@@ -129,6 +129,9 @@ class BaseShardedManagedCollisionEmbeddingCollection(
             )
         )
         self._return_remapped_features: bool = module._return_remapped_features
+        self._allow_in_place_embed_weight_update: bool = (
+            module._allow_in_place_embed_weight_update
+        )
 
         # pyre-ignore
         self._table_to_tbe_and_index = {}
@@ -202,12 +205,22 @@ class BaseShardedManagedCollisionEmbeddingCollection(
                     init_fn = self._embedding_module._table_name_to_config[
                         table
                     ].init_fn
-
                     # Set evicted indices to original init_fn instead of all zeros
-                    # pyre-ignore [29]
-                    table_weight_param[evictions_indices_for_table] = init_fn(
-                        table_weight_param[evictions_indices_for_table]
-                    )
+                    if self._allow_in_place_embed_weight_update:
+                        # In-place update with .data to bypass PyTorch's autograd tracking.
+                        # This is required for model training with multiple forward passes where the autograd graph
+                        # is already created. Direct tensor modification would trigger PyTorch's in-place operation
+                        # checks and invalidate gradients, while .data allows safe reinitialization of evicted
+                        # embeddings without affecting the computational graph.
+                        # pyre-ignore [29]
+                        table_weight_param.data[evictions_indices_for_table] = init_fn(
+                            table_weight_param[evictions_indices_for_table]
+                        )
+                    else:
+                        # pyre-ignore [29]
+                        table_weight_param[evictions_indices_for_table] = init_fn(
+                            table_weight_param[evictions_indices_for_table]
+                        )
 
     def compute(
         self,

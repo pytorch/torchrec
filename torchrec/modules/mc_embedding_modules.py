@@ -39,6 +39,9 @@ class BaseManagedCollisionEmbeddingCollection(nn.Module):
         managed_collision_modules: Dict of managed collision modules
         return_remapped_features (bool): whether to return remapped input features
             in addition to embeddings
+        allow_in_place_embed_weight_update(bool): Enables in-place update of embedding
+            weights on eviction. When enabled, this flag allows updates to embedding
+            weights without modifying the autograd graph.
 
     """
 
@@ -47,10 +50,12 @@ class BaseManagedCollisionEmbeddingCollection(nn.Module):
         embedding_module: Union[EmbeddingBagCollection, EmbeddingCollection],
         managed_collision_collection: ManagedCollisionCollection,
         return_remapped_features: bool = False,
+        allow_in_place_embed_weight_update: bool = False,
     ) -> None:
         super().__init__()
         self._managed_collision_collection = managed_collision_collection
         self._return_remapped_features = return_remapped_features
+        self._allow_in_place_embed_weight_update = allow_in_place_embed_weight_update
         self._embedding_module: Union[EmbeddingBagCollection, EmbeddingCollection] = (
             embedding_module
         )
@@ -97,10 +102,13 @@ class ManagedCollisionEmbeddingCollection(BaseManagedCollisionEmbeddingCollectio
     For details of input and output types, see EmbeddingCollection
 
     Args:
-        embedding_module: EmbeddingCollection to lookup embeddings
-        managed_collision_modules: Dict of managed collision modules
+        embedding_collection: EmbeddingCollection to lookup embeddings
+        managed_collision_collection: Dict of managed collision modules
         return_remapped_features (bool): whether to return remapped input features
             in addition to embeddings
+        allow_in_place_embed_weight_update(bool): enable in place update of embedding
+            weights on evict. This flag when enabled will allow update embedding
+            weights without modifying of autograd graph.
 
     """
 
@@ -109,9 +117,13 @@ class ManagedCollisionEmbeddingCollection(BaseManagedCollisionEmbeddingCollectio
         embedding_collection: EmbeddingCollection,
         managed_collision_collection: ManagedCollisionCollection,
         return_remapped_features: bool = False,
+        allow_in_place_embed_weight_update: bool = False,
     ) -> None:
         super().__init__(
-            embedding_collection, managed_collision_collection, return_remapped_features
+            embedding_collection,
+            managed_collision_collection,
+            return_remapped_features,
+            allow_in_place_embed_weight_update,
         )
 
     # For consistency with embedding bag collection
@@ -132,6 +144,10 @@ class ManagedCollisionEmbeddingBagCollection(BaseManagedCollisionEmbeddingCollec
         managed_collision_modules: Dict of managed collision modules
         return_remapped_features (bool): whether to return remapped input features
             in addition to embeddings
+        allow_in_place_embed_weight_update(bool): Enables in-place update of embedding
+            weights on eviction. When enabled, this flag allows updates to embedding
+            weights without modifying the autograd graph.
+
 
     """
 
@@ -140,11 +156,13 @@ class ManagedCollisionEmbeddingBagCollection(BaseManagedCollisionEmbeddingCollec
         embedding_bag_collection: EmbeddingBagCollection,
         managed_collision_collection: ManagedCollisionCollection,
         return_remapped_features: bool = False,
+        allow_in_place_embed_weight_update: bool = False,
     ) -> None:
         super().__init__(
             embedding_bag_collection,
             managed_collision_collection,
             return_remapped_features,
+            allow_in_place_embed_weight_update,
         )
 
     # For backwards compat, as references existed in tests
