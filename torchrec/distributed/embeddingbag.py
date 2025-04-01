@@ -1172,16 +1172,13 @@ class ShardedEmbeddingBagCollection(
         for i, name in enumerate(self._uncombined_embedding_names):
             embedding_name_order.setdefault(name, i)
 
-        def sort_key(input: Tuple[int, str]) -> Tuple[int, int]:
-            index, name = input
-            return (embedding_name_order[name], embedding_shard_offsets[index])
-
-        permute_indices = [
-            i
-            for i, _ in sorted(
-                enumerate(self._uncombined_embedding_names), key=sort_key
-            )
-        ]
+        permute_indices = sorted(
+            range(len(self._uncombined_embedding_names)),
+            key=lambda i: (
+                embedding_name_order[self._uncombined_embedding_names[i]],
+                embedding_shard_offsets[i],
+            ),
+        )
         self._permute_op: PermutePooledEmbeddings = PermutePooledEmbeddings(
             self._uncombined_embedding_dims, permute_indices, self._device
         )
