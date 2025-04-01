@@ -10,7 +10,6 @@
 #!/usr/bin/env python3
 
 import copy
-import multiprocessing
 import os
 from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Type, Union
 
@@ -24,9 +23,13 @@ from torch.optim import Optimizer
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.benchmark.benchmark_utils import benchmark_func
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.test_utils.multi_process import MultiProcessContext
+
+from torchrec.distributed.test_utils.multi_process import (
+    MultiProcessContext,
+    run_multi_process_func,
+)
+from torchrec.distributed.test_utils.test_input import ModelInput, TdModelInput
 from torchrec.distributed.test_utils.test_model import (
-    ModelInput,
     TestEBCSharder,
     TestOverArchLarge,
     TestSparseNN,
@@ -42,8 +45,6 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
 )
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
-
-from torchrec.test_utils import get_free_port
 
 
 _pipeline_cls: Dict[str, Type[Union[TrainPipelineBase, TrainPipelineSparseDist]]] = {
@@ -87,7 +88,7 @@ def _gen_pipelines(
     help="Dim embeddings embedding.",
 )
 @click.option(
-    "--n_batches",
+    "--num_batches",
     type=int,
     default=20,
     help="Num of batchs to run.",
@@ -123,12 +124,6 @@ def _gen_pipelines(
     help="Pipeline to run: all, base, sparse, semi, prefetch",
 )
 @click.option(
-    "--multi_process",
-    type=bool,
-    default=True,
-    help="Run in multi process mode.",
-)
-@click.option(
     "--profile",
     type=str,
     default="",
@@ -139,21 +134,17 @@ def main(
     n_features: int,
     ratio_features_weighted: float,
     dim_emb: int,
-    n_batches: int,
+    num_batches: int,
     batch_size: int,
     sharding_type: ShardingType,
     pooling_factor: int,
     input_type: str,
     pipeline: str,
-    multi_process: bool,
     profile: str,
 ) -> None:
     """
     Checks that pipelined training is equivalent to non-pipelined training.
     """
-
-    os.environ["MASTER_ADDR"] = str("localhost")
-    os.environ["MASTER_PORT"] = str(get_free_port())
 
     num_weighted_features = int(n_features * ratio_features_weighted)
     num_features = n_features - num_weighted_features
@@ -176,74 +167,22 @@ def main(
         )
         for i in range(num_weighted_features)
     ]
-    batches = _generate_data(
+
+    run_multi_process_func(
+        func=runner,
         tables=tables,
         weighted_tables=weighted_tables,
-        num_float_features=10,
-        num_batches=n_batches,
+        sharding_type=sharding_type.value,
+        kernel_type=EmbeddingComputeKernel.FUSED.value,
+        fused_params={},
         batch_size=batch_size,
         world_size=world_size,
+        num_batches=num_batches,
         pooling_factor=pooling_factor,
         input_type=input_type,
+        pipelines=pipeline,
+        profile=profile,
     )
-
-    if multi_process:
-        _run_multi_process_test(
-            callable=runner,
-            tables=tables,
-            weighted_tables=weighted_tables,
-            sharding_type=sharding_type.value,
-            kernel_type=EmbeddingComputeKernel.FUSED.value,
-            batches=batches,
-            fused_params={},
-            world_size=world_size,
-            pipelines=pipeline,
-            profile=profile,
-        )
-    else:
-        single_runner(
-            tables=tables,
-            weighted_tables=weighted_tables,
-            sharding_type=sharding_type.value,
-            kernel_type=EmbeddingComputeKernel.FUSED.value,
-            batches=batches,
-            fused_params={},
-            world_size=1,
-            pipelines=pipeline,
-            profile=profile,
-        )
-
-
-def _run_multi_process_test(
-    *,
-    callable: Callable[
-        ...,
-        None,
-    ],
-    world_size: int,
-    # pyre-ignore
-    **kwargs,
-) -> None:
-    ctx = multiprocessing.get_context("spawn")
-    processes = []
-    if world_size == 1:
-        kwargs["world_size"] = 1
-        kwargs["rank"] = 0
-        callable(**kwargs)
-        return
-
-    for rank in range(world_size):
-        kwargs["rank"] = rank
-        kwargs["world_size"] = world_size
-        p = ctx.Process(
-            target=callable,
-            kwargs=kwargs,
-        )
-        p.start()
-        processes.append(p)
-
-    for p in processes:
-        p.join()
 
 
 def _generate_data(
@@ -252,22 +191,31 @@ def _generate_data(
     num_float_features: int = 10,
     num_batches: int = 100,
     batch_size: int = 4096,
-    world_size: int = 1,
     pooling_factor: int = 10,
     input_type: str = "kjt",
-) -> List[List[ModelInput]]:
-    return [
-        ModelInput.generate(
-            tables=tables,
-            weighted_tables=weighted_tables,
-            batch_size=batch_size,
-            world_size=world_size,
-            num_float_features=num_float_features,
-            pooling_avg=pooling_factor,
-            input_type=input_type,
-        )[1]
-        for i in range(num_batches)
-    ]
+) -> List[ModelInput]:
+    if input_type == "kjt":
+        return [
+            ModelInput.generate(
+                tables=tables,
+                weighted_tables=weighted_tables,
+                batch_size=batch_size,
+                num_float_features=num_float_features,
+                pooling_avg=pooling_factor,
+            )
+            for _ in range(num_batches)
+        ]
+    else:
+        return [
+            TdModelInput.generate(
+                tables=tables,
+                weighted_tables=weighted_tables,
+                batch_size=batch_size,
+                num_float_features=num_float_features,
+                pooling_avg=pooling_factor,
+            )
+            for _ in range(num_batches)
+        ]
 
 
 def _generate_sharded_model_and_optimizer(
@@ -313,8 +261,11 @@ def runner(
     sharding_type: str,
     kernel_type: str,
     fused_params: Dict[str, Any],
+    batch_size: int,
     world_size: int,
-    batches: List[List[ModelInput]],
+    num_batches: int,
+    pooling_factor: int,
+    input_type: str,
     pipelines: str,
     profile: str,
 ) -> None:
@@ -347,7 +298,15 @@ def runner(
                 "learning_rate": 0.1,
             },
         )
-        bench_inputs = [batch[rank] for batch in batches]
+        bench_inputs = _generate_data(
+            tables=tables,
+            weighted_tables=weighted_tables,
+            num_float_features=10,
+            num_batches=num_batches,
+            batch_size=batch_size,
+            pooling_factor=pooling_factor,
+            input_type=input_type,
+        )
         for pipeline_clazz in _gen_pipelines(pipelines=pipelines):
             if pipeline_clazz == TrainPipelineSemiSync:
                 # pyre-ignore [28]
@@ -391,78 +350,6 @@ def runner(
             )
             if rank == 0:
                 print(result)
-
-
-def single_runner(
-    tables: List[EmbeddingBagConfig],
-    weighted_tables: List[EmbeddingBagConfig],
-    sharding_type: str,
-    kernel_type: str,
-    fused_params: Dict[str, Any],
-    world_size: int,
-    batches: List[List[ModelInput]],
-    pipelines: str,
-    profile: str,
-) -> None:
-    device = torch.device("cuda")
-    torch.autograd.set_detect_anomaly(True)
-    model = TestSparseNN(
-        tables=tables,
-        weighted_tables=weighted_tables,
-        dense_device=device,
-        sparse_device=device,
-        over_arch_clazz=TestOverArchLarge,
-    ).to(device)
-
-    optimizer = optim.SGD(
-        [param for name, param in model.named_parameters() if "sparse" not in name],
-        lr=0.1,
-    )
-
-    bench_inputs = [batch[0] for batch in batches]
-    for pipeline_clazz in _gen_pipelines(pipelines=pipelines):
-        if pipeline_clazz == TrainPipelineSemiSync:
-            # pyre-ignore [28]
-            pipeline = pipeline_clazz(
-                model=model,
-                optimizer=optimizer,
-                device=device,
-                start_batch=0,
-            )
-        else:
-            pipeline = pipeline_clazz(
-                model=model,
-                optimizer=optimizer,
-                device=device,
-            )
-        pipeline.progress(iter(bench_inputs))
-
-        def _func_to_benchmark(
-            bench_inputs: List[ModelInput],
-            model: nn.Module,
-            pipeline: TrainPipeline,
-        ) -> None:
-            dataloader = iter(bench_inputs)
-            while True:
-                try:
-                    pipeline.progress(dataloader)
-                except StopIteration:
-                    break
-
-        result = benchmark_func(
-            name=pipeline_clazz.__name__,
-            bench_inputs=bench_inputs,  # pyre-ignore
-            prof_inputs=bench_inputs,  # pyre-ignore
-            num_benchmarks=5,
-            num_profiles=2,
-            profile_dir=profile,
-            world_size=world_size,
-            func_to_benchmark=_func_to_benchmark,
-            benchmark_func_kwargs={"model": model, "pipeline": pipeline},
-            rank=0,
-        )
-
-        print(result)
 
 
 if __name__ == "__main__":

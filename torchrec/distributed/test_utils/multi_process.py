@@ -179,3 +179,49 @@ class MultiProcessTestBase(unittest.TestCase):
         for p in processes:
             p.join()
             self.assertEqual(0, p.exitcode)
+
+
+def run_multi_process_func(
+    func: Callable[
+        ...,
+        None,
+    ],
+    multiprocessing_method: str = "spawn",
+    use_deterministic_algorithms: bool = True,
+    world_size: int = 2,
+    # pyre-ignore
+    **kwargs,
+) -> None:
+    os.environ["MASTER_ADDR"] = str("localhost")
+    os.environ["MASTER_PORT"] = str(get_free_port())
+    os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
+    os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+
+    torch.use_deterministic_algorithms(use_deterministic_algorithms)
+    if torch.cuda.is_available():
+        torch.backends.cudnn.allow_tf32 = False
+        torch.backends.cuda.matmul.allow_tf32 = False
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
+    if world_size == 1:
+        kwargs["world_size"] = 1
+        kwargs["rank"] = 0
+        func(**kwargs)
+        return
+    ctx = multiprocessing.get_context(multiprocessing_method)
+    processes = []
+    for rank in range(world_size):
+        kwargs["rank"] = rank
+        kwargs["world_size"] = world_size
+        p = ctx.Process(
+            target=func,
+            name=f"rank{rank}",
+            kwargs=kwargs,
+        )
+        p.start()
+        processes.append(p)
+
+    for p in processes:
+        p.join()
+        if p.exitcode != 0:
+            print(p)
