@@ -175,7 +175,6 @@ def _get_dim(name: str, min: Optional[int] = None, max: Optional[int] = None) ->
     """
     dim = f"{name}_{DYNAMIC_DIMS[name]}"
     DYNAMIC_DIMS[name] += 1
-    # pyre-ignore[7]: Expected `DIM` but got `Dim`.
     return Dim(dim, min=min, max=max)
 
 
