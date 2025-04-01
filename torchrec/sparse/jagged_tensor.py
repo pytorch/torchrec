@@ -52,6 +52,9 @@ logger: logging.Logger = logging.getLogger()
 
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
+    """
+    moving a tensor from cpu to cuda using pinned memory (non_blocking) is generally faster
+    """
     if is_torchdynamo_compiling():
         # TODO: remove once FakeTensor supports pin_memory() and to(..., non_blocking=True)
         return tensor.to(device=device)
@@ -64,6 +67,9 @@ def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
 
 
 def _cumsum(o: List[int]) -> List[int]:
+    """
+    python-list version of converting lengths --> offsets
+    """
     ret = [0] * (len(o) + 1)
     for i in range(len(o)):
         ret[i + 1] = ret[i] + o[i]
@@ -92,7 +98,7 @@ def _maybe_compute_lengths(
 ) -> torch.Tensor:
     if lengths is None:
         assert offsets is not None
-        lengths = _to_lengths(offsets)
+        lengths = torch.diff(offsets)
     return lengths
 
 
