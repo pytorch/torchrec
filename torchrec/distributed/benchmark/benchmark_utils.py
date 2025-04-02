@@ -19,8 +19,7 @@ import logging
 import os
 import time
 import timeit
-from dataclasses import dataclass
-
+from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from typing import (
     Any,
@@ -29,10 +28,13 @@ from typing import (
     Dict,
     List,
     Optional,
+    Set,
     Tuple,
     TypeVar,
     Union,
 )
+
+import click
 
 import torch
 from torch import multiprocessing as mp
@@ -461,6 +463,52 @@ def set_embedding_config(
         ]
 
     return embedding_configs, pooling_configs
+
+
+# pyre-ignore [24]
+def cmd_conf(*configs: Any) -> Callable:
+    support_classes: List[Any] = [int, str, bool, float, Enum]  # pyre-ignore[33]
+
+    # pyre-ignore [24]
+    def wrapper(func: Callable) -> Callable:
+        for config in configs:
+            assert is_dataclass(config), f"{config} should be a dataclass"
+
+        # pyre-ignore
+        def rtf(**kwargs):
+            loglevel = logging._nameToLevel[kwargs["loglevel"].upper()]
+            logger.setLevel(logging.INFO)
+            input_configs = []
+            for config in configs:
+                params = {}
+                for field in fields(config):
+                    params[field.name] = kwargs.get(field.name, field.default)
+                conf = config(**params)
+                logger.info(conf)
+                input_configs.append(conf)
+            logger.setLevel(loglevel)
+            return func(*input_configs)
+
+        names: Set[str] = set()
+        for config in configs:
+            for field in fields(config):
+                if not isinstance(field.default, tuple(support_classes)):
+                    continue
+                if field.name not in names:
+                    names.add(field.name)
+                else:
+                    logger.warn(f"WARNING: duplicate argument {field.name}")
+                    continue
+                rtf = click.option(
+                    f"--{field.name}", type=field.type, default=field.default
+                )(rtf)
+        return click.option(
+            "--loglevel",
+            type=click.Choice(list(logging._nameToLevel.keys()), case_sensitive=False),
+            default=logging._levelToName[logger.level],
+        )(rtf)
+
+    return wrapper
 
 
 def init_argparse_and_args() -> argparse.Namespace:

@@ -529,3 +529,37 @@ class ModelInput(Pipelineable):
 @dataclass
 class TdModelInput(ModelInput):
     idlist_features: TensorDict  # pyre-ignore
+
+
+@dataclass
+class TestSparseNNInputConfig:
+    batch_size: int = 1
+    num_float_features: int = 10
+    feature_pooling_avg: int = 10
+    use_offsets: bool = False
+    dev_str: str = ""
+    long_kjt_indices: bool = True
+    long_kjt_offsets: bool = True
+    long_kjt_lengths: bool = True
+
+    def generate_model_input(
+        self,
+        tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
+        weighted_tables: Union[
+            List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
+        ],
+    ) -> ModelInput:
+        return ModelInput.generate(
+            batch_size=self.batch_size,
+            tables=tables,
+            weighted_tables=weighted_tables,
+            num_float_features=self.num_float_features,
+            pooling_avg=self.feature_pooling_avg,
+            use_offsets=self.use_offsets,
+            device=torch.device(self.dev_str) if self.dev_str else None,
+            indices_dtype=torch.int64 if self.long_kjt_indices else torch.int32,
+            offsets_dtype=torch.int64 if self.long_kjt_offsets else torch.int32,
+            lengths_dtype=torch.int64 if self.long_kjt_lengths else torch.int32,
+        )
