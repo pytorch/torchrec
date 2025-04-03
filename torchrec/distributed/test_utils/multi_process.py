@@ -183,7 +183,7 @@ class MultiProcessTestBase(unittest.TestCase):
 
 def run_multi_process_func(
     func: Callable[
-        ...,
+        [int, int, ...],  # rank, world_size, ...
         None,
     ],
     multiprocessing_method: str = "spawn",
@@ -192,6 +192,7 @@ def run_multi_process_func(
     # pyre-ignore
     **kwargs,
 ) -> None:
+    """ """
     os.environ["MASTER_ADDR"] = str("localhost")
     os.environ["MASTER_PORT"] = str(get_free_port())
     os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
