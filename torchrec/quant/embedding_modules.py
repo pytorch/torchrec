@@ -1091,15 +1091,16 @@ class QuantManagedCollisionEmbeddingCollection(EmbeddingCollection):
         )
         return self
 
+    # pyre-ignore
     def forward(
         self,
         features: KeyedJaggedTensor,
-    ) -> Dict[str, JaggedTensor]:
+    ) -> Tuple[
+        Union[KeyedTensor, Dict[str, JaggedTensor]], Optional[KeyedJaggedTensor]
+    ]:
         features = self._managed_collision_collection(features)
 
-        # mcec expects Tuple return type
-        # pyre-ignore
-        return (super().forward(features),)
+        return (super().forward(features), features)
 
     def _get_name(self) -> str:
         return "QuantManagedCollisionEmbeddingCollection"
