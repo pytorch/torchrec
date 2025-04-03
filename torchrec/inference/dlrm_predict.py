@@ -89,15 +89,16 @@ class DLRMPredictModule(PredictModule):
         dense_arch_layer_sizes: List[int],
         over_arch_layer_sizes: List[int],
         id_list_features_keys: List[str],
-        dense_device: Optional[torch.device] = None,
+        dense_device: Optional[str] = None,
     ) -> None:
         module = DLRM(
             embedding_bag_collection=embedding_bag_collection,
             dense_in_features=dense_in_features,
             dense_arch_layer_sizes=dense_arch_layer_sizes,
             over_arch_layer_sizes=over_arch_layer_sizes,
-            dense_device=dense_device,
+            dense_device=torch.device(dense_device),
         )
+
         super().__init__(module, dense_device)
 
         self.id_list_features_keys: List[str] = id_list_features_keys
@@ -154,7 +155,7 @@ class DLRMPredictFactory(PredictFactory):
     def __init__(self, model_config: DLRMModelConfig) -> None:
         self.model_config = model_config
 
-    def create_predict_module(self, world_size: int, device: str) -> torch.nn.Module:
+    def create_predict_module(self, device: str) -> torch.nn.Module:
         logging.basicConfig(level=logging.INFO)
         set_propogate_device(True)
 
