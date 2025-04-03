@@ -38,4 +38,5 @@ jobs:
       channel: ${{ inputs.channel }}
       repository: "pytorch/torchrec"
       smoke_test: "source ./.github/scripts/validate_binaries.sh"
+      post_script: .github/scripts/install_libs.sh
       with_cuda: enable
