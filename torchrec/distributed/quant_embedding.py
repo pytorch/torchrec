@@ -1189,7 +1189,9 @@ class ShardedMCECLookup(torch.nn.Module):
     def forward(
         self,
         features: KeyedJaggedTensor,
-    ) -> torch.Tensor:
+    ) -> Tuple[
+        Union[KeyedTensor, Dict[str, JaggedTensor]], Optional[KeyedJaggedTensor]
+    ]:
         remapped_kjt = self._mcc_remapper(features)
         return self._ec_lookup(remapped_kjt)
 
