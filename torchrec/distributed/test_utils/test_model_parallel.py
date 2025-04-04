@@ -290,7 +290,7 @@ class ModelParallelBase(ModelParallelTestShared):
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
         # TODO - need to enable optimizer overlapped behavior for data_parallel tables
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_dp(
         self,
         sharder_type: str,
@@ -429,7 +429,7 @@ class ModelParallelBase(ModelParallelTestShared):
         variable_batch_size=st.booleans(),
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
     def test_sharding_twcw(
         self,
         sharder_type: str,
@@ -510,7 +510,7 @@ class ModelParallelBase(ModelParallelTestShared):
         variable_batch_size=st.booleans(),
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=3, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
     def test_sharding_tw(
         self,
         sharder_type: str,
@@ -592,7 +592,7 @@ class ModelParallelBase(ModelParallelTestShared):
         pooling=st.sampled_from([PoolingType.SUM, PoolingType.MEAN]),
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=10, deadline=None)
     def test_sharding_twrw(
         self,
         sharder_type: str,
