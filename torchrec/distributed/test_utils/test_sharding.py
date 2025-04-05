@@ -9,18 +9,7 @@
 
 import random
 from enum import Enum
-from typing import (
-    Any,
-    Callable,
-    cast,
-    Dict,
-    List,
-    Optional,
-    Protocol,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import Any, cast, Dict, List, Optional, Protocol, Tuple, Type, Union
 
 import torch
 import torch.distributed as dist
@@ -59,7 +48,12 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import BaseEmbeddingConfig, EmbeddingBagConfig
+from torchrec.modules.embedding_configs import (
+    BaseEmbeddingConfig,
+    DataType,
+    EmbeddingBagConfig,
+)
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
 from torchrec.optim.optimizers import in_backward_optimizer_filter
 
@@ -329,6 +323,15 @@ def copy_state_dict(
             tensor.copy_(global_tensor)
 
 
+# alter the ebc dtype to float32 in-place.
+def alter_global_ebc_dtype(model: nn.Module) -> None:
+    for _name, ebc in model.named_modules():
+        if isinstance(ebc, EmbeddingBagCollection) and ebc._is_weighted:
+            with torch.no_grad():
+                for bag in ebc.embedding_bags.values():
+                    bag.weight = torch.nn.Parameter(bag.weight.float())
+
+
 def sharding_single_rank_test(
     rank: int,
     world_size: int,
@@ -527,6 +530,7 @@ def sharding_single_rank_test(
             global_model.state_dict(),
             exclude_predfix="sparse.pooled_embedding_arch.embedding_modules._itp_iter",
         )
+        alter_global_ebc_dtype(global_model)
 
         # Run a single training step of the sharded model.
         local_pred = gen_full_pred_after_one_step(
@@ -554,9 +558,7 @@ def sharding_single_rank_test(
             )
 
             # Compare predictions of sharded vs unsharded models.
-            if qcomms_config is None:
-                torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
-            else:
+            if qcomms_config is not None:
                 # With quantized comms, we can relax constraints a bit
                 rtol = 0.003
                 if CommType.FP8 in [
@@ -568,6 +570,25 @@ def sharding_single_rank_test(
                 torch.testing.assert_close(
                     global_pred, torch.cat(all_local_pred), rtol=rtol, atol=atol
                 )
+            elif (
+                weighted_tables is not None
+                and weighted_tables[0].data_type == DataType.FP16
+            ):
+                # we relax this accuracy test because when the embedding table weights is FP16,
+                # the sharded EBC would upscale the precision to FP32 for the returned embedding
+                # KJT.weights (FP32) + sharded_EBC (FP16) ==> embeddings (FP32)
+                # the test uses the unsharded EBC for reference to compare the results, but the unsharded EBC
+                #  uses EmbeddingBags can only handle same precision, i.e.,
+                # KJT.weights (FP32) + unsharded_EBC (FP32) ==> embeddings (FP32)
+                # therefore, the discrepancy leads to a relaxed tol level.
+                torch.testing.assert_close(
+                    global_pred,
+                    torch.cat(all_local_pred),
+                    atol=1e-4,  # relaxed atol due to FP16 in weights
+                    rtol=1e-4,  # relaxed rtol due to FP16 in weights
+                )
+            else:
+                torch.testing.assert_close(global_pred, torch.cat(all_local_pred))
 
 
 def create_device_mesh_for_2D(
