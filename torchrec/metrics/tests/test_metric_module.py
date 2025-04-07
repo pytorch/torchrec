@@ -586,3 +586,20 @@ class MetricModuleTest(unittest.TestCase):
         self.assertEqual(throughput_metric._num_batch, 100)
         # Make sure num_batch is correctly synchronized
         self.assertEqual(throughput_metric._num_batch, 100)
+
+        # Load the same checkpoint into a module that doesn't use BSS
+
+        no_bss_metric_module = generate_metric_module(
+            TestMetricModule,
+            metrics_config=DefaultMetricsConfig,
+            batch_size=128,
+            world_size=1,
+            my_rank=0,
+            state_metrics_mapping={},
+            device=torch.device("cpu"),
+            batch_size_stages=None,
+        )
+
+        no_bss_metric_module.load_state_dict(state_dict)
+        # Make sure num_batch wasn't created on the throughput module (and no exception was thrown above)
+        self.assertFalse(hasattr(no_bss_metric_module.throughput_metric, "_num_batch"))
