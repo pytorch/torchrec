@@ -310,6 +310,7 @@ class ThroughputMetricTest(unittest.TestCase):
         Verifies that the state_dict_hook does not add the 'num_batch' key when
         batch_size_stages is None.
         """
+        # Hook-only test
         throughput_metric = ThroughputMetric(
             batch_size=32,
             world_size=4,
@@ -321,22 +322,57 @@ class ThroughputMetricTest(unittest.TestCase):
         ThroughputMetric.state_dict_hook(throughput_metric, state_dict, prefix, {})
         self.assertNotIn(f"{prefix}num_batch", state_dict)
 
-    def test_load_state_dict_hook_restores_value(self) -> None:
+        # Lifecycle test
+
+        num_updates = 10
+        prev_job_throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=None,
+        )
+        for _ in range(num_updates):
+            prev_job_throughput_metric.update()
+        prev_state_dict = prev_job_throughput_metric.state_dict()
+
+        curr_job_throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=None,
+        )
+
+        curr_job_throughput_metric.load_state_dict(prev_state_dict)
+        # Make sure _num_batch is not present as an argument of the class
+        self.assertFalse(hasattr(curr_job_throughput_metric, "_num_batch"))
+
+    def test_load_state_dict_hook_resumes_from_checkpoint_with_bss_from_bss(
+        self,
+    ) -> None:
         """
         Checks that the load_state_dict_hook correctly restores the 'num_batch' value
         from the state_dict.
         """
-        throughput_metric = ThroughputMetric(
+        num_updates = 10
+        prev_job_throughput_metric = ThroughputMetric(
             batch_size=32,
             world_size=4,
             window_seconds=100,
             batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
         )
-        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
-        prefix: str = "test_prefix_"
-        state_dict[f"{prefix}num_batch"] = torch.tensor(10, dtype=torch.long)
-        throughput_metric.load_state_dict_hook(state_dict, prefix, {}, True, [], [], [])
-        self.assertEqual(throughput_metric._num_batch, 10)
+        for _ in range(num_updates):
+            prev_job_throughput_metric.update()
+        prev_state_dict = prev_job_throughput_metric.state_dict()
+
+        curr_job_throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(1024, 1), BatchSizeStage(2048, None)],
+        )
+
+        curr_job_throughput_metric.load_state_dict(prev_state_dict)
+        self.assertEqual(curr_job_throughput_metric._num_batch, num_updates)
 
     def test_load_state_dict_hook_resumes_from_checkpoint_without_bss(self) -> None:
         """
@@ -344,18 +380,26 @@ class ThroughputMetricTest(unittest.TestCase):
         previously checkpointed job used the batch_size_stages, but a subsequent job,
         restored from a checkpoint, isn't using them.
         """
-        throughput_metric = ThroughputMetric(
+
+        prev_job_throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
+        )
+
+        prev_state_dict = prev_job_throughput_metric.state_dict()
+
+        curr_job_throughput_metric = ThroughputMetric(
             batch_size=32,
             world_size=4,
             window_seconds=100,
             batch_size_stages=None,  # No batch_size_stages
         )
-        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
-        prefix: str = "test_prefix_"
-        state_dict[f"{prefix}num_batch"] = torch.tensor(10, dtype=torch.long)
-        throughput_metric.load_state_dict_hook(state_dict, prefix, {}, True, [], [], [])
 
-        self.assertFalse(hasattr(throughput_metric, "_num_batch"))
+        curr_job_throughput_metric.load_state_dict(prev_state_dict)
+
+        self.assertFalse(hasattr(curr_job_throughput_metric, "_num_batch"))
 
     def test_load_state_dict_hook_resumes_from_checkpoint_with_bss_without_key(
         self,
@@ -365,15 +409,22 @@ class ThroughputMetricTest(unittest.TestCase):
         previously checkpointed job didn't use batch_size_stages, but a subsequent job,
         restored from a checkpoint, is using them.
         """
-        throughput_metric = ThroughputMetric(
+        prev_job_throughput_metric = ThroughputMetric(
+            batch_size=32,
+            world_size=4,
+            window_seconds=100,
+            batch_size_stages=None,  # No batch_size_stages
+        )
+        prev_state_dict = prev_job_throughput_metric.state_dict()
+
+        curr_job_throughput_metric = ThroughputMetric(
             batch_size=32,
             world_size=4,
             window_seconds=100,
             batch_size_stages=[BatchSizeStage(256, 1), BatchSizeStage(512, None)],
         )
-        # Empty state_dict
-        state_dict: OrderedDict[str, torch.Tensor] = OrderedDict()
-        prefix: str = "test_prefix_"
-        throughput_metric.load_state_dict_hook(state_dict, prefix, {}, True, [], [], [])
+
+        curr_job_throughput_metric.load_state_dict(prev_state_dict)
+
         # Expecting 0
-        self.assertEqual(throughput_metric._num_batch, 0)
+        self.assertEqual(curr_job_throughput_metric._num_batch, 0)

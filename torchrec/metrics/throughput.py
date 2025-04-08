@@ -115,8 +115,9 @@ class ThroughputMetric(nn.Module):
         if self._batch_size_stages is not None:
             # Keep track of the number of batches if using batch_size_stages
             self._num_batch: int = 0
-            self._register_load_state_dict_pre_hook(self.load_state_dict_hook)
-            self.register_state_dict_post_hook(self.state_dict_hook)
+
+        self._register_load_state_dict_pre_hook(self.load_state_dict_hook)
+        self.register_state_dict_post_hook(self.state_dict_hook)
 
         self.register_buffer("total_examples", torch.tensor(0, dtype=torch.long))
         self.register_buffer("warmup_examples", torch.tensor(0, dtype=torch.long))

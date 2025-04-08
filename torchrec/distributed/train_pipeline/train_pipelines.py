@@ -141,6 +141,11 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._connected = False
         self._data_iter_stopped = False
 
+    def _reset_data_iter(self) -> None:
+        self._connected = False
+        self._data_iter_stopped = False
+        self._cur_batch = None
+
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         cur_batch = next(dataloader_iter)
         self._cur_batch = cur_batch
