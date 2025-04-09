@@ -342,6 +342,27 @@ class Shard:
         return f"Shard size: {tuple(self.size)}, offset: {tuple(self.offset)}, storage: {str(self.storage)}, perf: {str(self.perf)}, rank: {self.rank}"
 
 
+@dataclass
+class Rank:
+    key: str
+    hbm: float
+    ddr: float
+    node_key: str
+
+
+@dataclass
+class ShardInfo:
+    key: str
+    sharding_type: str
+    compute_kernel: str
+    table_name: str
+    rank_key: str  # either a number or DUMMY_RANK_KEY
+    shard: Shard
+    module_fqn: str
+    _index_in_shards: int
+    _index_in_search_space: int
+
+
 class ShardingOption:
     """
     One way of sharding an embedding table. In the enumerator, we generate
