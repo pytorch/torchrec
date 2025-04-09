@@ -179,6 +179,10 @@ def create_embedding_bag_sharding(
 ) -> EmbeddingSharding[
     EmbeddingShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
 ]:
+    """
+    This is the main function to generate `EmbeddingSharding` instances based on sharding_type
+    so that the same sharding_type in one EBC would be fused.
+    """
     sharding_type = sharding_infos[0].param_sharding.sharding_type
 
     if device is not None and device.type == "meta":
@@ -240,6 +244,10 @@ def create_sharding_infos_by_sharding(
     fused_params: Optional[Dict[str, Any]],
     suffix: Optional[str] = "weight",
 ) -> Dict[str, List[EmbeddingShardingInfo]]:
+    """
+    convert ParameterSharding (table_name_to_parameter_sharding: Dict[str, ParameterSharding]) to
+    EmbeddingShardingInfo that are grouped by sharding_type, and propagate the configs/parameters
+    """
 
     if fused_params is None:
         fused_params = {}
@@ -1197,6 +1205,9 @@ class ShardedEmbeddingBagCollection(
         )
 
     def _update_output_dist(self) -> None:
+        """
+        This function is only used in update update_shards
+        """
         embedding_shard_metadata: List[Optional[ShardMetadata]] = []
         # TODO: Optimize to only go through embedding shardings with new ranks
         self._output_dists: List[nn.Module] = []
@@ -1252,6 +1263,10 @@ class ShardedEmbeddingBagCollection(
         ctx: EmbeddingBagCollectionContext,
         features: Union[KeyedJaggedTensor, TensorDict],
     ) -> Awaitable[Awaitable[KJTList]]:
+        """
+        This is the main API called in train_pipeline where we want to do the input_dist
+        in advance
+        """
         if isinstance(features, TensorDict):
             feature_keys = list(features.keys())  # pyre-ignore[6]
             if len(self._features_order) > 0:
@@ -1325,6 +1340,10 @@ class ShardedEmbeddingBagCollection(
         ctx: EmbeddingBagCollectionContext,
         dist_input: KJTList,
     ) -> List[torch.Tensor]:
+        """
+        this function is not used in general practice, it's only called by the base class
+        ShardedModule.compute_and_output_dist to do the basic function
+        """
         return [lookup(features) for lookup, features in zip(self._lookups, dist_input)]
 
     def output_dist(
@@ -1377,6 +1396,10 @@ class ShardedEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: EmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
+        """
+        the main API called in PipelineForward, where the shardedEBC's forward is swapped
+        see _rewrite_model in train_pipeline for details
+        """
         batch_size_per_feature_pre_a2a = []
         awaitables = []
 
@@ -1447,6 +1470,8 @@ class ShardedEmbeddingBagCollection(
         device: Optional[torch.device],
     ) -> None:
         """
+        This is the main API used in sharder.reshard, currently only support redistribution
+        of existing shards (across different ranks, ideally from hot ranks to cold ranks)
         Update shards for this module based on the changed_sharding_params. This will:
         1. Move current lookup tensors to CPU
         2. Purge lookups
