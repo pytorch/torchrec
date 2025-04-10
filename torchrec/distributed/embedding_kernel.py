@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+import copy
 import logging
 from collections import defaultdict, OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -103,9 +104,10 @@ def get_state_dict(
             qbias = param[2]
             param = param[0]
 
-        assert embedding_table.local_rows == param.size(  # pyre-ignore[16]
-            0
-        ), f"{embedding_table.local_rows=}, {param.size(0)=}, {param.shape=}"  # pyre-ignore[16]
+        if not embedding_table.zero_collision:
+            assert embedding_table.local_rows == param.size(  # pyre-ignore[16]
+                0
+            ), f"{embedding_table.local_rows=}, {param.size(0)=}, {param.shape=}"  # pyre-ignore[16]
 
         if qscale is not None:
             assert embedding_table.local_cols == param.size(1)  # pyre-ignore[16]
@@ -128,14 +130,17 @@ def get_state_dict(
                 param.requires_grad  # pyre-ignore[16]
             )
             key_to_global_metadata[key] = embedding_table.global_metadata
+            local_metadata = copy.deepcopy(embedding_table.local_metadata)
+            local_metadata.shard_sizes = list(param.size())
 
             key_to_local_shards[key].append(
                 # pyre-fixme[6]: For 1st argument expected `Tensor` but got
                 #  `Union[Module, Tensor]`.
                 # pyre-fixme[6]: For 2nd argument expected `ShardMetadata` but got
                 #  `Optional[ShardMetadata]`.
-                Shard(param, embedding_table.local_metadata)
+                Shard(param, local_metadata)
             )
+
         else:
             destination[key] = param
             if qscale is not None:

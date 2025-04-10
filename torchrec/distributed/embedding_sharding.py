@@ -483,6 +483,16 @@ def _prefetch_and_cached(
     )
 
 
+def _is_kv_tbe(
+    table: ShardedEmbeddingTable,
+) -> bool:
+    """
+    Return true if this embedding enabled bucketized sharding for kv style TBE to support ZCH v.Next.
+    https://docs.google.com/document/d/13atWlDEkrkRulgC_gaoLv8ZsogQefdvsTdwlyam7ed0/edit?tab=t.0#heading=h.lxb1lainm4tc
+    """
+    return table.zero_collision
+
+
 def _all_tables_are_quant_kernel(
     tables: List[ShardedEmbeddingTable],
 ) -> bool:
@@ -558,7 +568,9 @@ def group_tables(
                     table.data_type,
                 ),
                 _prefetch_and_cached(table),
+                _is_kv_tbe(table),
             )
+            print(f"line debug: grouping_key: {grouping_key}")
             # micromanage the order of we traverse the groups to ensure backwards compatibility
             if grouping_key not in groups:
                 grouping_keys.append(grouping_key)
@@ -573,6 +585,7 @@ def group_tables(
                 compute_kernel_type,
                 _,
                 _,
+                is_kv_tbe,
             ) = grouping_key
             grouped_tables = groups[grouping_key]
             # remove non-native fused params
@@ -581,6 +594,8 @@ def group_tables(
                 for k, v in fused_params_tuple
                 if k not in ["_batch_key", USE_ONE_TBE_PER_TABLE]
             }
+            if is_kv_tbe:
+                per_tbe_fused_params["enable_zero_collision_tbe"] = True
             cache_load_factor = _get_weighted_avg_cache_load_factor(grouped_tables)
             if cache_load_factor is not None:
                 per_tbe_fused_params[CACHE_LOAD_FACTOR_STR] = cache_load_factor

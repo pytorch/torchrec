@@ -495,6 +495,9 @@ class QuantBatchedEmbedding(
         )
         if device is not None:
             self._emb_module.initialize_weights()
+        self._enable_zero_collision_tbe: bool = any(
+            table.zero_collision for table in config.embedding_tables
+        )
 
     @property
     def emb_module(

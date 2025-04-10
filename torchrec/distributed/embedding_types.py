@@ -231,6 +231,21 @@ class GroupedEmbeddingConfig:
             feature_hash_sizes.extend(table.num_features() * [table.num_embeddings])
         return feature_hash_sizes
 
+    def feature_total_num_buckets(self) -> Optional[List[int]]:
+        feature_total_num_buckets = []
+        for table in self.embedding_tables:
+            if table.total_num_buckets:
+                feature_total_num_buckets.extend(
+                    table.num_features() * [table.total_num_buckets]
+                )
+        return feature_total_num_buckets if len(feature_total_num_buckets) > 0 else None
+
+    def _is_zero_collision(self) -> bool:
+        for table in self.embedding_tables:
+            if table.zero_collision:
+                return True
+        return False
+
     def num_features(self) -> int:
         num_features = 0
         for table in self.embedding_tables:

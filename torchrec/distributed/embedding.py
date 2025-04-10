@@ -259,6 +259,8 @@ def create_sharding_infos_by_sharding(
                         embedding_names=embedding_names,
                         weight_init_max=config.weight_init_max,
                         weight_init_min=config.weight_init_min,
+                        total_num_buckets=config.total_num_buckets,
+                        zero_collision=config.zero_collision,
                     ),
                     param_sharding=parameter_sharding,
                     param=param,
@@ -353,6 +355,8 @@ def create_sharding_infos_by_sharding_device_group(
                         embedding_names=embedding_names,
                         weight_init_max=config.weight_init_max,
                         weight_init_min=config.weight_init_min,
+                        total_num_buckets=config.total_num_buckets,
+                        zero_collision=config.zero_collision,
                     ),
                     param_sharding=parameter_sharding,
                     param=param,
@@ -767,11 +771,13 @@ class ShardedEmbeddingCollection(
             )
 
         self._name_to_table_size = {}
+        table_zero_collision = {}
         for table in self._embedding_configs:
             self._name_to_table_size[table.name] = (
                 table.num_embeddings,
                 table.embedding_dim,
             )
+            table_zero_collision[table.name] = table.zero_collision
 
         for sharding_type, lookup in zip(
             self._sharding_type_to_sharding.keys(), self._lookups
@@ -871,8 +877,9 @@ class ShardedEmbeddingCollection(
                 # created ShardedTensors once in init, use in post_state_dict_hook
                 # note: at this point kvstore backed tensors don't own valid snapshots, so no read
                 # access is allowed on them.
+                # for collision free TBE, the shard sizes should be recalculated during ShardedTensor initilization
                 self._model_parallel_name_to_sharded_tensor[table_name] = (
-                    ShardedTensor._init_from_local_shards(
+                    ShardedTensor._init_from_local_shards_and_reset_offsets(
                         local_shards,
                         self._name_to_table_size[table_name],
                         process_group=(
@@ -925,20 +932,29 @@ class ShardedEmbeddingCollection(
                 return
 
             sharded_kvtensors_copy = copy.deepcopy(sharded_kvtensors)
+            sharded_id_buckets_state_dict = None
             for lookup, sharding_type in zip(
                 module._lookups, module._sharding_type_to_sharding.keys()
             ):
                 if sharding_type != ShardingType.DATA_PARALLEL.value:
-                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
-                    for key, v in lookup.get_named_split_embedding_weights_snapshot():
-                        assert key in sharded_kvtensors_copy
-                        sharded_kvtensors_copy[key].local_shards()[0].tensor = v
+                    for (
+                        key,
+                        v,
+                    ) in lookup.get_named_split_embedding_weights_snapshot():  # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
+                        if key in sharded_kvtensors_copy:
+                            sharded_kvtensors_copy[key].local_shards()[0].tensor = v
+                        else:
+                            d_k = f"{prefix}embeddings.{key}"
+                            destination[d_k] = v
+                            logger.info(f"add sharded tensor key {d_k} to state dict")
             for (
                 table_name,
                 sharded_kvtensor,
             ) in sharded_kvtensors_copy.items():
                 destination_key = f"{prefix}embeddings.{table_name}.weight"
                 destination[destination_key] = sharded_kvtensor
+            if sharded_id_buckets_state_dict:
+                destination.update(sharded_id_buckets_state_dict)
 
         self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)

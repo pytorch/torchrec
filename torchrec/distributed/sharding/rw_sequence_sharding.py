@@ -126,6 +126,11 @@ class RwSequenceEmbeddingSharding(
     ) -> BaseSparseFeaturesDist[KeyedJaggedTensor]:
         num_features = self._get_num_features()
         feature_hash_sizes = self._get_feature_hash_sizes()
+        is_zero_collision = any(
+            emb_config._is_zero_collision()
+            for emb_config in self._grouped_embedding_configs
+        )
+        feature_total_num_buckets = self._get_feature_total_num_buckets()
         return RwSparseFeaturesDist(
             # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
             #  `Optional[ProcessGroup]`.
@@ -136,6 +141,8 @@ class RwSequenceEmbeddingSharding(
             is_sequence=True,
             has_feature_processor=self._has_feature_processor,
             need_pos=False,
+            feature_total_num_buckets=feature_total_num_buckets,
+            keep_original_indices=is_zero_collision,
         )
 
     def create_lookup(
@@ -265,6 +272,10 @@ class InferRwSequenceEmbeddingSharding(
         (emb_sharding, is_even_sharding) = get_embedding_shard_metadata(
             self._grouped_embedding_configs_per_rank
         )
+        is_zero_collision = any(
+            emb_config._is_zero_collision()
+            for emb_config in self._grouped_embedding_configs
+        )
 
         return InferRwSparseFeaturesDist(
             world_size=self._world_size,
@@ -275,6 +286,7 @@ class InferRwSequenceEmbeddingSharding(
             has_feature_processor=self._has_feature_processor,
             need_pos=False,
             embedding_shard_metadata=emb_sharding if not is_even_sharding else None,
+            keep_original_indices=is_zero_collision,
         )
 
     def create_lookup(
