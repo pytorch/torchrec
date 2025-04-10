@@ -831,3 +831,12 @@ class Stats(abc.ABC):
         See class description
         """
         ...
+
+
+@dataclass
+class CriticalPathEstimate:
+    comms_estimate: float
+    comp_estimate: float
+
+    def total(self) -> float:
+        return self.comms_estimate + self.comp_estimate
