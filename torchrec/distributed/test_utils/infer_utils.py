@@ -187,6 +187,12 @@ def prep_inputs(
     long_indices: bool = True,
 ) -> List[ModelInput]:
     inputs = []
+    if long_indices:
+        indices_dtype = torch.int64
+        lengths_dtype = torch.int64
+    else:
+        indices_dtype = torch.int32
+        lengths_dtype = torch.int32
     for _ in range(count):
         inputs.append(
             ModelInput.generate(
@@ -195,7 +201,8 @@ def prep_inputs(
                 num_float_features=model_info.num_float_features,
                 tables=model_info.tables,
                 weighted_tables=model_info.weighted_tables,
-                long_indices=long_indices,
+                indices_dtype=indices_dtype,
+                lengths_dtype=lengths_dtype,
             )[1][0],
         )
 

@@ -198,7 +198,8 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
             num_float_features=10,
             tables=self.tables,
             weighted_tables=[],
-            long_indices=False,
+            indices_dtype=torch.int32,
+            lengths_dtype=torch.int32,
         )
         local_batch = local_batch.to(device)
         sharded_quant_model(local_batch.idlist_features)

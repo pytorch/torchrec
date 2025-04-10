@@ -372,8 +372,9 @@ def get_inputs(
                 num_float_features=0,
                 tables=tables,
                 weighted_tables=[],
-                long_indices=False,
                 tables_pooling=pooling_configs,
+                indices_dtype=torch.int32,
+                lengths_dtype=torch.int32,
             )
 
         if train:
