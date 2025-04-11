@@ -35,6 +35,7 @@ from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
 )
+from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 
 from torchrec.distributed.types import (
@@ -56,46 +57,6 @@ def table_name(i: int) -> str:
 
 def feature_name(i: int) -> str:
     return "feature_" + str(i)
-
-
-def generate_input_by_world_size(
-    world_size: int,
-    num_tables: int,
-    num_embeddings: int = 4,
-    max_mul: int = 3,
-) -> List[KeyedJaggedTensor]:
-    # TODO merge with new ModelInput generator in TestUtils
-    kjt_input_per_rank = []
-    mul = random.randint(1, max_mul)
-    total_size = num_tables * mul
-
-    for _ in range(world_size):
-        feature_names = [feature_name(i) for i in range(num_tables)]
-        lengths = []
-        values = []
-        counting_l = 0
-        for i in range(total_size):
-            if i == total_size - 1:
-                lengths.append(total_size - counting_l)
-                break
-            next_l = random.randint(0, total_size - counting_l)
-            values.extend(
-                [random.randint(0, num_embeddings - 1) for _ in range(next_l)]
-            )
-            lengths.append(next_l)
-            counting_l += next_l
-
-        # for length in lengths:
-
-        kjt_input_per_rank.append(
-            KeyedJaggedTensor.from_lengths_sync(
-                keys=feature_names,
-                values=torch.LongTensor(values),
-                lengths=torch.LongTensor(lengths),
-            )
-        )
-
-    return kjt_input_per_rank
 
 
 def generate_embedding_bag_config(
@@ -372,9 +333,13 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
         ):
             return
 
-        kjt_input_per_rank = generate_input_by_world_size(
-            world_size, num_tables, num_embeddings
-        )
+        kjt_input_per_rank = [
+            ModelInput.create_standard_kjt(
+                batch_size=2,
+                tables=embedding_bag_config,
+            )
+            for _ in range(world_size)
+        ]
 
         # initial_state_dict filled with deterministic dummy values
         initial_state_dict = create_test_initial_state_dict(
@@ -418,8 +383,8 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
         old_ranks = [random.randint(0, world_size - 1) for _ in range(num_tables)]
         new_ranks = [random.randint(0, world_size - 1) for _ in range(num_tables)]
 
-        if new_ranks == old_ranks:
-            return
+        while new_ranks == old_ranks:
+            new_ranks = [random.randint(0, world_size - 1) for _ in range(num_tables)]
         per_param_sharding = {}
         new_per_param_sharding = {}
 

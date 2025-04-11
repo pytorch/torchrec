@@ -98,20 +98,11 @@ class ModelInput(Pipelineable):
         indices_dtype: torch.dtype = torch.int64,
         offsets_dtype: torch.dtype = torch.int64,
         lengths_dtype: torch.dtype = torch.int64,
-        long_indices: bool = True,  # TODO - remove this once code base is updated to support more than long_indices spec
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
         and a list of local (multi-rank training) batches of world_size.
         """
-        if long_indices:
-            indices_dtype = torch.int64
-            lengths_dtype = torch.int64
-            use_offsets = False
-        else:
-            indices_dtype = torch.int32
-            lengths_dtype = torch.int32
-            use_offsets = False
         batch_size_by_rank = [batch_size] * world_size
         if variable_batch_size:
             batch_size_by_rank = [

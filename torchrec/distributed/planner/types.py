@@ -362,6 +362,18 @@ class ShardInfo:
     _index_in_shards: int
     _index_in_search_space: int
 
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.key,
+                self.sharding_type,
+                self.compute_kernel,
+                self.table_name,
+                self.shard,
+                self.module_fqn,
+            )
+        )
+
 
 class ShardingOption:
     """
@@ -831,3 +843,12 @@ class Stats(abc.ABC):
         See class description
         """
         ...
+
+
+@dataclass
+class CriticalPathEstimate:
+    comms_estimate: float
+    comp_estimate: float
+
+    def total(self) -> float:
+        return self.comms_estimate + self.comp_estimate

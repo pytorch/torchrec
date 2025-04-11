@@ -120,7 +120,6 @@ class ModelInputCallable(Protocol):
         indices_dtype: torch.dtype = torch.int64,
         offsets_dtype: torch.dtype = torch.int64,
         lengths_dtype: torch.dtype = torch.int64,
-        long_indices: bool = True,
     ) -> Tuple["ModelInput", List["ModelInput"]]: ...
 
 
@@ -166,7 +165,6 @@ def gen_model_and_input(
     global_constant_batch: bool = False,
     num_inputs: int = 1,
     input_type: str = "kjt",  # "kjt" or "td"
-    long_indices: bool = True,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
     torch.manual_seed(0)
     if dedup_feature_names:
@@ -229,7 +227,6 @@ def gen_model_and_input(
                     indices_dtype=indices_dtype,
                     offsets_dtype=offsets_dtype,
                     lengths_dtype=lengths_dtype,
-                    long_indices=long_indices,
                 )
             )
     else:
@@ -247,7 +244,6 @@ def gen_model_and_input(
                     indices_dtype=indices_dtype,
                     offsets_dtype=offsets_dtype,
                     lengths_dtype=lengths_dtype,
-                    long_indices=long_indices,
                 )
             )
     return (model, inputs)

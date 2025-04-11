@@ -53,6 +53,9 @@ class ModelInput(Pipelineable):
         )
 
     def record_stream(self, stream: torch.Stream) -> None:
+        """
+        need to explicitly call `record_stream` for non-pytorch native object (KJT)
+        """
         self.float_features.record_stream(stream)
         if isinstance(self.idlist_features, KeyedJaggedTensor):
             self.idlist_features.record_stream(stream)
@@ -204,7 +207,7 @@ class ModelInput(Pipelineable):
         all_zeros: bool = False,
     ) -> List["ModelInput"]:
         """
-        Returns multi-rank batches of world_size
+        Returns multi-rank batches (ModelInput) of world_size
         """
         return [
             cls.generate(
@@ -255,7 +258,7 @@ class ModelInput(Pipelineable):
         all_zeros: bool = False,
     ) -> "ModelInput":
         """
-        Returns a single batch
+        Returns a single batch of `ModelInput`
         """
         float_features = (
             torch.zeros((batch_size, num_float_features), device=device)
@@ -263,7 +266,7 @@ class ModelInput(Pipelineable):
             else torch.rand((batch_size, num_float_features), device=device)
         )
         idlist_features = (
-            ModelInput._create_standard_kjt(
+            ModelInput.create_standard_kjt(
                 batch_size=batch_size,
                 tables=tables,
                 pooling_avg=pooling_avg,
@@ -281,7 +284,7 @@ class ModelInput(Pipelineable):
             else None
         )
         idscore_features = (
-            ModelInput._create_standard_kjt(
+            ModelInput.create_standard_kjt(
                 batch_size=batch_size,
                 tables=weighted_tables,
                 pooling_avg=pooling_avg,
@@ -324,6 +327,13 @@ class ModelInput(Pipelineable):
         lengths_dtype: torch.dtype = torch.int64,
         all_zeros: bool = False,
     ) -> Tuple[List[str], List[torch.Tensor], List[torch.Tensor]]:
+        """
+        Create keys, lengths, and indices for a KeyedJaggedTensor from embedding table configs.
+
+        Returns:
+            Tuple[List[str], List[torch.Tensor], List[torch.Tensor]]:
+                Feature names, per-feature lengths, and per-feature indices.
+        """
         pooling_factor_per_feature: List[int] = []
         num_embeddings_per_feature: List[int] = []
         max_length_per_feature: List[Optional[int]] = []
@@ -395,6 +405,14 @@ class ModelInput(Pipelineable):
         use_offsets: bool = False,
         offsets_dtype: torch.dtype = torch.int64,
     ) -> KeyedJaggedTensor:
+        """
+
+        Assembles a KeyedJaggedTensor (KJT) from the provided per-feature lengths and indices.
+
+        This method is used to generate corresponding local_batches and global_batch KJTs.
+        It concatenates the lengths and indices for each feature to form a complete KJT.
+        """
+
         lengths = torch.cat(lengths_per_feature)
         indices = torch.cat(indices_per_feature)
         offsets = None
@@ -407,7 +425,7 @@ class ModelInput(Pipelineable):
         return KeyedJaggedTensor(features, indices, weights, lengths, offsets)
 
     @staticmethod
-    def _create_standard_kjt(
+    def create_standard_kjt(
         batch_size: int,
         tables: Union[
             List[EmbeddingTableConfig], List[EmbeddingBagConfig], List[EmbeddingConfig]
@@ -464,6 +482,10 @@ class ModelInput(Pipelineable):
         lengths_dtype: torch.dtype = torch.int64,
         all_zeros: bool = False,
     ) -> Tuple[KeyedJaggedTensor, List[KeyedJaggedTensor]]:
+        """
+        generate a global KJT and corresponding per-rank KJTs, the data are the same
+        so that they can be used for result comparison.
+        """
         data_per_rank = [
             ModelInput._create_features_lengths_indices(
                 batch_size,

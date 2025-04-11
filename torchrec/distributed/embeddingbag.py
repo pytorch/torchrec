@@ -855,6 +855,12 @@ class ShardedEmbeddingBagCollection(
         """
         This provides consistency between this class and the EmbeddingBagCollection's
         nn.Module API calls (state_dict, named_modules, etc)
+
+        Args:
+            skip_registering (bool): If True, skips registering state_dict hooks. This is useful
+                for dynamic sharding where the state_dict hooks do not need to be
+                reregistered when being resharded. Default is False.
+
         """
         self.embedding_bags: nn.ModuleDict = nn.ModuleDict()
         for table_name in self._table_names:
