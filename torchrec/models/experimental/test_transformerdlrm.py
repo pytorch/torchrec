@@ -61,12 +61,7 @@ class InteractionArchTransformerTest(unittest.TestCase):
         concat_dense = inter_arch(dense_features, sparse_features)
         self.assertEqual(concat_dense.size(), (B, D * (F + 1)))
 
-    # pyre-ignore[56]: Pyre was not able to infer the type of argument
-    @unittest.skipIf(
-        torch.cuda.device_count() == 0,
-        "skip this test in OSS (no GPU available) because seed might be different in OSS",
-    )
-    def test_correctness(self) -> None:
+    def test_correctness_disabled_in_oss_compatibility(self) -> None:
         D = 4
         B = 3
         # multi-head attentions
@@ -170,12 +165,7 @@ class InteractionArchTransformerTest(unittest.TestCase):
             )
         )
 
-    # pyre-ignore[56]: Pyre was not able to infer the type of argument
-    @unittest.skipIf(
-        torch.cuda.device_count() == 0,
-        "skip this test in OSS (no GPU available) because seed might be different in OSS",
-    )
-    def test_numerical_stability(self) -> None:
+    def test_numerical_stability_disabled_in_oss_compatibility(self) -> None:
         D = 4
         B = 3
         # multi-head attentions
@@ -204,12 +194,7 @@ class InteractionArchTransformerTest(unittest.TestCase):
 
 
 class DLRMTransformerTest(unittest.TestCase):
-    # pyre-ignore[56]: Pyre was not able to infer the type of argument
-    @unittest.skipIf(
-        torch.cuda.device_count() == 0,
-        "skip this test in OSS (no GPU available) because seed might be different in OSS",
-    )
-    def test_basic(self) -> None:
+    def test_basic_disabled_in_oss_compatibility(self) -> None:
         torch.manual_seed(0)
         B = 2
         D = 8
