@@ -731,6 +731,22 @@ class MetaInferGroupedEmbeddingsLookup(
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return get_tbes_to_register_from_iterable(self._emb_modules)
 
+    def embeddings_cat_empty_rank_handle_inference(
+        self,
+        embeddings: List[torch.Tensor],
+        dim: int = 0,
+    ) -> torch.Tensor:
+        if len(self.grouped_configs) == 0:
+            # return a dummy empty tensor when grouped_configs is empty
+            dev: Optional[torch.device] = (
+                torch.device(self.device) if self.device is not None else None
+            )
+            return torch.empty([0], dtype=self.output_dtype, device=dev)
+        elif len(self.grouped_configs) == 1:
+            return embeddings[0]
+        else:
+            return torch.cat(embeddings, dim=dim)
+
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
@@ -747,9 +763,7 @@ class MetaInferGroupedEmbeddingsLookup(
             # 2d embedding by nature
             embeddings.append(self._emb_modules[i].forward(features_by_group[i]))
 
-        return embeddings_cat_empty_rank_handle_inference(
-            embeddings, device=self.device, dtype=self.output_dtype
-        )
+        return self.embeddings_cat_empty_rank_handle_inference(embeddings)
 
     # pyre-ignore [14]
     def state_dict(
@@ -865,6 +879,22 @@ class MetaInferGroupedPooledEmbeddingsLookup(
     ) -> Dict[IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig]:
         return get_tbes_to_register_from_iterable(self._emb_modules)
 
+    def embeddings_cat_empty_rank_handle_inference(
+        self,
+        embeddings: List[torch.Tensor],
+        dim: int = 0,
+    ) -> torch.Tensor:
+        if len(self.grouped_configs) == 0:
+            # return a dummy empty tensor when grouped_configs is empty
+            dev: Optional[torch.device] = (
+                torch.device(self.device) if self.device is not None else None
+            )
+            return torch.empty([0], dtype=self.output_dtype, device=dev)
+        elif len(self.grouped_configs) == 1:
+            return embeddings[0]
+        else:
+            return torch.cat(embeddings, dim=dim)
+
     def forward(
         self,
         sparse_features: KeyedJaggedTensor,
@@ -897,11 +927,9 @@ class MetaInferGroupedPooledEmbeddingsLookup(
                 features = self._feature_processor(features)
             embeddings.append(emb_op.forward(features))
 
-        return embeddings_cat_empty_rank_handle_inference(
+        return self.embeddings_cat_empty_rank_handle_inference(
             embeddings,
             dim=1,
-            device=self.device,
-            dtype=self.output_dtype,
         )
 
     # pyre-ignore [14]
