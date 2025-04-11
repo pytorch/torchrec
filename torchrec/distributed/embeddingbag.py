@@ -1526,7 +1526,7 @@ class ShardedEmbeddingBagCollection(
 
         current_state = update_state_dict_post_resharding(
             state_dict=current_state,
-            shard_names_by_src_rank=local_shard_names_by_src_rank,
+            ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
             output_tensor=local_output_tensor,
             new_sharding_params=changed_sharding_params,
             curr_rank=dist.get_rank(),
