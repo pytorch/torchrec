@@ -29,3 +29,4 @@ fi
 
 
 ${CONDA_RUN} pip install importlib-metadata
+${CONDA_RUN} pip install pandas

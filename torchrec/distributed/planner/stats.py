@@ -1108,6 +1108,7 @@ def _calculate_critical_path(best_plan: List[ShardingOption]) -> CriticalPathEst
                         perf_type.split("_")[1],  # compute or comms
                     )
                 ] += perf_breakdown[perf_type]
+    # pyre-ignore[6]
     perf_df = pd.DataFrame.from_dict(perf_data, orient="index", columns=["perf"])
     perf_df.index = pd.MultiIndex.from_tuples(
         perf_df.index,
