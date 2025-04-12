@@ -819,6 +819,159 @@ class ConstructParameterShardingTest(unittest.TestCase):
     # pyre-fixme[56]
     @given(data_type=st.sampled_from([DataType.FP32, DataType.FP16]))
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_row_wise_bucket_level_sharding(self, data_type: DataType) -> None:
+
+        embedding_config = [
+            EmbeddingBagConfig(
+                name=f"table_{idx}",
+                feature_names=[f"feature_{idx}"],
+                embedding_dim=64,
+                num_embeddings=4096,
+                data_type=data_type,
+            )
+            for idx in range(2)
+        ]
+        module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingCollection(tables=embedding_config),
+            per_param_sharding={
+                "table_0": row_wise(
+                    sizes_placement=(
+                        [2048, 1024, 1024],
+                        ["cpu", "cuda", "cuda"],
+                    ),
+                    num_buckets_per_rank=[20, 30, 40],
+                ),
+                "table_1": row_wise(
+                    sizes_placement=([2048, 1024, 1024], ["cpu", "cpu", "cpu"])
+                ),
+            },
+            local_size=1,
+            world_size=2,
+            device_type="cuda",
+        )
+
+        # Make sure per_param_sharding setting override the default device_type
+        device_table_0_shard_0 = (
+            # pyre-ignore[16]
+            module_sharding_plan["table_0"]
+            .sharding_spec.shards[0]
+            .placement
+        )
+        self.assertEqual(
+            device_table_0_shard_0.device().type,
+            "cpu",
+        )
+        # cpu always has rank 0
+        self.assertEqual(
+            device_table_0_shard_0.rank(),
+            0,
+        )
+        for i in range(1, 3):
+            device_table_0_shard_i = (
+                module_sharding_plan["table_0"].sharding_spec.shards[i].placement
+            )
+            self.assertEqual(
+                device_table_0_shard_i.device().type,
+                "cuda",
+            )
+            # first rank is assigned to cpu so index = rank - 1
+            self.assertEqual(
+                device_table_0_shard_i.device().index,
+                i - 1,
+            )
+            self.assertEqual(
+                device_table_0_shard_i.rank(),
+                i,
+            )
+        for i in range(3):
+            device_table_1_shard_i = (
+                module_sharding_plan["table_1"].sharding_spec.shards[i].placement
+            )
+            self.assertEqual(
+                device_table_1_shard_i.device().type,
+                "cpu",
+            )
+            # cpu always has rank 0
+            self.assertEqual(
+                device_table_1_shard_i.rank(),
+                0,
+            )
+
+        expected = {
+            "table_0": ParameterSharding(
+                sharding_type="row_wise",
+                compute_kernel="key_value",
+                ranks=[
+                    0,
+                    1,
+                    2,
+                ],
+                sharding_spec=EnumerableShardingSpec(
+                    shards=[
+                        ShardMetadata(
+                            shard_offsets=[0, 0],
+                            shard_sizes=[2048, 64],
+                            placement="rank:0/cpu",
+                            bucket_id_offset=0,
+                            num_buckets=20,
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[2048, 0],
+                            shard_sizes=[1024, 64],
+                            placement="rank:1/cuda:0",
+                            bucket_id_offset=20,
+                            num_buckets=30,
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[3072, 0],
+                            shard_sizes=[1024, 64],
+                            placement="rank:2/cuda:1",
+                            bucket_id_offset=50,
+                            num_buckets=40,
+                        ),
+                    ]
+                ),
+            ),
+            "table_1": ParameterSharding(
+                sharding_type="row_wise",
+                compute_kernel="quant",
+                ranks=[
+                    0,
+                    1,
+                    2,
+                ],
+                sharding_spec=EnumerableShardingSpec(
+                    shards=[
+                        ShardMetadata(
+                            shard_offsets=[0, 0],
+                            shard_sizes=[2048, 64],
+                            placement="rank:0/cpu",
+                            bucket_id_offset=None,
+                            num_buckets=None,
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[2048, 0],
+                            shard_sizes=[1024, 64],
+                            placement="rank:0/cpu",
+                            bucket_id_offset=None,
+                            num_buckets=None,
+                        ),
+                        ShardMetadata(
+                            shard_offsets=[3072, 0],
+                            shard_sizes=[1024, 64],
+                            placement="rank:0/cpu",
+                            bucket_id_offset=None,
+                            num_buckets=None,
+                        ),
+                    ]
+                ),
+            ),
+        }
+        self.assertDictEqual(expected, module_sharding_plan)
+
+    # pyre-fixme[56]
+    @given(data_type=st.sampled_from([DataType.FP32, DataType.FP16]))
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_column_wise(self, data_type: DataType) -> None:
 
         embedding_bag_config = [
@@ -929,18 +1082,89 @@ class ShardingPlanTest(unittest.TestCase):
         )
         expected = """module: ebc
 
- param   | sharding type | compute kernel | ranks
+ param   | sharding type | compute kernel | ranks  
 -------- | ------------- | -------------- | ------
 user_id  | table_wise    | dense          | [0]
 movie_id | row_wise      | dense          | [0, 1]
 
- param   | shard offsets | shard sizes |   placement
+ param   | shard offsets | shard sizes |   placement  
 -------- | ------------- | ----------- | -------------
 user_id  | [0, 0]        | [4096, 32]  | rank:0/cuda:0
 movie_id | [0, 0]        | [2048, 32]  | rank:0/cuda:0
 movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1
 """
         self.maxDiff = None
+        print("STR PLAN")
+        print(str(plan))
+        print("=======")
+        for i in range(len(expected.splitlines())):
+            self.assertEqual(
+                expected.splitlines()[i].strip(), str(plan).splitlines()[i].strip()
+            )
+
+    def test_str_bucket_wise_sharding(self) -> None:
+        plan = ShardingPlan(
+            {
+                "ebc": EmbeddingModuleShardingPlan(
+                    {
+                        "user_id": ParameterSharding(
+                            sharding_type="table_wise",
+                            compute_kernel="dense",
+                            ranks=[0],
+                            sharding_spec=EnumerableShardingSpec(
+                                [
+                                    ShardMetadata(
+                                        shard_offsets=[0, 0],
+                                        shard_sizes=[4096, 32],
+                                        placement="rank:0/cuda:0",
+                                    ),
+                                ]
+                            ),
+                        ),
+                        "movie_id": ParameterSharding(
+                            sharding_type="row_wise",
+                            compute_kernel="dense",
+                            ranks=[0, 1],
+                            sharding_spec=EnumerableShardingSpec(
+                                [
+                                    ShardMetadata(
+                                        shard_offsets=[0, 0],
+                                        shard_sizes=[2048, 32],
+                                        placement="rank:0/cuda:0",
+                                        bucket_id_offset=0,
+                                        num_buckets=20,
+                                    ),
+                                    ShardMetadata(
+                                        shard_offsets=[2048, 0],
+                                        shard_sizes=[2048, 32],
+                                        placement="rank:0/cuda:1",
+                                        bucket_id_offset=20,
+                                        num_buckets=30,
+                                    ),
+                                ]
+                            ),
+                        ),
+                    }
+                )
+            }
+        )
+        expected = """module: ebc
+        
+ param   | sharding type | compute kernel | ranks  
+-------- | ------------- | -------------- | ------
+user_id  | table_wise    | dense          | [0]
+movie_id | row_wise      | dense          | [0, 1]
+
+ param   | shard offsets | shard sizes |   placement   | bucket id offset | num buckets
+-------- | ------------- | ----------- | ------------- | ---------------- | -----------
+user_id  | [0, 0]        | [4096, 32]  | rank:0/cuda:0 | None             | None       
+movie_id | [0, 0]        | [2048, 32]  | rank:0/cuda:0 | 0                | 20       
+movie_id | [2048, 0]     | [2048, 32]  | rank:0/cuda:1 | 20               | 30       
+"""
+        self.maxDiff = None
+        print("STR PLAN BUCKET WISE")
+        print(str(plan))
+        print("=======")
         for i in range(len(expected.splitlines())):
             self.assertEqual(
                 expected.splitlines()[i].strip(), str(plan).splitlines()[i].strip()

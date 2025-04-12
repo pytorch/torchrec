@@ -367,6 +367,7 @@ def _get_parameter_sharding(
     sharder: ModuleSharder[nn.Module],
     placements: Optional[List[str]] = None,
     compute_kernel: Optional[str] = None,
+    bucket_offset_sizes: Optional[List[Tuple[int, int]]] = None,
 ) -> ParameterSharding:
     return ParameterSharding(
         sharding_spec=(
@@ -377,6 +378,8 @@ def _get_parameter_sharding(
                     ShardMetadata(
                         shard_sizes=size,
                         shard_offsets=offset,
+                        bucket_id_offset=bucket_id_offset,
+                        num_buckets=num_buckets,
                         placement=(
                             placement(
                                 device_type,
@@ -387,9 +390,17 @@ def _get_parameter_sharding(
                             else device_placement
                         ),
                     )
-                    for (size, offset, rank), device_placement in zip(
+                    for (size, offset, rank), device_placement, (
+                        num_buckets,
+                        bucket_id_offset,
+                    ) in zip(
                         size_offset_ranks,
                         placements if placements else [None] * len(size_offset_ranks),
+                        (
+                            bucket_offset_sizes
+                            if bucket_offset_sizes
+                            else [(None, None)] * len(size_offset_ranks)
+                        ),
                     )
                 ]
             )
@@ -518,7 +529,8 @@ def table_wise(
 
 
 def row_wise(
-    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None
+    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None,
+    num_buckets_per_rank: Optional[List[int]] = None,  # propagate num buckets per rank
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::ROW_WISE` for construct_module_sharding_plan.
@@ -551,6 +563,7 @@ def row_wise(
         device_type: str,
         sharder: ModuleSharder[nn.Module],
     ) -> ParameterSharding:
+        bucket_offset_sizes = None
         if sizes_placement is None:
             size_and_offsets = _get_parameter_size_offsets(
                 param,
@@ -564,17 +577,34 @@ def row_wise(
                 size_offset_ranks.append((size, offset, rank))
         else:
             size_offset_ranks = []
+            bucket_offset_sizes = None if num_buckets_per_rank is None else []
             sizes = sizes_placement[0]
+            if num_buckets_per_rank is not None:
+                assert len(sizes) == len(
+                    num_buckets_per_rank
+                ), f"sizes and num_buckets_per_rank must have the same length during row_wise sharding, got {len(sizes)} and {len(num_buckets_per_rank)} respectively"
             (rows, cols) = param.shape
             cur_offset = 0
             prev_offset = 0
+            prev_bucket_offset = 0
+            cur_bucket_offset = 0
             for rank, size in enumerate(sizes):
                 per_rank_row = size
+                per_rank_bucket_size = None
+                if num_buckets_per_rank is not None:
+                    per_rank_bucket_size = num_buckets_per_rank[rank]
+                    cur_bucket_offset += per_rank_bucket_size
                 cur_offset += per_rank_row
                 cur_offset = min(cur_offset, rows)
                 per_rank_row = cur_offset - prev_offset
                 size_offset_ranks.append(([per_rank_row, cols], [prev_offset, 0], rank))
                 prev_offset = cur_offset
+                if num_buckets_per_rank is not None:
+                    # bucket has only one col for now
+                    none_throws(bucket_offset_sizes).append(
+                        (per_rank_bucket_size, prev_bucket_offset)
+                    )
+                    prev_bucket_offset = cur_bucket_offset
 
             if cur_offset < rows:
                 raise ValueError(
@@ -596,6 +626,13 @@ def row_wise(
                 if device_type == "cuda":
                     index += 1
 
+        compute_kernel = None
+        if sizes_placement is not None:
+            if num_buckets_per_rank is not None:
+                compute_kernel = EmbeddingComputeKernel.KEY_VALUE.value
+            else:
+                compute_kernel = EmbeddingComputeKernel.QUANT.value
+
         return _get_parameter_sharding(
             param,
             ShardingType.ROW_WISE.value,
@@ -604,9 +641,8 @@ def row_wise(
             device_type,
             sharder,
             placements=placements if sizes_placement else None,
-            compute_kernel=(
-                EmbeddingComputeKernel.QUANT.value if sizes_placement else None
-            ),
+            compute_kernel=compute_kernel,
+            bucket_offset_sizes=bucket_offset_sizes,
         )
 
     return _parameter_sharding_generator
