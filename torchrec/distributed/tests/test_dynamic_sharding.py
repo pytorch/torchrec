@@ -26,6 +26,7 @@ from torchrec import distributed as trec_dist, EmbeddingBagCollection, KeyedJagg
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
 
 from torchrec.distributed.sharding_plan import (
+    column_wise,
     construct_module_sharding_plan,
     get_module_to_default_sharders,
     table_wise,
@@ -77,6 +78,23 @@ def generate_embedding_bag_config(
             ),
         )
     return embedding_bag_config
+
+
+def generate_rank_placements(
+    world_size: int,
+    num_tables: int,
+    ranks_per_tables: List[int],
+) -> List[List[int]]:
+    # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
+    placements = []
+    max_rank = world_size - 1
+    if ranks_per_tables == [0]:
+        ranks_per_tables = [random.randint(1, max_rank) for _ in range(num_tables)]
+    for i in range(num_tables):
+        ranks_per_table = ranks_per_tables[i]
+        placement = sorted(random.sample(range(world_size), ranks_per_table))
+        placements.append(placement)
+    return placements
 
 
 def create_test_initial_state_dict(
@@ -379,19 +397,73 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
     ) -> None:
         # Tests EBC dynamic sharding implementation for TW
 
+        # Table wise can only have 1 rank allocated per table:
+        ranks_per_tables = [1 for _ in range(num_tables)]
         # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
-        old_ranks = [random.randint(0, world_size - 1) for _ in range(num_tables)]
-        new_ranks = [random.randint(0, world_size - 1) for _ in range(num_tables)]
+        old_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+        new_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
 
         while new_ranks == old_ranks:
-            new_ranks = [random.randint(0, world_size - 1) for _ in range(num_tables)]
+            new_ranks = generate_rank_placements(
+                world_size, num_tables, ranks_per_tables
+            )
         per_param_sharding = {}
         new_per_param_sharding = {}
 
         # Construct parameter shardings
         for i in range(num_tables):
-            per_param_sharding[table_name(i)] = table_wise(rank=old_ranks[i])
-            new_per_param_sharding[table_name(i)] = table_wise(rank=new_ranks[i])
+            per_param_sharding[table_name(i)] = table_wise(rank=old_ranks[i][0])
+            new_per_param_sharding[table_name(i)] = table_wise(rank=new_ranks[i][0])
+
+        self._run_ebc_resharding_test(
+            per_param_sharding,
+            new_per_param_sharding,
+            num_tables,
+            world_size,
+            data_type,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    @given(  # pyre-ignore
+        num_tables=st.sampled_from([2, 3, 4]),
+        data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
+        world_size=st.sampled_from([3, 4]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_dynamic_sharding_ebc_cw(
+        self,
+        num_tables: int,
+        data_type: DataType,
+        world_size: int,
+    ) -> None:
+        # Tests EBC dynamic sharding implementation for CW
+
+        # Force the ranks per table to be consistent
+        ranks_per_tables = [
+            random.randint(1, world_size - 1) for _ in range(num_tables)
+        ]
+
+        old_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+        new_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+
+        # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
+        while new_ranks == old_ranks:
+            old_ranks = generate_rank_placements(
+                world_size, num_tables, ranks_per_tables
+            )
+            new_ranks = generate_rank_placements(
+                world_size, num_tables, ranks_per_tables
+            )
+        per_param_sharding = {}
+        new_per_param_sharding = {}
+
+        # Construct parameter shardings
+        for i in range(num_tables):
+            per_param_sharding[table_name(i)] = column_wise(ranks=old_ranks[i])
+            new_per_param_sharding[table_name(i)] = column_wise(ranks=new_ranks[i])
 
         self._run_ebc_resharding_test(
             per_param_sharding,
