@@ -23,6 +23,7 @@ from torchrec.distributed.fp_embeddingbag import (
     FeatureProcessedEmbeddingBagCollectionSharder,
 )
 from torchrec.distributed.fused_embeddingbag import FusedEmbeddingBagCollectionSharder
+from torchrec.distributed.mapped_embedding import MappedEmbeddingCollectionSharder
 from torchrec.distributed.mc_embedding import ManagedCollisionEmbeddingCollectionSharder
 from torchrec.distributed.mc_embeddingbag import (
     ManagedCollisionEmbeddingBagCollectionSharder,
@@ -34,6 +35,9 @@ from torchrec.distributed.quant_embedding import (
     QuantManagedCollisionEmbeddingCollectionSharder,
 )
 from torchrec.distributed.quant_embeddingbag import QuantEmbeddingBagCollectionSharder
+from torchrec.distributed.quant_mapped_embedding import (
+    QuantMappedEmbeddingCollectionSharder,
+)
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
@@ -62,6 +66,8 @@ def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
                 InferManagedCollisionCollectionSharder(),
             ),
         ),
+        cast(ModuleSharder[nn.Module], MappedEmbeddingCollectionSharder()),
+        cast(ModuleSharder[nn.Module], QuantMappedEmbeddingCollectionSharder()),
     ]
 
 
