@@ -36,6 +36,7 @@ from torchrec.distributed.planner.storage_reservations import (
     InferenceStorageReservation,
 )
 from torchrec.distributed.planner.types import (
+    CriticalPathEstimate,
     ParameterConstraints,
     Perf,
     ShardingOption,
@@ -319,7 +320,7 @@ class EmbeddingStats(Stats):
                 )
 
                 # Max perf and HBM to help root cause imbalance
-                self._log_max_perf_and_max_hbm(perf, used_hbm)
+                self._log_max_perf_and_max_hbm(perf, used_hbm, best_plan)
             self._log_storage_reservation_stats(
                 storage_reservation,
                 topology,
@@ -445,10 +446,14 @@ class EmbeddingStats(Stats):
                 f"# {'Imbalance stats range 0-1, higher means more imbalanced' : <{self._width-3}}#"
             )
 
-    def _log_max_perf_and_max_hbm(self, perfs: List[Perf], used_hbm: List[int]) -> None:
+    def _log_max_perf_and_max_hbm(
+        self, perfs: List[Perf], used_hbm: List[int], best_plan: List[ShardingOption]
+    ) -> None:
         total_perfs = [perf.total for perf in perfs]
 
-        max_total_perf_text = f"Longest Critical Path (Maximum of Total Perf): {_generate_max_text(total_perfs)}"
+        max_total_perf_text = (
+            f"Maximum of Total Perf: {_generate_max_text(total_perfs)}"
+        )
 
         mean_total_perf = statistics.mean(total_perfs)
         mean_total_perf_text = f"Mean Total Perf: {round(mean_total_perf,3)} ms"
@@ -479,6 +484,8 @@ class EmbeddingStats(Stats):
             + max(perf.prefetch_compute for perf in perfs)
         )
         sum_of_maxima_text = f"Sum of Maxima: {round(sum_of_maxima, 3)} ms"
+
+        critical_path_estimate = _calculate_critical_path(best_plan)
 
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(f"# {max_total_perf_text : <{self._width-3}}#")
@@ -511,6 +518,15 @@ class EmbeddingStats(Stats):
         )
         self._stats_table.append(
             f"# {'High Median HBM: '+_generate_rank_hbm_stats(used_hbm, statistics.median_high) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'Critical Path (comms): '+str(round(critical_path_estimate.comms_estimate, 3)) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'Critical Path (compute): '+str(round(critical_path_estimate.comp_estimate, 3)) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'Critical Path (comms + compute): '+str(round(critical_path_estimate.total(), 3)) : <{self._width-3}}#"
         )
 
         max_used_hbm = max(used_hbm)
@@ -1050,6 +1066,54 @@ def _reduce_int_list(input_list: List[int]) -> str:
         reduced.append(str(prev_num))
 
     return ", ".join(reduced)
+
+
+def _calculate_critical_path(best_plan: List[ShardingOption]) -> CriticalPathEstimate:
+    """
+    Calculates the critical path of the sharding plan. Makes the following assumptions:
+
+        1. There is a synchronization point across the ranks after each of the 4 events: Fwd/Bwd x Comms/Comp.
+        2. There are additional synchronization points during communication (both fwd & bwd) for each module <> sharding type combination.
+            i. Communication operations for each shard from the same module <> sharding type group are executed sequentially.
+            ii. Ranks need to synchronize before they can begin the communication operation for the next module <> sharding type group.
+        3. There are additional synchronization points during computation (both fwd & bwd) at the rank level.
+            i. Computation operations for each shard from the same module are executed sequentially.
+            ii. Ranks need to synchronize before they can begin the next set of events.
+    """
+    comms_data = defaultdict(lambda: defaultdict(float))
+    comp_data = defaultdict(lambda: defaultdict(float))
+    for so in best_plan:
+        module = so.module
+        sharding_type = so.sharding_type
+        for shard in so.shards:
+            rank = cast(int, shard.rank)
+            perf = cast(Perf, shard.perf)
+            comms_data[(module, sharding_type, "fwd")][rank] += perf.fwd_comms
+            comms_data[(module, sharding_type, "bwd")][rank] += perf.bwd_comms
+            comp_data["fwd"][rank] += perf.fwd_compute
+            comp_data["bwd"][rank] += perf.bwd_compute
+    comms_rank_agg = {
+        outer_key: max(inner_dict.values())
+        for outer_key, inner_dict in comms_data.items()
+    }
+    rank_count = len({cast(int, shard.rank) for so in best_plan for shard in so.shards})
+    sharding_types = list({so.sharding_type for so in best_plan})
+    adjustment_factor = 1
+    # Default bandwidth is 12.5 is used and closer to 40 is right for internode GTT
+    if (
+        rank_count > 8
+        and len(sharding_types) == 1
+        and sharding_types[0] == "column_wise"
+    ):
+        adjustment_factor = 3
+    comms_estimate = sum(comms_rank_agg.values()) / adjustment_factor
+    comp_rank_agg = {
+        outer_key: max(inner_dict.values())
+        for outer_key, inner_dict in comp_data.items()
+    }
+    comp_estimate = sum(comp_rank_agg.values())
+
+    return CriticalPathEstimate(comms_estimate, comp_estimate)
 
 
 class NoopEmbeddingStats(Stats):
