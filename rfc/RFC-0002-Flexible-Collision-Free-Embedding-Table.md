@@ -1,10 +1,9 @@
 # RFC: Flexible Collision Free Embedding Table
 
-| Status |  |
+| Status | Published |
 | :---- | :---- |
-| RFC |  |
-| Author(s) |  |
-| Updated |  |
+| Author(s) | Emma Lin, Joe Wang, Kaustubh Vartak, Dennis van der Staay, Huanyu He|
+| Updated | 04-13-2025 |
 
 ## Motivation
 
