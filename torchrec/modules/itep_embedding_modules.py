@@ -79,6 +79,7 @@ class ITEPEmbeddingBagCollection(nn.Module):
 
         features = self._itep_module(features, self._iter.item())
         pooled_embeddings = self._embedding_bag_collection(features)
+
         self._iter += 1
 
         return pooled_embeddings
