@@ -737,6 +737,7 @@ class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterShardin
         out = ""
         param_table = []
         shard_table = []
+        contains_bucket_wise_shards = False
         for param_name, param_sharding in self.items():
             param_table.append(
                 [
@@ -749,20 +750,54 @@ class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterShardin
             if isinstance(param_sharding.sharding_spec, EnumerableShardingSpec):
                 shards = param_sharding.sharding_spec.shards
                 if shards is not None:
+                    param_sharding_contains_bucket_info = any(
+                        shard.bucket_id_offset is not None for shard in shards
+                    )
+                    if param_sharding_contains_bucket_info:
+                        contains_bucket_wise_shards = True
                     for shard in shards:
-                        shard_table.append(
+                        cols = (
                             [
                                 param_name,
                                 shard.shard_offsets,
                                 shard.shard_sizes,
                                 shard.placement,
                             ]
+                            if param_sharding_contains_bucket_info is None
+                            else [
+                                param_name,
+                                shard.shard_offsets,
+                                shard.shard_sizes,
+                                shard.placement,
+                                shard.bucket_id_offset,
+                                shard.num_buckets,
+                            ]
                         )
+                        shard_table.append(cols)
+        if contains_bucket_wise_shards:
+            for i in range(len(shard_table)):
+                if len(shard_table[i]) == 4:
+                    # add None for the tables that don't have bucket info
+                    shard_table[i].append(None)
+                    shard_table[i].append(None)
         out += "\n\n" + _tabulate(
             param_table, ["param", "sharding type", "compute kernel", "ranks"]
         )
+        column_str = (
+            ["param", "shard offsets", "shard sizes", "placement"]
+            if not contains_bucket_wise_shards
+            else [
+                "param",
+                "shard offsets",
+                "shard sizes",
+                "placement",
+                "bucket id offset",
+                "num buckets",
+            ]
+        )
         out += "\n\n" + _tabulate(
-            shard_table, ["param", "shard offsets", "shard sizes", "placement"]
+            shard_table,
+            column_str,
         )
         return out
 
