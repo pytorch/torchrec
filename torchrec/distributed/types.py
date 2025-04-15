@@ -693,10 +693,9 @@ class KeyValueParams:
 @dataclass
 class ParameterSharding:
     """
-        Describes the sharding of the parameter.
+        Describes (configures) the sharding of a parameter, which usually corresponds to a (feature) table.
 
-        sharding_type (str): how this parameter is sharded. See ShardingType for well-known
-            types.
+        sharding_type (str): how this parameter is sharded. See ShardingType for well-known types.
         compute_kernel (str): compute kernel to be used by this parameter.
         ranks (Optional[List[int]]): rank of each shard.
         sharding_spec (Optional[ShardingSpec]): list of ShardMetadata for each shard.
@@ -709,8 +708,7 @@ class ParameterSharding:
 
     NOTE:
       ShardingType.TABLE_WISE - rank where this embedding is placed
-      ShardingType.COLUMN_WISE - rank where the embedding shards are placed, seen as
-      individual tables
+      ShardingType.COLUMN_WISE - rank where the embedding shards are placed, seen as individual tables
       ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed
       ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
 
