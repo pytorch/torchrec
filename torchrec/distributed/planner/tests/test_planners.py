@@ -301,7 +301,11 @@ class AutoSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
     def compute_kernels(
         self, sharding_type: str, compute_device_type: str
     ) -> List[str]:
-        return [k.value for k in EmbeddingComputeKernel]
+        return [
+            k.value
+            for k in EmbeddingComputeKernel
+            if k is not EmbeddingComputeKernel.CUSTOMIZED_KERNEL
+        ]
 
 
 class TestAutoPlannerWithScaleupProposer(unittest.TestCase):

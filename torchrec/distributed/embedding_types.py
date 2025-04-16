@@ -70,6 +70,7 @@ class EmbeddingComputeKernel(Enum):
     QUANT_UVM = "quant_uvm"
     QUANT_UVM_CACHING = "quant_uvm_caching"
     KEY_VALUE = "key_value"
+    CUSTOMIZED_KERNEL = "customized_kernel"
 
 
 def compute_kernel_to_embedding_location(

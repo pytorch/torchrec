@@ -147,46 +147,6 @@ def get_ec_index_dedup() -> bool:
     return EC_INDEX_DEDUP
 
 
-def create_embedding_sharding(
-    sharding_type: str,
-    sharding_infos: List[EmbeddingShardingInfo],
-    env: ShardingEnv,
-    device: Optional[torch.device] = None,
-    qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
-) -> EmbeddingSharding[
-    SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
-]:
-    if sharding_type == ShardingType.TABLE_WISE.value:
-        return TwSequenceEmbeddingSharding(
-            sharding_infos=sharding_infos,
-            env=env,
-            device=device,
-            qcomm_codecs_registry=qcomm_codecs_registry,
-        )
-    elif sharding_type == ShardingType.ROW_WISE.value:
-        return RwSequenceEmbeddingSharding(
-            sharding_infos=sharding_infos,
-            env=env,
-            device=device,
-            qcomm_codecs_registry=qcomm_codecs_registry,
-        )
-    elif sharding_type == ShardingType.DATA_PARALLEL.value:
-        return DpSequenceEmbeddingSharding(
-            sharding_infos=sharding_infos,
-            env=env,
-            device=device,
-        )
-    elif sharding_type == ShardingType.COLUMN_WISE.value:
-        return CwSequenceEmbeddingSharding(
-            sharding_infos=sharding_infos,
-            env=env,
-            device=device,
-            qcomm_codecs_registry=qcomm_codecs_registry,
-        )
-    else:
-        raise ValueError(f"Sharding not supported {sharding_type}")
-
-
 def create_sharding_infos_by_sharding(
     module: EmbeddingCollectionInterface,
     table_name_to_parameter_sharding: Dict[str, ParameterSharding],
@@ -557,7 +517,7 @@ class ShardedEmbeddingCollection(
                 SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
             ],
         ] = {
-            sharding_type: create_embedding_sharding(
+            sharding_type: self.create_embedding_sharding(
                 sharding_type=sharding_type,
                 sharding_infos=embedding_confings,
                 env=env,
@@ -636,6 +596,51 @@ class ShardedEmbeddingCollection(
 
         if module.device != torch.device("meta"):
             self.load_state_dict(module.state_dict())
+
+    @classmethod
+    def create_embedding_sharding(
+        cls,
+        sharding_type: str,
+        sharding_infos: List[EmbeddingShardingInfo],
+        env: ShardingEnv,
+        device: Optional[torch.device] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> EmbeddingSharding[
+        SequenceShardingContext, KeyedJaggedTensor, torch.Tensor, torch.Tensor
+    ]:
+        """
+        This is the main function to generate `EmbeddingSharding` instances based on sharding_type
+        so that the same sharding_type in one EC would be fused.
+        """
+        if sharding_type == ShardingType.TABLE_WISE.value:
+            return TwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                qcomm_codecs_registry=qcomm_codecs_registry,
+            )
+        elif sharding_type == ShardingType.ROW_WISE.value:
+            return RwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                qcomm_codecs_registry=qcomm_codecs_registry,
+            )
+        elif sharding_type == ShardingType.DATA_PARALLEL.value:
+            return DpSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+            )
+        elif sharding_type == ShardingType.COLUMN_WISE.value:
+            return CwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                qcomm_codecs_registry=qcomm_codecs_registry,
+            )
+        else:
+            raise ValueError(f"Sharding not supported {sharding_type}")
 
     @staticmethod
     def _pre_state_dict_hook(
@@ -757,13 +762,22 @@ class ShardedEmbeddingCollection(
             parameter_sharding,
         ) in self.module_sharding_plan.items():
             if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
+                # Don't need to use sharded/distributed state tensor for DATA_PARALLEL
+                # because each rank has a full copy of the table in DATA_PARALLEL
+                continue
+            _model_parallel_name_to_compute_kernel[table_name] = (
+                parameter_sharding.compute_kernel
+            )
+            if (
+                parameter_sharding.compute_kernel
+                == EmbeddingComputeKernel.CUSTOMIZED_KERNEL.value
+            ):
+                # Skip state_dict handling for CUSTOMIZED_KERNEL, this should be implemented
+                # in child class for the CUSTOMIZED_KERNEL
                 continue
             self._model_parallel_name_to_local_shards[table_name] = []
             self._model_parallel_name_to_shards_wrapper[table_name] = OrderedDict(
                 [("local_tensors", []), ("local_offsets", [])]
-            )
-            _model_parallel_name_to_compute_kernel[table_name] = (
-                parameter_sharding.compute_kernel
             )
 
         self._name_to_table_size = {}
@@ -783,6 +797,11 @@ class ShardedEmbeddingCollection(
                 # save local_shards for transforming MP params to shardedTensor
                 for key, v in lookup.state_dict().items():
                     table_name = key[: -len(".weight")]
+                    if (
+                        _model_parallel_name_to_compute_kernel[table_name]
+                        == EmbeddingComputeKernel.CUSTOMIZED_KERNEL.value
+                    ):
+                        continue
                     if isinstance(v, DTensor):
                         shards_wrapper = self._model_parallel_name_to_shards_wrapper[
                             table_name
