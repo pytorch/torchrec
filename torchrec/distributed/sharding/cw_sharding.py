@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Union
 
 import torch
 import torch.distributed as dist  # noqa
@@ -70,6 +70,7 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         device: Optional[torch.device] = None,
         permute_embeddings: bool = False,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = None,
     ) -> None:
         super().__init__(
             sharding_infos,
@@ -80,6 +81,10 @@ class BaseCwEmbeddingSharding(BaseTwEmbeddingSharding[C, F, T, W]):
         self._permute_embeddings = permute_embeddings
         if self._permute_embeddings:
             self._init_combined_embeddings()
+
+        self._device_type_from_sharding_infos: Optional[Union[str, Tuple[str, ...]]] = (
+            device_type_from_sharding_infos
+        )
 
     def _init_combined_embeddings(self) -> None:
         """

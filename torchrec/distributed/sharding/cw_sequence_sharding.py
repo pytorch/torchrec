@@ -10,7 +10,6 @@
 from typing import Any, Dict, List, Optional
 
 import torch
-from torchrec.distributed.dist_data import SeqEmbeddingsAllToOne
 from torchrec.distributed.embedding_lookup import (
     GroupedEmbeddingsLookup,
     InferGroupedEmbeddingsLookup,
@@ -26,6 +25,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.cw_sharding import BaseCwEmbeddingSharding
 from torchrec.distributed.sharding.sequence_sharding import (
+    InferSequenceEmbeddingDist,
     InferSequenceShardingContext,
     SequenceShardingContext,
 )
@@ -111,6 +111,7 @@ class InferCwSequenceEmbeddingSharding(
             world_size=self._world_size,
             fused_params=fused_params,
             device=device if device is not None else self._device,
+            device_type_from_sharding_infos=self._device_type_from_sharding_infos,
         )
 
     def create_output_dist(
@@ -121,31 +122,9 @@ class InferCwSequenceEmbeddingSharding(
         device = device if device is not None else self._device
         assert device is not None
 
-        dist_out = InferCwSequenceEmbeddingDist(
+        dist_out = InferSequenceEmbeddingDist(
             device,
             self._world_size,
+            self._device_type_from_sharding_infos,
         )
         return dist_out
-
-
-class InferCwSequenceEmbeddingDist(
-    BaseEmbeddingDist[
-        InferSequenceShardingContext, List[torch.Tensor], List[torch.Tensor]
-    ]
-):
-    def __init__(
-        self,
-        device: torch.device,
-        world_size: int,
-    ) -> None:
-        super().__init__()
-        self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(
-            device=device, world_size=world_size
-        )
-
-    def forward(
-        self,
-        local_embs: List[torch.Tensor],
-        sharding_ctx: Optional[InferSequenceShardingContext] = None,
-    ) -> List[torch.Tensor]:
-        return self._dist(local_embs)
