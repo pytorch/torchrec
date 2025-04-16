@@ -994,6 +994,9 @@ class QuantEmbeddingCollectionSharder(
     This implementation uses non-fused EmbeddingCollection
     """
 
+    def __init__(self, fused_params: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(fused_params)
+
     def shard(
         self,
         module: QuantEmbeddingCollection,
