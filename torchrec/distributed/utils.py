@@ -436,6 +436,16 @@ def add_params_from_parameter_sharding(
             "caching params will be ignored"
         )
 
+    # calling `get_additional_fused_params` for customized kernel
+    # it will be updated to the `fused_params` dict
+    if hasattr(
+        parameter_sharding, "get_additional_fused_params"
+    ) and parameter_sharding.compute_kernel in {
+        EmbeddingComputeKernel.CUSTOMIZED_KERNEL.value
+    }:
+        # type: ignore[attr-defined]
+        fused_params.update(parameter_sharding.get_additional_fused_params())
+
     return fused_params
 
 

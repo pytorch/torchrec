@@ -181,46 +181,11 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
     ) -> None:
-        # TODO rename to _create_embedding_kernel
-        def _create_lookup(
-            config: GroupedEmbeddingConfig,
-        ) -> BaseEmbedding:
-            for table in config.embedding_tables:
-                if (
-                    table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
-                    or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
-                ):
-                    self._need_prefetch = True
-            if config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                return BatchedDenseEmbedding(
-                    config=config,
-                    pg=pg,
-                    device=device,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
-                return BatchedFusedEmbedding(
-                    config=config,
-                    pg=pg,
-                    device=device,
-                )
-            elif config.compute_kernel in {
-                EmbeddingComputeKernel.KEY_VALUE,
-            }:
-                return KeyValueEmbedding(
-                    config=config,
-                    pg=pg,
-                    device=device,
-                )
-            else:
-                raise ValueError(
-                    f"Compute kernel not supported {config.compute_kernel}"
-                )
-
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         self._need_prefetch: bool = False
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config))
+            self._emb_modules.append(self._create_embedding_kernel(config, pg, device))
 
         self._feature_splits: List[int] = []
         for config in grouped_configs:
@@ -238,6 +203,41 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
         )
 
         self.grouped_configs = grouped_configs
+
+    def _create_embedding_kernel(
+        self,
+        config: GroupedEmbeddingConfig,
+        pg: Optional[dist.ProcessGroup],
+        device: Optional[torch.device],
+    ) -> BaseEmbedding:
+        for table in config.embedding_tables:
+            if (
+                table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
+                or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
+            ):
+                self._need_prefetch = True
+        if config.compute_kernel == EmbeddingComputeKernel.DENSE:
+            return BatchedDenseEmbedding(
+                config=config,
+                pg=pg,
+                device=device,
+            )
+        elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
+            return BatchedFusedEmbedding(
+                config=config,
+                pg=pg,
+                device=device,
+            )
+        elif config.compute_kernel in {
+            EmbeddingComputeKernel.KEY_VALUE,
+        }:
+            return KeyValueEmbedding(
+                config=config,
+                pg=pg,
+                device=device,
+            )
+        else:
+            raise ValueError(f"Compute kernel not supported {config.compute_kernel}")
 
     def prefetch(
         self,
@@ -409,44 +409,12 @@ class GroupedPooledEmbeddingsLookup(
         scale_weight_gradients: bool = True,
         sharding_type: Optional[ShardingType] = None,
     ) -> None:
-        # TODO rename to _create_embedding_kernel
-        def _create_lookup(
-            config: GroupedEmbeddingConfig,
-            device: Optional[torch.device] = None,
-            sharding_type: Optional[ShardingType] = None,
-        ) -> BaseEmbedding:
-            if config.compute_kernel == EmbeddingComputeKernel.DENSE:
-                return BatchedDenseEmbeddingBag(
-                    config=config,
-                    pg=pg,
-                    device=device,
-                    sharding_type=sharding_type,
-                )
-            elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
-                return BatchedFusedEmbeddingBag(
-                    config=config,
-                    pg=pg,
-                    device=device,
-                    sharding_type=sharding_type,
-                )
-            elif config.compute_kernel in {
-                EmbeddingComputeKernel.KEY_VALUE,
-            }:
-                return KeyValueEmbeddingBag(
-                    config=config,
-                    pg=pg,
-                    device=device,
-                    sharding_type=sharding_type,
-                )
-            else:
-                raise ValueError(
-                    f"Compute kernel not supported {config.compute_kernel}"
-                )
-
         super().__init__()
         self._emb_modules: nn.ModuleList = nn.ModuleList()
         for config in grouped_configs:
-            self._emb_modules.append(_create_lookup(config, device, sharding_type))
+            self._emb_modules.append(
+                self._create_embedding_kernel(config, device, pg, sharding_type)
+            )
 
         self._feature_splits: List[int] = []
         for config in grouped_configs:
@@ -472,6 +440,39 @@ class GroupedPooledEmbeddingsLookup(
             if scale_weight_gradients and get_gradient_division()
             else 1
         )
+
+    def _create_embedding_kernel(
+        self,
+        config: GroupedEmbeddingConfig,
+        device: Optional[torch.device],
+        pg: Optional[dist.ProcessGroup],
+        sharding_type: Optional[ShardingType],
+    ) -> BaseEmbedding:
+        if config.compute_kernel == EmbeddingComputeKernel.DENSE:
+            return BatchedDenseEmbeddingBag(
+                config=config,
+                pg=pg,
+                device=device,
+                sharding_type=sharding_type,
+            )
+        elif config.compute_kernel == EmbeddingComputeKernel.FUSED:
+            return BatchedFusedEmbeddingBag(
+                config=config,
+                pg=pg,
+                device=device,
+                sharding_type=sharding_type,
+            )
+        elif config.compute_kernel in {
+            EmbeddingComputeKernel.KEY_VALUE,
+        }:
+            return KeyValueEmbeddingBag(
+                config=config,
+                pg=pg,
+                device=device,
+                sharding_type=sharding_type,
+            )
+        else:
+            raise ValueError(f"Compute kernel not supported {config.compute_kernel}")
 
     def prefetch(
         self,
