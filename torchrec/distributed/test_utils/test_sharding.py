@@ -254,6 +254,9 @@ def copy_state_dict(
     glob: Dict[str, torch.Tensor],
     exclude_predfix: Optional[str] = None,
 ) -> None:
+    """
+    Copies the contents of the global tensors in glob to the local tensors in loc.
+    """
     for name, tensor in loc.items():
         if exclude_predfix is not None and name.startswith(exclude_predfix):
             continue

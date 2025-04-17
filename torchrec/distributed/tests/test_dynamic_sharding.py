@@ -213,10 +213,8 @@ def _test_ebc_resharding(
     trec_dist.comm_ops.set_gradient_division(False)
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         kjt_input_per_rank = [kjt.to(ctx.device) for kjt in kjt_input_per_rank]
-
-        initial_state_dict = {
-            fqn: tensor.to(ctx.device) for fqn, tensor in initial_state_dict.items()
-        }
+        # Set seed to be 0 to ensure models have the same initialization across ranks
+        torch.manual_seed(0)
         m1 = EmbeddingBagCollection(
             tables=tables,
             device=ctx.device,
@@ -226,19 +224,24 @@ def _test_ebc_resharding(
             tables=tables,
             device=ctx.device,
         )
+        if initial_state_dict is not None:
+            initial_state_dict = {
+                fqn: tensor.to(ctx.device) for fqn, tensor in initial_state_dict.items()
+            }
 
-        # Load initial State - making sure models are identical
-        m1.load_state_dict(initial_state_dict)
-        copy_state_dict(
-            loc=m1.state_dict(),
-            glob=copy.deepcopy(initial_state_dict),
-        )
+            # Load initial State - making sure models are identical
+            m1.load_state_dict(initial_state_dict)
 
-        m2.load_state_dict(initial_state_dict)
-        copy_state_dict(
-            loc=m2.state_dict(),
-            glob=copy.deepcopy(initial_state_dict),
-        )
+            m2.load_state_dict(initial_state_dict)
+
+        else:
+            # Note this is the only correct behavior due to setting random seed to 0 above
+            # Otherwise the weights generated in EBC initialization will be different on
+            # Each rank, resulting in different behavior after resharding
+            copy_state_dict(
+                loc=m2.state_dict(),
+                glob=m1.state_dict(),
+            )
 
         sharder = get_module_to_default_sharders()[type(m1)]
 
@@ -278,8 +281,8 @@ def _test_ebc_resharding(
             feature_keys.extend(table.feature_names)
 
         # For current test model and inputs, the prediction should be the exact same
-        rtol = 0
-        atol = 0
+        # rtol = 0
+        # atol = 0
 
         for _ in range(world_size):
             # sharded model
@@ -301,9 +304,7 @@ def _test_ebc_resharding(
             # their model. output from sharded_pred is correctly on the correct device.
 
             # Compare predictions of sharded vs unsharded models.
-            torch.testing.assert_close(
-                sharded_m1_pred.cpu(), resharded_m2_pred.cpu(), rtol=rtol, atol=atol
-            )
+            torch.testing.assert_close(sharded_m1_pred.cpu(), resharded_m2_pred.cpu())
 
             sharded_m1_pred.sum().backward()
             resharded_m2_pred.sum().backward()
@@ -320,6 +321,7 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
         data_type: DataType,
         embedding_dim: int = 16,
         num_embeddings: int = 4,
+        use_debug_state_dict: bool = False,  # Turn on to use dummy values for initial state dict
     ) -> None:
         embedding_bag_config = generate_embedding_bag_config(
             data_type, num_tables, embedding_dim, num_embeddings
@@ -359,14 +361,16 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
             for _ in range(world_size)
         ]
 
-        # initial_state_dict filled with deterministic dummy values
-        initial_state_dict = create_test_initial_state_dict(
-            ShardedEmbeddingBagCollection,  # pyre-ignore
-            num_tables,
-            data_type,
-            embedding_dim,
-            num_embeddings,
-        )
+        initial_state_dict = None
+        if use_debug_state_dict:
+            # initial_state_dict filled with deterministic dummy values
+            initial_state_dict = create_test_initial_state_dict(
+                ShardedEmbeddingBagCollection,  # pyre-ignore
+                num_tables,
+                data_type,
+                embedding_dim,
+                num_embeddings,
+            )
 
         self._run_multi_process_test(
             callable=_test_ebc_resharding,
