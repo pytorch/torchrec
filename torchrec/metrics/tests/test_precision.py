@@ -53,7 +53,7 @@ class PrecisionMetricTest(unittest.TestCase):
     target_clazz: Type[RecMetric] = PrecisionMetric
     task_name: str = "precision"
 
-    def test_unfused_precision(self) -> None:
+    def test_precision_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=PrecisionMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -67,10 +67,24 @@ class PrecisionMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_fused_precision(self) -> None:
+    def test_precision_fused_tasks(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=PrecisionMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            test_clazz=TestPrecisionMetric,
+            metric_name=PrecisionMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
+
+    def test_precision_fused_tasks_and_states(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=PrecisionMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
             test_clazz=TestPrecisionMetric,
             metric_name=PrecisionMetricTest.task_name,
             task_names=["t1", "t2", "t3"],

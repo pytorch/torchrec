@@ -161,7 +161,7 @@ class TowerQPSMetricTest(unittest.TestCase):
     )
     update_wrapper(_test_tower_qps, metric_test_helper)
 
-    def test_unfused_tower_qps_during_warmup(self) -> None:
+    def test_tower_qps_during_warmup_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=TowerQPSMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -175,7 +175,7 @@ class TowerQPSMetricTest(unittest.TestCase):
             entry_point=self._test_tower_qps,
         )
 
-    def test_unfused_tower_qps(self) -> None:
+    def test_tower_qps_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=TowerQPSMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -190,7 +190,7 @@ class TowerQPSMetricTest(unittest.TestCase):
             test_nsteps=DURING_WARMUP_NSTEPS,
         )
 
-    def test_fused_tower_qps(self) -> None:
+    def test_tower_qps_fused_tasks(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=TowerQPSMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
@@ -205,7 +205,22 @@ class TowerQPSMetricTest(unittest.TestCase):
             test_nsteps=AFTER_WARMUP_NSTEPS,
         )
 
-    def test_unfused_check_update_tower_qps(self) -> None:
+    def test_tower_qps_fused_tasks_and_states(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=TowerQPSMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
+            test_clazz=TestTowerQPSMetric,
+            metric_name=TowerQPSMetricTest.task_names,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=self._test_tower_qps,
+            test_nsteps=AFTER_WARMUP_NSTEPS,
+        )
+
+    def test_check_update_tower_qps_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=TowerQPSMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -220,7 +235,7 @@ class TowerQPSMetricTest(unittest.TestCase):
             test_nsteps=AFTER_WARMUP_NSTEPS,
         )
 
-    def test_fused_check_update_tower_qps(self) -> None:
+    def test_check_update_tower_qps_fused_tasks(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=TowerQPSMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,

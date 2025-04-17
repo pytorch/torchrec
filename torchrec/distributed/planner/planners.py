@@ -8,6 +8,8 @@
 # pyre-strict
 
 import copy
+import logging
+import time
 from functools import reduce
 from time import perf_counter
 from typing import Callable, cast, Dict, List, Optional, Tuple, Union
@@ -65,6 +67,8 @@ from torchrec.distributed.types import (
     ShardMetadata,
 )
 from torchrec.distributed.utils import none_throws
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def to_sharding_plan(
@@ -181,6 +185,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         callbacks: Optional[
             List[Callable[[List[ShardingOption]], List[ShardingOption]]]
         ] = None,
+        timeout_seconds: Optional[int] = None,
     ) -> None:
         if topology is None:
             topology = Topology(
@@ -235,6 +240,9 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         self._callbacks: List[
             Callable[[List[ShardingOption]], List[ShardingOption]]
         ] = ([] if callbacks is None else callbacks)
+        if timeout_seconds is not None:
+            assert timeout_seconds > 0, "Timeout must be positive"
+        self._timeout_seconds = timeout_seconds
 
     def collective_plan(
         self,
@@ -320,10 +328,19 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         for proposer in self._proposers:
             proposer.load(search_space=search_space, enumerator=self._enumerator)
 
+        start = time.time()
         for proposer in self._proposers:
             proposal = proposer.propose()
 
             while proposal:
+                end = time.time()
+                elapsed = end - start
+                if self._timeout_seconds:
+                    if elapsed > self._timeout_seconds:
+                        logger.info(
+                            f"Exceeded time limit of {self._timeout_seconds}s. Took {elapsed}s"
+                        )
+                        break
                 proposal_key = tuple(sorted(map(hash, proposal)))
                 if proposal_key in proposal_cache:
                     partitionable, plan, perf_rating = proposal_cache[proposal_key]
