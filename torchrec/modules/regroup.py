@@ -35,19 +35,6 @@ def _permuted_values(
 
 
 @torch.fx.wrap
-def _build_dict(
-    keys: List[str],
-    values: Union[torch.Tensor, List[torch.Tensor]],
-    splits: List[int],
-    dim: int,
-) -> Dict[str, torch.Tensor]:
-    if isinstance(values, torch.Tensor):
-        return dict(zip(keys, torch.split(values, splits, dim=dim)))
-    else:
-        return dict(zip(keys, values))
-
-
-@torch.fx.wrap
 def module_init(module: "KTRegroupAsDict", keyed_tensors: List[KeyedTensor]) -> None:
     assert len(keyed_tensors) > 0, "Empty list provided"
     assert all(
@@ -113,6 +100,12 @@ class PermuteMultiEmbedding(torch.nn.Module):
             self._out_shapes,
             self._out_lengths,
         )
+
+
+def _to_tensor_dict(
+    keys: List[str], values: Union[List[torch.Tensor], Tuple[torch.Tensor, ...]]
+) -> Dict[str, torch.Tensor]:
+    return {key: values[i] for i, key in enumerate(keys)}
 
 
 class KTRegroupAsDict(torch.nn.Module, CacheMixin):
@@ -204,11 +197,13 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         if self._use_fbgemm_regroup:
             values = _get_kts_values(keyed_tensors)
             permuted_values = self._permute_pooled_embs_impl(values)
+            return _to_tensor_dict(self._keys, permuted_values)
         else:
             permuted_values = _permuted_values(
                 keyed_tensors, self._idx_key_pairs, self._dim
             )
-        return _build_dict(self._keys, permuted_values, self._splits, self._dim)
+            splitted_values = torch.split(permuted_values, self._splits, dim=self._dim)
+            return _to_tensor_dict(self._keys, splitted_values)
 
     def clear_cache(self) -> None:
         self._is_inited = False
