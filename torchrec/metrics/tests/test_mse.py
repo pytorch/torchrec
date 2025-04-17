@@ -70,7 +70,7 @@ class MSEMetricTest(unittest.TestCase):
     task_name: str = "mse"
     rmse_task_name: str = "rmse"
 
-    def test_unfused_mse(self) -> None:
+    def test_mse_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -84,7 +84,7 @@ class MSEMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_fused_mse(self) -> None:
+    def test_mse_fused_tasks(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
@@ -98,7 +98,21 @@ class MSEMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_unfused_rmse(self) -> None:
+    def test_mse_fused_tasks_and_states(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=MSEMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
+            test_clazz=TestMSEMetric,
+            metric_name=MSEMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
+
+    def test_rmse_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -112,10 +126,24 @@ class MSEMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_fused_rmse(self) -> None:
+    def test_rmse_fused_tasks(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=MSEMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            test_clazz=TestRMSEMetric,
+            metric_name=MSEMetricTest.rmse_task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
+
+    def test_rmse_fused_tasks_and_states(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=MSEMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
             test_clazz=TestRMSEMetric,
             metric_name=MSEMetricTest.rmse_task_name,
             task_names=["t1", "t2", "t3"],

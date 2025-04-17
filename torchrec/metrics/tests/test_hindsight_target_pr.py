@@ -126,7 +126,7 @@ class TestHindsightTargetPRMetricTest(unittest.TestCase):
     precision_task_name: str = "hindsight_target_precision"
     recall_task_name: str = "hindsight_target_recall"
 
-    def test_unfused_hindsight_target_precision(self) -> None:
+    def test_hindsight_target_precision_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=HindsightTargetPRMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -140,7 +140,7 @@ class TestHindsightTargetPRMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_unfused_hindsight_target_recall(self) -> None:
+    def test_hindsight_target_recall_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=HindsightTargetPRMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
