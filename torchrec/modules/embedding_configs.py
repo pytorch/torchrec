@@ -195,6 +195,8 @@ class BaseEmbeddingConfig:
 
     # handle the special case
     input_dim: Optional[int] = None
+    total_num_buckets: Optional[int] = None
+    zero_collision: bool = False
 
     def get_weight_init_max(self) -> float:
         if self.weight_init_max is None:

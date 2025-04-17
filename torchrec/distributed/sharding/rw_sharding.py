@@ -56,6 +56,7 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -137,6 +138,9 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             []
         )
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
+        logger.info(
+            f"self._grouped_embedding_configs_per_rank: {self._grouped_embedding_configs_per_rank}"
+        )
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[self._rank]
         )
@@ -145,6 +149,9 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         for group_config in self._grouped_embedding_configs:
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
+
+        for group_config in self._grouped_embedding_configs:
+            group_config.feature_names
 
     def _shard(
         self,
@@ -217,6 +224,8 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,
                         num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
+                        total_num_buckets=info.embedding_config.total_num_buckets,
+                        zero_collision=info.embedding_config.zero_collision,
                     )
                 )
         return tables_per_rank
@@ -271,6 +280,23 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         for group_config in self._grouped_embedding_configs:
             feature_hash_sizes.extend(group_config.feature_hash_sizes())
         return feature_hash_sizes
+
+    def _get_feature_total_num_buckets(self) -> Optional[List[int]]:
+        feature_total_num_buckets: List[int] = []
+        for group_config in self._grouped_embedding_configs:
+            if group_config.feature_total_num_buckets() is not None:
+                feature_total_num_buckets.extend(
+                    none_throws(group_config.feature_total_num_buckets())
+                )
+        return (
+            feature_total_num_buckets if len(feature_total_num_buckets) > 0 else None
+        )  # If no feature_total_num_buckets is provided, we return None to keep backward compatibility.
+
+    def _is_zero_collision(self) -> bool:
+        for group_config in self._grouped_embedding_configs:
+            if group_config._is_zero_collision():
+                return True
+        return False
 
 
 class RwSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
