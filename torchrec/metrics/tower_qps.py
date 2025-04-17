@@ -222,7 +222,10 @@ class TowerQPSMetric(RecMetric):
         **kwargs: Dict[str, Any],
     ) -> None:
         with torch.no_grad():
-            if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
+            if self._compute_mode in [
+                RecComputeMode.FUSED_TASKS_COMPUTATION,
+                RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
+            ]:
                 if not isinstance(labels, torch.Tensor):
                     raise RecMetricException(
                         "Fused computation only support where 'labels' is a tensor"
