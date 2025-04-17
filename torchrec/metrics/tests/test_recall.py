@@ -53,7 +53,7 @@ class RecallMetricTest(unittest.TestCase):
     clazz: Type[RecMetric] = RecallMetric
     task_name: str = "recall"
 
-    def test_recall_unfused(self) -> None:
+    def test_unfused_recall(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=RecallMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
@@ -67,24 +67,10 @@ class RecallMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_recall_fused_tasks(self) -> None:
+    def test_fused_recall(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=RecallMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-            test_clazz=TestRecallMetric,
-            metric_name=RecallMetricTest.task_name,
-            task_names=["t1", "t2", "t3"],
-            fused_update_limit=0,
-            compute_on_all_ranks=False,
-            should_validate_update=False,
-            world_size=WORLD_SIZE,
-            entry_point=metric_test_helper,
-        )
-
-    def test_recall_fused_tasks_and_states(self) -> None:
-        rec_metric_value_test_launcher(
-            target_clazz=RecallMetric,
-            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
             test_clazz=TestRecallMetric,
             metric_name=RecallMetricTest.task_name,
             task_names=["t1", "t2", "t3"],

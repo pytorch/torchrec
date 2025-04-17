@@ -134,19 +134,13 @@ class RecMetricComputation(Metric, abc.ABC):
         window_size: int,
         compute_on_all_ranks: bool = False,
         should_validate_update: bool = False,
-        fuse_state_tensors: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
         fused_update_limit: int = 0,
         allow_missing_label_with_zero_weight: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        super().__init__(
-            process_group=process_group,
-            fuse_state_tensors=fuse_state_tensors,
-            *args,
-            **kwargs,
-        )
+        super().__init__(process_group=process_group, *args, **kwargs)
 
         self._my_rank = my_rank
         self._n_tasks = n_tasks
@@ -347,11 +341,7 @@ class RecMetric(nn.Module, abc.ABC):
         # TODO(stellaya): consider to inherit from TorchMetrics.Metric or
         # TorchMetrics.MetricCollection.
         if (
-            compute_mode
-            in [
-                RecComputeMode.FUSED_TASKS_COMPUTATION,
-                RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
-            ]
+            compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION
             and fused_update_limit > 0
         ):
             raise ValueError(
@@ -386,10 +376,7 @@ class RecMetric(nn.Module, abc.ABC):
                 f"Local window size must be larger than batch size. Got local window size {self._window_size} and batch size {self._batch_size}."
             )
 
-        if compute_mode in [
-            RecComputeMode.FUSED_TASKS_COMPUTATION,
-            RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
-        ]:
+        if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
             task_per_metric = len(self._tasks)
             self._tasks_iter = self._fused_tasks_iter
         else:
@@ -398,11 +385,7 @@ class RecMetric(nn.Module, abc.ABC):
 
         for task_config in (
             [self._tasks]
-            if compute_mode
-            in [
-                RecComputeMode.FUSED_TASKS_COMPUTATION,
-                RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
-            ]
+            if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION
             else self._tasks
         ):
             # pyre-ignore
@@ -411,16 +394,13 @@ class RecMetric(nn.Module, abc.ABC):
             # according to https://github.com/python/mypy/issues/3048.
             # pyre-fixme[45]: Cannot instantiate abstract class `RecMetricCoputation`.
             metric_computation = self._computation_class(
-                my_rank=my_rank,
-                batch_size=batch_size,
-                n_tasks=task_per_metric,
-                window_size=self._window_size,
-                compute_on_all_ranks=compute_on_all_ranks,
-                should_validate_update=self._should_validate_update,
-                fuse_state_tensors=(
-                    compute_mode == RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION
-                ),
-                process_group=process_group,
+                my_rank,
+                batch_size,
+                task_per_metric,
+                self._window_size,
+                compute_on_all_ranks,
+                self._should_validate_update,
+                process_group,
                 **{**kwargs, **self._get_task_kwargs(task_config)},
             )
             required_inputs = self._get_task_required_inputs(task_config)
@@ -547,10 +527,7 @@ class RecMetric(nn.Module, abc.ABC):
         **kwargs: Dict[str, Any],
     ) -> None:
         with torch.no_grad():
-            if self._compute_mode in [
-                RecComputeMode.FUSED_TASKS_COMPUTATION,
-                RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
-            ]:
+            if self._compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
                 task_names = [task.name for task in self._tasks]
 
                 if not isinstance(predictions, torch.Tensor):

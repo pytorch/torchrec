@@ -291,10 +291,7 @@ def rec_metric_value_test_helper(
             labels, predictions, weights, _ = parse_task_model_outputs(
                 tasks, model_outs[i]
             )
-            if target_compute_mode in [
-                RecComputeMode.FUSED_TASKS_COMPUTATION,
-                RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
-            ]:
+            if target_compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
                 labels = torch.stack(list(labels.values()))
                 predictions = torch.stack(list(predictions.values()))
                 weights = torch.stack(list(weights.values()))
