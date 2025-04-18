@@ -24,7 +24,7 @@ from torchrec.metrics.rec_metric import (
 def compute_gauc_3d(
     predictions: torch.Tensor,
     labels: torch.Tensor,
-    num_candidates: torch.Tensor,
+    weights: torch.Tensor,
 ) -> Dict[str, torch.Tensor]:
     """Both predictions and labels are 3-d tensors in shape [n_task, n_group, n_sample]."""
 
@@ -34,7 +34,7 @@ def compute_gauc_3d(
     pre_arange = torch.arange(max_len, device=predictions.device)
 
     with record_function("## gauc_argsort ##"):
-        sorted_indices = torch.argsort(predictions, descending=True, dim=-1)
+        sorted_indices = torch.argsort(predictions, dim=-1)
     task_indices = (
         pre_arange[:n_task][:, None, None]
         .expand(n_task, n_group, n_sample)
@@ -51,28 +51,26 @@ def compute_gauc_3d(
     sorted_labels = labels[task_indices, group_indices, sample_indices].view(
         n_task, n_group, n_sample
     )
+    sorted_weights = weights[task_indices, group_indices, sample_indices].view(
+        n_task, n_group, n_sample
+    )
 
     with record_function("## gauc_calculation ##"):
-        num_sample = num_candidates[None, :].expand(n_task, n_group)
-        # Count number of padding zeros.
-        num_zeros = (n_sample - num_candidates)[None, :, None].expand(
-            n_task, n_group, n_sample
-        )  # [n_task, n_group, n_sample]
-        # This assumes the labels are binary.
-        num_zeros = (sorted_labels != 0) * num_zeros
-        rank = torch.flip(pre_arange[:n_sample] + 1, [0])[None, None, :].expand(
-            n_task, n_group, n_sample
-        )
-        positive_rank = sorted_labels * rank - num_zeros  # [n_task, n_group, n_sample]
-        num_positive = sorted_labels.sum(-1)  # [n_task, n_group]
+        pos_mask = sorted_labels
+        neg_mask = 1 - sorted_labels
 
-        # AUC is calcuated as (sum{positive_ranks} - num{positive_pairs}) /
-        # (num_positive * num_negative).
-        numerator = torch.sum(positive_rank, -1) - (
-            num_positive * (num_positive + 1) / 2
-        )
-        denominator = num_positive * (num_sample - num_positive)
-        auc = numerator / (denominator + 1e-10)  # [n_task, n_group]
+        # cumulative negative *weight* that appear **before** each position
+        cum_neg_weight = torch.cumsum(sorted_weights * neg_mask, dim=-1)
+
+        # contribution of every positive example: w_pos * (sum w_neg ranked lower)
+        contrib = pos_mask * sorted_weights * cum_neg_weight
+        numerator = contrib.sum(-1)  # [n_task, n_group]
+
+        w_pos = (pos_mask * sorted_weights).sum(-1)  # [n_task, n_group]
+        w_neg = (neg_mask * sorted_weights).sum(-1)  # [n_task, n_group]
+        denominator = w_pos * w_neg
+
+        auc = numerator / (denominator + 1e-10)
 
     # Skip identical prediction sessions.
     identical_prediction_mask = ~(
@@ -85,7 +83,7 @@ def compute_gauc_3d(
         )
     )
     # Skip identical label(all 0s/1s) sessions.
-    identical_label_mask = (num_positive >= 1) * (num_positive < num_sample)
+    identical_label_mask = (w_pos > 0) & (w_neg > 0)
     auc_mask = identical_label_mask * identical_prediction_mask
     auc *= auc_mask
     num_effective_samples = auc_mask.sum(-1)  # [n_task]
@@ -104,7 +102,7 @@ def to_3d(
 def get_auc_states(
     labels: torch.Tensor,
     predictions: torch.Tensor,
-    weights: Optional[torch.Tensor],
+    weights: torch.Tensor,
     num_candidates: torch.Tensor,
 ) -> Dict[str, torch.Tensor]:
 
@@ -112,15 +110,17 @@ def get_auc_states(
     max_length = int(num_candidates.max().item())
     predictions_perm = predictions.permute(1, 0)
     labels_perm = labels.permute(1, 0)
+    weights_perm = weights.permute(1, 0)
     predictions_3d = to_3d(predictions_perm, num_candidates, max_length).permute(
         2, 0, 1
     )
     labels_3d = to_3d(labels_perm, num_candidates, max_length).permute(2, 0, 1)
+    weights_3d = to_3d(weights_perm, num_candidates, max_length).permute(2, 0, 1)
 
     return compute_gauc_3d(
         predictions_3d,
         labels_3d,
-        num_candidates,
+        weights_3d,
     )
 
 
@@ -175,9 +175,9 @@ class GAUCMetricComputation(RecMetricComputation):
         num_candidates: torch.Tensor,
         **kwargs: Dict[str, Any],
     ) -> None:
-        if predictions is None or labels is None:
+        if predictions is None or weights is None:
             raise RecMetricException(
-                "Inputs 'predictions' and 'labels' should not be None for GAUCMetricComputation update"
+                "Inputs 'predictions' and 'weights' should not be None for GAUCMetricComputation update"
             )
 
         states = get_auc_states(labels, predictions, weights, num_candidates)
