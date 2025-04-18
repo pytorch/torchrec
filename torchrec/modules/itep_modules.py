@@ -548,7 +548,10 @@ class RowwiseShardedITEPModule(GenericITEPModule):
         shard_offsets: List[int] = [0]
 
         for rank in range(num_devices):
-            if sharding_type == ShardingType.ROW_WISE.value:
+            if (
+                sharding_type == ShardingType.ROW_WISE.value
+                or sharding_type == ShardingType.TABLE_ROW_WISE.value
+            ):
                 if rank < last_rank:
                     local_row: int = block_size
                 elif rank == last_rank:
