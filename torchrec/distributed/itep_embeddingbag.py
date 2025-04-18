@@ -123,6 +123,7 @@ class ShardedITEPEmbeddingBagCollection(
             lookups=grouped_lookups[ShardingTypeGroup.CW_GROUP],
             pruning_interval=module._itep_module.pruning_interval,
             enable_pruning=module._itep_module.enable_pruning,
+            pg=env.process_group,
         )
         self._rowwise_itep_module: RowwiseShardedITEPModule = RowwiseShardedITEPModule(
             table_name_to_sharding_type=self.table_name_to_sharding_type,
@@ -132,6 +133,7 @@ class ShardedITEPEmbeddingBagCollection(
             lookups=grouped_lookups[ShardingTypeGroup.RW_GROUP],
             pruning_interval=module._itep_module.pruning_interval,
             enable_pruning=module._itep_module.enable_pruning,
+            pg=env.process_group,
         )
 
     def prefetch(
@@ -389,6 +391,7 @@ class ShardedITEPEmbeddingCollection(
             lookups=grouped_lookups[ShardingTypeGroup.CW_GROUP],
             pruning_interval=module._itep_module.pruning_interval,
             enable_pruning=module._itep_module.enable_pruning,
+            pg=env.process_group,
         )
         self._rowwise_itep_module: RowwiseShardedITEPModule = RowwiseShardedITEPModule(
             table_name_to_unpruned_hash_sizes=grouped_table_unpruned_size_map[
@@ -398,6 +401,7 @@ class ShardedITEPEmbeddingCollection(
             pruning_interval=module._itep_module.pruning_interval,
             table_name_to_sharding_type=self.table_name_to_sharding_type,
             enable_pruning=module._itep_module.enable_pruning,
+            pg=env.process_group,
         )
 
     # pyre-ignore
