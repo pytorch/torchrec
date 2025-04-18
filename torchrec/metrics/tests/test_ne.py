@@ -117,24 +117,10 @@ class NEMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_ne_fused_tasks(self) -> None:
+    def test_ne_fused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=NEMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-            test_clazz=TestNEMetric,
-            metric_name=NEMetricTest.task_name,
-            task_names=["t1", "t2", "t3"],
-            fused_update_limit=0,
-            compute_on_all_ranks=False,
-            should_validate_update=False,
-            world_size=WORLD_SIZE,
-            entry_point=metric_test_helper,
-        )
-
-    def test_ne_fused_tasks_and_states(self) -> None:
-        rec_metric_value_test_launcher(
-            target_clazz=NEMetric,
-            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
             test_clazz=TestNEMetric,
             metric_name=NEMetricTest.task_name,
             task_names=["t1", "t2", "t3"],
@@ -207,24 +193,10 @@ class NEMetricTest(unittest.TestCase):
             entry_point=self._logloss_metric_test_helper,
         )
 
-    def test_logloss_fused_tasks(self) -> None:
+    def test_logloss_fused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=NEMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-            metric_name="logloss",
-            test_clazz=TestLoglossMetric,
-            task_names=["t1", "t2", "t3"],
-            fused_update_limit=0,
-            compute_on_all_ranks=False,
-            should_validate_update=False,
-            world_size=WORLD_SIZE,
-            entry_point=self._logloss_metric_test_helper,
-        )
-
-    def test_logloss_fused_tasks_and_states(self) -> None:
-        rec_metric_value_test_launcher(
-            target_clazz=NEMetric,
-            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
             metric_name="logloss",
             test_clazz=TestLoglossMetric,
             task_names=["t1", "t2", "t3"],

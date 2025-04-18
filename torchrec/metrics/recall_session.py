@@ -235,10 +235,7 @@ class RecallSessionMetric(RecMetric):
         process_group: Optional[dist.ProcessGroup] = None,
         **kwargs: Any,
     ) -> None:
-        if compute_mode in [
-            RecComputeMode.FUSED_TASKS_COMPUTATION,
-            RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
-        ]:
+        if compute_mode == RecComputeMode.FUSED_TASKS_COMPUTATION:
             raise RecMetricException(
                 "Fused computation is not supported for recall session-level metrics"
             )
