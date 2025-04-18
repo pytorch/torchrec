@@ -10,6 +10,7 @@
 #!/usr/bin/env python3
 
 import abc
+import inspect
 import itertools
 import math
 from collections import defaultdict, deque
@@ -141,9 +142,11 @@ class RecMetricComputation(Metric, abc.ABC):
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        metric_init_signature = inspect.signature(Metric.__init__)
+        if "fuse_state_tensors" in metric_init_signature.parameters:
+            kwargs["fuse_state_tensors"] = fuse_state_tensors
         super().__init__(
             process_group=process_group,
-            fuse_state_tensors=fuse_state_tensors,
             *args,
             **kwargs,
         )
