@@ -535,6 +535,10 @@ class BaseForward(Generic[TForwardContext]):
 
 
 class PipelinedForward(BaseForward[TrainPipelineContext]):
+    """
+    This pipeline is used in TrainPipelineSparseDist
+    """
+
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert (
@@ -568,6 +572,10 @@ class PipelinedForward(BaseForward[TrainPipelineContext]):
 
 
 class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
+    """
+    This pipeline is used in TrainPipelineSparseDist
+    """
+
     def __call__(
         self,
         # pyre-ignore
@@ -642,6 +650,10 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
 
 
 class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
+    """
+    This pipeline is used in PrefetchTrainPipelineSparseDist
+    """
+
     def __init__(
         self,
         name: str,
