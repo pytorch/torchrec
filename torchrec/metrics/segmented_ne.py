@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import logging
 from typing import Any, Dict, List, Optional, Type
 
 import torch
@@ -20,6 +21,8 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
 )
 
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 PREDICTIONS = "predictions"
 LABELS = "labels"
@@ -346,3 +349,8 @@ class SegmentedNEMetric(RecMetric):
         else:
             # pyre-ignore[6]
             self._required_inputs.add(kwargs["grouping_keys"])
+        if self._compute_mode == RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION:
+            logging.warning(
+                f"compute_mode FUSED_TASKS_AND_STATES_COMPUTATION can't support {self._namespace} yet "
+                "because its states are not 1D Tensors. Only FUSED_TASKS_COMPUTATION will take effect."
+            )
