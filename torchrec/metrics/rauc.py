@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import logging
 from functools import partial
 from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Type
 
@@ -22,6 +23,8 @@ from torchrec.metrics.rec_metric import (
     RecMetricException,
 )
 
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 PREDICTIONS = "predictions"
 LABELS = "labels"
@@ -448,3 +451,8 @@ class RAUCMetric(RecMetric):
         )
         if kwargs.get("grouped_rauc"):
             self._required_inputs.add(GROUPING_KEYS)
+        if self._compute_mode == RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION:
+            logging.warning(
+                f"compute_mode FUSED_TASKS_AND_STATES_COMPUTATION can't support {self._namespace} yet "
+                "because its states are not 1D Tensors. Only FUSED_TASKS_COMPUTATION will take effect."
+            )

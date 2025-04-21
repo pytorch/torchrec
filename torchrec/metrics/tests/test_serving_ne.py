@@ -78,7 +78,7 @@ class ServingNEMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_ne_fused(self) -> None:
+    def test_ne_fused_tasks(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=ServingNEMetric,
             target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
@@ -92,7 +92,21 @@ class ServingNEMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_ne_update_fused(self) -> None:
+    def test_ne_fused_tasks_and_states(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=ServingNEMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
+            test_clazz=TestNEMetric,
+            metric_name=ServingNEMetricTest.task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
+
+    def test_ne_update_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=ServingNEMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
