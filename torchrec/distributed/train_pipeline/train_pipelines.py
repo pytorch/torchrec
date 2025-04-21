@@ -345,6 +345,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
     """
 
+    # The PipelinedForward class that is used in _rewrite_model
+    _pipelined_forward_type = PipelinedForward
+
     def __init__(
         self,
         model: torch.nn.Module,
@@ -413,7 +416,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._model_fwd: Callable[[Optional[In]], Tuple[torch.Tensor, Out]] = (
             custom_model_fwd if custom_model_fwd else model
         )
-        self._pipelined_forward_type = PipelinedForward
 
         # DEPRECATED FIELDS
         self._batch_i: Optional[In] = None
@@ -423,7 +425,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
     def detach(self) -> torch.nn.Module:
         """
-        Detaches the model from sparse data dist (SDD) pipeline.
+        Detaches the model from sparse data dist (SDD) pipeline. A user might want to get
+        the original model back after training. The original model.forward was previously
+        modified by the train pipeline. for more please see:
+        https://github.com/pytorch/torchrec/pull/2076
+
         To use the pipeline after detaching the model, pipeline.attach(model)
         needs to be called.
         Inflight batches are kept so pipeline.progress(data_iter) can be resumed normally.
@@ -445,6 +451,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
     def attach(
         self, model: Optional[torch.nn.Module] = None, sparse_dist: bool = True
     ) -> None:
+        """
+        should be used with detach function. these functions should only be used from user code,
+        when user want to switch the train pipeline. for more please see:
+        https://github.com/pytorch/torchrec/pull/2076
+        """
         if model:
             self._model = model
 
@@ -463,6 +474,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._pipelined_postprocs = []
 
     def _set_module_context(self, context: TrainPipelineContext) -> None:
+        """
+        pipelined modules are the TorchRec's sparse modules like shardedEBC, shardedEC, etc.
+        the forward function is swapped with a PipelinedForward in the _rewrite_model call.
+        The PipelinedForward needs a context to correctly perform the forward behavior.
+        please check PipelinedForward for details.
+        """
         for module in self._pipelined_modules:
             module.forward.set_context(context)
 
@@ -471,6 +488,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             postproc_module.set_context(context)
 
     def enqueue_batch(self, dataloader_iter: Iterator[In]) -> bool:
+        """
+        load a data batch from dataloader, and copy it from cpu to gpu
+        also create the context for this batch.
+        """
         batch, context = self.copy_batch_to_gpu(dataloader_iter)
         if batch is None:
             return False
@@ -481,30 +502,50 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         return True
 
     def dequeue_batch(self) -> None:
+        """
+        remove a processed batch from the batch queue, also set the module context if applicable
+        """
         self.batches.popleft()
         self.contexts.popleft()
-        # update PipelineForwards context to match next forward pass
+
+        # update PipelinedForward context to match next forward pass
         if len(self.batches) >= 1:
             self._set_module_context(self.contexts[0])
 
     def fill_pipeline(self, dataloader_iter: Iterator[In]) -> None:
-        # pipeline is already filled
+        """
+        This function is called in self.progress (one of the main APIs for running train pipeline)
+        Here we assume the max pipelined len(batches) == 2 (capacity), which will be the most common
+        scenario during the full training job, when this function is effectively doing nothing.
+        There would only be two other scenarios:
+        len(batches) == 0:
+            initialize the pipeline, fill in two batches, start input_dist for the first batch.
+        len(batches) == 1:
+            dataloader_iter stops, the last batch, do nothing
+        """
+
+        # pipeline is already filled with max capacity (2)
         if len(self.batches) >= 2:
             return
-        # executes last batch in pipeline
+
+        # executes last batch in pipeline, when there is only one batch in the pipeline
+        # TODO: this _execute_all_batches doesn't really work here D43546239. it will
+        # just throw an exception at copy_to_gpu when the dataloader is exhausted
         if self.batches and self._execute_all_batches:
             return
 
-        # batch i
+        # batch i, data (batch) and context
         if not self.enqueue_batch(dataloader_iter):
             return
 
+        # modify the (sharded) sparse module forward, and invoke the first part of input_dist
         self._init_pipelined_modules(
             # pyre-ignore [6]
             self.batches[0],
             self.contexts[0],
-            PipelinedForward,
+            self._pipelined_forward_type,
         )
+        # doing the second part of input_dist, the first part is invoked in _init_pipelined_modules
         self.wait_sparse_data_dist(self.contexts[0])
 
         # batch i+1
@@ -520,10 +561,22 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             torch.sum(losses, dim=0).backward()
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        """
+        For TrainPipelineSparseDist, we assume the max pipelined batches == 3 (capacity):
+            batches[0]: current batch, for emb_lookup, output_dist, and fwd/bwd/opt (expecting input_dist)
+            batches[1]: next batch, for input_dist (expecting copied to device)
+            batches[2]: i+2 batch, for copy_batch_to_gpu (expecting non-exhausted dataloader iter)
+        """
+
+        # attach the model just in case the user forgets to call it, especially when the user
+        # pauses the pipeline.progress and detach the model for other purpose.
         if not self._model_attached:
             self.attach(self._model)
 
+        # fill the pipeline is only needed for the beginning when the pipeline (batches) is empty
         self.fill_pipeline(dataloader_iter)
+
+        # here is the expected stop after exhausting all batches
         if not self.batches:
             raise StopIteration
 
@@ -534,12 +587,15 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with record_function("## zero_grad ##"):
                 self._optimizer.zero_grad()
 
+        # wait for batches[0] being available on device, this should always be completed since
+        # the input_dist of batches[0] has be invoked in previous iter. TODO: fact check
         self._wait_for_batch()
 
         if len(self.batches) >= 2:
+            # invoke splits all_to_all comms (first part of input_dist)
             self.start_sparse_data_dist(self.batches[1], self.contexts[1])
 
-        # batch i+2
+        # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here
         self.enqueue_batch(dataloader_iter)
 
         # forward
@@ -547,6 +603,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             losses, output = self._model_fwd(self.batches[0])
 
         if len(self.batches) >= 2:
+            # invoke data (values, lengths, etc.) all_to_all comms (second part of input_dist)
             self.wait_sparse_data_dist(self.contexts[1])
 
         if self._model.training:
@@ -768,6 +825,9 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             training.  If False, will update dense optimizer as soon as gradients available (naive "Semi-Sync)
     """
 
+    # The PipelinedForward class that is used in _rewrite_model
+    _pipelined_forward_type = EmbeddingPipelinedForward  # pyre-ignore
+
     def __init__(
         self,
         model: torch.nn.Module,
@@ -793,7 +853,6 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
         )
-        self._pipelined_forward_type = EmbeddingPipelinedForward
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
         logger.debug(f"Starting semi-sync run at batch: {self._start_batch}")
@@ -835,7 +894,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             self.batches[0],
             self.contexts[0],
             # pyre-ignore [6]
-            EmbeddingPipelinedForward,
+            self._pipelined_forward_type,
         )
         self.wait_sparse_data_dist(self.contexts[0])
         self._validate_optimizer()
@@ -865,6 +924,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         self._optimizer.step()
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        # attach the model just in case the user forgets to call it, especially when the user
+        # pauses the pipeline.progress and detach the model for other purpose.
         if not self._model_attached:
             self.attach(self._model)
 
@@ -1074,6 +1135,9 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
     """
 
+    # The PipelinedForward class that is used in _rewrite_model
+    _pipelined_forward_type = PrefetchPipelinedForward  # pyre-ignore
+
     def __init__(
         self,
         model: torch.nn.Module,
@@ -1126,7 +1190,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             self._batch_i,
             self._context,
             # pyre-ignore
-            PrefetchPipelinedForward,
+            self._pipelined_forward_type,
         )
         self._start_sparse_data_dist(self._batch_i)
         self._wait_sparse_data_dist()
@@ -1228,6 +1292,9 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
     """
 
+    # The PipelinedForward class that is used in _rewrite_model
+    _pipelined_forward_type = PipelinedForward
+
     def __init__(
         self,
         model: torch.nn.Module,
@@ -1265,7 +1332,7 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                 # pyre-ignore
                 self.batches[0],
                 self.contexts[0],
-                PipelinedForward,
+                self._pipelined_forward_type,
             )
             self.start_sparse_data_dist(self.batches[0], self.contexts[0])
             self.wait_sparse_data_dist(self.contexts[0])
@@ -1653,6 +1720,8 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
         )
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        # attach the model just in case the user forgets to call it, especially when the user
+        # pauses the pipeline.progress and detach the model for other purpose.
         if not self._model_attached:
             self.attach(self._model)
 

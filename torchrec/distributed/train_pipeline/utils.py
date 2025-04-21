@@ -535,6 +535,10 @@ class BaseForward(Generic[TForwardContext]):
 
 
 class PipelinedForward(BaseForward[TrainPipelineContext]):
+    """
+    This pipeline is used in TrainPipelineSparseDist
+    """
+
     # pyre-ignore [2, 24]
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert (
@@ -568,6 +572,10 @@ class PipelinedForward(BaseForward[TrainPipelineContext]):
 
 
 class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
+    """
+    This pipeline is used in TrainPipelineSemiSync
+    """
+
     def __call__(
         self,
         # pyre-ignore
@@ -593,8 +601,11 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             )
             ctx.record_stream(cur_stream)
         awaitable = self._context.embedding_a2a_requests.pop(self._name)
+        # in case of MC modules
+        is_mc_module: bool = isinstance(awaitable, Iterable)
         remapped_kjts: Optional[KeyedJaggedTensor] = None
-        if isinstance(awaitable, Iterable):
+
+        if is_mc_module:
             embeddings = awaitable[0].wait()
             remapped_kjts = awaitable[1].wait()
         else:
@@ -604,6 +615,7 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             )  # trigger awaitable manually for type checking
         tensors = []
         detached_tensors = []
+        # in case of EC, embeddings are Dict[str, JaggedTensor]
         if isinstance(embeddings, Dict):
             for jt in embeddings.values():
                 assert isinstance(jt, JaggedTensor)
@@ -617,6 +629,7 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             self._context.embedding_features.append(list(embeddings.keys()))
             self._context.detached_embedding_tensors.append(detached_tensors)
         else:
+            # in case of EBC, embeddings are KeyedTensor
             assert isinstance(embeddings, KeyedTensor)
             embeddings.record_stream(cur_stream)
             tensor = embeddings.values()
@@ -626,22 +639,28 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             tensors.append(tensor)
             detached_tensors.append(detached_tensor)
             self._context.embedding_tensors.append(tensors)
-            # KeyedTensor is returned by EmbeddingBagCollections and its variants
-            # KeyedTensor holds dense data from multiple features and .values()
-            # returns a single concatenated dense tensor. To ensure that
-            # context.embedding_tensors[i] has the same length as
-            # context.embedding_features[i], we pass in a list with a single item:
-            # a list containing all the embedding feature names.
+            """
+            KeyedTensor is returned by EmbeddingBagCollections and its variants
+            KeyedTensor holds dense data from multiple features and .values()
+            returns a single concatenated dense tensor. To ensure that
+            context.embedding_tensors[i] has the same length as
+            context.embedding_features[i], we pass in a list with a single item:
+            a list containing all the embedding feature names.
+            """
             self._context.embedding_features.append([list(embeddings.keys())])
             self._context.detached_embedding_tensors.append(detached_tensors)
 
-        if isinstance(awaitable, Iterable):
+        if is_mc_module:
             return (LazyNoWait(embeddings), LazyNoWait(remapped_kjts))
         else:
             return LazyNoWait(embeddings)
 
 
 class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
+    """
+    This pipeline is used in PrefetchTrainPipelineSparseDist
+    """
+
     def __init__(
         self,
         name: str,
@@ -811,10 +830,13 @@ def _start_data_dist(
 
     for module in pipelined_modules:
         forward = module.forward
-        assert (
-            isinstance(forward, PipelinedForward)
-            or isinstance(forward, PrefetchPipelinedForward)
-            or isinstance(forward, EmbeddingPipelinedForward)
+        assert isinstance(
+            forward,
+            (
+                PipelinedForward,
+                PrefetchPipelinedForward,
+                EmbeddingPipelinedForward,
+            ),
         )
 
         # Retrieve argument for the input_dist of EBC
