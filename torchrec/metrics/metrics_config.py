@@ -81,8 +81,12 @@ class RecComputeMode(Enum):
     """This Enum lists the supported computation modes for RecMetrics.
 
     FUSED_TASKS_COMPUTATION indicates that RecMetrics will fuse the computation
-    for multiple tasks of the same metric. This can be used by modules where the
-    outputs of all the tasks are vectorized.
+        for multiple tasks of the same metric. This can be used by modules where the
+        outputs of all the tasks are vectorized.
+    FUSED_TASKS_AND_STATES_COMPUTATION fuse both the tasks (same as FUSED_TASKS_COMPUTATION)
+        and states (e.g. calibration_num and calibration_denom for caliration) of the
+        same metric. This currently only supports 1D state tensors (e.g. when all state
+        tensors are of the same (n_tasks) shape).
     """
 
     FUSED_TASKS_COMPUTATION = 1

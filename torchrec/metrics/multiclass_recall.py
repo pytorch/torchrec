@@ -7,9 +7,11 @@
 
 # pyre-strict
 
+import logging
 from typing import Any, cast, Dict, List, Optional, Type
 
 import torch
+from torchrec.metrics.metrics_config import RecComputeMode
 from torchrec.metrics.metrics_namespace import MetricName, MetricNamespace, MetricPrefix
 
 from torchrec.metrics.rec_metric import (
@@ -18,6 +20,9 @@ from torchrec.metrics.rec_metric import (
     RecMetricComputation,
     RecMetricException,
 )
+
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def compute_true_positives_at_k(
@@ -154,3 +159,11 @@ class MulticlassRecallMetricComputation(RecMetricComputation):
 class MulticlassRecallMetric(RecMetric):
     _namespace: MetricNamespace = MetricNamespace.MULTICLASS_RECALL
     _computation_class: Type[RecMetricComputation] = MulticlassRecallMetricComputation
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if self._compute_mode == RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION:
+            logging.warning(
+                f"compute_mode FUSED_TASKS_AND_STATES_COMPUTATION can't support {self._namespace} yet "
+                "because its states are not 1D Tensors. Only FUSED_TASKS_COMPUTATION will take effect."
+            )

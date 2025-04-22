@@ -12,8 +12,12 @@ from typing import Dict, Optional, Union
 
 import torch
 from torch import no_grad
-from torchrec.metrics.metrics_config import RecTaskInfo, SessionMetricDef
 
+from torchrec.metrics.metrics_config import (
+    RecComputeMode,
+    RecTaskInfo,
+    SessionMetricDef,
+)
 from torchrec.metrics.precision_session import PrecisionSessionMetric
 from torchrec.metrics.rec_metric import RecMetricException
 
@@ -232,6 +236,37 @@ class PrecisionSessionValueTest(unittest.TestCase):
                 my_rank=5,
                 batch_size=100,
                 tasks=[task_info2],
+            )
+
+    def test_compute_mode_exception(self) -> None:
+        task_info = RecTaskInfo(
+            name="Task1",
+            label_name="label1",
+            prediction_name="prediction1",
+            weight_name="weight1",
+        )
+        with self.assertRaisesRegex(
+            RecMetricException,
+            "Fused computation is not supported for precision session-level metrics",
+        ):
+            PrecisionSessionMetric(
+                world_size=1,
+                my_rank=0,
+                batch_size=100,
+                tasks=[task_info],
+                compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            )
+
+        with self.assertRaisesRegex(
+            RecMetricException,
+            "Fused computation is not supported for precision session-level metrics",
+        ):
+            PrecisionSessionMetric(
+                world_size=1,
+                my_rank=5,
+                batch_size=100,
+                tasks=[task_info],
+                compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
             )
 
     def test_tasks_input_propagation(self) -> None:
