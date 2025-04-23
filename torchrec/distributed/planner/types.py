@@ -175,6 +175,78 @@ class CustomTopologyData:
         return key in self._data
 
 
+class CollectiveType(Enum):
+    ALL_TO_ALL = "all_to_all"
+    REDUCE_SCATTER = "reduce_scatter"
+    ALL_GATHER = "all_gather"
+    ALL_REDUCE = "all_reduce"
+
+
+class GeneralizedCommsBandwidth(abc.ABC):
+    @abc.abstractmethod
+    def get_bw(
+        self,
+        local_world_size: int,
+        world_size: int,
+        collective_type: CollectiveType,
+    ) -> float:
+        """
+        Get Bandwidth Corresponding to a collective communication where involving world_size ranks
+            spread equally across world_size / local_world_size nodes
+        """
+        pass
+
+    @property
+    @abc.abstractmethod
+    def intra_host_bw(self) -> float:
+        """this must be implemented for backward compatibility"""
+        pass
+
+    @property
+    @abc.abstractmethod
+    def inter_host_bw(self) -> float:
+        """this must be implemented for backward compatibility"""
+        pass
+
+
+class BasicCommsBandwidths(GeneralizedCommsBandwidth):
+    def __init__(
+        self,
+        inter_host_bw: float = CROSS_NODE_BANDWIDTH,
+        intra_host_bw: float = INTRA_NODE_BANDWIDTH,
+    ) -> None:
+        self.name = "BasicCommsBandwidths"
+        self._inter_host_bw = inter_host_bw
+        self._intra_host_bw = intra_host_bw
+
+    def __str__(self) -> str:
+        return (
+            self.name
+            + f": inter_host_bw={self.inter_host_bw}, intra_host_bw={self.intra_host_bw}"
+        )
+
+    @property
+    def inter_host_bw(self) -> float:
+        return self._inter_host_bw
+
+    @property
+    def intra_host_bw(self) -> float:
+        return self._intra_host_bw
+
+    def get_bw(
+        self,
+        local_world_size: int,
+        world_size: int,
+        collective_type: CollectiveType,
+    ) -> float:
+        if collective_type == CollectiveType.ALL_REDUCE:
+            return self.inter_host_bw * local_world_size  # 1 NIC per GPU
+        if world_size <= local_world_size:
+            return self.intra_host_bw
+        else:
+            return self.inter_host_bw
+
+
 class Topology:
     def __init__(
         self,
@@ -192,9 +264,14 @@ class Topology:
         custom_topology_data: Optional[CustomTopologyData] = None,
         weighted_feature_bwd_compute_multiplier: float = WEIGHTED_FEATURE_BWD_COMPUTE_MULTIPLIER,
         uneven_sharding_perf_multiplier: float = 1.0,
+        generalized_comms_bandwidths: Optional[GeneralizedCommsBandwidth] = None,
     ) -> None:
         """
         Representation of a network of devices in a cluster.
+
+        If a GeneralizedCommsBandwidth is passed to generalized_comms_bandwidths, this object will
+            take precedence over the formulation using only intra_host_bw and inter_host_bw.
+            If it's not passed, we will create a BasicCommsBandwidths object with the provided bandwidths.
         """
         # validate input
         assert compute_device in [
@@ -241,8 +318,15 @@ class Topology:
         self._hbm_mem_bw = hbm_mem_bw
         self._ddr_mem_bw = ddr_mem_bw
         self._hbm_to_ddr_mem_bw = hbm_to_ddr_mem_bw
-        self._intra_host_bw = intra_host_bw
-        self._inter_host_bw = inter_host_bw
+
+        self._comms_bandwidths: GeneralizedCommsBandwidth = (
+            generalized_comms_bandwidths
+            if generalized_comms_bandwidths is not None
+            else BasicCommsBandwidths(
+                intra_host_bw=intra_host_bw, inter_host_bw=inter_host_bw
+            )
+        )
+
         self._bwd_compute_multiplier = bwd_compute_multiplier
         self._custom_topology_data = custom_topology_data
         self._weighted_feature_bwd_compute_multiplier = (
@@ -280,11 +364,15 @@ class Topology:
 
     @property
     def intra_host_bw(self) -> float:
-        return self._intra_host_bw
+        return self._comms_bandwidths.intra_host_bw
 
     @property
     def inter_host_bw(self) -> float:
-        return self._inter_host_bw
+        return self._comms_bandwidths.inter_host_bw
+
+    @property
+    def comms_bandwidths(self) -> GeneralizedCommsBandwidth:
+        return self._comms_bandwidths
 
     @property
     def bwd_compute_multiplier(self) -> float:
@@ -305,8 +393,7 @@ class Topology:
         for idx, device in enumerate(self._devices):
             topology_repr += f"\tdevice {idx} {device}\n"
         topology_repr += f"local_world_size={self._local_world_size} \n"
-        topology_repr += f"intra_host_bw={self._intra_host_bw} \n"
-        topology_repr += f"inter_host_bw={self._inter_host_bw} \n"
+        topology_repr += str(self._comms_bandwidths) + "\n"
         return topology_repr
 
 
