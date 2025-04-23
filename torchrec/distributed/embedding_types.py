@@ -11,7 +11,18 @@ import abc
 import copy
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Any, Dict, Generic, Iterator, List, Optional, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import EmbeddingLocation
@@ -398,6 +409,16 @@ class ShardedEmbeddingModule(
             lookup.train(mode)
 
         return self
+
+    @property
+    def unsharded_module_type(self) -> Type[nn.Module]:
+        """
+        As this is the generic ShardedEmbeddingModule class, simply
+        return the generic nn.Module type. In the inherited classes of
+        ShardedEmbeddingModule, the specific unsharded module type will
+        be returned.
+        """
+        return nn.Module
 
 
 M = TypeVar("M", bound=nn.Module)

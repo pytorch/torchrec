@@ -1034,6 +1034,19 @@ class ShardedModule(
         for key, _ in self.named_parameters(prefix):
             yield key
 
+    @property
+    @abc.abstractmethod
+    def unsharded_module_type(self) -> Type[nn.Module]:
+        """
+        This property is added as part of dynamic sharding implementation.
+
+        When resharding an already-sharded module wrapped in DMP, the unsharded
+        module type is needed to identify the proper sharder to reshard. This is
+        due to DistributedModelParellel (DMP) references module Sharders based
+        on the unsharded module type.
+        """
+        ...
+
 
 def get_tensor_size_bytes(t: torch.Tensor) -> int:
     b: int = t.numel() * t.element_size()

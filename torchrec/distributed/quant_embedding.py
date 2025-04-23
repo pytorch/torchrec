@@ -1320,6 +1320,10 @@ class ShardedQuantManagedCollisionEmbeddingCollection(ShardedQuantEmbeddingColle
         for fqn, _ in self.named_buffers():
             yield append_prefix(prefix, fqn)
 
+    @property
+    def unsharded_module_type(self) -> Type[QuantManagedCollisionEmbeddingCollection]:
+        return QuantManagedCollisionEmbeddingCollection
+
 
 class QuantManagedCollisionEmbeddingCollectionSharder(
     BaseQuantEmbeddingSharder[QuantManagedCollisionEmbeddingCollection]

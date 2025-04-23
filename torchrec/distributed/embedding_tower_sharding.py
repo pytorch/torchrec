@@ -438,6 +438,10 @@ class ShardedEmbeddingTower(
     def create_context(self) -> NullShardedModuleContext:
         return NullShardedModuleContext()
 
+    @property
+    def unsharded_module_type(self) -> Type[EmbeddingTower]:
+        return EmbeddingTower
+
 
 class ShardedEmbeddingTowerCollection(
     ShardedEmbeddingModule[
@@ -940,6 +944,10 @@ class EmbeddingTowerSharder(BaseEmbeddingSharder[EmbeddingTower]):
             else:
                 kjt_features.extend(config.feature_names)
         return kjt_features, wkjt_features
+
+    @property
+    def unsharded_module_type(self) -> Type[EmbeddingTowerCollection]:
+        return EmbeddingTowerCollection
 
 
 class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollection]):

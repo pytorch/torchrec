@@ -85,6 +85,10 @@ class ShardedFusedEmbeddingBagCollection(
                 # We need to ensure that a checkpoint from DDP and a checkpoint from a
                 # model parallel version are compatible.
 
+    @property
+    def unsharded_module_type(self) -> Type[FusedEmbeddingBagCollection]:
+        return FusedEmbeddingBagCollection
+
 
 class FusedEmbeddingBagCollectionSharder(
     BaseEmbeddingSharder[FusedEmbeddingBagCollection]

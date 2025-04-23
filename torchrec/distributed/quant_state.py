@@ -10,12 +10,13 @@
 import copy
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Dict, List, Mapping, Optional, Tuple, TypeVar, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Type, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
+from torch import nn
 from torch.distributed import _remote_device
 from torch.distributed._shard.sharded_tensor import (
     Shard,
@@ -366,6 +367,17 @@ class ShardedQuantEmbeddingModuleState(
             _unexpected_keys.remove(src_state_dict_name)
         missing_keys.extend(_missing_keys)
         unexpected_keys.extend(_unexpected_keys)
+
+    @property
+    def unsharded_module_type(self) -> Type[nn.Module]:
+        """
+        Since ShardedQuantEmbeddingModuleState is not exactly a sharded module
+        but rather a class to utilize generic helper functions. Returns generic
+        nn.Module type.
+        """
+
+        # TODO: Add test in TorchRec for using ShardedQuantEmbeddingModuleState
+        return nn.Module
 
 
 @dataclass
