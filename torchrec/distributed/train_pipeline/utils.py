@@ -600,6 +600,7 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
                 self._stream
             )
             ctx.record_stream(cur_stream)
+
         awaitable = self._context.embedding_a2a_requests.pop(self._name)
         # in case of MC modules
         is_mc_module: bool = isinstance(awaitable, Iterable)
@@ -613,6 +614,24 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             embeddings = (
                 awaitable.wait()
             )  # trigger awaitable manually for type checking
+
+        self.detach_embeddings(embeddings=embeddings, cur_stream=cur_stream)
+
+        if is_mc_module:
+            return (LazyNoWait(embeddings), LazyNoWait(remapped_kjts))
+        else:
+            return LazyNoWait(embeddings)
+
+    def detach_embeddings(
+        self,
+        embeddings: Union[Dict[str, JaggedTensor], KeyedTensor],
+        cur_stream: torch.Stream,
+    ) -> None:
+        """
+        detach the grad from embeddings so that the backward/opt of the embeddings
+        won't be invoked by loss.backward(). Instead, there is a dedicated embedding_backward
+        call in semi-sync pipeline progress.
+        """
         tensors = []
         detached_tensors = []
         # in case of EC, embeddings are Dict[str, JaggedTensor]
@@ -649,11 +668,6 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             """
             self._context.embedding_features.append([list(embeddings.keys())])
             self._context.detached_embedding_tensors.append(detached_tensors)
-
-        if is_mc_module:
-            return (LazyNoWait(embeddings), LazyNoWait(remapped_kjts))
-        else:
-            return LazyNoWait(embeddings)
 
 
 class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):

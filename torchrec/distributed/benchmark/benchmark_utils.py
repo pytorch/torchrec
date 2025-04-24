@@ -867,6 +867,7 @@ def benchmark_func(
                 profile_memory=True,
                 with_flops=True,
                 with_modules=True,
+                with_stack=False,  # usually we don't want to show the entire stack in the trace
                 on_trace_ready=trace_handler,
             ) as p:
                 for i in range(num_profiles):
