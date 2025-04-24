@@ -141,13 +141,10 @@ def create_test_initial_state_dict(
     return initial_state_dict
 
 
-def are_modules_identical(
-    module1: Union[EmbeddingBagCollection, ShardedEmbeddingBagCollection],
-    module2: Union[EmbeddingBagCollection, ShardedEmbeddingBagCollection],
+def are_sharded_ebc_modules_identical(
+    module1: ShardedEmbeddingBagCollection,
+    module2: ShardedEmbeddingBagCollection,
 ) -> None:
-    # Check if both modules have the same type
-    assert type(module1) is type(module2)
-
     # Check if both modules have the same parameters
     params1 = list(module1.named_parameters())
     params2 = list(module2.named_parameters())
@@ -169,6 +166,52 @@ def are_modules_identical(
     for buffer1, buffer2 in zip(buffers1, buffers2):
         assert buffer1[0] == buffer2[0]  # Check buffer names
         assert torch.allclose(buffer1[1], buffer2[1])  # Check buffer values
+
+    # Hard-coded attributes for EmbeddingBagCollection
+    attribute_list = [
+        "_module_fqn",
+        "_table_names",
+        "_pooling_type_to_rs_features",
+        "_output_dtensor",
+        "_sharding_types",
+        "_is_weighted",
+        "_embedding_names",
+        "_embedding_dims",
+        "_feature_splits",
+        "_features_order",
+        "_uncombined_embedding_names",
+        "_uncombined_embedding_dims",
+        "_has_mean_pooling_callback",
+        "_kjt_key_indices",
+        "_has_uninitialized_input_dist",
+        "_has_features_permute",
+        "_dim_per_key",  # Tensor
+        "_inverse_indices_permute_indices",  # Tensor
+        "_kjt_inverse_order",  # Tensor
+        "_kt_key_ordering",  # Tensor
+        # Non-primitive types which can be compared
+        "module_sharding_plan",
+        "_table_name_to_config",
+        # Excluding the non-primitive types that cannot be compared
+        # "sharding_type_to_sharding_infos",
+        # "_embedding_shardings"
+        # "_input_dists",
+        # "_lookups",
+        # "_output_dists",
+        # "_optim",
+    ]
+
+    for attr in attribute_list:
+        assert hasattr(module1, attr) and hasattr(module2, attr)
+
+        val1 = getattr(module1, attr)
+        val2 = getattr(module2, attr)
+
+        assert type(val1) is type(val2)
+        if type(val1) is torch.Tensor:
+            torch.testing.assert_close(val1, val2)
+        else:
+            assert val1 == val2
 
 
 def output_sharding_plan_delta(
@@ -274,7 +317,7 @@ def _test_ebc_resharding(
             device=ctx.device,
         )
 
-        are_modules_identical(sharded_m1, resharded_m2)
+        are_sharded_ebc_modules_identical(sharded_m1, resharded_m2)
 
         feature_keys = []
         for table in tables:
