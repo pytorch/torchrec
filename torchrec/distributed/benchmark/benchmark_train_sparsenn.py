@@ -54,8 +54,8 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 @dataclass
 class RunOptions:
-    world_size: int = 4
-    num_batches: int = 20
+    world_size: int = 2
+    num_batches: int = 10
     sharding_type: ShardingType = ShardingType.TABLE_WISE
     input_type: str = "kjt"
     profile: str = ""
@@ -63,8 +63,8 @@ class RunOptions:
 
 @dataclass
 class EmbeddingTablesConfig:
-    num_unweighted_features: int = 4
-    num_weighted_features: int = 4
+    num_unweighted_features: int = 100
+    num_weighted_features: int = 100
     embedding_feature_dim: int = 512
 
     def generate_tables(

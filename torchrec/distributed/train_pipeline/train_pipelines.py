@@ -680,7 +680,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 `self._execute_all_batches=True`, then returns None.
         """
         context = self._create_context()
-        with record_function(f"## copy_batch_to_gpu {self._next_index} ##"):
+        with record_function(f"## copy_batch_to_gpu {context.index} ##"):
             with self._stream_context(self._memcpy_stream):
                 batch = self._next_batch(dataloader_iter)
                 if batch is not None:
@@ -1008,11 +1008,13 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             context.detached_embedding_tensors,
         ):
             grads = [tensor.grad for tensor in detached_emb_tensors]
-            # Some embeddings may never get used in the final loss computation,
-            # so the grads will be `None`. If we don't exclude these, it will fail
-            # with error: "grad can be implicitly created only for scalar outputs"
-            # Alternatively, if the tensor has only 1 element, pytorch can still
-            # figure out how to do autograd
+            """
+            Some embeddings may never get used in the final loss computation,
+            so the grads will be `None`. If we don't exclude these, it will fail
+            with error: "grad can be implicitly created only for scalar outputs"
+            Alternatively, if the tensor has only 1 element, pytorch can still
+            figure out how to do autograd
+            """
             embs_to_backprop, grads_to_use, invalid_features = [], [], []
             assert len(embedding_features) == len(emb_tensors)
             for features, tensor, grad in zip(embedding_features, emb_tensors, grads):
