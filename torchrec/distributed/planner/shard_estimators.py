@@ -27,6 +27,8 @@ from torchrec.distributed.planner.constants import (
     WEIGHTED_KERNEL_MULTIPLIER,
 )
 from torchrec.distributed.planner.types import (
+    CollectiveType,
+    GeneralizedCommsBandwidth,
     ParameterConstraints,
     Perf,
     PlannerError,
@@ -231,8 +233,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 hbm_mem_bw=self._topology.hbm_mem_bw,
                 ddr_mem_bw=self._topology.ddr_mem_bw,
                 hbm_to_ddr_mem_bw=self._topology.hbm_to_ddr_mem_bw,
-                intra_host_bw=self._topology.intra_host_bw,
-                inter_host_bw=self._topology.inter_host_bw,
+                comms_bandwidths=self._topology.comms_bandwidths,
                 bwd_compute_multiplier=self._topology.bwd_compute_multiplier,
                 weighted_feature_bwd_compute_multiplier=self._topology.weighted_feature_bwd_compute_multiplier,
                 is_pooled=sharding_option.is_pooled,
@@ -269,8 +270,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         hbm_mem_bw: float,
         ddr_mem_bw: float,
         hbm_to_ddr_mem_bw: float,
-        intra_host_bw: float,
-        inter_host_bw: float,
+        comms_bandwidths: GeneralizedCommsBandwidth,
         bwd_compute_multiplier: float,
         weighted_feature_bwd_compute_multiplier: float,
         is_pooled: bool,
@@ -359,8 +359,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     num_poolings=num_poolings,
                     hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
-                    inter_host_bw=inter_host_bw,
-                    intra_host_bw=intra_host_bw,
+                    comms_bandwidths=comms_bandwidths,
                     bwd_compute_multiplier=bwd_compute_multiplier,
                     weighted_feature_bwd_compute_multiplier=weighted_feature_bwd_compute_multiplier,
                     is_pooled=is_pooled,
@@ -385,8 +384,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     num_poolings=num_poolings,
                     hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
-                    inter_host_bw=inter_host_bw,
-                    intra_host_bw=intra_host_bw,
+                    comms_bandwidths=comms_bandwidths,
                     bwd_compute_multiplier=bwd_compute_multiplier,
                     weighted_feature_bwd_compute_multiplier=weighted_feature_bwd_compute_multiplier,
                     is_pooled=is_pooled,
@@ -414,8 +412,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     num_poolings=num_poolings,
                     hbm_to_ddr_mem_bw=hbm_to_ddr_mem_bw,
                     device_bw=device_bw,
-                    inter_host_bw=inter_host_bw,
-                    intra_host_bw=intra_host_bw,
+                    comms_bandwidths=comms_bandwidths,
                     bwd_compute_multiplier=bwd_compute_multiplier,
                     weighted_feature_bwd_compute_multiplier=weighted_feature_bwd_compute_multiplier,
                     is_pooled=is_pooled,
@@ -435,7 +432,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                     output_data_type_size=output_data_type_size,
                     num_poolings=num_poolings,
                     device_bw=device_bw,
-                    inter_host_bw=inter_host_bw,
+                    comms_bandwidths=comms_bandwidths,
                     bwd_compute_multiplier=bwd_compute_multiplier,
                     weighted_feature_bwd_compute_multiplier=weighted_feature_bwd_compute_multiplier,
                     is_pooled=is_pooled,
@@ -477,8 +474,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         num_poolings: List[float],
         hbm_to_ddr_mem_bw: float,
         device_bw: float,
-        inter_host_bw: float,
-        intra_host_bw: float,
+        comms_bandwidths: GeneralizedCommsBandwidth,
         bwd_compute_multiplier: float,
         weighted_feature_bwd_compute_multiplier: float,
         is_pooled: bool,
@@ -486,6 +482,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         is_inference: bool = False,
         expected_cache_fetches: float = 0,
     ) -> Perf:
+
         batch_inputs = sum(
             [x * y * z for x, y, z in zip(input_lengths, num_poolings, batch_sizes)]
         )
@@ -518,8 +515,11 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 block_usage_penalty = HALF_BLOCK_PENALTY
             else:  # emb_dim >= 32
                 block_usage_penalty = QUARTER_BLOCK_PENALTY
-
-        comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
+        comms_bw = comms_bandwidths.get_bw(
+            world_size=world_size,
+            local_world_size=local_world_size,
+            collective_type=CollectiveType.ALL_TO_ALL,
+        )
         fwd_comms = fwd_output_write_size / comms_bw
 
         fwd_compute = (
@@ -576,8 +576,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         num_poolings: List[float],
         hbm_to_ddr_mem_bw: float,
         device_bw: float,
-        inter_host_bw: float,
-        intra_host_bw: float,
+        comms_bandwidths: GeneralizedCommsBandwidth,
         bwd_compute_multiplier: float,
         weighted_feature_bwd_compute_multiplier: float,
         is_pooled: bool,
@@ -615,8 +614,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
             if is_pooled
             else batch_outputs * world_size * emb_dim * bwd_a2a_comm_data_type_size
         )
+        comms_bw = comms_bandwidths.get_bw(
+            world_size=world_size,
+            local_world_size=local_world_size,
+            collective_type=CollectiveType.REDUCE_SCATTER,
+        )
 
-        comms_bw = inter_host_bw if world_size > local_world_size else intra_host_bw
         fwd_comms = fwd_output_write_size / comms_bw
 
         fwd_compute = (
@@ -628,7 +631,11 @@ class EmbeddingPerfEstimator(ShardEstimator):
             return Perf(
                 fwd_compute=fwd_compute, fwd_comms=fwd_comms, bwd_compute=0, bwd_comms=0
             )
-
+        comms_bw = comms_bandwidths.get_bw(
+            world_size=world_size,
+            local_world_size=local_world_size,
+            collective_type=CollectiveType.ALL_GATHER,
+        )
         bwd_comms = bwd_output_write_size / comms_bw
 
         bwd_batched_copy = bwd_output_write_size * BATCHED_COPY_PERF_FACTOR / device_bw
@@ -675,8 +682,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         num_poolings: List[float],
         hbm_to_ddr_mem_bw: float,
         device_bw: float,
-        inter_host_bw: float,
-        intra_host_bw: float,
+        comms_bandwidths: GeneralizedCommsBandwidth,
         bwd_compute_multiplier: float,
         weighted_feature_bwd_compute_multiplier: float,
         is_pooled: bool,
@@ -709,9 +715,14 @@ class EmbeddingPerfEstimator(ShardEstimator):
         bwd_output_write_size = (
             batch_outputs * world_size * emb_dim * bwd_sr_comm_data_type_size
         )
+        comms_bw = comms_bandwidths.get_bw(
+            world_size=local_world_size,
+            local_world_size=local_world_size,
+            collective_type=CollectiveType.REDUCE_SCATTER,
+        )
 
         # intra host comm
-        fwd_comms = fwd_output_write_size / intra_host_bw
+        fwd_comms = fwd_output_write_size / comms_bw
 
         # inter host comm
         if world_size > local_world_size:
@@ -719,18 +730,28 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 batch_outputs
                 * (
                     world_size / local_world_size
-                )  # this is the size of the procress group.
+                )  # this is the size of the procees group.
                 * emb_dim
                 * fwd_a2a_comm_data_type_size
             )
-            fwd_comms += inter_host_fwd_output_write_size / inter_host_bw
+            comms_bw = comms_bandwidths.get_bw(
+                world_size=int(world_size / local_world_size),
+                local_world_size=1,
+                collective_type=CollectiveType.ALL_TO_ALL,
+            )
+            fwd_comms += inter_host_fwd_output_write_size / comms_bw
 
         fwd_compute = (
             input_read_size + embedding_lookup_size + fwd_output_write_size
         ) / device_bw
 
         # intra host comm (i.e. all gather)
-        bwd_comms = bwd_output_write_size / intra_host_bw
+        comms_bw = comms_bandwidths.get_bw(
+            world_size=local_world_size,
+            local_world_size=local_world_size,
+            collective_type=CollectiveType.ALL_GATHER,
+        )
+        bwd_comms = bwd_output_write_size / comms_bw
 
         # inter host comm (i.e. all to all)
         if world_size > local_world_size:
@@ -742,7 +763,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 * emb_dim
                 * bwd_a2a_comm_data_type_size
             )
-            bwd_comms += inter_host_bwd_output_write_size / inter_host_bw
+            comms_bw = comms_bandwidths.get_bw(
+                world_size=int(world_size / local_world_size),
+                local_world_size=1,
+                collective_type=CollectiveType.ALL_TO_ALL,
+            )
+            bwd_comms += inter_host_bwd_output_write_size / comms_bw
 
         bwd_grad_indice_weights_kernel = (
             fwd_compute * WEIGHTED_KERNEL_MULTIPLIER if is_weighted else 0
@@ -784,7 +810,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         output_data_type_size: float,
         num_poolings: List[float],
         device_bw: float,
-        inter_host_bw: float,
+        comms_bandwidths: GeneralizedCommsBandwidth,
         bwd_compute_multiplier: float,
         weighted_feature_bwd_compute_multiplier: float,
         is_pooled: bool,
@@ -815,12 +841,12 @@ class EmbeddingPerfEstimator(ShardEstimator):
         num_nodes = min(world_size / local_world_size, 2)
 
         # all-reduce data transfer: https://images.nvidia.com/events/sc15/pdfs/NCCL-Woolley.pdf
-        all_reduce = (
-            table_size
-            * (2 * num_nodes - 1)
-            / num_nodes
-            / (inter_host_bw * local_world_size)  # 1 NIC per GPU
+        comms_bw = comms_bandwidths.get_bw(
+            world_size=world_size,
+            local_world_size=local_world_size,
+            collective_type=CollectiveType.ALL_REDUCE,
         )
+        all_reduce = table_size * (2 * num_nodes - 1) / num_nodes / comms_bw
         # inter host communication constraint
         if world_size > 2 * local_world_size:
             all_reduce *= 2
