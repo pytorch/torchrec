@@ -821,6 +821,10 @@ class ShardedManagedCollisionCollection(
             for name, _ in module.named_parameters():
                 yield append_prefix(module_prefix, name)
 
+    @property
+    def unsharded_module_type(self) -> Type[ManagedCollisionCollection]:
+        return ManagedCollisionCollection
+
 
 class ManagedCollisionCollectionSharder(
     BaseEmbeddingSharder[ManagedCollisionCollection]
@@ -1302,6 +1306,10 @@ class ShardedQuantManagedCollisionCollection(
 
     def create_context(self) -> ManagedCollisionCollectionContext:
         return ManagedCollisionCollectionContext(sharding_contexts=[])
+
+    @property
+    def unsharded_module_type(self) -> Type[ManagedCollisionCollection]:
+        return ManagedCollisionCollection
 
 
 class InferManagedCollisionCollectionSharder(ManagedCollisionCollectionSharder):

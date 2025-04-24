@@ -8,7 +8,7 @@
 # pyre-strict
 
 from abc import abstractmethod
-from typing import Generic
+from typing import Generic, Type
 
 import torch
 from torch._prims_common import is_integer_dtype
@@ -144,3 +144,7 @@ class ShardedObjectPool(
     #  `None`.
     def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
         pass
+
+    @property
+    def unsharded_module_type(self) -> Type[ObjectPool[Out]]:
+        return ObjectPool[Out]
