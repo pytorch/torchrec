@@ -221,3 +221,17 @@ def update_state_dict_post_resharding(
                 sharded_t._local_shards = []
 
     return state_dict
+
+
+def update_module_sharding_plan(
+    module: ShardedModule[Any, Any, Any, Any],  # pyre-ignore
+    changed_sharding_params: Dict[str, ParameterSharding],
+) -> None:
+    if not hasattr(module, "module_sharding_plan"):
+        return
+
+    # pyre-ignore
+    current_plan: Dict[str, ParameterSharding] = module.module_sharding_plan
+    for table_name, param_sharding in changed_sharding_params.items():
+        current_plan[table_name] = param_sharding
+    return

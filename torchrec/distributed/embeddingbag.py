@@ -55,6 +55,7 @@ from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
 from torchrec.distributed.sharding.dynamic_sharding import (
     shards_all_to_all,
+    update_module_sharding_plan,
     update_state_dict_post_resharding,
 )
 from torchrec.distributed.sharding.grid_sharding import GridPooledEmbeddingSharding
@@ -1232,11 +1233,19 @@ class ShardedEmbeddingBagCollection(
         # TODO: Optimize to only go through embedding shardings with new ranks
         self._output_dists: List[nn.Module] = []
         self._embedding_names: List[str] = []
+        self._embedding_dims: List[int] = []
+        self._uncombined_embedding_names: List[str] = []
+        self._uncombined_embedding_dims: List[int] = []
         for sharding in self._embedding_shardings:
             # TODO: if sharding type of table completely changes, need to regenerate everything
             self._embedding_names.extend(sharding.embedding_names())
             self._output_dists.append(sharding.create_output_dist(device=self._device))
             embedding_shard_metadata.extend(sharding.embedding_shard_metadata())
+            self._embedding_dims.extend(sharding.embedding_dims())
+            self._uncombined_embedding_names.extend(
+                sharding.uncombined_embedding_names()
+            )
+            self._uncombined_embedding_dims.extend(sharding.uncombined_embedding_dims())
 
         embedding_shard_offsets: List[int] = [
             meta.shard_offsets[1] if meta is not None else 0
@@ -1585,6 +1594,26 @@ class ShardedEmbeddingBagCollection(
             self._initialize_torch_state(skip_registering=True)
 
         self.load_state_dict(current_state)
+
+        # update optimizer
+        optims = []
+        for lookup in self._lookups:
+            for _, tbe_module in lookup.named_modules():
+                if isinstance(tbe_module, FusedOptimizerModule):
+                    # modify param keys to match EmbeddingBagCollection
+                    params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
+                    for (
+                        param_key,
+                        weight,
+                    ) in tbe_module.fused_optimizer.params.items():
+                        # pyre-fixme[16]: `Mapping` has no attribute `__setitem__`
+                        params["embedding_bags." + param_key] = weight
+                    tbe_module.fused_optimizer.params = params
+                    optims.append(("", tbe_module.fused_optimizer))
+
+        self._optim: CombinedOptimizer = CombinedOptimizer(optims)
+
+        update_module_sharding_plan(self, changed_sharding_params)
         return
 
     @property
