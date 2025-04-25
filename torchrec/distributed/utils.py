@@ -29,6 +29,7 @@ from torchrec.distributed.types import (
     ParameterSharding,
     ShardedModule,
     ShardingType,
+    ShardMetadata,
 )
 from torchrec.modules.embedding_configs import data_type_to_sparse_type
 from torchrec.types import CopyMixIn
@@ -564,3 +565,44 @@ def create_global_tensor_shape_stride_from_metadata(
         size = torch.Size([row_dim, col_dim])
     # pyre-ignore[7]
     return size, (size[1], 1) if size else (torch.Size([0, 0]), (0, 1))
+
+
+def get_bucket_offsets_from_shard_metadata(
+    shards: List[ShardMetadata],
+    num_buckets: int,
+) -> List[int]:
+    """
+    Calculate the bucket offsets from shard metadata.
+
+    This function assumes the table is to be row-wise sharded in equal sized buckets across bucket boundaries.
+    It computes the sequential bucket offsets for each shard. It ensures that the table size
+    is divisible by the number of buckets and that each shard size is divisible
+    by the bucket size.
+
+    Args:
+        shards (List[ShardMetadata]): A list of shard metadata objects.
+        num_buckets (int): The number of buckets to divide the table into.
+
+    Returns:
+        List[int]: A list of bucket offsets.
+    """
+    assert len(shards) > 0, "Shards cannot be empty"
+    table_size = shards[-1].shard_offsets[0] + shards[-1].shard_sizes[0]
+    assert (
+        table_size % num_buckets == 0
+    ), f"Table size '{table_size}' must be divisible by num_buckets '{num_buckets}'"
+    bucket_offsets: List[int] = []
+    bucket_size = table_size // num_buckets
+    current_bucket_offset = 0
+    for shard in shards:
+        assert (
+            len(shard.shard_offsets) == 1 or shard.shard_offsets[1] == 0
+        ), f"Shard shard_offsets[1] '{shard.shard_offsets[1]}' is not 0. Table should be only row-wise sharded for bucketization"
+        assert (
+            shard.shard_sizes[0] % bucket_size == 0
+        ), f"Shard size[0] '{shard.shard_sizes[0]}' is not divisible by bucket size '{bucket_size}'"
+        num_buckets_in_shard = shard.shard_sizes[0] // bucket_size
+        bucket_offsets.append(current_bucket_offset)
+        current_bucket_offset += num_buckets_in_shard
+
+    return bucket_offsets
