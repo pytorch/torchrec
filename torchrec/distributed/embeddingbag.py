@@ -1627,6 +1627,10 @@ class ShardedEmbeddingBagCollection(
     def extend_shard_name(shard_name: str) -> str:
         return f"embedding_bags.{shard_name}.weight"
 
+    @property
+    def unsharded_module_type(self) -> Type[EmbeddingBagCollection]:
+        return EmbeddingBagCollection
+
 
 class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]):
     """
@@ -1915,6 +1919,10 @@ class ShardedEmbeddingBag(
 
     def create_context(self) -> NullShardedModuleContext:
         return NullShardedModuleContext()
+
+    @property
+    def unsharded_module_type(self) -> Type[nn.EmbeddingBag]:
+        return nn.EmbeddingBag
 
 
 class EmbeddingBagSharder(BaseEmbeddingSharder[nn.EmbeddingBag]):
