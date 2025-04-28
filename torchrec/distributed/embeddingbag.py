@@ -1006,46 +1006,32 @@ class ShardedEmbeddingBagCollection(
                 # access is allowed on them.
 
                 # create ShardedTensor from local shards and metadata avoding all_gather collective
-                if self._construct_sharded_tensor_from_metadata:
-                    sharding_spec = none_throws(
-                        self.module_sharding_plan[table_name].sharding_spec
-                    )
+                sharding_spec = none_throws(
+                    self.module_sharding_plan[table_name].sharding_spec
+                )
 
-                    tensor_properties = TensorProperties(
-                        dtype=(
-                            data_type_to_dtype(
-                                self._table_name_to_config[table_name].data_type
-                            )
+                tensor_properties = TensorProperties(
+                    dtype=(
+                        data_type_to_dtype(
+                            self._table_name_to_config[table_name].data_type
+                        )
+                    ),
+                )
+
+                self._model_parallel_name_to_sharded_tensor[table_name] = (
+                    ShardedTensor._init_from_local_shards_and_global_metadata(
+                        local_shards=local_shards,
+                        sharded_tensor_metadata=sharding_spec.build_metadata(
+                            tensor_sizes=self._name_to_table_size[table_name],
+                            tensor_properties=tensor_properties,
+                        ),
+                        process_group=(
+                            self._env.sharding_pg
+                            if isinstance(self._env, ShardingEnv2D)
+                            else self._env.process_group
                         ),
                     )
-
-                    self._model_parallel_name_to_sharded_tensor[table_name] = (
-                        ShardedTensor._init_from_local_shards_and_global_metadata(
-                            local_shards=local_shards,
-                            sharded_tensor_metadata=sharding_spec.build_metadata(
-                                tensor_sizes=self._name_to_table_size[table_name],
-                                tensor_properties=tensor_properties,
-                            ),
-                            process_group=(
-                                self._env.sharding_pg
-                                if isinstance(self._env, ShardingEnv2D)
-                                else self._env.process_group
-                            ),
-                        )
-                    )
-                else:
-                    # create ShardedTensor from local shards using all_gather collective
-                    self._model_parallel_name_to_sharded_tensor[table_name] = (
-                        ShardedTensor._init_from_local_shards(
-                            local_shards,
-                            self._name_to_table_size[table_name],
-                            process_group=(
-                                self._env.sharding_pg
-                                if isinstance(self._env, ShardingEnv2D)
-                                else self._env.process_group
-                            ),
-                        )
-                    )
+                )
 
         def extract_sharded_kvtensors(
             module: ShardedEmbeddingBagCollection,
