@@ -24,3 +24,4 @@ jobs:
     uses: ./.github/workflows/validate-binaries.yml
     with:
       channel: nightly
+      post_script: .github/scripts/install_libs.sh
