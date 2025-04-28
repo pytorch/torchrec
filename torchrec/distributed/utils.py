@@ -28,6 +28,7 @@ from torchrec.distributed.types import (
     EmbeddingEvent,
     ParameterSharding,
     ShardedModule,
+    ShardingBucketMetadata,
     ShardingType,
     ShardMetadata,
 )
@@ -567,32 +568,32 @@ def create_global_tensor_shape_stride_from_metadata(
     return size, (size[1], 1) if size else (torch.Size([0, 0]), (0, 1))
 
 
-def get_bucket_offsets_from_shard_metadata(
+def get_bucket_metadata_from_shard_metadata(
     shards: List[ShardMetadata],
     num_buckets: int,
-) -> List[int]:
+) -> ShardingBucketMetadata:
     """
-    Calculate the bucket offsets from shard metadata.
+    Calculate the bucket metadata from shard metadata.
 
     This function assumes the table is to be row-wise sharded in equal sized buckets across bucket boundaries.
-    It computes the sequential bucket offsets for each shard. It ensures that the table size
-    is divisible by the number of buckets and that each shard size is divisible
-    by the bucket size.
+    It computes the number of buckets per shard and the bucket size.
 
     Args:
-        shards (List[ShardMetadata]): A list of shard metadata objects.
+        shards (List[ShardMetadata]): Shard metadata for all shards of a table.
         num_buckets (int): The number of buckets to divide the table into.
 
     Returns:
-        List[int]: A list of bucket offsets.
+        ShardingBucketMetadata: An object containing the number of buckets per shard and the bucket size.
     """
     assert len(shards) > 0, "Shards cannot be empty"
     table_size = shards[-1].shard_offsets[0] + shards[-1].shard_sizes[0]
     assert (
         table_size % num_buckets == 0
     ), f"Table size '{table_size}' must be divisible by num_buckets '{num_buckets}'"
-    bucket_offsets: List[int] = []
     bucket_size = table_size // num_buckets
+    bucket_metadata: ShardingBucketMetadata = ShardingBucketMetadata(
+        num_buckets_per_shard=[], bucket_offsets_per_shard=[], bucket_size=bucket_size
+    )
     current_bucket_offset = 0
     for shard in shards:
         assert (
@@ -602,7 +603,8 @@ def get_bucket_offsets_from_shard_metadata(
             shard.shard_sizes[0] % bucket_size == 0
         ), f"Shard size[0] '{shard.shard_sizes[0]}' is not divisible by bucket size '{bucket_size}'"
         num_buckets_in_shard = shard.shard_sizes[0] // bucket_size
-        bucket_offsets.append(current_bucket_offset)
+        bucket_metadata.num_buckets_per_shard.append(num_buckets_in_shard)
+        bucket_metadata.bucket_offsets_per_shard.append(current_bucket_offset)
         current_bucket_offset += num_buckets_in_shard
 
-    return bucket_offsets
+    return bucket_metadata
