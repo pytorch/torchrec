@@ -54,6 +54,7 @@ def _cat_jagged_values(jd: Dict[str, JaggedTensor]) -> torch.Tensor:
     return torch.cat([jt.values() for jt in jd.values()])
 
 
+# TODO: keep the old implementation for backward compatibility and will remove it later
 @torch.fx.wrap
 def _mcc_lazy_init(
     features: KeyedJaggedTensor,
@@ -76,6 +77,34 @@ def _mcc_lazy_init(
         )
 
     return (features, created_feature_order, features_order)
+
+
+@torch.fx.wrap
+def _mcc_lazy_init_inplace(
+    features: KeyedJaggedTensor,
+    feature_names: List[str],
+    features_order: List[int],
+    created_feature_order: List[bool],
+) -> KeyedJaggedTensor:
+    input_feature_names: List[str] = features.keys()
+    if not created_feature_order or not created_feature_order[0]:
+        for f in feature_names:
+            features_order.append(input_feature_names.index(f))
+
+        if features_order == list(range(len(input_feature_names))):
+            features_order.clear()
+
+        if len(created_feature_order) > 0:
+            created_feature_order[0] = True
+        else:
+            created_feature_order.append(True)
+
+    if len(features_order) > 0:
+        features = features.permute(
+            features_order,
+        )
+
+    return features
 
 
 @torch.fx.wrap
@@ -298,6 +327,7 @@ class ManagedCollisionCollection(nn.Module):
 
     _table_to_features: Dict[str, List[str]]
     _features_order: List[int]
+    _created_feature_order: List[bool]  # use list for inplace update in leaf function
 
     def __init__(
         self,
@@ -338,7 +368,7 @@ class ManagedCollisionCollection(nn.Module):
         self._feature_names: List[str] = [
             feature for config in embedding_configs for feature in config.feature_names
         ]
-        self._created_feature_order = False
+        self._created_feature_order: List[bool] = [False]
         self._features_order = []
 
     def _create_feature_order(
@@ -360,11 +390,7 @@ class ManagedCollisionCollection(nn.Module):
         self,
         features: KeyedJaggedTensor,
     ) -> KeyedJaggedTensor:
-        (
-            features,
-            self._created_feature_order,
-            self._features_order,
-        ) = _mcc_lazy_init(
+        features = _mcc_lazy_init_inplace(
             features,
             self._feature_names,
             self._features_order,
