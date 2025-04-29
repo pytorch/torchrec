@@ -29,12 +29,13 @@ from torchrec.distributed.types import (
     ModuleSharder,
     MultiPassPrefetchConfig,
     ParameterSharding,
+    ShardingBucketMetadata,
     ShardMetadata,
 )
 from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
     convert_to_fbgemm_types,
-    get_bucket_offsets_from_shard_metadata,
+    get_bucket_metadata_from_shard_metadata,
     get_unsharded_module_names,
     merge_fused_params,
 )
@@ -472,15 +473,15 @@ class ConvertFusedParamsTest(unittest.TestCase):
         self.assertFalse(isinstance(per_table_fused_params["output_dtype"], DataType))
 
 
-class TestBucketOffsets(unittest.TestCase):
-    def test_bucket_offsets(self) -> None:
+class TestBucketMetadata(unittest.TestCase):
+    def test_bucket_metadata(self) -> None:
         # Given no shards
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
+        # When we get bucket metadata from get_bucket_metadata_from_shard_metadata
         # Then an error should be raised
         self.assertRaisesRegex(
             AssertionError,
             "Shards cannot be empty",
-            get_bucket_offsets_from_shard_metadata,
+            get_bucket_metadata_from_shard_metadata,
             [],
             num_buckets=4,
         )
@@ -490,11 +491,13 @@ class TestBucketOffsets(unittest.TestCase):
             ShardMetadata(shard_offsets=[0], shard_sizes=[5], placement="rank:0/cuda:0")
         ]
 
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
-        bucket_offsets = get_bucket_offsets_from_shard_metadata(shards, num_buckets=5)
+        # When we get bucket offsets from get_bucket_metadata_from_shard_metadata
+        bucket_metadata = get_bucket_metadata_from_shard_metadata(shards, num_buckets=5)
         # Then we should get 1 offset with value 0
-        expected_offsets = [0]
-        self.assertEqual(bucket_offsets, expected_offsets)
+        expected_metadata = ShardingBucketMetadata(
+            num_buckets_per_shard=[5], bucket_offsets_per_shard=[0], bucket_size=1
+        )
+        self.assertEqual(bucket_metadata, expected_metadata)
 
         # Given 2 shards of size 5 and 4 buckets
         shards = [
@@ -506,12 +509,12 @@ class TestBucketOffsets(unittest.TestCase):
             ),
         ]
 
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
+        # When we get bucket offsets from get_bucket_metadata_from_shard_metadata
         # Then an error should be raised
         self.assertRaisesRegex(
             AssertionError,
             "Table size '10' must be divisible by num_buckets '4'",
-            get_bucket_offsets_from_shard_metadata,
+            get_bucket_metadata_from_shard_metadata,
             shards,
             num_buckets=4,
         )
@@ -526,12 +529,12 @@ class TestBucketOffsets(unittest.TestCase):
             ),
         ]
 
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
+        # When we get bucket offsets from get_bucket_metadata_from_shard_metadata
         # Then an error should be raised
         self.assertRaisesRegex(
             AssertionError,
             "Table size '4' must be divisible by num_buckets '5'",
-            get_bucket_offsets_from_shard_metadata,
+            get_bucket_metadata_from_shard_metadata,
             shards,
             num_buckets=5,
         )
@@ -546,12 +549,12 @@ class TestBucketOffsets(unittest.TestCase):
             ),
         ]
 
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
+        # When we get bucket offsets from get_bucket_metadata_from_shard_metadata
         # Then an error should be raised
         self.assertRaisesRegex(
             AssertionError,
             r"Shard shard_offsets\[1\] '5' is not 0. Table should be only row-wise sharded for bucketization",
-            get_bucket_offsets_from_shard_metadata,
+            get_bucket_metadata_from_shard_metadata,
             shards,
             num_buckets=2,
         )
@@ -566,17 +569,17 @@ class TestBucketOffsets(unittest.TestCase):
             ),
         ]
 
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
+        # When we get bucket offsets from get_bucket_metadata_from_shard_metadata
         # Then an error should be raised
         self.assertRaisesRegex(
             AssertionError,
             r"Shard size\[0\] '10' is not divisible by bucket size '4'",
-            get_bucket_offsets_from_shard_metadata,
+            get_bucket_metadata_from_shard_metadata,
             shards,
             num_buckets=5,
         )
 
-        # Given 2 shards of size 20 and 4 buckets
+        # Given 2 shards of size 20 and 10 buckets
         shards = [
             ShardMetadata(
                 shard_offsets=[0], shard_sizes=[20], placement="rank:0/cuda:0"
@@ -585,13 +588,20 @@ class TestBucketOffsets(unittest.TestCase):
                 shard_offsets=[20], shard_sizes=[20], placement="rank:0/cuda:0"
             ),
         ]
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
-        bucket_offsets = get_bucket_offsets_from_shard_metadata(
+        # When we get bucket offsets from get_bucket_metadata_from_shard_metadata
+        bucket_metadata = get_bucket_metadata_from_shard_metadata(
             shards,
             num_buckets=10,
         )
-        # Then bucket offsets should be set to [0, 5]
-        self.assertEqual(bucket_offsets, [0, 5])
+        # Then num_buckets_per_shard should be set to [5, 5]
+        self.assertEqual(
+            bucket_metadata,
+            ShardingBucketMetadata(
+                num_buckets_per_shard=[5, 5],
+                bucket_offsets_per_shard=[0, 5],
+                bucket_size=4,
+            ),
+        )
 
         # Given 3 uneven shards of sizes 12, 16 and 20 and 12 buckets
         shards = [
@@ -606,10 +616,17 @@ class TestBucketOffsets(unittest.TestCase):
             ),
         ]
 
-        # When we get bucket offsets from get_bucket_offsets_from_shard_metadata
-        bucket_offsets = get_bucket_offsets_from_shard_metadata(
+        # When we get bucket offsets from get_bucket_metadata_from_shard_metadata
+        bucket_metadata = get_bucket_metadata_from_shard_metadata(
             shards,
             num_buckets=12,
         )
-        # Then bucket offsets should be set to [0, 3, 7]
-        self.assertEqual(bucket_offsets, [0, 3, 7])
+        # Then num_buckets_per_shard should be set to [3, 4, 5]
+        self.assertEqual(
+            bucket_metadata,
+            ShardingBucketMetadata(
+                num_buckets_per_shard=[3, 4, 5],
+                bucket_offsets_per_shard=[0, 3, 7],
+                bucket_size=4,
+            ),
+        )

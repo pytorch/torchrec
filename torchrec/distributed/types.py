@@ -1223,3 +1223,19 @@ class ObjectPoolShardingType(Enum):
 class ObjectPoolShardingPlan(ModuleShardingPlan):
     sharding_type: ObjectPoolShardingType
     inference: bool = False
+
+
+@dataclass
+class ShardingBucketMetadata:
+    """
+    If a table is row-wise sharded with bucketization, this class contains the bucket information for the table.
+
+    Attributes:
+        num_buckets_per_shard (List[int]): Number of buckets in each shard of the table.
+        bucket_offsets_per_shard (List[int]): Index of the first bucket in each shard.
+        bucket_size (int): No. of rows in one bucket.
+    """
+
+    num_buckets_per_shard: List[int]
+    bucket_offsets_per_shard: List[int]
+    bucket_size: int
