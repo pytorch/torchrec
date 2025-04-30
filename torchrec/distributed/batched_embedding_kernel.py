@@ -166,6 +166,17 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
             )
             ssd_tbe_params["cache_sets"] = int(max_cache_sets)
 
+    ssd_tbe_params["table_names"] = [table.name for table in config.embedding_tables]
+    ssd_tbe_params["table_offsets"] = []
+    for emb_tbl in config.embedding_tables:
+        local_metadata = emb_tbl.local_metadata
+        if (
+            local_metadata is not None
+            and local_metadata.shard_offsets is not None
+            and len(local_metadata.shard_offsets) >= 1
+        ):
+            ssd_tbe_params["table_offsets"].append(local_metadata.shard_offsets[0])
+
     return ssd_tbe_params
 
 
