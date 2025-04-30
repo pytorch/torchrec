@@ -128,6 +128,7 @@ class MLP(torch.nn.Module):
         ] = torch.relu,
         device: Optional[torch.device] = None,
         dtype: torch.dtype = torch.float32,
+        activation_on_last: bool = True,
     ) -> None:
         super().__init__()
 
@@ -143,7 +144,11 @@ class MLP(torch.nn.Module):
                         layer_sizes[i - 1] if i > 0 else in_size,
                         layer_sizes[i],
                         bias=bias,
-                        activation=extract_module_or_tensor_callable(activation),
+                        activation=(
+                            torch.nn.Identity()
+                            if not activation_on_last and i == len(layer_sizes) - 1
+                            else extract_module_or_tensor_callable(activation)
+                        ),
                         device=device,
                         dtype=dtype,
                     )
@@ -158,7 +163,11 @@ class MLP(torch.nn.Module):
                             layer_sizes[i - 1] if i > 0 else in_size,
                             layer_sizes[i],
                             bias=bias,
-                            activation=SwishLayerNorm(layer_sizes[i], device=device),
+                            activation=(
+                                torch.nn.Identity()
+                                if not activation_on_last and i == len(layer_sizes) - 1
+                                else SwishLayerNorm(layer_sizes[i], device=device)
+                            ),
                             device=device,
                         )
                         for i in range(len(layer_sizes))
