@@ -758,12 +758,15 @@ class KJTAllToAllForward:
 
 class Tracer(torch.fx.Tracer):
     """
-    Disables proxying buffers during tracing. Ideally, proxying buffers would be
-    disabled, but some models are currently mutating buffer values, which causes errors
-    during tracing. If those models can be rewritten to not do that, we can likely
-    remove this line.
+    The Trace class used in `_rewrite_model`, treating all ShardedModules and ShardedModule-free
+    modules as leaf modules. A module who is not a ShardedModule but contains ShardedModule would
+    NOT be considered as a leaf module.
     """
 
+    # Disables proxying buffers during tracing. Ideally, proxying buffers would be
+    # disabled, but some models are currently mutating buffer values, which causes errors
+    # during tracing. If those models can be rewritten to not do that, we can likely
+    # remove this line.
     proxy_buffer_attributes = False
 
     def __init__(self, leaf_modules: Optional[List[str]] = None) -> None:
@@ -1344,6 +1347,12 @@ def _get_leaf_module_names_helper(
     path: str,
     leaf_module_names: Set[str],
 ) -> bool:
+    """
+    recursive function returns True if any of the sub-modules is ShardedModule.
+    it also added the fqns of the sub-modules who do not contain any ShardedModule
+    into the `leaf_module_names` unless it's marked as `_is_pytorch_fx_traceable = True`,
+    which suggests this ShardedModule-free module should NOT be treated as a leaf module
+    """
     sharded_children = set()
     for name, child in model.named_children():
         curr_path = path + name
@@ -1358,6 +1367,7 @@ def _get_leaf_module_names_helper(
             if child_sharded:
                 sharded_children.add(name)
 
+    # only do this for hybrid module (has sharded child)
     if len(sharded_children) > 0:
         for name, child in model.named_children():
             if name in sharded_children:
@@ -1371,8 +1381,9 @@ def _get_leaf_module_names_helper(
 def _get_leaf_module_names(model: torch.nn.Module) -> List[str]:
     """
     Returns a list of top level modules to be used as leaf modules for FX tracing.
-    This is a shallow FX trace that only goes the minimum depth required to pipeline
-    the model unless child modules are explicitly tagged as `_is_pytorch_fx_traceable`.
+    This is a shallow FX trace that only goes the minimum depth required to pipeline.
+    Any sub-module who does not contain a ShardedModule would be considered as a leaf
+    module unless explicitly tagged as `_is_pytorch_fx_traceable = True`.
     """
 
     leaf_module_names: Set[str] = set()
@@ -1454,7 +1465,7 @@ def _pipeline_detach_model(
         setattr(model, postproc_mod.fqn, postproc_mod.postproc_module)
 
 
-# pyre-ignore[3]
+# pyre-ignore[3] Return type must be specified as type that does not contain
 def _rewrite_model(  # noqa C901
     model: torch.nn.Module,
     context: TForwardContext,
@@ -1471,32 +1482,50 @@ def _rewrite_model(  # noqa C901
     List[PipelinedPostproc],
     List[str],
 ]:
+    """
+    This is a very important util function used by TorchRec's sparse-dist (and others) train pipeline.
+
+    The high-level idea of the sparse-dist train pipeline is to extract the forward calls of the sharded
+    modules (e.g., ShardedEBC, ShardedEC, etc.) from the model's forward call, so that the sparse-dist
+    pipeline can apply some optimization technique like overlapping the comms (i.e., input_dist) with
+    compute (e.g., dense-forward, emb-lookup, etc.). And this "extraction of sharded forward" is done by
+    this `_rewrite_model` util function.
+
+    currently the `_rewrite_model` function uses fx tracer to capture the graph of the sharded model,
+    and find the "call_module" nodes for sharded modules.
+
+    theoretically the ShardedModule takes a KJT as the only input (EBC, EC, etc.), it calls `_get_node_args`
+    to
+    """
     input_model = model
-    # Get underlying nn.Module
+    # Get underlying sharded model (nn.Module) from DistributedModelParallel
+    #   which will not be wrapped in DDP, FSDP, DMP, or any other parallelism wrappers.
     if isinstance(model, DistributedModelParallel):
         model = model.module
 
     # Collect a list of sharded modules.
-    sharded_modules = {}
+    sharded_modules: Dict[str, ShardedModule] = {}  # fqn -> ShardedModule
     for name, m in model.named_modules():
         if isinstance(m, ShardedModule):
             sharded_modules[name] = m
 
-    # Trace a model.
+    ## Trace a model. for more: https://pytorch.org/docs/stable/fx.html
     concrete_args = {}
+    """
+    concrete_args allows you to partially specialize your function, whether it’s to remove
+    control flow or data structures.
+    """
+
+    # special handling of placeholder, adding meta/label to the PH node
     if batch:
         if hasattr(batch, "to_proxy"):
-            # for some special models, it requires using "input"
-            # as the key for input
+            # for some special models, it requires using "input" as the key for input
             # pyre-ignore[16]: Variable[In (bound to Pipelineable)] has no attribute to_proxy.
             concrete_args["inputs"] = copy.copy(batch).to_proxy()
         elif hasattr(batch, "to_proxy_tuple"):
-            # when the model is pre-fx traced or dynamo exported, the
-            # inputs are already flattened, and therefore we use
-            # tuple as concrete args that fx.trace will automatically
-            # match with the argument names.
-            # We pass in the model for the caller side to customize
-            # the batch
+            # when the model is pre-fx traced or dynamo exported, the inputs are already flattened,
+            # and therefore we use tuple as concrete args that fx.trace will automatically match
+            # with the argument names. We pass in the model for the caller side to customize the batch
             # pyre-ignore[16]: Variable[In (bound to Pipelineable)] has no attribute to_proxy_tuple.
             concrete_args = batch.to_proxy_tuple(model)
 
@@ -1512,37 +1541,45 @@ def _rewrite_model(  # noqa C901
     non_pipelined_sharded_modules = []
 
     for node in graph.nodes:
-        if node.op == "call_module" and node.target in sharded_modules:
-            total_num_args = len(node.args) + len(node.kwargs)
-            if total_num_args == 0:
-                continue
-            arg_info_list, num_found = _get_node_args(
-                model,
-                node,
-                pipelined_postprocs,
-                context,
-                pipeline_postproc,
-                default_stream=default_stream,
-                dist_stream=dist_stream,
-            )
+        # only work on the call_module node which is also a sharded module
+        if node.op != "call_module" or node.target not in sharded_modules:
+            continue
 
-            if num_found == total_num_args:
-                logger.info(f"Module '{node.target}' will be pipelined")
-                child = sharded_modules[node.target]
-                original_forwards.append(child.forward)
-                child.forward = pipelined_forward(
-                    node.target,
-                    arg_info_list,
-                    child,
-                    context,
-                    dist_stream,
-                )
-                pipelined_forwards.append(child)
-            else:
-                logger.warning(
-                    f"Module '{node.target}'' will not be pipelined, due to input modifications"
-                )
-                non_pipelined_sharded_modules.append(node.target)
+        total_num_args = len(node.args) + len(node.kwargs)
+        # only work on node with input(s), we don't expect zero input count for sharded module
+        if total_num_args == 0:
+            logger.warning(f"Module '{node.target}' is a ShardedModule with zero input")
+            continue
+
+        # List[ArgInfo]: for rebuilding the input arguments, while the num verifies if missing any
+        arg_info_list, num_found = _get_node_args(
+            model,
+            node,
+            pipelined_postprocs,
+            context,
+            pipeline_postproc,
+            default_stream=default_stream,
+            dist_stream=dist_stream,
+        )
+
+        if num_found == total_num_args:
+            logger.info(f"Module '{node.target}' will be pipelined")
+            child = sharded_modules[node.target]
+            original_forwards.append(child.forward)
+            # pyre-ignore[8] Incompatible attribute type
+            child.forward = pipelined_forward(
+                node.target,
+                arg_info_list,
+                child,
+                context,
+                dist_stream,
+            )
+            pipelined_forwards.append(child)
+        else:
+            logger.warning(
+                f"Module '{node.target}' will NOT be pipelined, due to input modifications"
+            )
+            non_pipelined_sharded_modules.append(node.target)
 
     # JIT script unsharded modules if applicable.
     if apply_jit:
