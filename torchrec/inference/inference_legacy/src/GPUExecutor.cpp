@@ -237,7 +237,7 @@ void GPUExecutor::process(int idx) {
         << "GPU " << rank_ << " is running batch size " << batch->batchSize
         << ", avg request size " << batch->batchSize / batch->contexts.size();
 
-    std::string exWhat = "";
+    std::string exWhat;
     try {
       RECORD_USER_SCOPE("Forward");
       // Block current stream until H2D finishes.
