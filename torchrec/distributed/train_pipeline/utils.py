@@ -670,6 +670,20 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
             self._context.detached_embedding_tensors.append(detached_tensors)
 
 
+class InSyncEmbeddingPipelinedForward(EmbeddingPipelinedForward):
+    """
+    This pipeline is used in TrainPipelineFusedSparseDist
+    """
+
+    def detach_embeddings(
+        self,
+        embeddings: Union[Dict[str, JaggedTensor], KeyedTensor],
+        cur_stream: torch.Stream,
+    ) -> None:
+        # doing nothing
+        pass
+
+
 class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
     """
     This pipeline is used in PrefetchTrainPipelineSparseDist
@@ -853,6 +867,7 @@ def _start_data_dist(
                 PipelinedForward,
                 PrefetchPipelinedForward,
                 EmbeddingPipelinedForward,
+                InSyncEmbeddingPipelinedForward,
             ),
         )
 

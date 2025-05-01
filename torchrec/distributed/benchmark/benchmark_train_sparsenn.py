@@ -42,6 +42,7 @@ from torchrec.distributed.test_utils.test_model import (
 from torchrec.distributed.train_pipeline import (
     TrainPipeline,
     TrainPipelineBase,
+    TrainPipelineFusedSparseDist,
     TrainPipelineSparseDist,
 )
 from torchrec.distributed.train_pipeline.train_pipelines import (
@@ -106,6 +107,7 @@ class PipelineConfig:
         ] = {
             "base": TrainPipelineBase,
             "sparse": TrainPipelineSparseDist,
+            "fused": TrainPipelineFusedSparseDist,
             "semi": TrainPipelineSemiSync,
             "prefetch": PrefetchTrainPipelineSparseDist,
         }
