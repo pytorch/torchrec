@@ -1099,10 +1099,13 @@ def _maybe_compute_stride_kjt(
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
     stride_per_key_per_rank: Optional[List[List[int]]],
+    inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
 ) -> int:
     if stride is None:
         if len(keys) == 0:
             stride = 0
+        elif inverse_indices is not None and inverse_indices[1].numel() > 0:
+            return inverse_indices[1].shape[1]
         elif stride_per_key_per_rank is not None and len(stride_per_key_per_rank) > 0:
             stride = max([sum(s) for s in stride_per_key_per_rank])
         elif offsets is not None and offsets.numel() > 0:
@@ -2174,6 +2177,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self._lengths,
             self._offsets,
             self._stride_per_key_per_rank,
+            self._inverse_indices,
         )
         self._stride = stride
         return stride

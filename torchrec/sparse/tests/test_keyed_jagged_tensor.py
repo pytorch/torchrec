@@ -1033,6 +1033,7 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             kjt.stride_per_key_per_rank(), unflattened_kjt.stride_per_key_per_rank()
         )
         self.assertEqual(kjt.inverse_indices(), unflattened_kjt.inverse_indices())
+        self.assertEqual(kjt.stride(), kjt.inverse_indices()[1].shape[1])
 
 
 class TestKeyedJaggedTensorScripting(unittest.TestCase):
