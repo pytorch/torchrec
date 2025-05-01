@@ -442,9 +442,9 @@ class ModelInput(Pipelineable):
             lengths = None
         if pin_memory:
             indices = indices.pin_memory()
-            lengths = lengths.pin_memory() if lengths else None
-            weights = weights.pin_memory() if weights else None
-            offsets = offsets.pin_memory() if offsets else None
+            lengths = lengths.pin_memory() if lengths is not None else None
+            weights = weights.pin_memory() if weights is not None else None
+            offsets = offsets.pin_memory() if offsets is not None else None
         return KeyedJaggedTensor(features, indices, weights, lengths, offsets)
 
     @staticmethod
