@@ -858,7 +858,7 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
         strict: bool = False,
-        use_emb_lookup_stream: bool = False,  # default False explained below
+        emb_lookup_stream: str = "data_dist",  # new, current, data_dist (default)
     ) -> None:
         super().__init__(
             model=model,
@@ -870,16 +870,22 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
         )
-        if use_emb_lookup_stream:
+        if emb_lookup_stream == "new":
             self._emb_lookup_stream: Optional[torch.Stream] = (
                 (torch.get_device_module(device).Stream())
                 if device.type in ["cuda", "mtia"]
                 else None
             )
-        else:
-            # default to False: re-use data_dist stream for emb lookup to reduce CUDA memory footprint
+        elif emb_lookup_stream == "current":
+            self._emb_lookup_stream = torch.get_device_module(
+                self._device
+            ).current_stream()
+        elif emb_lookup_stream == "data_dist":
+            # default here: re-use data_dist stream for emb lookup to reduce CUDA memory footprint
             # due to Caching Allocator reserving the memory for each stream
             self._emb_lookup_stream = self._data_dist_stream
+        else:
+            raise RuntimeError(f"Unknown emb_lookup_stream {emb_lookup_stream}")
 
     def wait_embedding_lookup(self) -> None:
         """
@@ -906,7 +912,7 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
                     _start_embedding_lookup(
                         module,
                         context,
-                        source_stream=self._emb_lookup_stream,
+                        source_stream=self._data_dist_stream,
                         target_stream=current_stream,
                         stream_context=self._stream_context,
                     )
