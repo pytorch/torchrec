@@ -1003,6 +1003,14 @@ class ShardedModule(
     def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
         pass
 
+    def prefetch(
+        self,
+        dist_input: CompIn,
+        forward_stream: Optional[torch.Stream] = None,
+        ctx: Optional[ShrdCtx] = None,
+    ) -> None:
+        return None
+
     def compute_and_output_dist(
         self, ctx: ShrdCtx, input: CompIn
     ) -> LazyAwaitable[Out]:

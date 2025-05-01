@@ -15,6 +15,7 @@ from typing import (
     Any,
     Dict,
     Generic,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -329,7 +330,7 @@ class ModuleShardingMixIn:
 
 
 Out = TypeVar("Out")
-CompIn = TypeVar("CompIn")
+CompIn = TypeVar("CompIn", KJTList, ListOfKJTList, KeyedJaggedTensor)
 DistOut = TypeVar("DistOut")
 ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
 
@@ -358,14 +359,14 @@ class ShardedEmbeddingModule(
 
     def prefetch(
         self,
-        dist_input: KJTList,
+        dist_input: CompIn,
         forward_stream: Optional[Union[torch.cuda.Stream, torch.mtia.Stream]] = None,
         ctx: Optional[ShrdCtx] = None,
     ) -> None:
         """
         Prefetch input features for each lookup module.
         """
-
+        assert isinstance(dist_input, Iterable)
         for feature, emb_lookup in zip(dist_input, self._lookups):
             while isinstance(emb_lookup, DistributedDataParallel):
                 emb_lookup = emb_lookup.module
