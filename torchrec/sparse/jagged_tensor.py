@@ -8,9 +8,11 @@
 # pyre-strict
 
 import abc
+import dataclasses
 import logging
 
 import operator
+from dataclasses import dataclass
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -1097,10 +1099,13 @@ def _maybe_compute_stride_kjt(
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
     stride_per_key_per_rank: Optional[List[List[int]]],
+    inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
 ) -> int:
     if stride is None:
         if len(keys) == 0:
             stride = 0
+        elif inverse_indices is not None and inverse_indices[1].numel() > 0:
+            return inverse_indices[1].shape[1]
         elif stride_per_key_per_rank is not None and len(stride_per_key_per_rank) > 0:
             stride = max([sum(s) for s in stride_per_key_per_rank])
         elif offsets is not None and offsets.numel() > 0:
@@ -1756,6 +1761,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         "_weights",
         "_lengths",
         "_offsets",
+        "_inverse_indices_tensor",
     ]
 
     def __init__(
@@ -1800,6 +1806,12 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = (
             inverse_indices
         )
+
+        # Init _inverse_indices_tensor to an empty tensor so it will be exported as FakeTensor by torch.export.
+        # Otherwise it will be exported as ConstantArgument when it's None, which causes Unsupported data type error.
+        self._inverse_indices_tensor: Optional[torch.Tensor] = torch.empty(0)
+        if inverse_indices is not None:
+            self._inverse_indices_tensor = inverse_indices[1]
 
         # legacy attribute, for backward compatabilibity
         self._variable_stride_per_key: Optional[bool] = None
@@ -2165,6 +2177,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self._lengths,
             self._offsets,
             self._stride_per_key_per_rank,
+            self._inverse_indices,
         )
         self._stride = stride
         return stride
@@ -3030,15 +3043,32 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             return kjt.sync()
 
 
+@dataclass
+class KjtTreeSpecs:
+    keys: List[str]
+    stride_per_key_per_rank: Optional[List[List[int]]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            field.name: getattr(self, field.name) for field in dataclasses.fields(self)
+        }
+
+
 def _kjt_flatten(
     t: KeyedJaggedTensor,
-) -> Tuple[List[Optional[torch.Tensor]], List[str]]:
-    return [getattr(t, a) for a in KeyedJaggedTensor._fields], t._keys
+) -> Tuple[List[Optional[torch.Tensor]], Tuple[List[str], Optional[List[List[int]]]]]:
+    return [getattr(t, a) for a in KeyedJaggedTensor._fields], (
+        t._keys,
+        t._stride_per_key_per_rank,
+    )
 
 
 def _kjt_flatten_with_keys(
     t: KeyedJaggedTensor,
-) -> Tuple[List[Tuple[KeyEntry, Optional[torch.Tensor]]], List[str]]:
+) -> Tuple[
+    List[Tuple[KeyEntry, Optional[torch.Tensor]]],
+    Tuple[List[str], Optional[List[List[int]]]],
+]:
     values, context = _kjt_flatten(t)
     # pyre can't tell that GetAttrKey implements the KeyEntry protocol
     return [  # pyre-ignore[7]
@@ -3047,9 +3077,17 @@ def _kjt_flatten_with_keys(
 
 
 def _kjt_unflatten(
-    values: List[Optional[torch.Tensor]], context: List[str]  # context is the _keys
+    values: List[Optional[torch.Tensor]],
+    context: Tuple[
+        List[str], Optional[List[List[int]]]
+    ],  # context is the (_keys, _stride_per_key_per_rank, _inverse_indices) tuple
 ) -> KeyedJaggedTensor:
-    return KeyedJaggedTensor(context, *values)
+    return KeyedJaggedTensor(
+        context[0],
+        *values[:-1],
+        stride_per_key_per_rank=context[1],
+        inverse_indices=(context[0], values[-1]),
+    )
 
 
 def _kjt_flatten_spec(
@@ -3070,7 +3108,9 @@ register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 def flatten_kjt_list(
     kjt_arr: List[KeyedJaggedTensor],
-) -> Tuple[List[Optional[torch.Tensor]], List[List[str]]]:
+) -> Tuple[
+    List[Optional[torch.Tensor]], List[Tuple[List[str], Optional[List[List[int]]]]]
+]:
     _flattened_data = []
     _flattened_context = []
     for t in kjt_arr:
@@ -3081,7 +3121,8 @@ def flatten_kjt_list(
 
 
 def unflatten_kjt_list(
-    values: List[Optional[torch.Tensor]], contexts: List[List[str]]
+    values: List[Optional[torch.Tensor]],
+    contexts: List[Tuple[List[str], Optional[List[List[int]]]]],
 ) -> List[KeyedJaggedTensor]:
     num_kjt_fields = len(KeyedJaggedTensor._fields)
     length = len(values)
