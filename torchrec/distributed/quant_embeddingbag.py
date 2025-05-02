@@ -383,6 +383,10 @@ class ShardedQuantEmbeddingBagCollection(
 
         return NullShardedModuleContext()
 
+    @property
+    def unsharded_module_type(self) -> Type[QuantEmbeddingBagCollection]:
+        return QuantEmbeddingBagCollection
+
 
 class QuantEmbeddingBagCollectionSharder(
     BaseQuantEmbeddingSharder[QuantEmbeddingBagCollection]

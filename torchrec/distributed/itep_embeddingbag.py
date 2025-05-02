@@ -274,6 +274,10 @@ class ShardedITEPEmbeddingBagCollection(
 
         return grouped_lookups, grouped_table_unpruned_size_map
 
+    @property
+    def unsharded_module_type(self) -> Type[ITEPEmbeddingBagCollection]:
+        return ITEPEmbeddingBagCollection
+
 
 class ITEPEmbeddingBagCollectionSharder(
     BaseEmbeddingSharder[ITEPEmbeddingBagCollection]
@@ -522,6 +526,10 @@ class ShardedITEPEmbeddingCollection(
                         )
 
         return grouped_lookups, grouped_table_unpruned_size_map
+
+    @property
+    def unsharded_module_type(self) -> Type[ITEPEmbeddingCollection]:
+        return ITEPEmbeddingCollection
 
 
 class ITEPEmbeddingCollectionSharder(BaseEmbeddingSharder[ITEPEmbeddingCollection]):

@@ -1409,6 +1409,10 @@ class ShardedEmbeddingCollection(
     def fused_optimizer(self) -> KeyedOptimizer:
         return self._optim
 
+    @property
+    def unsharded_module_type(self) -> Type[EmbeddingCollection]:
+        return EmbeddingCollection
+
     def create_context(self) -> EmbeddingCollectionContext:
         return EmbeddingCollectionContext(sharding_contexts=[])
 

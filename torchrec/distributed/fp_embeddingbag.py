@@ -161,6 +161,10 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
             if "_embedding_bag_collection" in fqn:
                 yield append_prefix(prefix, fqn)
 
+    @property
+    def unsharded_module_type(self) -> Type[FeatureProcessedEmbeddingBagCollection]:
+        return FeatureProcessedEmbeddingBagCollection
+
 
 class FeatureProcessedEmbeddingBagCollectionSharder(
     BaseEmbeddingSharder[FeatureProcessedEmbeddingBagCollection]

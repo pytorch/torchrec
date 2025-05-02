@@ -82,6 +82,10 @@ class ShardedManagedCollisionEmbeddingBagCollection(
     ) -> ManagedCollisionEmbeddingBagCollectionContext:
         return ManagedCollisionEmbeddingBagCollectionContext(sharding_contexts=[])
 
+    @property
+    def unsharded_module_type(self) -> Type[ManagedCollisionEmbeddingBagCollection]:
+        return ManagedCollisionEmbeddingBagCollection
+
 
 class ManagedCollisionEmbeddingBagCollectionSharder(
     BaseManagedCollisionEmbeddingCollectionSharder[

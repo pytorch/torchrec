@@ -8,9 +8,10 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, List
+from typing import Dict, List, Type
 
 import torch
+from torch import nn
 from torchrec.distributed.embedding_types import KJTList, ShardedEmbeddingModule
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionContext
 from torchrec.distributed.types import Awaitable, LazyAwaitable
@@ -54,6 +55,11 @@ class FakeShardedEmbeddingModule(ShardedEmbeddingModule[CompIn, DistOut, Out, Sh
     #  return value of `None`.
     def output_dist(self, ctx: ShrdCtx, output: DistOut) -> LazyAwaitable[Out]:
         pass
+
+    @property
+    def unsharded_module_type(self) -> Type[nn.Module]:
+        # Since this is a fake sharded embedding module, just returning default module
+        return nn.Module
 
 
 class TestShardedEmbeddingModule(unittest.TestCase):
