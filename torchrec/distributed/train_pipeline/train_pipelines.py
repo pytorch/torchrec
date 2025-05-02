@@ -595,12 +595,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             # invoke splits all_to_all comms (first part of input_dist)
             self.start_sparse_data_dist(self.batches[1], self.contexts[1])
 
-        # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here
-        self.enqueue_batch(dataloader_iter)
-
         # forward
         with record_function("## forward ##"):
             losses, output = self._model_fwd(self.batches[0])
+
+        # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here.
+        # Start this step after the forward of batch i, so that the H2D copy doesn't compete
+        # pcie bandwidth with embedding lookup from UVM/UVM_CACHING.
+        self.enqueue_batch(dataloader_iter)
 
         if len(self.batches) >= 2:
             # invoke data (values, lengths, etc.) all_to_all comms (second part of input_dist)
