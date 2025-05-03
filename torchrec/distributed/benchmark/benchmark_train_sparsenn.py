@@ -98,6 +98,7 @@ class EmbeddingTablesConfig:
 @dataclass
 class PipelineConfig:
     pipeline: str = "base"
+    emb_lookup_stream: str = "data_dist"
 
     def generate_pipeline(
         self, model: nn.Module, opt: torch.optim.Optimizer, device: torch.device
@@ -115,6 +116,13 @@ class PipelineConfig:
         if self.pipeline == "semi":
             return TrainPipelineSemiSync(
                 model=model, optimizer=opt, device=device, start_batch=0
+            )
+        elif self.pipeline == "fused":
+            return TrainPipelineFusedSparseDist(
+                model=model,
+                optimizer=opt,
+                device=device,
+                emb_lookup_stream=self.emb_lookup_stream,
             )
         elif self.pipeline in _pipeline_cls:
             Pipeline = _pipeline_cls[self.pipeline]
