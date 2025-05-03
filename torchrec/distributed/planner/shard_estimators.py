@@ -106,7 +106,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
         if not sharder_map:
             assert not sharding_options, "sharder_map not provided for sharding_options"
             return
-
+        num_feature_processors = 0
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
@@ -160,7 +160,7 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 in module._feature_processor.feature_processor_modules.keys()
             ):
                 has_feature_processor = True
-                logger.info(f"Table {sharding_option.name} has feature processor.")
+                num_feature_processors += 1
 
             if isinstance(module, EmbeddingBagCollectionInterface):
                 is_weighted = module.is_weighted()
@@ -247,6 +247,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
 
             for shard, perf in zip(sharding_option.shards, shard_perfs):
                 shard.perf = perf
+
+        logger.info(f"Total {num_feature_processors} feature processor.")
 
     @classmethod
     def perf_func_emb_wall_time(
