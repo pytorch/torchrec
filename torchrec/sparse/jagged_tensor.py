@@ -1756,6 +1756,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         "_weights",
         "_lengths",
         "_offsets",
+        "_inverse_indices",
     ]
 
     def __init__(
@@ -1800,7 +1801,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = (
             inverse_indices
         )
-
         # legacy attribute, for backward compatabilibity
         self._variable_stride_per_key: Optional[bool] = None
 
@@ -3032,13 +3032,36 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
 def _kjt_flatten(
     t: KeyedJaggedTensor,
-) -> Tuple[List[Optional[torch.Tensor]], List[str]]:
-    return [getattr(t, a) for a in KeyedJaggedTensor._fields], t._keys
+) -> Tuple[
+    List[Optional[torch.Tensor]],
+    Tuple[List[str], Optional[List[str]], Optional[List[List[int]]]],
+]:
+    field_values = [getattr(t, a) for a in KeyedJaggedTensor._fields[:-1]]
+    inverse_index_keys: Optional[List[str]] = None
+    # Init to an empty tensor so it will be exported as FakeTensor by torch.export.
+    # Otherwise it will be exported as a ConstantArgument when the KJT's _inverse_indices None, which causes Unsupported data type error.
+    inverse_indices: torch.Tensor = torch.empty(0)
+
+    if t._inverse_indices is not None:
+        inverse_indices = t._inverse_indices[1]
+        # pyre-fixme: [16]: `Optional` has no attribute `__getitem__`.
+        inverse_index_keys = t._inverse_indices[0]
+
+    field_values.append(inverse_indices)
+
+    return field_values, (
+        t._keys,
+        inverse_index_keys,
+        t._stride_per_key_per_rank,
+    )
 
 
 def _kjt_flatten_with_keys(
     t: KeyedJaggedTensor,
-) -> Tuple[List[Tuple[KeyEntry, Optional[torch.Tensor]]], List[str]]:
+) -> Tuple[
+    List[Tuple[KeyEntry, Optional[torch.Tensor]]],
+    Tuple[List[str], Optional[List[str]], Optional[List[List[int]]]],
+]:
     values, context = _kjt_flatten(t)
     # pyre can't tell that GetAttrKey implements the KeyEntry protocol
     return [  # pyre-ignore[7]
@@ -3047,9 +3070,17 @@ def _kjt_flatten_with_keys(
 
 
 def _kjt_unflatten(
-    values: List[Optional[torch.Tensor]], context: List[str]  # context is the _keys
+    values: List[Optional[torch.Tensor]],
+    context: Tuple[
+        List[str], Optional[List[str]], Optional[List[List[int]]]
+    ],  # context is the (_keys, inverse_index_keys, _stride_per_key_per_rank) tuple
 ) -> KeyedJaggedTensor:
-    return KeyedJaggedTensor(context, *values)
+    return KeyedJaggedTensor(
+        context[0],
+        *values[:-1],
+        stride_per_key_per_rank=context[2],
+        inverse_indices=(context[1], values[-1]) if context[1] is not None else None,
+    )
 
 
 def _kjt_flatten_spec(
@@ -3070,7 +3101,10 @@ register_pytree_flatten_spec(KeyedJaggedTensor, _kjt_flatten_spec)
 
 def flatten_kjt_list(
     kjt_arr: List[KeyedJaggedTensor],
-) -> Tuple[List[Optional[torch.Tensor]], List[List[str]]]:
+) -> Tuple[
+    List[Optional[torch.Tensor]],
+    List[Tuple[List[str], Optional[List[str]], Optional[List[List[int]]]]],
+]:
     _flattened_data = []
     _flattened_context = []
     for t in kjt_arr:
@@ -3081,7 +3115,8 @@ def flatten_kjt_list(
 
 
 def unflatten_kjt_list(
-    values: List[Optional[torch.Tensor]], contexts: List[List[str]]
+    values: List[Optional[torch.Tensor]],
+    contexts: List[Tuple[List[str], Optional[List[str]], Optional[List[List[int]]]]],
 ) -> List[KeyedJaggedTensor]:
     num_kjt_fields = len(KeyedJaggedTensor._fields)
     length = len(values)
