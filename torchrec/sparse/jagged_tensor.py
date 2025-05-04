@@ -548,7 +548,7 @@ def _kjt_concat(
         lengths=torch.cat(length_list, dim=0),
         stride=stride,
         stride_per_key_per_rank=(
-            stride_per_key_per_rank if variable_stride_per_key else None
+            torch.tensor(stride_per_key_per_rank) if variable_stride_per_key else None
         ),
         length_per_key=length_per_key if has_length_per_key else None,
         inverse_indices=(
@@ -1096,7 +1096,7 @@ def _maybe_compute_stride_kjt(
     stride: Optional[int],
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
-    stride_per_key_per_rank: Optional[List[List[int]]],
+    stride_per_key_per_rank: Union[Optional[torch.Tensor], Optional[List[List[int]]]],
 ) -> int:
     if stride is None:
         if len(keys) == 0:
@@ -1668,7 +1668,7 @@ def _maybe_compute_lengths_offset_per_key(
 
 def _maybe_compute_stride_per_key(
     stride_per_key: Optional[List[int]],
-    stride_per_key_per_rank: Optional[List[List[int]]],
+    stride_per_key_per_rank: Union[Optional[torch.Tensor], Optional[List[List[int]]]],
     stride: Optional[int],
     keys: List[str],
 ) -> Optional[List[int]]:
@@ -1684,7 +1684,7 @@ def _maybe_compute_stride_per_key(
 
 def _maybe_compute_variable_stride_per_key(
     variable_stride_per_key: Optional[bool],
-    stride_per_key_per_rank: Optional[List[List[int]]],
+    stride_per_key_per_rank: Union[Optional[torch.Tensor], Optional[List[List[int]]]],
 ) -> bool:
     if variable_stride_per_key is not None:
         return variable_stride_per_key
@@ -1766,7 +1766,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         lengths: Optional[torch.Tensor] = None,
         offsets: Optional[torch.Tensor] = None,
         stride: Optional[int] = None,
-        stride_per_key_per_rank: Optional[List[List[int]]] = None,
+        stride_per_key_per_rank: Union[
+            Optional[torch.Tensor], Optional[List[List[int]]]
+        ] = None,
         # Below exposed to ensure torch.script-able
         stride_per_key: Optional[List[int]] = None,
         length_per_key: Optional[List[int]] = None,
@@ -1788,9 +1790,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._lengths: Optional[torch.Tensor] = lengths
         self._offsets: Optional[torch.Tensor] = offsets
         self._stride: Optional[int] = stride
-        self._stride_per_key_per_rank: Optional[List[List[int]]] = (
-            stride_per_key_per_rank
-        )
+        self._stride_per_key_per_rank: Union[
+            Optional[torch.Tensor], Optional[List[List[int]]]
+        ] = stride_per_key_per_rank
         self._stride_per_key: Optional[List[int]] = stride_per_key
         self._length_per_key: Optional[List[int]] = length_per_key
         self._offset_per_key: Optional[List[int]] = offset_per_key
@@ -1827,7 +1829,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         offsets: torch.Tensor,
         weights: Optional[torch.Tensor] = None,
         stride: Optional[int] = None,
-        stride_per_key_per_rank: Optional[List[List[int]]] = None,
+        stride_per_key_per_rank: Union[
+            Optional[torch.Tensor], Optional[List[List[int]]]
+        ] = None,
         inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
     ) -> "KeyedJaggedTensor":
         """
@@ -1840,7 +1844,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights (Optional[torch.Tensor]): if the values have weights. Tensor with the
                 same shape as values.
             stride (Optional[int]): number of examples per batch.
-            stride_per_key_per_rank (Optional[List[List[int]]]): batch size
+            stride_per_key_per_rank (Union[Optional[torch.Tensor], Optional[List[List[int]]]]): batch size
                 (number of examples) per key per rank, with the outer list representing the
                 keys and the inner list representing the values.
             inverse_indices (Optional[Tuple[List[str], torch.Tensor]]): inverse indices to
@@ -1867,7 +1871,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         lengths: torch.Tensor,
         weights: Optional[torch.Tensor] = None,
         stride: Optional[int] = None,
-        stride_per_key_per_rank: Optional[List[List[int]]] = None,
+        stride_per_key_per_rank: Union[
+            Optional[torch.Tensor], Optional[List[List[int]]]
+        ] = None,
         inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
     ) -> "KeyedJaggedTensor":
         """
@@ -1881,7 +1887,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights (Optional[torch.Tensor]): if the values have weights. Tensor with the
                 same shape as values.
             stride (Optional[int]): number of examples per batch.
-            stride_per_key_per_rank (Optional[List[List[int]]]): batch size
+            stride_per_key_per_rank (Union[Optional[torch.Tensor], Optional[List[List[int]]]]): batch size
                 (number of examples) per key per rank, with the outer list representing the
                 keys and the inner list representing the values.
             inverse_indices (Optional[Tuple[List[str], torch.Tensor]]): inverse indices to
@@ -2193,8 +2199,15 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         Returns:
             List[List[int]]: stride per key per rank of the KeyedJaggedTensor.
         """
+        if self._stride_per_key_per_rank is None:
+            return []
+
         stride_per_key_per_rank = self._stride_per_key_per_rank
-        return stride_per_key_per_rank if stride_per_key_per_rank is not None else []
+        return (
+            stride_per_key_per_rank.tolist()
+            if isinstance(stride_per_key_per_rank, torch.Tensor)
+            else stride_per_key_per_rank
+        )
 
     def variable_stride_per_key(self) -> bool:
         """
