@@ -111,22 +111,25 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
                         "SSDEmbeddingBag or SSDEmbeddingBag."
                     )
 
-                    emb1_kv = dict(
-                        emb_module1.get_named_split_embedding_weights_snapshot()
-                    )
+                    emb1_kv = {
+                        t: (w, w_id, bucket_cnt)
+                        for t, w, w_id, bucket_cnt in emb_module1.get_named_split_embedding_weights_snapshot()
+                    }
                     for (
-                        k,
-                        v,
+                        t,
+                        w,
+                        _,
+                        _,
                     ) in emb_module2.get_named_split_embedding_weights_snapshot():
-                        v1 = emb1_kv.get(k)
-                        v1_full_tensor = v1.full_tensor()
+                        w1 = emb1_kv[t][0]
+                        w1_full_tensor = w1.full_tensor()
 
                         # write value into ssd for both emb module for later comparison
-                        v.wrapped.set_range(
-                            0, 0, v1_full_tensor.size(0), v1_full_tensor
+                        w.wrapped.set_range(
+                            0, 0, w1_full_tensor.size(0), w1_full_tensor
                         )
-                        v1.wrapped.set_range(
-                            0, 0, v1_full_tensor.size(0), v1_full_tensor
+                        w1.wrapped.set_range(
+                            0, 0, w1_full_tensor.size(0), w1_full_tensor
                         )
 
                     # purge after loading. This is needed, since we pass a batch
@@ -682,11 +685,26 @@ class KeyValueSequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
                         "SSDEmbeddingBag or SSDEmbeddingBag."
                     )
 
-                    weights = emb_module1.emb_module.debug_split_embedding_weights()
-                    # need to set emb_module1 as well, since otherwise emb_module1 would
-                    # produce a random debug_split_embedding_weights everytime
-                    _load_split_embedding_weights(emb_module1, weights)
-                    _load_split_embedding_weights(emb_module2, weights)
+                    emb1_kv = {
+                        t: (w, w_id, bucket_cnt)
+                        for t, w, w_id, bucket_cnt in emb_module1.get_named_split_embedding_weights_snapshot()
+                    }
+                    for (
+                        t,
+                        w,
+                        _,
+                        _,
+                    ) in emb_module2.get_named_split_embedding_weights_snapshot():
+                        w1 = emb1_kv[t][0]
+                        w1_full_tensor = w1.full_tensor()
+
+                        # write value into ssd for both emb module for later comparison
+                        w.wrapped.set_range(
+                            0, 0, w1_full_tensor.size(0), w1_full_tensor
+                        )
+                        w1.wrapped.set_range(
+                            0, 0, w1_full_tensor.size(0), w1_full_tensor
+                        )
 
                     # purge after loading. This is needed, since we pass a batch
                     # through dmp when instantiating them.

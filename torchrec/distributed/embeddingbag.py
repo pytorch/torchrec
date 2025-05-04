@@ -1077,8 +1077,12 @@ class ShardedEmbeddingBagCollection(
             sharded_kvtensors_copy = copy.deepcopy(sharded_kvtensors)
             for lookup, sharding in zip(module._lookups, module._embedding_shardings):
                 if not isinstance(sharding, DpPooledEmbeddingSharding):
-                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
-                    for key, v in lookup.get_named_split_embedding_weights_snapshot():
+                    for (
+                        key,
+                        v,
+                        _,
+                        _,
+                    ) in lookup.get_named_split_embedding_weights_snapshot():  # pyre-ignore
                         assert key in sharded_kvtensors_copy
                         sharded_kvtensors_copy[key].local_shards()[0].tensor = v
             for (

@@ -952,8 +952,12 @@ class ShardedEmbeddingCollection(
                 module._lookups, module._sharding_type_to_sharding.keys()
             ):
                 if sharding_type != ShardingType.DATA_PARALLEL.value:
-                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
-                    for key, v in lookup.get_named_split_embedding_weights_snapshot():
+                    for (
+                        key,
+                        v,
+                        _,
+                        _,
+                    ) in lookup.get_named_split_embedding_weights_snapshot():  # pyre-ignore
                         assert key in sharded_kvtensors_copy
                         sharded_kvtensors_copy[key].local_shards()[0].tensor = v
             for (
