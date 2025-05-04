@@ -10,7 +10,7 @@ Sarunya Pumma, Emma Lin, Ehsan K. Ardestani, Joe Wang
 # High Level Design
 
 Considering design principles listed above, we have opted on a Key-Value API. TBE will offer a software managed cache in HBM, as we do when leveraging the host side memory. However, unlike extension to host side memory where we leverage UVA to prefetch, currently we opt for a copy based API, mandated by design rule \#2, to separate the implementation of the backend KV store, and TBE. It is possible that in future we might adopt a UVA based command queue approach interface with the KV-store, if the cost of the copy based semantics proves prohibitive.
-[![][image1]](https://github.com/pytorch/torchrec/blob/main/rfc/RFC-0002-assets/kv_tbe_training_high_level.png)
+[![image1]](./kv_tbe_training_high_level.png)
 
 Figure 1: High level architecture of TBE KV Store based extension. The blocks with orange line are implemented by TBE.
 
@@ -24,7 +24,7 @@ The Auxiliary buffers indicated in Figure 1 provide a scratch pad to stage the d
 
 We do expect a training pipeline similar to EMO-DRAM to allow for overlapping prefetch(i+1) with train(i), where (i) denotes a training iteration number. This requires some extra work on the train pipeline to enable prefetch pipeline on top of SSD pipeline.  The high-level workflow of pipeline prefetching is shown in the figure below.
 
-[![][image2]](https://github.com/pytorch/torchrec/blob/main/rfc/RFC-0002-assets/kv_tbe_pipeline_prefetching.png)
+[![image2]](./kv_tbe_pipeline_prefetching.png)
 
 # Handling Conflict Miss
 
@@ -44,7 +44,7 @@ Similar to EMO+DRAM:
 
 The detailed prefetch workflow is demonstrated in the figure below.
 
-![][image3](https://github.com/pytorch/torchrec/blob/main/rfc/RFC-0002-assets/kv_tbe_prefetch_workflow.png)
+![image3](./kv_tbe_prefetch_workflow.png)
 
 TBE will ensure a unified UVA buffer across prefetch and eviction flows.
 
