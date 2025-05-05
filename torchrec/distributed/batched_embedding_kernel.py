@@ -660,7 +660,7 @@ def _gen_named_parameters_by_table_ssd_pmt(
     name as well as the parameter itself. The embedding table is in the form of
     PartiallyMaterializedTensor to support windowed access.
     """
-    pmts = emb_module.split_embedding_weights()
+    pmts, _, _ = emb_module.split_embedding_weights()
     for table_config, pmt in zip(config.embedding_tables, pmts):
         table_name = table_config.name
         emb_table = pmt
@@ -963,7 +963,7 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
         # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        emb_tables = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_tables, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
             emb_table.local_metadata.placement._device = torch.device("cpu")
@@ -1002,14 +1002,19 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, tensor in zip(
             self._config.embedding_tables,
-            self.split_embedding_weights(),
+            self.split_embedding_weights()[0],
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
             yield key, tensor
 
-    def get_named_split_embedding_weights_snapshot(
-        self, prefix: str = ""
-    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+    def get_named_split_embedding_weights_snapshot(self, prefix: str = "") -> Iterator[
+        Tuple[
+            str,
+            Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
+            Optional[ShardedTensor],
+        ]
+    ]:
         """
         Return an iterator over embedding tables, yielding both the table name as well as the embedding
         table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
@@ -1017,10 +1022,10 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         """
         for config, tensor in zip(
             self._config.embedding_tables,
-            self.split_embedding_weights(no_snapshot=False),
+            self.split_embedding_weights(no_snapshot=False)[0],
         ):
             key = append_prefix(prefix, f"{config.name}")
-            yield key, tensor
+            yield key, tensor, None, None
 
     def flush(self) -> None:
         """
@@ -1037,9 +1042,11 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         self.emb_module.lxu_cache_state.fill_(-1)
 
     # pyre-ignore [15]
-    def split_embedding_weights(
-        self, no_snapshot: bool = True
-    ) -> List[PartiallyMaterializedTensor]:
+    def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
+        List[PartiallyMaterializedTensor],
+        Optional[List[torch.Tensor]],
+        Optional[List[torch.Tensor]],
+    ]:
         return self.emb_module.split_embedding_weights(no_snapshot)
 
 
@@ -1455,7 +1462,7 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
         # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        emb_tables = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_tables, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
             emb_table.local_metadata.placement._device = torch.device("cpu")
@@ -1494,14 +1501,19 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
         for config, tensor in zip(
             self._config.embedding_tables,
-            self.split_embedding_weights(),
+            self.split_embedding_weights()[0],
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
             yield key, tensor
 
-    def get_named_split_embedding_weights_snapshot(
-        self, prefix: str = ""
-    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+    def get_named_split_embedding_weights_snapshot(self, prefix: str = "") -> Iterator[
+        Tuple[
+            str,
+            Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
+            Optional[ShardedTensor],
+        ]
+    ]:
         """
         Return an iterator over embedding tables, yielding both the table name as well as the embedding
         table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
@@ -1509,10 +1521,10 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         """
         for config, tensor in zip(
             self._config.embedding_tables,
-            self.split_embedding_weights(no_snapshot=False),
+            self.split_embedding_weights(no_snapshot=False)[0],
         ):
             key = append_prefix(prefix, f"{config.name}")
-            yield key, tensor
+            yield key, tensor, None, None
 
     def flush(self) -> None:
         """
@@ -1529,9 +1541,11 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         self.emb_module.lxu_cache_state.fill_(-1)
 
     # pyre-ignore [15]
-    def split_embedding_weights(
-        self, no_snapshot: bool = True
-    ) -> List[PartiallyMaterializedTensor]:
+    def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
+        List[PartiallyMaterializedTensor],
+        Optional[List[torch.Tensor]],
+        Optional[List[torch.Tensor]],
+    ]:
         return self.emb_module.split_embedding_weights(no_snapshot)
 
 
