@@ -350,7 +350,14 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
 
     def get_named_split_embedding_weights_snapshot(
         self,
-    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+    ) -> Iterator[
+        Tuple[
+            str,
+            Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
+            Optional[ShardedTensor],
+        ]
+    ]:
         """
         Return an iterator over embedding tables, yielding both the table name as well as the embedding
         table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
@@ -657,7 +664,14 @@ class GroupedPooledEmbeddingsLookup(
 
     def get_named_split_embedding_weights_snapshot(
         self,
-    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+    ) -> Iterator[
+        Tuple[
+            str,
+            Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
+            Optional[ShardedTensor],
+        ]
+    ]:
         """
         Return an iterator over embedding tables, yielding both the table name as well as the embedding
         table itself. The embedding table is in the form of PartiallyMaterializedTensor with a valid
