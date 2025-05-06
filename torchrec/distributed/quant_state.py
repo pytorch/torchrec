@@ -7,7 +7,9 @@
 
 # pyre-strict
 
+import bisect
 import copy
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Dict, List, Mapping, Optional, Tuple, TypeVar, Union
@@ -16,6 +18,7 @@ import torch
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
+from pyre_extensions import none_throws
 from torch.distributed import _remote_device
 from torch.distributed._shard.sharded_tensor import (
     Shard,
@@ -32,6 +35,7 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingModule,
 )
 from torchrec.distributed.types import ParameterSharding, ShardingType
+from torchrec.distributed.utils import get_bucket_metadata_from_shard_metadata
 from torchrec.modules.embedding_configs import DataType
 from torchrec.streamable import Multistreamable
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
@@ -379,8 +383,41 @@ class WeightSpec:
     sharding_type: Optional[str]  # e.g. ShardingType.ROW_WISE.value=="row_wise"
 
 
+def get_bucket_offsets_per_virtual_table(
+    grouped_embedding_config: List[GroupedEmbeddingConfig],
+    virtual_table_name_to_bucket_lengths: Dict[str, List[int]],
+) -> Dict[str, List[int]]:
+    shard_metadata_per_virtual_table: Dict[str, List[ShardMetadata]] = defaultdict(list)
+    for config in grouped_embedding_config:
+        tables = config.embedding_tables
+        for table in tables:
+            assert (
+                # pyre-fixme: Undefined attribute [16]
+                table.global_metadata.shards_metadata
+                is not None
+            ), f"Table: {table} doesn't have global metadata in grouped embedding config"
+            if table.name in none_throws(virtual_table_name_to_bucket_lengths):
+                if table.name in shard_metadata_per_virtual_table:
+                    assert (
+                        shard_metadata_per_virtual_table[table.name]
+                        == table.global_metadata.shards_metadata
+                    ), f"Virtual table: {table.name} should have same global metadata across all gouped embedding config got sharded_metadata_map: {shard_metadata_per_virtual_table[table.name]} vs global metadata: {table.global_metadata.shards_metadata}"
+                else:
+                    shard_metadata_per_virtual_table[table.name] = (
+                        table.global_metadata.shards_metadata
+                    )
+
+    return {
+        table: get_bucket_metadata_from_shard_metadata(
+            shard_metadata, len(virtual_table_name_to_bucket_lengths[table])
+        ).bucket_offsets_per_shard
+        for table, shard_metadata in shard_metadata_per_virtual_table.items()
+    }
+
+
 def sharded_tbes_weights_spec(
     sharded_model: torch.nn.Module,
+    virtual_table_name_to_bucket_lengths: Optional[Dict[str, list[int]]] = None,
 ) -> Dict[str, WeightSpec]:
     # OUTPUT:
     # Example:
@@ -434,15 +471,81 @@ def sharded_tbes_weights_spec(
                 for info in sharding_infos:
                     table_shardings[info.embedding_config.name] = sharding_type
 
-            for tbe_idx, (_tbe, config) in enumerate(tbes_configs.items()):
+            # mapping to compute shard offsets based on bucket length tensor
+            # for bucket wise sharding of virtual embedding tables
+            bucket_metadata_per_virtual_table = (
+                None
+                if virtual_table_name_to_bucket_lengths is None
+                else get_bucket_offsets_per_virtual_table(
+                    list(tbes_configs.values()),
+                    virtual_table_name_to_bucket_lengths,
+                )
+            )
+
+            cum_shard_row_offset_bw_sharding: Dict[str, int] = {}
+            for tbe_idx, (_, config) in enumerate(tbes_configs.items()):
                 tables = config.embedding_tables
                 for table_idx, table in enumerate(tables):
                     table_name: str = table.name
                     # pyre-ignore
                     table_metadata: ShardMetadata = table.local_metadata
+                    local_rows = table.local_rows
+                    row_offsets = table_metadata.shard_offsets[0]
                     # TODO(ivankobzarev) Switch to use table_metadata.shard_sizes when it works correctly with int4 quantized modules
-                    shard_sizes: List[int] = [table.local_rows, table.local_cols]
-                    shard_offsets: List[int] = table_metadata.shard_offsets
+                    if (
+                        virtual_table_name_to_bucket_lengths is not None
+                        and table_name in virtual_table_name_to_bucket_lengths
+                    ):
+                        assert (
+                            bucket_metadata_per_virtual_table is not None
+                        ), f"Bucket id offsets must be populated for virtual table: {table_name}"
+                        shard_index = bisect.bisect_left(
+                            [
+                                shard_metadata.shard_offsets[0]
+                                # pyre-fixme: Undefined attribute[16]
+                                for shard_metadata in table.global_metadata.shards_metadata
+                            ],
+                            # pyre-fixme: Undefined attribute[16]
+                            table.local_metadata.shard_offsets[0],
+                        )
+                        assert (
+                            shard_index < len(table.global_metadata.shards_metadata)
+                            and table.global_metadata.shards_metadata[
+                                shard_index
+                            ].shard_offsets[0]
+                            == table.local_metadata.shard_offsets[0]
+                        ), f"virtual table: {table_name} local metadata shard offsets: {table.local_metadata.shard_offsets} should match with at least one of the shards in its global meetadata: {table.global_metadata.shards_metadata}"
+                        bucket_id_offset = bucket_metadata_per_virtual_table[
+                            table_name
+                        ][shard_index]
+                        bucket_id_offset_end = (
+                            bucket_metadata_per_virtual_table[table_name][
+                                shard_index + 1
+                            ]
+                            if shard_index
+                            < len(bucket_metadata_per_virtual_table[table_name]) - 1
+                            else None
+                        )
+                        if table_name not in cum_shard_row_offset_bw_sharding:
+                            cum_shard_row_offset_bw_sharding[table_name] = 0
+                        local_rows = int(
+                            sum(
+                                virtual_table_name_to_bucket_lengths[table_name][
+                                    bucket_id_offset:bucket_id_offset_end
+                                ]
+                                if bucket_id_offset_end is not None
+                                else virtual_table_name_to_bucket_lengths[table_name][
+                                    bucket_id_offset:
+                                ]  # last bucket
+                            )
+                        )
+                        row_offsets = cum_shard_row_offset_bw_sharding[table_name]
+                        cum_shard_row_offset_bw_sharding[table_name] += local_rows
+                    shard_sizes: List[int] = [local_rows, table.local_cols]
+                    shard_offsets: List[int] = [
+                        row_offsets,
+                        table_metadata.shard_offsets[1],
+                    ]
                     s: str = "embedding_bags" if is_sqebc else "embeddings"
                     s = ("_embedding_module." if is_sqmcec else "") + s
                     unsharded_fqn_weight: str = f"{module_fqn}.{s}.{table_name}.weight"
