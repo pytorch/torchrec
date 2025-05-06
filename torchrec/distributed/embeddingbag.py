@@ -1082,7 +1082,9 @@ class ShardedEmbeddingBagCollection(
                         v,
                         _,
                         _,
-                    ) in lookup.get_named_split_embedding_weights_snapshot():  # pyre-ignore
+                    ) in (
+                        lookup.get_named_split_embedding_weights_snapshot()  # pyre-ignore
+                    ):
                         assert key in sharded_kvtensors_copy
                         sharded_kvtensors_copy[key].local_shards()[0].tensor = v
             for (
