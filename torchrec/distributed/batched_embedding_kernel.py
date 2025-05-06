@@ -168,6 +168,25 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
 
     return ssd_tbe_params
 
+enable_gradient_accumulation = False
+
+def set_gradient_accumulation(enable: bool):
+    global enable_gradient_accumulation
+    enable_gradient_accumulation = enable
+
+class GradientAccumulationQueue:
+    def __init__(self) -> None:
+        self.inputs = []
+        self.grads = []
+
+    def push(self, input, grad):
+        self.inputs.append(input)
+        self.grads.append(grad)
+
+    def pop(self):
+        i, g = self.inputs, [x.grad for x in self.grads]
+        self.inputs, self.grads = [], []
+        return i, g
 
 class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
     def __init__(
@@ -630,6 +649,48 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
     def update_hyper_parameters(self, params_dict: Dict[str, Any]) -> None:
         self._emb_module.update_hyper_parameters(params_dict)
 
+
+class GradAccEmbeddingFusedOptimizer(EmbeddingFusedOptimizer):
+    def __init__(self, queue: GradientAccumulationQueue, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._queue = queue
+        self._permute_indices = {}
+    
+    def step(self, closure: Any = None) -> None:
+        with torch.cuda.nvtx.range("grad acc optimizer step"):
+            inputs, grads = self._queue.pop()
+            if len(inputs) > 0:
+                for i in range(1, len(inputs)):
+                    assert inputs[i].keys() == inputs[0].keys()
+                key_cnt, input_cnt = len(inputs[0].keys()), len(inputs)
+                ids = KeyedJaggedTensor.concat(inputs)
+                x = ids.values()
+                grad = torch.cat(grads, dim=0)
+                del inputs, grads
+
+                ids._values = torch.arange(0, x.numel(), dtype=torch.int32, device='cuda')
+                indices_key = (key_cnt, input_cnt)
+                if indices_key in self._permute_indices:
+                    permute_indices, permute_indices_tensor = self._permute_indices[indices_key]
+                else:
+                    permute_indices = []
+                    for i in range(key_cnt):
+                        for j in range(input_cnt):
+                            permute_indices.append(j * key_cnt + i)
+                    permute_indices_tensor = torch.tensor(permute_indices, dtype=torch.int, device=x.device)
+                    self._permute_indices[indices_key] = (permute_indices, permute_indices_tensor)
+
+                ids = ids.permute(permute_indices, indices_tensor=permute_indices_tensor)
+                x = torch.index_select(x, dim=0, index=ids.values())
+                grad = torch.index_select(grad, dim=0, index=ids.values())
+
+                output = self._emb_module(
+                    indices=x.long(),
+                    offsets=ids.offsets().long(),
+                )
+                torch.autograd.backward(output, grad_tensors=grad)
+
+        super().step(closure)
 
 def _gen_named_parameters_by_table_ssd(
     emb_module: SSDTableBatchedEmbeddingBags,
@@ -1103,11 +1164,23 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
                 **fused_params,
             )
         )
-        self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
-            config,
-            self._emb_module,
-            pg,
-        )
+        global enable_gradient_accumulation
+        if enable_gradient_accumulation:
+            self._grad_acc_queue = GradientAccumulationQueue()
+            self._optim: EmbeddingFusedOptimizer = GradAccEmbeddingFusedOptimizer(
+                self._grad_acc_queue,
+                config,
+                self._emb_module,
+                pg,
+            )
+        else:
+            self._grad_acc_queue = None
+            self._optim: EmbeddingFusedOptimizer = EmbeddingFusedOptimizer(
+                config,
+                self._emb_module,
+                pg,
+            )
+
         self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
             _gen_named_parameters_by_table_fused(
                 emb_module=self._emb_module,
@@ -1156,6 +1229,20 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
 
     def purge(self) -> None:
         self._emb_module.reset_cache_states()
+
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        if self._grad_acc_queue is None:
+            return super().forward(features)
+
+        with torch.no_grad():
+            if hasattr(self._emb_module, 'iter'):
+                step = self._emb_module.iter.item()
+            ret = super().forward(features)
+            if hasattr(self._emb_module, 'iter'):
+                self._emb_module.iter[0] = step
+        ret.requires_grad=True
+        self._grad_acc_queue.push(features, ret)
+        return ret
 
 
 class BatchedDenseEmbedding(BaseBatchedEmbedding[torch.Tensor]):
