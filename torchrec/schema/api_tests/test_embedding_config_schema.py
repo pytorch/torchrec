@@ -39,6 +39,8 @@ class StableEmbeddingBagConfig:
     # enable this flag to support rw_sharding
     need_pos: bool = False
     input_dim: Optional[int] = None
+    total_num_buckets: Optional[int] = None
+    use_virtual_table: bool = False
     pooling: PoolingType = PoolingType.SUM
 
 

@@ -177,6 +177,11 @@ class BaseEmbeddingConfig:
             If None, no pruning is applied.
         init_fn (Optional[Callable[[torch.Tensor], Optional[torch.Tensor]]]): init function for embedding weights.
         need_pos (bool): whether table is position weighted.
+
+        total_num_buckets (Optional[int]): number of bucket globally, unchanged through model lifetime
+        use_virtual_table (bool): indicator of whether table uses virtual space(magnitude like 2^50)
+            for number embedding memory for virtual table is dynamic and only materialized when
+            id is trained this needs to be paired with SSD/DRAM Virtual talbe in EmbeddingComputeKernel
     """
 
     num_embeddings: int
@@ -195,6 +200,8 @@ class BaseEmbeddingConfig:
 
     # handle the special case
     input_dim: Optional[int] = None
+    total_num_buckets: Optional[int] = None
+    use_virtual_table: bool = False
 
     def get_weight_init_max(self) -> float:
         if self.weight_init_max is None:
