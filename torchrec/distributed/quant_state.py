@@ -26,6 +26,9 @@ from torch.distributed._shard.sharded_tensor import (
 from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
 from torchrec.distributed.embedding_types import (
     GroupedEmbeddingConfig,
+    KeyedJaggedTensor,
+    KJTList,
+    ListOfKJTList,
     ShardedEmbeddingModule,
 )
 from torchrec.distributed.types import ParameterSharding, ShardingType
@@ -34,7 +37,7 @@ from torchrec.streamable import Multistreamable
 from torchrec.tensor_types import UInt2Tensor, UInt4Tensor
 
 Out = TypeVar("Out")
-CompIn = TypeVar("CompIn")
+CompIn = TypeVar("CompIn", KJTList, ListOfKJTList, KeyedJaggedTensor)
 DistOut = TypeVar("DistOut")
 ShrdCtx = TypeVar("ShrdCtx", bound=Multistreamable)
 

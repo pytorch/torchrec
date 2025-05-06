@@ -1746,7 +1746,7 @@ def _prefetch_embeddings(
     context: PrefetchTrainPipelineContext,
     pipelined_modules: List[ShardedModule],
     device: torch.device,
-    stream_context: torch.Stream,
+    stream_context: Callable[[Optional[torch.Stream]], torch.cuda.StreamContext],
     data_dist_stream: Optional[torch.Stream],
     default_stream: Optional[torch.Stream],
 ) -> Dict[str, KJTList]:
@@ -1754,7 +1754,6 @@ def _prefetch_embeddings(
     for sharded_module in pipelined_modules:
         forward = sharded_module.forward
         assert isinstance(forward, PrefetchPipelinedForward)
-
         assert forward._name in context.input_dist_tensors_requests
         request = context.input_dist_tensors_requests.pop(forward._name)
         assert isinstance(request, Awaitable)
@@ -1777,10 +1776,12 @@ def _prefetch_embeddings(
                 data, (torch.Tensor, Multistreamable)
             ), f"{type(data)} must implement Multistreamable interface"
             data.record_stream(cur_stream)
-            data.record_stream(default_stream)
+            if default_stream:
+                data.record_stream(default_stream)
 
             module_context.record_stream(cur_stream)
-            module_context.record_stream(default_stream)
+            if default_stream:
+                module_context.record_stream(default_stream)
 
         sharded_module.prefetch(
             ctx=module_context,

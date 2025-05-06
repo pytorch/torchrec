@@ -77,6 +77,17 @@ if not torch._running_with_deploy():
     torch.ops.import_module("fbgemm_gpu.sparse_ops")
 
 
+# Note: doesn't make much sense but better than throwing.
+# Somehow some users would mess up their dependency when using torch package,
+# and we cannot fix their problem sorry
+has_2d_support = True
+try:
+    from torchrec.distributed.model_parallel import DMPCollection
+except ImportError:
+    logger.warning("DMPCollection is not available. 2D sharding is not supported.")
+    has_2d_support = False
+
+
 class ModelDetachedException(Exception):
     pass
 
@@ -85,6 +96,39 @@ class TrainPipeline(abc.ABC, Generic[In, Out]):
     @abc.abstractmethod
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         pass
+
+    def sync_embeddings(
+        self,
+        model: torch.nn.Module,
+        interval_batches: Optional[int],
+        context: Optional[TrainPipelineContext] = None,
+    ) -> None:
+        """
+        Sync the embedding weights and fused optimizer states across replicas.
+        Only enabled if DMPCollection is used to shard the model.
+        Otherwise this is a no op.
+        """
+        if (
+            not has_2d_support
+            or not isinstance(model, DMPCollection)
+            or interval_batches is None
+        ):
+            return
+
+        if not context:
+            logger.warning(
+                f"{self.__class__.__name__} does not support context (not expected). "
+                "Embedding weight sync is disabled."
+            )
+            return
+
+        index = context.index
+        assert (
+            index is not None
+        ), f"{self.__class__.__name__} context does not provide number of batches: {context=}"
+        if index % interval_batches == 0:
+            with record_function("## dmp_collection_sync ##"):
+                model.sync()
 
 
 @dataclass
@@ -344,6 +388,10 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         execute_all_batches (bool): executes remaining batches in pipeline after
             exhausting dataloader iterator.
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+        dmp_collection_sync_interval_batches (Optional[int]):
+            (applicable to 2D sharding only)
+            if set and DMP collection is enabled for 2D sharding,
+            sync DMPs every N batches (default to 1, i.e. every batch, None to disable)
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -362,6 +410,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
+        dmp_collection_sync_interval_batches: Optional[int] = 1,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -417,6 +466,15 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._model_fwd: Callable[[Optional[In]], Tuple[torch.Tensor, Out]] = (
             custom_model_fwd if custom_model_fwd else model
         )
+        self._pipelined_forward_type = PipelinedForward
+        self._dmp_collection_sync_interval_batches = (
+            dmp_collection_sync_interval_batches
+        )
+        if self._dmp_collection_sync_interval_batches is not None:
+            logger.info(
+                f"{self.__class__.__name__}: [Sparse 2D] DMP collection will sync every "
+                f"{self._dmp_collection_sync_interval_batches} batches"
+            )
 
         # DEPRECATED FIELDS
         self._batch_i: Optional[In] = None
@@ -609,6 +667,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         if self._model.training:
             # backward
             self._backward(losses)
+
+            self.sync_embeddings(
+                self._model,
+                self._dmp_collection_sync_interval_batches,
+                self.contexts[0],
+            )
 
             # update
             with record_function("## optimizer ##"):
@@ -999,6 +1063,10 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         start_batch (int): batch to begin semi-sync training.  Typically small period of synchronous training reduces early stage NEX.
         stash_gradients (bool): if True, will store gradients for each parameter to insure true "Semi-Sync"
             training.  If False, will update dense optimizer as soon as gradients available (naive "Semi-Sync)
+        dmp_collection_sync_interval_batches (Optional[int]):
+            (applicable to 2D sharding only)
+            if set and DMP collection is enabled for 2D sharding,
+            sync DMPs every N batches (default to 1, i.e. every batch, None to disable)
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -1018,6 +1086,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
         strict: bool = False,
+        dmp_collection_sync_interval_batches: Optional[int] = 1,
     ) -> None:
         super().__init__(
             model=model,
@@ -1028,6 +1097,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             context_type=EmbeddingTrainPipelineContext,
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
+            dmp_collection_sync_interval_batches=dmp_collection_sync_interval_batches,
         )
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
@@ -1148,6 +1218,11 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
                 # pyre-ignore [6]
                 self.embedding_backward(context)
 
+            self.sync_embeddings(
+                self._model,
+                self._dmp_collection_sync_interval_batches,
+                context,
+            )
             del context  # context is no longer needed, deleting to free up memory
 
             with record_function(f"## optimizer {iteration - 1} ##"):

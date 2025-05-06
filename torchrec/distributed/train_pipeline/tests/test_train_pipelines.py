@@ -10,11 +10,11 @@
 import copy
 
 import unittest
-from contextlib import ExitStack
+from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, Dict, List, Optional, Tuple, Type, Union
-from unittest.mock import MagicMock
+from typing import cast, Dict, Generator, List, Optional, Tuple, Type, TypeVar, Union
+from unittest.mock import MagicMock, patch
 
 import torch
 from hypothesis import assume, given, settings, strategies as st, Verbosity
@@ -29,6 +29,7 @@ from torchrec.distributed.fp_embeddingbag import (
     FeatureProcessedEmbeddingBagCollectionSharder,
     ShardedFeatureProcessedEmbeddingBagCollection,
 )
+from torchrec.distributed.model_parallel import DMPCollection
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     table_wise,
@@ -84,6 +85,9 @@ from torchrec.optim.optimizers import in_backward_optimizer_filter
 from torchrec.pt2.utils import kjt_for_pt2_tracing
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Pipelineable
+
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -690,6 +694,104 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
             # Forward + backward w/ pipelining
             pred_pipeline = pipeline.progress(dataloader)
             self.assertEqual(pred_pipeline.size(0), 64)
+
+
+class TrainPipelineSparseDist2DShardingTest(unittest.TestCase):
+    @contextmanager
+    def _mocked_pipeline(self, obj: T) -> Generator[T, None, None]:
+        disabled_methods = [
+            "fill_pipeline",
+            "_wait_for_batch",
+            "enqueue_batch",
+            "dequeue_batch",
+            "start_sparse_data_dist",
+            "wait_sparse_data_dist",
+        ]
+
+        with ExitStack() as stack:
+            for method in disabled_methods:
+                stack.enter_context(
+                    patch.object(obj.__class__, method, return_value=None)
+                )
+            yield obj
+
+    def test_dmp_collection_sync(self) -> None:
+        dmp = MagicMock(spec=DMPCollection)
+        dmp.training = True
+        dmp.return_value = (
+            torch.tensor(0.1, requires_grad=True),
+            torch.tensor(2),
+        )  # loss, output
+
+        optimizer = MagicMock(spec=torch.optim.Optimizer)
+        data_iter = MagicMock()
+        mock_data: MagicMock = MagicMock(spec=Pipelineable)
+
+        def _add_context(pipeline: TrainPipelineSparseDist) -> None:  # pyre-ignore
+            context = TrainPipelineContext()
+            context.index = 10
+            for _ in range(3):
+                pipeline.batches.append(mock_data)
+                pipeline.contexts.append(context)
+
+        # disable
+        pipeline = TrainPipelineSparseDist(
+            dmp,
+            optimizer,
+            device=torch.device("cpu"),
+            dmp_collection_sync_interval_batches=None,
+        )
+        _add_context(pipeline)
+        with self._mocked_pipeline(pipeline):
+            pipeline.progress(data_iter)
+
+        dmp.sync.assert_not_called()
+
+        # enable
+        dmp.reset_mock()
+        pipeline_with_dmp_sync = TrainPipelineSparseDist(
+            dmp,
+            optimizer,
+            device=torch.device("cpu"),
+            dmp_collection_sync_interval_batches=10,
+        )
+        _add_context(pipeline_with_dmp_sync)
+        with self._mocked_pipeline(pipeline_with_dmp_sync):
+            pipeline_with_dmp_sync.progress(data_iter)
+
+        dmp.assert_called_once()
+        dmp.sync.assert_called_once()
+
+    def test_sync_disabled_if_dmp_collection_is_not_used(self) -> None:
+        dmp = MagicMock(spec=DistributedModelParallel)
+        dmp.training = True
+        dmp.return_value = (
+            torch.tensor(0.1, requires_grad=True),
+            torch.tensor(2),
+        )  # loss, output
+
+        optimizer = MagicMock(spec=torch.optim.Optimizer)
+        data_iter = MagicMock()
+        mock_data: MagicMock = MagicMock(spec=Pipelineable)
+
+        # set interval but pass in raw DMP
+        # interval will be ignored
+        pipeline = TrainPipelineSparseDist(
+            dmp,
+            optimizer,
+            device=torch.device("cpu"),
+            dmp_collection_sync_interval_batches=10,
+        )
+        context = TrainPipelineContext()
+        context.index = 10
+        for _ in range(3):
+            pipeline.batches.append(mock_data)
+            pipeline.contexts.append(context)
+        with self._mocked_pipeline(pipeline):
+            # no exception
+            pipeline.progress(data_iter)
+
+        dmp.assert_called_once()
 
 
 class TrainPipelineAttachDetachTest(TrainPipelineSparseDistTestBase):
