@@ -207,6 +207,51 @@ class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
 
 
+class ZeroCollisionKeyValueEmbeddingFusedOptimizer(FusedOptimizer):
+    def __init__(  # noqa C901
+        self,
+        config: GroupedEmbeddingConfig,
+        emb_module: SSDTableBatchedEmbeddingBags,
+        sharded_embedding_weights_by_table: List[ShardedTensor],
+        table_name_to_weight_count_per_rank: Dict[str, List[int]],
+        sharded_embedding_weight_ids: Optional[List[ShardedTensor]] = None,
+        pg: Optional[dist.ProcessGroup] = None,
+    ) -> None:
+        """
+        Implementation of a FusedOptimizer for KV ZCH computation kernel.
+        The difference between this and KeyValueEmbeddingFusedOptimizer is that this optimizer
+        support dynamic trained embedding weights and weights, instead of relying on fixed
+        embedding table sizes.
+
+        Args:
+            config (GroupedEmbeddingConfig): the embedding config
+            emb_module (SSDTableBatchedEmbeddingBags): the embedding module
+            sharded_embedding_weights_by_table (List[ShardedTensor]): the sharded embedding weights
+            table_name_to_weight_count_per_rank (Dict[str, List[int]]): the table name to weight count per rank
+            sharded_embedding_weight_ids (Optional[List[ShardedTensor]]): the sharded embedding weight ids
+            pg (Optional[dist.ProcessGroup]): the process group
+        """
+        self._emb_module: SSDTableBatchedEmbeddingBags = emb_module
+        self._pg = pg
+        self._my_rank: int = dist.get_rank(self._pg)
+        self._config = config
+        self._sharded_embedding_weight_ids: Optional[List[ShardedTensor]] = (
+            sharded_embedding_weight_ids
+        )
+        self._table_name_to_weight_count_per_rank: Dict[str, List[int]] = (
+            table_name_to_weight_count_per_rank
+        )
+
+    def zero_grad(self, set_to_none: bool = False) -> None:
+        # pyre-ignore [16]
+        self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
+
+    # pyre-ignore [2]
+    def step(self, closure: Any = None) -> None:
+        # pyre-ignore [16]
+        self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
+
+
 class EmbeddingFusedOptimizer(FusedOptimizer):
     def __init__(  # noqa C901
         self,
