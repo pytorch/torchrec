@@ -411,12 +411,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
         dmp_collection_sync_interval_batches: Optional[int] = 1,
+        enqueue_batch_after_forward: bool = False,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
         self._device = device
         self._execute_all_batches = execute_all_batches
         self._apply_jit = apply_jit
+        self._enqueue_batch_after_forward = enqueue_batch_after_forward
 
         if device.type == "cuda":
             # use two data streams to support two concurrent batches
@@ -653,12 +655,19 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             # invoke splits all_to_all comms (first part of input_dist)
             self.start_sparse_data_dist(self.batches[1], self.contexts[1])
 
-        # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here
-        self.enqueue_batch(dataloader_iter)
+        if not self._enqueue_batch_after_forward:
+            # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here
+            self.enqueue_batch(dataloader_iter)
 
         # forward
         with record_function("## forward ##"):
             losses, output = self._model_fwd(self.batches[0])
+
+        if self._enqueue_batch_after_forward:
+            # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here.
+            # Start this step after the forward of batch i, so that the H2D copy doesn't compete
+            # for pcie bandwidth with embedding lookup from UVM/UVM_CACHING.
+            self.enqueue_batch(dataloader_iter)
 
         if len(self.batches) >= 2:
             # invoke data (values, lengths, etc.) all_to_all comms (second part of input_dist)
