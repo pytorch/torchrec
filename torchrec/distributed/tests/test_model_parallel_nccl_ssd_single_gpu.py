@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import copy
 import unittest
 from typing import cast, List, OrderedDict, Union
 
@@ -17,6 +18,7 @@ from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.batched_embedding_kernel import (
     KeyValueEmbedding,
     KeyValueEmbeddingBag,
+    ZeroCollisionKeyValueEmbedding,
 )
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
@@ -37,7 +39,7 @@ from torchrec.distributed.tests.test_sequence_model import (
     TestEmbeddingCollectionSharder,
     TestSequenceSparseNN,
 )
-from torchrec.distributed.types import ModuleSharder, ShardingType
+from torchrec.distributed.types import KeyValueParams, ModuleSharder, ShardingType
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -112,25 +114,20 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
                     )
 
                     emb1_kv = {
-                        t: (w, w_id, bucket_cnt)
-                        for t, w, w_id, bucket_cnt in emb_module1.get_named_split_embedding_weights_snapshot()
+                        t: pmt
+                        for t, pmt, _, _ in emb_module1.get_named_split_embedding_weights_snapshot()
                     }
                     for (
                         t,
-                        w,
+                        pmt,
                         _,
                         _,
                     ) in emb_module2.get_named_split_embedding_weights_snapshot():
-                        w1 = emb1_kv[t][0]
-                        w1_full_tensor = w1.full_tensor()
+                        pmt1 = emb1_kv[t]
+                        w1 = pmt1.full_tensor()
 
                         # write value into ssd for both emb module for later comparison
-                        w.wrapped.set_range(
-                            0, 0, w1_full_tensor.size(0), w1_full_tensor
-                        )
-                        w1.wrapped.set_range(
-                            0, 0, w1_full_tensor.size(0), w1_full_tensor
-                        )
+                        pmt.wrapped.set_range(0, 0, w1.size(0), w1)
 
                     # purge after loading. This is needed, since we pass a batch
                     # through dmp when instantiating them.
@@ -193,6 +190,7 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
             table.name: ParameterConstraints(
                 sharding_types=[sharding_type],
                 compute_kernels=[kernel_type],
+                key_value_params=KeyValueParams(bulk_init_chunk_size=1024),
             )
             for i, table in enumerate(self.tables)
         }
@@ -396,6 +394,7 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
             table.name: ParameterConstraints(
                 sharding_types=[sharding_type],
                 compute_kernels=[kernel_type],
+                key_value_params=KeyValueParams(bulk_init_chunk_size=1024),
             )
             for i, table in enumerate(self.tables)
         }
@@ -515,6 +514,7 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
                 compute_kernels=(
                     [base_kernel_type] if i % 2 == fused_first else [kernel_type]
                 ),
+                key_value_params=KeyValueParams(bulk_init_chunk_size=1024),
             )
             for i, table in enumerate(self.tables)
         }
@@ -586,6 +586,7 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
                     else [ShardingType.ROW_WISE.value]
                 ),
                 compute_kernels=[kernel_type],
+                key_value_params=KeyValueParams(bulk_init_chunk_size=1024),
             )
             for i, table in enumerate(self.tables)
         }
@@ -686,25 +687,20 @@ class KeyValueSequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
                     )
 
                     emb1_kv = {
-                        t: (w, w_id, bucket_cnt)
-                        for t, w, w_id, bucket_cnt in emb_module1.get_named_split_embedding_weights_snapshot()
+                        t: pmt
+                        for t, pmt, _, _ in emb_module1.get_named_split_embedding_weights_snapshot()
                     }
                     for (
                         t,
-                        w,
+                        pmt,
                         _,
                         _,
                     ) in emb_module2.get_named_split_embedding_weights_snapshot():
-                        w1 = emb1_kv[t][0]
-                        w1_full_tensor = w1.full_tensor()
+                        pmt1 = emb1_kv[t]
+                        w1 = pmt1.full_tensor()
 
                         # write value into ssd for both emb module for later comparison
-                        w.wrapped.set_range(
-                            0, 0, w1_full_tensor.size(0), w1_full_tensor
-                        )
-                        w1.wrapped.set_range(
-                            0, 0, w1_full_tensor.size(0), w1_full_tensor
-                        )
+                        pmt.wrapped.set_range(0, 0, w1.size(0), w1)
 
                     # purge after loading. This is needed, since we pass a batch
                     # through dmp when instantiating them.
@@ -769,6 +765,7 @@ class KeyValueSequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
             table.name: ParameterConstraints(
                 sharding_types=[sharding_type],
                 compute_kernels=[kernel_type],
+                key_value_params=KeyValueParams(bulk_init_chunk_size=1024),
             )
             for i, table in enumerate(self.tables)
         }
@@ -784,6 +781,359 @@ class KeyValueSequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
             self._train_models(m1, m2, batch)
         self._eval_models(m1, m2, batch, is_deterministic=is_deterministic)
         self._compare_models(m1, m2, is_deterministic=is_deterministic)
+
+
+class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
+    def setUp(self, backend: str = "nccl") -> None:
+        self.shared_features = []
+        self.embedding_groups = {}
+
+        super().setUp(backend=backend)
+
+    def _create_tables(self) -> None:
+        num_features = 4
+        shared_features = 2
+
+        initial_tables = [
+            EmbeddingConfig(
+                num_embeddings=(i + 1) * 1000,
+                embedding_dim=16,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+                total_num_buckets=10,
+                use_virtual_table=True,
+            )
+            for i in range(num_features)
+        ]
+
+        shared_features_tables = [
+            EmbeddingConfig(
+                num_embeddings=(i + 1) * 20,
+                embedding_dim=16,
+                name="table_" + str(i + num_features),
+                feature_names=["feature_" + str(i)],
+                total_num_buckets=10,
+                use_virtual_table=True,
+            )
+            for i in range(shared_features)
+        ]
+
+        self.tables += initial_tables + shared_features_tables
+        self.shared_features += [f"feature_{i}" for i in range(shared_features)]
+
+        self.embedding_groups["group_0"] = [
+            (f"{feature}@{table.name}" if feature in self.shared_features else feature)
+            for table in self.tables
+            for feature in table.feature_names
+        ]
+
+    def _create_model(self) -> nn.Module:
+        return TestSequenceSparseNN(
+            tables=self.tables,
+            num_float_features=self.num_float_features,
+            embedding_groups=self.embedding_groups,
+            dense_device=self.device,
+            sparse_device=torch.device("meta"),
+        )
+
+    @staticmethod
+    def _copy_ssd_emb_modules(
+        m1: DistributedModelParallel, m2: DistributedModelParallel
+    ) -> None:
+        """
+        Util function to copy and set the SSD TBE modules of two models. It
+        requires both DMP modules to have the same sharding plan.
+        """
+        for lookup1, lookup2 in zip(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            m1.module.sparse.ec._lookups,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            m2.module.sparse.ec._lookups,
+        ):
+            for emb_module1, emb_module2 in zip(
+                lookup1._emb_modules, lookup2._emb_modules
+            ):
+                ssd_emb_modules = {
+                    ZeroCollisionKeyValueEmbedding,
+                }
+                if type(emb_module1) in ssd_emb_modules:
+                    assert type(emb_module1) is type(emb_module2), (
+                        "Expect two emb_modules to be of the same type, either both "
+                        "SSDEmbeddingBag or SSDEmbeddingBag."
+                    )
+                    emb_module1.flush()
+                    emb_module2.flush()
+
+                    emb1_kv = {
+                        t: (sharded_t, sharded_w_id, bucket)
+                        for t, sharded_t, sharded_w_id, bucket in emb_module1.get_named_split_embedding_weights_snapshot()
+                    }
+                    for (
+                        t,
+                        sharded_t2,
+                        _,
+                        _,
+                    ) in emb_module2.get_named_split_embedding_weights_snapshot():
+                        assert t in emb1_kv
+                        sharded_t1 = emb1_kv[t][0]
+                        sharded_w1_id = emb1_kv[t][1]
+                        w1_id = sharded_w1_id.local_shards()[0].tensor
+
+                        pmt1 = sharded_t1.local_shards()[0].tensor
+                        w1 = pmt1.get_weights_by_ids(w1_id)
+
+                        # write value into ssd for both emb module for later comparison
+                        pmt2 = sharded_t2.local_shards()[0].tensor
+                        pmt2.wrapped.set_weights_and_ids(w1, w1_id.view(-1))
+
+                    # purge after loading. This is needed, since we pass a batch
+                    # through dmp when instantiating them.
+                    emb_module1.purge()
+                    emb_module2.purge()
+
+    @staticmethod
+    def _copy_fused_modules_into_ssd_emb_modules(
+        fused_m: DistributedModelParallel, ssd_m: DistributedModelParallel
+    ) -> None:
+        """
+        Util function to copy from fused embedding module to SSD TBE for initialization. It
+        requires both DMP modules to have the same sharding plan.
+        """
+
+        for fused_lookup, ssd_lookup in zip(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            fused_m.module.sparse.ec._lookups,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            ssd_m.module.sparse.ec._lookups,
+        ):
+            for fused_emb_module, ssd_emb_module in zip(
+                fused_lookup._emb_modules, ssd_lookup._emb_modules
+            ):
+                ssd_emb_modules = {ZeroCollisionKeyValueEmbedding}
+                if type(ssd_emb_module) in ssd_emb_modules:
+                    fused_state_dict = fused_emb_module.state_dict()
+                    for (
+                        t,
+                        sharded_t,
+                        _,
+                        _,
+                    ) in ssd_emb_module.get_named_split_embedding_weights_snapshot():
+                        weight_key = f"{t}.weight"
+                        fused_sharded_t = fused_state_dict[weight_key]
+                        fused_weight = fused_sharded_t.local_shards()[0].tensor.to(
+                            "cpu"
+                        )
+
+                        # write value into ssd for both emb module for later comparison
+                        pmt = sharded_t.local_shards()[0].tensor
+                        pmt.wrapped.set_range(0, 0, fused_weight.size(0), fused_weight)
+
+                    # purge after loading. This is needed, since we pass a batch
+                    # through dmp when instantiating them.
+                    fused_emb_module.purge()
+                    ssd_emb_module.purge()
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                # TODO: add other test cases when kv embedding support other sharding
+                ShardingType.ROW_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+            ]
+        ),
+        is_training=st.booleans(),
+        stochastic_rounding=st.booleans(),
+        dtype=st.sampled_from([DataType.FP32, DataType.FP16]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_kv_zch_load_state_dict(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        is_training: bool,
+        stochastic_rounding: bool,
+        dtype: DataType,
+    ) -> None:
+        """
+        This test checks that if SSD TBE is deterministic. That is, if two SSD
+        TBEs start with the same state, they would produce the same output.
+        """
+        self._set_table_weights_precision(dtype)
+
+        fused_params = {
+            "learning_rate": 0.1,
+            "stochastic_rounding": stochastic_rounding,
+        }
+        is_deterministic = dtype == DataType.FP32 or not stochastic_rounding
+        sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                TestEmbeddingCollectionSharder(
+                    sharding_type=sharding_type,
+                    kernel_type=kernel_type,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+
+        constraints = {
+            table.name: ParameterConstraints(
+                sharding_types=[sharding_type],
+                compute_kernels=[kernel_type],
+            )
+            for i, table in enumerate(self.tables)
+        }
+
+        models, batch = self._generate_dmps_and_batch(sharders, constraints=constraints)
+        m1, m2 = models
+
+        # load state dict for dense modules
+        m2.load_state_dict(cast("OrderedDict[str, torch.Tensor]", m1.state_dict()))
+        self._copy_ssd_emb_modules(m1, m2)
+
+        if is_training:
+            self._train_models(m1, m2, batch)
+        self._eval_models(m1, m2, batch, is_deterministic=is_deterministic)
+        self._compare_models(
+            m1, m2, is_deterministic=is_deterministic, use_virtual_table=True
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                # TODO: add other test cases when kv embedding support other sharding
+                ShardingType.ROW_WISE.value,
+            ]
+        ),
+        is_training=st.booleans(),
+        stochastic_rounding=st.booleans(),
+        dtype=st.sampled_from([DataType.FP32, DataType.FP16]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_kv_zch_numerical_accuracy(
+        self,
+        sharder_type: str,
+        kernel_type: str,
+        sharding_type: str,
+        is_training: bool,
+        stochastic_rounding: bool,
+        dtype: DataType,
+    ) -> None:
+        """
+        Make sure it produces same numbers as normal TBE.
+        """
+        self._set_table_weights_precision(dtype)
+        base_kernel_type = EmbeddingComputeKernel.FUSED.value
+        learning_rate = 0.1
+        fused_params = {
+            "optimizer": EmbOptimType.EXACT_ROWWISE_ADAGRAD,
+            "learning_rate": learning_rate,
+            "stochastic_rounding": stochastic_rounding,
+        }
+        is_deterministic = dtype == DataType.FP32 or not stochastic_rounding
+        fused_sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    base_kernel_type,  # base kernel type
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+        ssd_sharders = [
+            cast(
+                ModuleSharder[nn.Module],
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    fused_params=fused_params,
+                ),
+            ),
+        ]
+        ssd_constraints = {
+            table.name: ParameterConstraints(
+                sharding_types=[sharding_type],
+                compute_kernels=[kernel_type],
+            )
+            for i, table in enumerate(self.tables)
+        }
+
+        # for fused model, we need to change the table config to non-kvzch
+        ssd_tables = copy.deepcopy(self.tables)
+        for table in self.tables:
+            table.total_num_buckets = None
+            table.use_virtual_table = False
+        (fused_model, _), _ = self._generate_dmps_and_batch(fused_sharders)
+        self.tables = ssd_tables
+        (ssd_model, _), batch = self._generate_dmps_and_batch(
+            ssd_sharders, constraints=ssd_constraints
+        )
+
+        # load state dict for dense modules
+        ssd_model.load_state_dict(
+            cast("OrderedDict[str, torch.Tensor]", fused_model.state_dict())
+        )
+
+        # for this to work, we expect the order of lookups to be the same
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+        assert len(fused_model.module.sparse.ec._lookups) == len(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            ssd_model.module.sparse.ec._lookups
+        ), "Expect same number of lookups"
+
+        for fused_lookup, ssd_lookup in zip(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            fused_model.module.sparse.ec._lookups,
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+            ssd_model.module.sparse.ec._lookups,
+        ):
+            assert len(fused_lookup._emb_modules) == len(
+                ssd_lookup._emb_modules
+            ), "Expect same number of emb modules"
+
+        self._copy_fused_modules_into_ssd_emb_modules(fused_model, ssd_model)
+
+        if is_training:
+            self._train_models(fused_model, ssd_model, batch)
+        self._eval_models(
+            fused_model, ssd_model, batch, is_deterministic=is_deterministic
+        )
+
+    # TODO: uncomment this when we have optimizer plumb through
+    # def test_ssd_fused_optimizer(
+
+    # TODO: uncomment this when we have multiple kernels in rw support(unblock input dist)
+    # def test_ssd_mixed_kernels
+
+    # TODO: uncomment this when we support different sharding types, e.g. tw, tw_rw together with rw
+    # def test_ssd_mixed_sharding_types
 
 
 # TODO: remove after development is done

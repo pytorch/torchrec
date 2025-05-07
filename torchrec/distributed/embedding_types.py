@@ -79,8 +79,16 @@ class EmbeddingComputeKernel(Enum):
     QUANT = "quant"
     QUANT_UVM = "quant_uvm"
     QUANT_UVM_CACHING = "quant_uvm_caching"
-    KEY_VALUE = "key_value"
+    KEY_VALUE = (
+        "key_value"  # ssd as kv backend storage for fully materialized embedding table
+    )
     CUSTOMIZED_KERNEL = "customized_kernel"
+    SSD_VIRTUAL_TABLE = (
+        "ssd_virtual_table"  # ssd as kv backend storage for virtual table
+    )
+    DRAM_VIRTUAL_TABLE = (
+        "dram_virtual_table"  # dram as kv backend storage for virtual table
+    )
 
 
 def compute_kernel_to_embedding_location(
@@ -91,6 +99,8 @@ def compute_kernel_to_embedding_location(
         EmbeddingComputeKernel.FUSED,
         EmbeddingComputeKernel.QUANT,
         EmbeddingComputeKernel.KEY_VALUE,  # use hbm for cache
+        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,  # use hbm for cache
+        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE,  # use hbm for cache
     ]:
         return EmbeddingLocation.DEVICE
     elif compute_kernel in [
@@ -472,6 +482,8 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
                     EmbeddingComputeKernel.FUSED_UVM.value,
                     EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
                     EmbeddingComputeKernel.KEY_VALUE.value,
+                    EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+                    EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
                 ]
         else:
             # TODO re-enable model parallel and dense
