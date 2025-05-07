@@ -191,7 +191,7 @@ class ArgInfo:
             positional arg.
     """
 
-    input_attrs: List[str]
+    input_attrs: List[Union[str, int]]
     is_getitems: List[bool]
     # recursive dataclass as postproc_modules.args -> arginfo.postproc_modules -> so on
     postproc_modules: List[Optional["PipelinedPostproc"]]
@@ -1092,7 +1092,12 @@ def _get_node_args_helper_inner(
                 ph_keys = ph_key.split(".")
                 for key in ph_keys:
                     if "]" in key:
-                        arg_info.input_attrs.append(key[:-1])
+                        k_ = key[:-1]
+                        try:
+                            k_ = int(k_)
+                        except ValueError:
+                            pass
+                        arg_info.input_attrs.append(k_)
                         arg_info.is_getitems.append(True)
                     else:
                         arg_info.input_attrs.append(key)
