@@ -110,7 +110,7 @@ accessing the key from the ``KeyedJaggedTensor``.
    # - User features: 2 users, with 2 and 3 interactions respectively
    # - Item features: 2 items, with 1 and 2 interactions respectively
    lengths = [2, 3, 1, 2]
-   values = torch.Tensor([11, 12, 21, 22, 23, 101, 102, 201])
+   values = torch.Tensor([11, 12, 21, 22, 23, 101, 201, 202])
    # Create a KeyedJaggedTensor
    kjt = KeyedJaggedTensor(keys=keys, lengths=lengths, values=values)
    # Access the features by key
