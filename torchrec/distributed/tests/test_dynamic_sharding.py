@@ -13,17 +13,20 @@ import copy
 import random
 import unittest
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import hypothesis.strategies as st
 
 import torch
 
-from hypothesis import given, settings, Verbosity
+from hypothesis import assume, given, settings, Verbosity
+
 from torch import nn
 
 from torchrec import distributed as trec_dist, EmbeddingBagCollection, KeyedJaggedTensor
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
+from torchrec.distributed.fbgemm_qcomm_codec import QCommsConfig
 
 from torchrec.distributed.sharding_plan import (
     column_wise,
@@ -37,7 +40,14 @@ from torchrec.distributed.test_utils.multi_process import (
     MultiProcessTestBase,
 )
 from torchrec.distributed.test_utils.test_input import ModelInput
-from torchrec.distributed.test_utils.test_sharding import copy_state_dict
+from torchrec.distributed.test_utils.test_model_parallel import ModelParallelTestShared
+from torchrec.distributed.test_utils.test_sharding import (
+    copy_state_dict,
+    create_test_sharder,
+    generate_rank_placements,
+    output_sharding_plan_delta,
+    SharderType,
+)
 
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
@@ -78,23 +88,6 @@ def generate_embedding_bag_config(
             ),
         )
     return embedding_bag_config
-
-
-def generate_rank_placements(
-    world_size: int,
-    num_tables: int,
-    ranks_per_tables: List[int],
-) -> List[List[int]]:
-    # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
-    placements = []
-    max_rank = world_size - 1
-    if ranks_per_tables == [0]:
-        ranks_per_tables = [random.randint(1, max_rank) for _ in range(num_tables)]
-    for i in range(num_tables):
-        ranks_per_table = ranks_per_tables[i]
-        placement = sorted(random.sample(range(world_size), ranks_per_table))
-        placements.append(placement)
-    return placements
 
 
 def create_test_initial_state_dict(
@@ -354,7 +347,7 @@ def _test_ebc_resharding(
 
 
 @skip_if_asan_class
-class MultiRankDynamicShardingTest(MultiProcessTestBase):
+class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
     def _run_ebc_resharding_test(
         self,
         per_param_sharding: Dict[str, ParameterSharding],
@@ -518,4 +511,95 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
             num_tables,
             world_size,
             data_type,
+        )
+
+
+@skip_if_asan_class
+class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
+    @given(  # pyre-ignore
+        sharder_type=st.sampled_from(
+            [
+                # SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ],
+        ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                # TODO: Enable QComms config, will require adjusting tensor comparison precision
+                # QCommsConfig(
+                #     forward_precision=CommType.FP16,
+                #     backward_precision=CommType.BF16,
+                # ),
+            ]
+        ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                # None,
+                {
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
+                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
+                },
+            ]
+        ),
+        variable_batch_size=st.sampled_from(
+            [False]
+        ),  # TODO: Enable variable batch size st.booleans(),
+        data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
+        random_seed=st.integers(0, 1000),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_sharding_tw(
+        self,
+        sharder_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        variable_batch_size: bool,
+        data_type: DataType,
+        random_seed: int,  # Random seed value for deterministically generating sharding plan for resharding
+    ) -> None:
+        """
+        Tests resharding from DMP module interface, rather than EBC level.
+        """
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
+        sharding_type = ShardingType.TABLE_WISE.value
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
+
+        self._test_dynamic_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=self.device,
+                ),
+            ],
+            backend=self.backend,
+            qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
+            data_type=data_type,
+            sharding_type=ShardingType.TABLE_WISE,
+            random_seed=random_seed,
         )
