@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+import copy
 import logging
 from collections import defaultdict, OrderedDict
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -26,7 +27,12 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.shards_wrapper import LocalShardsWrapper
-from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
+from torchrec.distributed.types import (
+    Shard,
+    ShardedTensor,
+    ShardedTensorMetadata,
+    ShardMetadata,
+)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -54,6 +60,113 @@ class BaseEmbedding(abc.ABC, nn.Module):
     @abc.abstractmethod
     def config(self) -> GroupedEmbeddingConfig:
         pass
+
+
+def create_virtual_table_local_metadata(
+    local_metadata: ShardMetadata,
+    param: Union[torch.Tensor, PartiallyMaterializedTensor],
+    my_rank: int,
+) -> None:
+    local_metadata.shard_sizes = list(param.size())  # pyre-ignore
+    local_metadata.shard_offsets = [0 for _ in range(len(param.size()))]  # pyre-ignore
+
+
+def create_virtual_table_global_metadata(
+    metadata: ShardedTensorMetadata,
+    my_rank: int,
+    param: Union[torch.Tensor, PartiallyMaterializedTensor],
+) -> None:
+    # update tensor properties from local tensor properties, this should be universal for all ranks
+    metadata.tensor_properties.dtype = param.dtype
+    metadata.tensor_properties.requires_grad = param.requires_grad
+
+    # manually craft metadata, faking the metadata in a way that all other rank only has 0 row
+    # NOTE this currently only works for row-wise sharding
+    fake_total_rows = param.size()[0]  # pyre-ignore
+    metadata.size = torch.Size(
+        [
+            fake_total_rows if dim == 0 else param.size(dim)
+            for dim in range(len(param.size()))  # pyre-ignore
+        ]
+    )
+
+    for rank, shard_metadata in enumerate(metadata.shards_metadata):
+        if rank < my_rank:
+            shard_metadata.shard_sizes = [  # pyre-ignore
+                0 if dim == 0 else param.size(dim)
+                # pyre-ignore
+                for dim in range(len(param.size()))
+            ]
+            shard_metadata.shard_offsets = [
+                0 for _ in range(len(param.size()))  # pyre-ignore
+            ]
+        elif rank == my_rank:
+            create_virtual_table_local_metadata(shard_metadata, param, my_rank)
+        else:
+            # pyre-ignore
+            shard_metadata.shard_sizes = [
+                0 if dim == 0 else param.size(dim)
+                # pyre-ignore
+                for dim in range(len(param.size()))
+            ]
+            # pyre-ignore
+            shard_metadata.shard_offsets = [
+                param.size(0) if dim == 0 else 0
+                # pyre-ignore
+                for dim in range(len(param.size()))
+            ]
+
+
+def create_virtual_sharded_tensors(
+    embedding_tables: List[ShardedEmbeddingTable],
+    params: Union[List[torch.Tensor], List[PartiallyMaterializedTensor]],
+    pg: Optional[dist.ProcessGroup] = None,
+    prefix: str = "",
+) -> List[ShardedTensor]:
+    """
+    Create virtual sharded tensors for the given embedding tables and parameters.
+    This is used to create sharded tensor for virtual table, where the table rows changes dynamically
+    everytime we call ec/ebc state_dict, we will create a ShardedTensor and recalculate the metadata by
+    all_gather, however since we don't want to put all_gather implicitly inside state_dict, we need to
+    create a ShardedTensor temporarily and return it to the caller side to do the metadata recalculation work
+
+    Here for the local shard tensor, we just fake zero sizes on the remote shards' metadata
+    for this shard's ShardedTensor
+    """
+    key_to_local_shards: Dict[str, List[Shard]] = defaultdict(list)
+    key_to_global_metadata: Dict[str, ShardedTensorMetadata] = {}
+
+    def get_key_from_embedding_table(embedding_table: ShardedEmbeddingTable) -> str:
+        return prefix + f"{embedding_table.name}"
+
+    my_rank = dist.get_rank()
+    for embedding_table, param in zip(embedding_tables, params):
+        key = get_key_from_embedding_table(embedding_table)
+        assert embedding_table.use_virtual_table
+
+        assert embedding_table.global_metadata is not None and pg is not None
+        global_metadata = copy.deepcopy(embedding_table.global_metadata)
+        create_virtual_table_global_metadata(global_metadata, my_rank, param)
+        key_to_global_metadata[key] = global_metadata
+
+        assert embedding_table.local_metadata is not None
+        local_metadata = copy.deepcopy(embedding_table.local_metadata)
+        create_virtual_table_local_metadata(local_metadata, param, my_rank)
+
+        key_to_local_shards[key].append(Shard(param, local_metadata))  # pyre-ignore
+
+    result: List[ShardedTensor] = []
+    if pg is not None:
+        for key in key_to_local_shards:
+            global_metadata = key_to_global_metadata[key]
+            result.append(
+                ShardedTensor._init_from_local_shards_and_global_metadata(
+                    local_shards=key_to_local_shards[key],
+                    sharded_tensor_metadata=global_metadata,
+                    process_group=pg,
+                )
+            )
+    return result
 
 
 def get_state_dict(
@@ -84,11 +197,18 @@ def get_state_dict(
     # pyre-ignore[33]
     key_to_local_tensor_shards: Dict[str, List[Any]] = defaultdict(list)
 
+    # validate on the function input for kv zch cases
+    use_virtual_size = None
+    for emb_table in embedding_tables:
+        if use_virtual_size is None:
+            use_virtual_size = emb_table.use_virtual_table
+        assert use_virtual_size == emb_table.use_virtual_table
+
     def get_key_from_embedding_table(embedding_table: ShardedEmbeddingTable) -> str:
         return prefix + f"{embedding_table.name}.weight"
 
     for embedding_table, param in zip(embedding_tables, params):
-        key = get_key_from_embedding_table(embedding_table)
+        weights_key = get_key_from_embedding_table(embedding_table)
         is_quant = embedding_table.compute_kernel in [
             EmbeddingComputeKernel.QUANT,
             EmbeddingComputeKernel.QUANT_UVM,
@@ -103,17 +223,18 @@ def get_state_dict(
             qbias = param[2]
             param = param[0]
 
-        assert embedding_table.local_rows == param.size(  # pyre-ignore[16]
-            0
-        ), f"{embedding_table.local_rows=}, {param.size(0)=}, {param.shape=}"  # pyre-ignore[16]
+        if not embedding_table.use_virtual_table:
+            assert embedding_table.local_rows == param.size(  # pyre-ignore[16]
+                0
+            ), f"{embedding_table.local_rows=}, {param.size(0)=}, {param.shape=}"  # pyre-ignore[16]
 
         if qscale is not None:
             assert embedding_table.local_cols == param.size(1)  # pyre-ignore[16]
 
         if embedding_table.dtensor_metadata is not None and pg is not None:
             # DTensor path
-            key_to_dtensor_metadata[key] = embedding_table.dtensor_metadata
-            key_to_local_tensor_shards[key].append(
+            key_to_dtensor_metadata[weights_key] = embedding_table.dtensor_metadata
+            key_to_local_tensor_shards[weights_key].append(
                 [
                     param,
                     embedding_table.local_metadata.shard_offsets,  # pyre-ignore[16]
@@ -127,21 +248,51 @@ def get_state_dict(
             embedding_table.global_metadata.tensor_properties.requires_grad = (
                 param.requires_grad  # pyre-ignore[16]
             )
-            key_to_global_metadata[key] = embedding_table.global_metadata
+            local_metadata = embedding_table.local_metadata
+            glb_metadata = embedding_table.global_metadata
+            if use_virtual_size:
+                assert local_metadata is not None and glb_metadata is not None
+                local_metadata = copy.deepcopy(embedding_table.local_metadata)
+                local_metadata.shard_sizes = list(param.size())  # pyre-ignore
+                local_metadata.shard_offsets = [0, 0]
 
-            key_to_local_shards[key].append(
+                glb_metadata = copy.deepcopy(embedding_table.global_metadata)
+                glb_metadata.size = param.size()  # pyre-ignore
+                my_rank = dist.get_rank()
+                for rank, shards_metadata in enumerate(
+                    # pyre-ignore
+                    glb_metadata.shards_metadata
+                ):
+                    if rank < my_rank:
+                        shards_metadata.shard_offsets = [0, 0]
+                        shards_metadata.shard_sizes = [0, 0]
+                    elif rank == my_rank:
+                        shards_metadata.shard_offsets = local_metadata.shard_offsets
+                        shards_metadata.shard_sizes = local_metadata.shard_sizes
+                    else:
+                        shards_metadata.shard_offsets = [
+                            local_metadata.shard_sizes[0],
+                            0,
+                        ]
+                        shards_metadata.shard_sizes = [0, 0]
+
+            key_to_global_metadata[weights_key] = glb_metadata  # pyre-ignore
+
+            # for kv zch cases, we use virtual space, the logic will be the same as non-kv zch cases
+            key_to_local_shards[weights_key].append(
                 # pyre-fixme[6]: For 1st argument expected `Tensor` but got
                 #  `Union[Module, Tensor]`.
                 # pyre-fixme[6]: For 2nd argument expected `ShardMetadata` but got
                 #  `Optional[ShardMetadata]`.
-                Shard(param, embedding_table.local_metadata)
+                Shard(param, local_metadata)
             )
+
         else:
-            destination[key] = param
+            destination[weights_key] = param
             if qscale is not None:
-                destination[f"{key}_qscale"] = qscale
+                destination[f"{weights_key}_qscale"] = qscale
             if qbias is not None:
-                destination[f"{key}_qbias"] = qbias
+                destination[f"{weights_key}_qbias"] = qbias
 
     if pg is not None:
         # Populate the remaining destinations that have a global metadata
