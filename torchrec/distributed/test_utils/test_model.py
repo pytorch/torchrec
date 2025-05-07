@@ -15,6 +15,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
+from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_tower_sharding import (
     EmbeddingTowerCollectionSharder,
     EmbeddingTowerSharder,
@@ -1669,6 +1670,38 @@ class TestTowerCollectionSparseNN(TestSparseNNBase):
             )
         else:
             return pred
+
+
+class TestECSharder(EmbeddingCollectionSharder):
+    def __init__(
+        self,
+        sharding_type: str,
+        kernel_type: str,
+        fused_params: Optional[Dict[str, Any]] = None,
+        qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+    ) -> None:
+        if fused_params is None:
+            fused_params = {}
+
+        self._sharding_type = sharding_type
+        self._kernel_type = kernel_type
+        super().__init__(fused_params, qcomm_codecs_registry)
+
+    """
+    Restricts sharding to single type only.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        return [self._sharding_type]
+
+    """
+    Restricts to single impl.
+    """
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        return [self._kernel_type]
 
 
 class TestEBCSharder(EmbeddingBagCollectionSharder):

@@ -36,6 +36,7 @@ from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestEBCSharder,
     TestEBSharder,
+    TestECSharder,
     TestETCSharder,
     TestETSharder,
     TestSparseNNBase,
@@ -63,6 +64,7 @@ class SharderType(Enum):
     EMBEDDING_BAG_COLLECTION = "embedding_bag_collection"
     EMBEDDING_TOWER = "embedding_tower"
     EMBEDDING_TOWER_COLLECTION = "embedding_tower_collection"
+    EMBEDDING_COLLECTION = "embedding_collection"
 
 
 def create_test_sharder(
@@ -72,7 +74,7 @@ def create_test_sharder(
     fused_params: Optional[Dict[str, Any]] = None,
     qcomms_config: Optional[QCommsConfig] = None,
     device: Optional[torch.device] = None,
-) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder]:
+) -> Union[TestEBSharder, TestEBCSharder, TestETSharder, TestETCSharder, TestECSharder]:
     if fused_params is None:
         fused_params = {}
     qcomm_codecs_registry = {}
@@ -90,6 +92,10 @@ def create_test_sharder(
             kernel_type,
             fused_params,
             qcomm_codecs_registry,
+        )
+    elif sharder_type == SharderType.EMBEDDING_COLLECTION.value:
+        return TestECSharder(
+            sharding_type, kernel_type, fused_params, qcomm_codecs_registry
         )
     elif sharder_type == SharderType.EMBEDDING_TOWER.value:
         return TestETSharder(

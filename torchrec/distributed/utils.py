@@ -423,7 +423,12 @@ def add_params_from_parameter_sharding(
         fused_params["output_dtype"] = parameter_sharding.output_dtype
 
     if (
-        parameter_sharding.compute_kernel in {EmbeddingComputeKernel.KEY_VALUE.value}
+        parameter_sharding.compute_kernel
+        in {
+            EmbeddingComputeKernel.KEY_VALUE.value,
+            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+            EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
+        }
         and parameter_sharding.key_value_params is not None
     ):
         kv_params = parameter_sharding.key_value_params
