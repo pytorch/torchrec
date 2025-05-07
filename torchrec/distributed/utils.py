@@ -45,6 +45,17 @@ version checks
 """
 
 
+def get_class_name(obj: object) -> str:
+    if obj is None:
+        return "None"
+    return obj.__class__.__name__
+
+
+def assert_instance(obj: object, t: Type[_T]) -> _T:
+    assert isinstance(obj, t), f"Got {get_class_name(obj)}"
+    return obj
+
+
 def none_throws(optional: Optional[_T], message: str = "Unexpected `None`") -> _T:
     """Convert an optional to its value. Raises an `AssertionError` if the
     value is `None`"""
