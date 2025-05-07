@@ -548,11 +548,13 @@ def sharded_tbes_weights_spec(
                     ]
                     s: str = "embedding_bags" if is_sqebc else "embeddings"
                     s = ("_embedding_module." if is_sqmcec else "") + s
-                    unsharded_fqn_weight: str = f"{module_fqn}.{s}.{table_name}.weight"
+                    unsharded_fqn_weight_prefix: str = f"{module_fqn}.{s}.{table_name}"
+                    unsharded_fqn_weight: str = unsharded_fqn_weight_prefix + ".weight"
 
-                    sharded_fqn_weight: str = (
-                        f"{module_fqn}.tbes.{tbe_idx}.{table_idx}.{table_name}.weight"
+                    sharded_fqn_weight_prefix: str = (
+                        f"{module_fqn}.tbes.{tbe_idx}.{table_idx}.{table_name}"
                     )
+                    sharded_fqn_weight: str = sharded_fqn_weight_prefix + ".weight"
                     sharding_type: str = table_shardings[table_name]
                     ret[sharded_fqn_weight] = WeightSpec(
                         fqn=unsharded_fqn_weight,
@@ -560,6 +562,30 @@ def sharded_tbes_weights_spec(
                         shard_sizes=shard_sizes,
                         sharding_type=sharding_type,
                     )
+
+                    # We also need to populate weight_id tensor for vritual
+                    # tables with bucket wise sharding where the sharding spec
+                    # should be aligned with the weight tensor for each virtual
+                    # table
+                    if (
+                        virtual_table_name_to_bucket_lengths is not None
+                        and table_name in virtual_table_name_to_bucket_lengths
+                    ):
+                        unsharded_weight_id_fqn_weight: str = (
+                            unsharded_fqn_weight_prefix + ".weight_id"
+                        )
+                        sharded_fqn_weight_id: str = (
+                            sharded_fqn_weight_prefix + ".weight_id"
+                        )
+                        shard_offsets_weight_id: List[int] = [row_offsets, 0]
+                        # single column for weight_id
+                        shard_sizes_weight_id: List[int] = [local_rows, 1]
+                        ret[sharded_fqn_weight_id] = WeightSpec(
+                            fqn=unsharded_weight_id_fqn_weight,
+                            shard_offsets=shard_offsets_weight_id,
+                            shard_sizes=shard_sizes_weight_id,
+                            sharding_type=sharding_type,
+                        )
 
                     for qcomponent in ["qscale", "qbias"]:
                         qcomp_shard_offsets: List[int] = copy.deepcopy(shard_offsets)
