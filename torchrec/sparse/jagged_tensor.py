@@ -1760,6 +1760,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         "_weights",
         "_lengths",
         "_offsets",
+        "_stride_per_key_per_rank_tensor",
+        "_inverse_indices_tensor",
     ]
 
     def __init__(
@@ -1810,6 +1812,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         self._inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = (
             inverse_indices
         )
+        self._inverse_indices_tensor: torch.Tensor = torch.empty(0)
+        if inverse_indices is not None:
+            self._inverse_indices_tensor = inverse_indices[1]
 
         # legacy attribute, for backward compatabilibity
         self._variable_stride_per_key: Optional[bool] = None
@@ -3092,9 +3097,15 @@ def _kjt_flatten_with_keys(
 
 
 def _kjt_unflatten(
-    values: List[Optional[torch.Tensor]], context: List[str]  # context is the _keys
+    values: List[Optional[torch.Tensor]],
+    context: List[str],
 ) -> KeyedJaggedTensor:
-    return KeyedJaggedTensor(context, *values)
+    return KeyedJaggedTensor(
+        context,
+        *values[:-2],
+        stride_per_key_per_rank_tensor=values[-2],
+        inverse_indices=(context, values[-1]) if values[-1] is not None else None,
+    )
 
 
 def _kjt_flatten_spec(
