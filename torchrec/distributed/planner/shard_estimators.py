@@ -1178,10 +1178,18 @@ def calculate_shard_storages(
         EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
         EmbeddingComputeKernel.QUANT_UVM_CACHING.value,
         EmbeddingComputeKernel.KEY_VALUE.value,
+        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
     }:
+        # TODO(wangj): for ssd/dram kv, most likely we use absolute L1 cache size instead of caching ratio, as denominator is huge
         hbm_storage = round(ddr_storage * caching_ratio)
         table_cached = True
-    if compute_kernel in {EmbeddingComputeKernel.KEY_VALUE.value}:
+    if compute_kernel in {
+        EmbeddingComputeKernel.KEY_VALUE.value,
+        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
+    }:
+        # TODO(wangj): update this to the L2 cache usage and add SSD usage
         ddr_storage = 0
 
     optimizer_class = getattr(tensor, "_optimizer_classes", [None])[0]

@@ -20,7 +20,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
-from fbgemm_gpu.tbe.ssd.training import SSDTableBatchedEmbeddingBags
+from fbgemm_gpu.tbe.ssd.training import BackendType, SSDTableBatchedEmbeddingBags
 from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
     PartiallyMaterializedTensor,
 )
@@ -38,6 +38,7 @@ from torchrec.distributed.batched_embedding_kernel import (
     BatchedFusedEmbeddingBag,
     KeyValueEmbedding,
     KeyValueEmbeddingBag,
+    ZeroCollisionKeyValueEmbedding,
 )
 from torchrec.distributed.comm_ops import get_gradient_division
 from torchrec.distributed.composable.table_batched_embedding_slice import (
@@ -214,6 +215,8 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             if (
                 table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
                 or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
+                or table.compute_kernel == EmbeddingComputeKernel.SSD_VIRTUAL_TABLE
+                or table.compute_kernel == EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE
             ):
                 self._need_prefetch = True
         if config.compute_kernel == EmbeddingComputeKernel.DENSE:
@@ -228,13 +231,27 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
                 pg=pg,
                 device=device,
             )
-        elif config.compute_kernel in {
-            EmbeddingComputeKernel.KEY_VALUE,
-        }:
+        elif config.compute_kernel == EmbeddingComputeKernel.KEY_VALUE:
             return KeyValueEmbedding(
                 config=config,
                 pg=pg,
                 device=device,
+            )
+        elif config.compute_kernel == EmbeddingComputeKernel.SSD_VIRTUAL_TABLE:
+            # for ssd kv
+            return ZeroCollisionKeyValueEmbedding(
+                config=config,
+                pg=pg,
+                device=device,
+                backend_type=BackendType.SSD,
+            )
+        elif config.compute_kernel == EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE:
+            # for dram kv
+            return ZeroCollisionKeyValueEmbedding(
+                config=config,
+                pg=pg,
+                device=device,
+                backend_type=BackendType.DRAM,
             )
         else:
             raise ValueError(f"Compute kernel not supported {config.compute_kernel}")
@@ -364,7 +381,9 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
         RocksDB snapshot to support windowed access.
         """
         for emb_module in self._emb_modules:
-            if isinstance(emb_module, KeyValueEmbedding):
+            if isinstance(emb_module, KeyValueEmbedding) or isinstance(
+                emb_module, ZeroCollisionKeyValueEmbedding
+            ):
                 yield from emb_module.get_named_split_embedding_weights_snapshot()
 
     def flush(self) -> None:

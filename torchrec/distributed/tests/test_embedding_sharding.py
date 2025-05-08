@@ -11,16 +11,16 @@
 import random
 import unittest
 from typing import Any, Dict, List
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import hypothesis.strategies as st
 import torch
 
 from hypothesis import given, settings
+from torchrec.distributed.batched_embedding_kernel import ZeroCollisionKeyValueEmbedding
 from torchrec.distributed.embedding import EmbeddingCollectionContext
 
 from torchrec.distributed.embedding_lookup import EmbeddingComputeKernel
-
 from torchrec.distributed.embedding_sharding import (
     _get_compute_kernel_type,
     _get_grouping_fused_params,
@@ -37,6 +37,8 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.modules.embedding_configs import DataType, PoolingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+
+WORLD_SIZE = 4
 
 
 class TestGetWeightedAverageCacheLoadFactor(unittest.TestCase):
@@ -532,3 +534,97 @@ class TestGroupTablesPerRank(unittest.TestCase):
         _set_sharding_context_post_a2a(kjts, ctx)
         for context, result in zip(ctx.sharding_contexts, results):
             self.assertEqual(context.batch_size_per_rank_per_feature, result)
+
+
+class TestECBucketMetadata(unittest.TestCase):
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(
+        data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
+        embedding_dim=st.sampled_from(list(range(160, 320, 40))),
+        total_bucket=st.sampled_from([14, 20, 32, 40]),
+        my_rank=st.integers(min_value=0, max_value=WORLD_SIZE),
+    )
+    @settings(max_examples=10, deadline=10000)
+    def test_bucket_metadata_calculation_util(
+        self, data_type: DataType, embedding_dim: int, total_bucket: int, my_rank: int
+    ) -> None:
+        compute_kernels = [
+            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
+            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
+            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
+            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
+        ]
+        fused_params_groups = [
+            {"cache_load_factor": 0.5},
+            {"cache_load_factor": 0.5},
+            {"cache_load_factor": 0.5},
+            {"cache_load_factor": 0.5},
+        ]
+        tables = [
+            ShardedEmbeddingTable(
+                name=f"table_{i}",
+                data_type=data_type,
+                pooling=PoolingType.NONE,
+                has_feature_processor=False,
+                fused_params=fused_params_groups[i],
+                feature_names=[f"feature_{i}"],
+                compute_kernel=compute_kernels[i],
+                embedding_dim=embedding_dim,
+                local_rows=10000 * (2 * i + 1) // WORLD_SIZE,
+                local_cols=embedding_dim,
+                num_embeddings=10000 * (2 * i + 1),
+                total_num_buckets=total_bucket,
+                use_virtual_table=True,
+            )
+            for i in range(len(compute_kernels))
+        ]
+
+        # since we don't have access to _group_tables_per_rank
+        tables_per_rank: List[List[ShardedEmbeddingTable]] = [tables]
+
+        # taking only the list for the first rank
+        table_groups: List[GroupedEmbeddingConfig] = group_tables(tables_per_rank)[0]
+
+        # assert that they are grouped together
+        self.assertEqual(len(table_groups), 1)
+
+        table_group = table_groups[0]
+
+        expect_failure = False
+        for table in tables:
+            if (
+                table.num_embeddings % total_bucket != 0
+                or total_bucket % WORLD_SIZE != 0
+            ):
+                expect_failure = True
+                break
+
+        with patch(
+            "torchrec.distributed.batched_embedding_kernel.dist.get_world_size",
+            return_value=WORLD_SIZE,
+        ), patch(
+            "torchrec.distributed.batched_embedding_kernel.dist.get_rank",
+            return_value=my_rank,
+        ):
+            if expect_failure:
+                with self.assertRaises(AssertionError):
+                    zch_kv_emb = ZeroCollisionKeyValueEmbedding(
+                        table_group, None, torch.device("cpu")
+                    )
+            else:
+                zch_kv_emb = ZeroCollisionKeyValueEmbedding(
+                    table_group, None, torch.device("cpu")
+                )
+                expected_tuple = [
+                    (
+                        total_bucket / WORLD_SIZE * my_rank,
+                        total_bucket / WORLD_SIZE * (my_rank + 1),
+                        table.num_embeddings / total_bucket,
+                    )
+                    for table in tables
+                ]
+                self.assertEqual(zch_kv_emb._bucket_spec, expected_tuple)

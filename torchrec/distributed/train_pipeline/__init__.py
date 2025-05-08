@@ -27,6 +27,8 @@ from torchrec.distributed.train_pipeline.utils import (  # noqa
     _to_device,  # noqa
     _wait_for_batch,  # noqa
     ArgInfo,  # noqa
+    ArgInfoStepFactory,  # noqa
+    CallArgs,  # noqa
     DataLoadingThread,  # noqa
     In,  # noqa
     Out,  # noqa

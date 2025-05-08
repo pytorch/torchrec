@@ -16,6 +16,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
+    PartiallyMaterializedTensor,
+)
 from hypothesis import given, settings, strategies as st, Verbosity
 from torch import distributed as dist
 from torch.distributed._shard.sharded_tensor import ShardedTensor
@@ -396,20 +399,46 @@ class ModelParallelSingleRankBase(unittest.TestCase):
         m1: DistributedModelParallel,
         m2: DistributedModelParallel,
         is_deterministic: bool = True,
+        use_virtual_table: bool = False,
     ) -> None:
         sd1 = m1.state_dict()
-        for key, value in m2.state_dict().items():
+        sd2 = m2.state_dict()
+        for key, value in sd2.items():
             v2 = sd1[key]
             if isinstance(value, ShardedTensor):
                 assert isinstance(v2, ShardedTensor)
                 self.assertEqual(len(value.local_shards()), len(v2.local_shards()))
-                for dst, src in zip(value.local_shards(), v2.local_shards()):
-                    if is_deterministic:
-                        self.assertTrue(torch.equal(src.tensor, dst.tensor))
+                for local_shard_id, (dst, src) in enumerate(
+                    zip(value.local_shards(), v2.local_shards())
+                ):
+                    src_tensor = None
+                    dst_tensor = None
+                    if isinstance(dst.tensor, PartiallyMaterializedTensor):
+                        assert isinstance(src.tensor, PartiallyMaterializedTensor)
+                        if use_virtual_table:
+                            # kvz zch emb table comparison, id is non-continuous
+                            wid_key = key[: key.rfind(".")] + ".weight_id"
+                            src_wid = sd1[wid_key].local_shards()[local_shard_id].tensor
+                            dst_wid = sd2[wid_key].local_shards()[local_shard_id].tensor
+
+                            sorted_src_wid, _ = torch.sort(src_wid.view(-1))
+                            sorted_dst_wid, _ = torch.sort(dst_wid.view(-1))
+                            assert torch.equal(sorted_src_wid, sorted_dst_wid)
+                            src_tensor = src.tensor.get_weights_by_ids(src_wid)
+                            dst_tensor = dst.tensor.get_weights_by_ids(dst_wid)
+                        else:
+                            # normal ssd offloading emb table comparison
+                            src_tensor = src.tensor.full_tensor()
+                            dst_tensor = dst.tensor.full_tensor()
                     else:
-                        rtol, atol = _get_default_rtol_and_atol(src.tensor, dst.tensor)
+                        src_tensor = src.tensor
+                        dst_tensor = dst.tensor
+                    if is_deterministic:
+                        self.assertTrue(torch.equal(src_tensor, dst_tensor))
+                    else:
+                        rtol, atol = _get_default_rtol_and_atol(src_tensor, dst_tensor)
                         torch.testing.assert_close(
-                            src.tensor, dst.tensor, rtol=rtol, atol=atol
+                            src_tensor, dst_tensor, rtol=rtol, atol=atol
                         )
             elif isinstance(value, DTensor):
                 assert isinstance(v2, DTensor)

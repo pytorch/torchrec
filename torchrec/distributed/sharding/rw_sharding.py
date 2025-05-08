@@ -217,6 +217,8 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         weight_init_min=info.embedding_config.weight_init_min,
                         fused_params=info.fused_params,
                         num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
+                        total_num_buckets=info.embedding_config.total_num_buckets,
+                        use_virtual_table=info.embedding_config.use_virtual_table,
                     )
                 )
         return tables_per_rank
