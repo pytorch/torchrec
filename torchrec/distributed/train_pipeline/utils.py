@@ -11,7 +11,7 @@ import copy
 import itertools
 import logging
 from collections import defaultdict, OrderedDict
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
 from itertools import chain
@@ -20,6 +20,7 @@ from typing import (
     Any,
     Callable,
     cast,
+    ContextManager,
     Dict,
     Generic,
     Iterable,
@@ -1537,6 +1538,7 @@ def _rewrite_model(  # noqa C901
     pipelined_forward: Type[BaseForward[TrainPipelineContext]] = PipelinedForward,
     pipeline_postproc: bool = False,
     default_stream: Optional[torch.Stream] = None,
+    apply_jit_context: Optional[ContextManager[None]] = None,
 ) -> Tuple[
     List[ShardedModule],
     torch.nn.Module,
@@ -1640,10 +1642,14 @@ def _rewrite_model(  # noqa C901
 
     # JIT script unsharded modules if applicable.
     if apply_jit:
-        graph_model = torch.fx.GraphModule(model, graph)
-        _jit_modules(graph_model, "")
-        if isinstance(input_model, DistributedModelParallel):
-            input_model.module = graph_model
+        if apply_jit_context is None:
+            apply_jit_context = nullcontext()
+
+        with apply_jit_context:
+            graph_model = torch.fx.GraphModule(model, graph)
+            _jit_modules(graph_model, "")
+            if isinstance(input_model, DistributedModelParallel):
+                input_model.module = graph_model
 
     if non_pipelined_sharded_modules:
         logger.warn(
