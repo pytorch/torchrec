@@ -468,7 +468,6 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._model_fwd: Callable[[Optional[In]], Tuple[torch.Tensor, Out]] = (
             custom_model_fwd if custom_model_fwd else model
         )
-        self._pipelined_forward_type = PipelinedForward
         self._dmp_collection_sync_interval_batches = (
             dmp_collection_sync_interval_batches
         )
