@@ -58,6 +58,7 @@ from torchrec.distributed.train_pipeline.utils import (
     StageOut,
     StageOutputWithEvent,
     TrainPipelineContext,
+    use_context_for_postprocs,
 )
 from torchrec.distributed.types import Awaitable
 from torchrec.pt2.checks import is_torchdynamo_compiling
@@ -792,19 +793,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with self._stream_context(self._data_dist_stream):
                 _wait_for_batch(batch, self._memcpy_stream)
 
-                original_contexts = [p.get_context() for p in self._pipelined_postprocs]
-
                 # Temporarily set context for next iter to populate cache
-                for postproc_mod in self._pipelined_postprocs:
-                    postproc_mod.set_context(context)
-
-                _start_data_dist(self._pipelined_modules, batch, context)
-
-                # Restore context for model fwd
-                for module, context in zip(
-                    self._pipelined_postprocs, original_contexts
-                ):
-                    module.set_context(context)
+                with use_context_for_postprocs(self._pipelined_postprocs, context):
+                    _start_data_dist(self._pipelined_modules, batch, context)
 
     def wait_sparse_data_dist(self, context: TrainPipelineContext) -> None:
         """
@@ -1325,22 +1316,15 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             return
 
         # Temporarily set context for next iter to populate cache
-        original_contexts = [p.get_context() for p in self._pipelined_postprocs]
-        for postproc_mod in self._pipelined_postprocs:
-            postproc_mod.set_context(context)
-
-        with record_function(f"## start_sparse_data_dist {context.index} ##"):
-            with self._stream_context(self._data_dist_stream):
-                _wait_for_events(batch, context, self._data_dist_stream)
-                model_input = self.extract_model_input_from_batch(batch)
-                _start_data_dist(self._pipelined_modules, model_input, context)
-                event = torch.get_device_module(self._device).Event()
-                event.record()
-                context.events.append(event)
-
-        # Restore context for model forward
-        for module, context in zip(self._pipelined_postprocs, original_contexts):
-            module.set_context(context)
+        with use_context_for_postprocs(self._pipelined_postprocs, context):
+            with record_function(f"## start_sparse_data_dist {context.index} ##"):
+                with self._stream_context(self._data_dist_stream):
+                    _wait_for_events(batch, context, self._data_dist_stream)
+                    model_input = self.extract_model_input_from_batch(batch)
+                    _start_data_dist(self._pipelined_modules, model_input, context)
+                    event = torch.get_device_module(self._device).Event()
+                    event.record()
+                    context.events.append(event)
 
     def start_embedding_lookup(
         self,
@@ -1727,8 +1711,6 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         inputs: Optional[In],
         stream: torch.Stream,
     ) -> StageOutputWithEvent:
-        if inputs is None:
-            return (None, None)
         with self._stream_context(stream):
             # If there is no previous event, data is entering the pipeline
             if event is not None:
@@ -1783,12 +1765,19 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
                 assert batch_to_wait_with_event is not None
                 batch_to_wait, event = batch_to_wait_with_event
 
-            new_result = self._run_with_event(
-                runnable=stage.runnable,
-                event=event,
-                inputs=batch_to_wait,
-                stream=stage.stream,
-            )
+            if batch_to_wait is not None:
+                new_result = self._run_with_event(
+                    runnable=stage.runnable,
+                    event=event,
+                    inputs=batch_to_wait,
+                    stream=stage.stream,
+                )
+            else:
+                new_result = (None, None)
+                if (
+                    data_exhausted_callback := stage.data_exhausted_callback
+                ) is not None:
+                    data_exhausted_callback()
 
         self._stage_outputs[batch_offset] = new_result
         if self._debug_mode:
