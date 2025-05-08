@@ -1711,8 +1711,6 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         inputs: Optional[In],
         stream: torch.Stream,
     ) -> StageOutputWithEvent:
-        if inputs is None:
-            return (None, None)
         with self._stream_context(stream):
             # If there is no previous event, data is entering the pipeline
             if event is not None:
@@ -1767,12 +1765,19 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
                 assert batch_to_wait_with_event is not None
                 batch_to_wait, event = batch_to_wait_with_event
 
-            new_result = self._run_with_event(
-                runnable=stage.runnable,
-                event=event,
-                inputs=batch_to_wait,
-                stream=stage.stream,
-            )
+            if batch_to_wait is not None:
+                new_result = self._run_with_event(
+                    runnable=stage.runnable,
+                    event=event,
+                    inputs=batch_to_wait,
+                    stream=stage.stream,
+                )
+            else:
+                new_result = (None, None)
+                if (
+                    data_exhausted_callback := stage.data_exhausted_callback
+                ) is not None:
+                    data_exhausted_callback()
 
         self._stage_outputs[batch_offset] = new_result
         if self._debug_mode:
