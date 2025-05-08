@@ -251,7 +251,6 @@ def _test_compile_rank_fn(
         num_float_features: int = 8
         num_weighted_features: int = 1
 
-        # pyre-ignore
         device: torch.Device = torch.device("cuda")
         pg: Optional[dist.ProcessGroup] = ctx.pg
         assert pg is not None
@@ -336,7 +335,7 @@ def _test_compile_rank_fn(
                 env=ShardingEnv.from_process_group(pg),
                 plan=plan,
                 sharders=sharders,
-                device=device,
+                device=device,  # pyre-ignore
                 init_data_parallel=False,
             )
 
@@ -601,7 +600,7 @@ def _test_compile_fake_pg_fn(
             env=ShardingEnv(world_size, rank, pg),
             plan=plan,
             sharders=sharders,
-            device=device,
+            device=device,  # pyre-ignore
             init_data_parallel=False,
         )
 
