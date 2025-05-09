@@ -640,6 +640,7 @@ class KeyValueParams:
         bulk_init_chunk_size: int: number of rows to insert into rocksdb in each chunk
         lazy_bulk_init_enabled: bool: whether to enable lazy(async) bulk init for SSD TBE
         enable_raw_embedding_streaming: Optional[bool]: enable raw embedding streaming for SSD TBE
+        res_store_shards: Optional[int] = None: the number of shards to store the raw embeddings
 
         # Parameter Server (PS) Attributes
         ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
@@ -664,6 +665,7 @@ class KeyValueParams:
     enable_raw_embedding_streaming: Optional[bool] = (
         None  # enable raw embedding streaming for SSD TBE
     )
+    res_store_shards: Optional[int] = None  # shards to store the raw embeddings
 
     # Parameter Server (PS) Attributes
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -691,6 +693,7 @@ class KeyValueParams:
                 self.bulk_init_chunk_size,
                 self.lazy_bulk_init_enabled,
                 self.enable_raw_embedding_streaming,
+                self.res_store_shards,
             )
         )
 

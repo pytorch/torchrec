@@ -37,6 +37,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     DenseTableBatchedEmbeddingBagsCodegen,
     EmbeddingLocation,
     PoolingMode,
+    RESParams,
     SparseType,
     SplitTableBatchedEmbeddingBagsCodegen,
 )
@@ -170,6 +171,23 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
                 "by max_l1_cache_size, cap at max_cache_sets instead"
             )
             ssd_tbe_params["cache_sets"] = int(max_cache_sets)
+
+    # populate res_params, which is used for raw embedding streaming
+    # here only populates the params available in fused_params and TBE configs
+    res_params: RESParams = RESParams()
+    res_params.table_names = [table.name for table in config.embedding_tables]
+    res_params.table_offsets = []
+    for emb_tbl in config.embedding_tables:
+        local_metadata = emb_tbl.local_metadata
+        if (
+            local_metadata is not None
+            and local_metadata.shard_offsets is not None
+            and len(local_metadata.shard_offsets) >= 1
+        ):
+            res_params.table_offsets.append(local_metadata.shard_offsets[0])
+    if "res_store_shards" in fused_params:
+        res_params.res_store_shards = fused_params.get("res_store_shards")
+    ssd_tbe_params["res_params"] = res_params
 
     return ssd_tbe_params
 
