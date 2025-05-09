@@ -214,6 +214,9 @@ class InferRwSequenceEmbeddingDist(
             # using _device_type_from_sharding_infos to iterate on local_embs list as
             # that's a better practice.
             for i, device_type in enumerate(self._device_type_from_sharding_infos):
+                assert (
+                    device_type != "ssd"
+                ), "Heterogenous sharding across multiple storage device types for a single table not supported for ssd stroage device type"
                 if device_type != "cpu":
                     non_cpu_local_embs.append(
                         _get_batching_hinted_output(
@@ -235,7 +238,7 @@ class InferRwSequenceEmbeddingDist(
                     result.append(non_cpu_local_embs_dist[index])
                     index += 1
             return result
-        elif self._device_type_from_sharding_infos == "cpu":
+        elif self._device_type_from_sharding_infos in ["cpu", "ssd"]:
             # for cpu sharder, output dist should be a no-op
             return local_embs
         else:

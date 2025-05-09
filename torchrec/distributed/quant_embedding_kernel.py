@@ -34,6 +34,7 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.fused_params import (
     fused_param_bounds_check_mode,
     fused_param_lengths_to_offsets_lookup,
+    FUSED_PARAM_SSD_TABLE_PLACEMENT_LIST,
     is_fused_param_quant_state_dict_split_scale_bias,
     is_fused_param_register_tbe,
     tbe_fused_params,
