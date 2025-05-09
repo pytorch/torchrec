@@ -268,9 +268,11 @@ class AUCMetricComputation(RecMetricComputation):
             raise RecMetricException(
                 "Inputs 'predictions' and 'weights' should not be None for AUCMetricComputation update"
             )
-        predictions = predictions.float()
-        labels = labels.float()
-        weights = weights.float()
+
+        # Clone to avoid output tensor overwritten issue in cudagraph
+        predictions = predictions.clone().float()
+        labels = labels.clone().float()
+        weights = weights.clone().float()
         batch_size = predictions.size(-1)
         start_index = max(self._num_samples + batch_size - self._window_size, 0)
 
@@ -314,6 +316,7 @@ class AUCMetricComputation(RecMetricComputation):
                 raise RecMetricException(
                     f"Input '{GROUPING_KEYS}' are required for AUCMetricComputation grouped update"
                 )
+            grouping_keys = grouping_keys.clone()
             getattr(self, GROUPING_KEYS)[0] = torch.cat(
                 [
                     cast(torch.Tensor, getattr(self, GROUPING_KEYS)[0])[start_index:],
