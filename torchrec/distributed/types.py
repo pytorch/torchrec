@@ -639,6 +639,7 @@ class KeyValueParams:
         enable_async_update: Optional[bool]: whether to enable async update for l2 cache
         bulk_init_chunk_size: int: number of rows to insert into rocksdb in each chunk
         lazy_bulk_init_enabled: bool: whether to enable lazy(async) bulk init for SSD TBE
+        enable_raw_embedding_streaming: Optional[bool]: enable raw embedding streaming for SSD TBE
 
         # Parameter Server (PS) Attributes
         ps_hosts (Optional[Tuple[Tuple[str, int]]]): List of PS host ip addresses
@@ -660,6 +661,9 @@ class KeyValueParams:
     enable_async_update: Optional[bool] = None  # enable L2 cache async update
     bulk_init_chunk_size: Optional[int] = None  # number of rows
     lazy_bulk_init_enabled: Optional[bool] = None  # enable lazy bulk init
+    enable_raw_embedding_streaming: Optional[bool] = (
+        None  # enable raw embedding streaming for SSD TBE
+    )
 
     # Parameter Server (PS) Attributes
     ps_hosts: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -686,6 +690,7 @@ class KeyValueParams:
                 self.enable_async_update,
                 self.bulk_init_chunk_size,
                 self.lazy_bulk_init_enabled,
+                self.enable_raw_embedding_streaming,
             )
         )
 
