@@ -35,6 +35,7 @@ from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     EnumerableShardingSpec,
     ModuleSharder,
+    ParameterSharding,
     ShardedModule,
     ShardingEnv,
     ShardingEnv2D,
@@ -611,6 +612,43 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         for _, m in module.named_modules():
             if hasattr(m, "reset_parameters"):
                 m.reset_parameters()
+
+    def reshard(
+        self,
+        path_to_sharded_module: str,
+        changed_shard_to_params: Dict[str, ParameterSharding],
+    ) -> None:
+        """
+        Reshards a module in the DMP. This is useful when the sharding plan for a module
+        changes during training.
+
+        Args:
+            path_to_sharded_module (str): The path to the sharded module in the DMP.
+            changed_shard_to_params (Dict[str, ParameterSharding]): The delta between original sharding plan
+                and new sharding plan for the module.
+        """
+        steps = path_to_sharded_module.split(".")
+        sharded_module = self.module
+        for s in steps:
+            sharded_module = getattr(sharded_module, s)
+
+        assert isinstance(sharded_module, ShardedModule)
+        assert changed_shard_to_params is not None
+        sharder_key = sharded_module.unsharded_module_type
+        sharder = self._sharder_map[sharder_key]
+        assert hasattr(
+            sharder, "reshard"
+        ), "reshard is not implemented for this sharder"
+        sharded_module = sharder.reshard(  # pyre-ignore
+            sharded_module,
+            changed_shard_to_params,
+            self._env,
+            self.device,
+        )
+
+        self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
+        self._plan.plan[path_to_sharded_module] = sharded_module.module_sharding_plan
+        return sharded_module
 
 
 class DMPCollection(DistributedModelParallel):
