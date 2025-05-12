@@ -28,6 +28,12 @@ FUSED_PARAM_BOUNDS_CHECK_MODE: str = "__register_tbe_bounds_check_mode"
 # with certain ways to split models.
 FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP: str = "__register_lengths_to_offsets_lookup"
 
+# Fused param storing list of cpu embedding tables offloaded to ssd to scale
+# the embedding table size
+FUSED_PARAM_SSD_TABLE_LIST: str = "__register_ssd_table_list"
+# Bool fused param per table to check if the table is offloaded to SSD
+FUSED_PARAM_IS_SSD_TABLE: str = "__register_is_ssd_table"
+
 
 class TBEToRegisterMixIn:
     def get_tbes_to_register(
@@ -111,5 +117,7 @@ def tbe_fused_params(
         fused_params_for_tbe.pop(FUSED_PARAM_BOUNDS_CHECK_MODE)
     if FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP in fused_params_for_tbe:
         fused_params_for_tbe.pop(FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP)
+    if FUSED_PARAM_SSD_TABLE_LIST in fused_params_for_tbe:
+        fused_params_for_tbe.pop(FUSED_PARAM_SSD_TABLE_LIST)
 
     return fused_params_for_tbe
