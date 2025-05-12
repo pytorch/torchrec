@@ -8,10 +8,18 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Type
+from functools import partial, update_wrapper
+from typing import Callable, Dict, Type
 
 import torch
-from torchrec.metrics.mse import compute_mse, compute_rmse, MSEMetric
+from torchrec.metrics.mse import (
+    compute_error_sum,
+    compute_mse,
+    compute_r_squared,
+    compute_rmse,
+    compute_total_sum,
+    MSEMetric,
+)
 from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
 from torchrec.metrics.test_utils import (
     metric_test_helper,
@@ -65,10 +73,31 @@ class TestRMSEMetric(TestMetric):
         )
 
 
+class TestRSquaredMetric(TestMetric):
+    @staticmethod
+    def _get_states(
+        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+    ) -> Dict[str, torch.Tensor]:
+        error_sum = compute_error_sum(labels, predictions, weights)
+        total_sum = compute_total_sum(labels, weights)
+        return {
+            "error_sum": error_sum,
+            "total_sum": total_sum,
+        }
+
+    @staticmethod
+    def _compute(states: Dict[str, torch.Tensor]) -> torch.Tensor:
+        return compute_r_squared(
+            states["error_sum"],
+            states["total_sum"],
+        )
+
+
 class MSEMetricTest(unittest.TestCase):
     clazz: Type[RecMetric] = MSEMetric
     task_name: str = "mse"
     rmse_task_name: str = "rmse"
+    r_squared_task_name: str = "r_squared"
 
     def test_mse_unfused(self) -> None:
         rec_metric_value_test_launcher(
@@ -152,6 +181,53 @@ class MSEMetricTest(unittest.TestCase):
             should_validate_update=False,
             world_size=WORLD_SIZE,
             entry_point=metric_test_helper,
+        )
+
+    _r_squared_metric_test_helper: Callable[..., None] = partial(
+        metric_test_helper, include_r_squared=True
+    )
+    update_wrapper(_r_squared_metric_test_helper, metric_test_helper)
+
+    def test_r_squared_unfused(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=MSEMetric,
+            target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestRSquaredMetric,
+            metric_name=MSEMetricTest.r_squared_task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=self._r_squared_metric_test_helper,
+        )
+
+    def test_r_squared_fused_tasks(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=MSEMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            test_clazz=TestRSquaredMetric,
+            metric_name=MSEMetricTest.r_squared_task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=self._r_squared_metric_test_helper,
+        )
+
+    def test_r_squared_fused_tasks_and_states(self) -> None:
+        rec_metric_value_test_launcher(
+            target_clazz=MSEMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
+            test_clazz=TestRSquaredMetric,
+            metric_name=MSEMetricTest.r_squared_task_name,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=self._r_squared_metric_test_helper,
         )
 
 
