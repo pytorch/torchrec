@@ -27,7 +27,7 @@ def reorder_inverse_indices(
     inverse_indices: Optional[Tuple[List[str], torch.Tensor]],
     feature_names: List[str],
 ) -> torch.Tensor:
-    if inverse_indices is None:
+    if inverse_indices is None or inverse_indices[1].numel() == 0:
         return torch.empty(0)
     index_per_name = {name: i for i, name in enumerate(inverse_indices[0])}
     index = torch.tensor(
