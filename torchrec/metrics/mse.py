@@ -22,6 +22,7 @@ from torchrec.metrics.rec_metric import (
 
 ERROR_SUM = "error_sum"
 WEIGHTED_NUM_SAMPES = "weighted_num_samples"
+TOTAL_SUM = "total_sum"
 
 
 def compute_mse(
@@ -40,11 +41,22 @@ def compute_rmse(
     ).double()
 
 
+def compute_r_squared(error_sum: torch.Tensor, total_sum: torch.Tensor) -> torch.Tensor:
+    return torch.where(total_sum == 0.0, 0.0, 1.0 - error_sum / total_sum).double()
+
+
 def compute_error_sum(
     labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
 ) -> torch.Tensor:
     predictions = predictions.double()
     return torch.sum(weights * torch.square(labels - predictions), dim=-1)
+
+
+def compute_total_sum(labels: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
+    mean_label = (
+        torch.sum(weights * labels, dim=-1) / torch.sum(weights, dim=-1)
+    ).double()
+    return torch.sum(weights * torch.square(labels - mean_label.unsqueeze(-1)), dim=-1)
 
 
 def get_mse_states(
@@ -53,6 +65,7 @@ def get_mse_states(
     return {
         "error_sum": compute_error_sum(labels, predictions, weights),
         "weighted_num_samples": torch.sum(weights, dim=-1),
+        "total_sum": compute_total_sum(labels, weights),
     }
 
 
@@ -64,7 +77,13 @@ class MSEMetricComputation(RecMetricComputation):
     See the docstring of RecMetricComputation for more detail.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        include_r_squared: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        self._include_r_squared: bool = include_r_squared
         super().__init__(*args, **kwargs)
         self._add_state(
             "error_sum",
@@ -75,6 +94,13 @@ class MSEMetricComputation(RecMetricComputation):
         )
         self._add_state(
             "weighted_num_samples",
+            torch.zeros(self._n_tasks, dtype=torch.double),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            "total_sum",
             torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
@@ -101,7 +127,7 @@ class MSEMetricComputation(RecMetricComputation):
             self._aggregate_window_state(state_name, state_value, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
-        return [
+        reports = [
             MetricComputationReport(
                 name=MetricName.MSE,
                 metric_prefix=MetricPrefix.LIFETIME,
@@ -135,6 +161,28 @@ class MSEMetricComputation(RecMetricComputation):
                 ),
             ),
         ]
+
+        if self._include_r_squared:
+            reports += [
+                MetricComputationReport(
+                    name=MetricName.R_SQUARED,
+                    metric_prefix=MetricPrefix.LIFETIME,
+                    value=compute_r_squared(
+                        cast(torch.Tensor, self.error_sum),
+                        cast(torch.Tensor, self.total_sum),
+                    ),
+                ),
+                MetricComputationReport(
+                    name=MetricName.R_SQUARED,
+                    metric_prefix=MetricPrefix.WINDOW,
+                    value=compute_r_squared(
+                        self.get_window_state(ERROR_SUM),
+                        self.get_window_state(TOTAL_SUM),
+                    ),
+                ),
+            ]
+
+        return reports
 
 
 class MSEMetric(RecMetric):
