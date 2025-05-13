@@ -34,6 +34,7 @@ from torchrec.distributed.embedding_types import (
     ListOfKJTList,
     ShardedEmbeddingTable,
 )
+from torchrec.distributed.fused_params import FUSED_PARAM_SSD_TABLE_LIST
 from torchrec.distributed.types import (
     Awaitable,
     EmbeddingEvent,
@@ -420,7 +421,7 @@ def _get_grouping_fused_params(
 ) -> Optional[Dict[str, Any]]:
     """
     Only shallow copy the fused params we need for grouping tables into TBEs. In
-    particular, we do not copy cache_load_factor.
+    particular, we do not copy cache_load_factor or ssd embedding table list.
     """
     grouping_fused_params: Optional[Dict[str, Any]] = copy.copy(fused_params)
 
@@ -429,6 +430,9 @@ def _get_grouping_fused_params(
 
     if CACHE_LOAD_FACTOR_STR in grouping_fused_params:
         del grouping_fused_params[CACHE_LOAD_FACTOR_STR]
+
+    if FUSED_PARAM_SSD_TABLE_LIST in grouping_fused_params:
+        del grouping_fused_params[FUSED_PARAM_SSD_TABLE_LIST]
 
     if grouping_fused_params.get(USE_ONE_TBE_PER_TABLE, False):
         # Replace with unique value to force it into singleton group.

@@ -47,6 +47,7 @@ from torchrec.distributed.embedding_types import (
     ShardingType,
 )
 from torchrec.distributed.fused_params import (
+    FUSED_PARAM_IS_SSD_TABLE,
     FUSED_PARAM_QUANT_STATE_DICT_SPLIT_SCALE_BIAS,
     FUSED_PARAM_REGISTER_TBE_BOOL,
     get_tbes_to_register_from_iterable,
@@ -173,12 +174,17 @@ def get_device_from_parameter_sharding(
 def get_device_from_sharding_infos(
     emb_shard_infos: List[EmbeddingShardingInfo],
 ) -> Union[str, Tuple[str, ...]]:
-    res = list(
-        {
-            get_device_from_parameter_sharding(ps.param_sharding)
-            for ps in emb_shard_infos
-        }
-    )
+    res_set = set()
+    for emb_shard_info in emb_shard_infos:
+        if emb_shard_info.fused_params and emb_shard_info.fused_params.get(
+            FUSED_PARAM_IS_SSD_TABLE, False
+        ):
+            res_set.add("ssd")
+        else:
+            res_set.add(
+                get_device_from_parameter_sharding(emb_shard_info.param_sharding)
+            )
+    res = list(res_set)
     assert len(res) == 1, "All shards should be on the same type of device"
     return res[0]
 
@@ -201,11 +207,11 @@ def create_infer_embedding_sharding(
     List[torch.Tensor],
     List[torch.Tensor],
 ]:
-    device_type_from_sharding_infos: Union[str, Tuple[str, ...]] = (
+    storage_device_type_from_sharding_infos: Union[str, Tuple[str, ...]] = (
         get_device_from_sharding_infos(sharding_infos)
     )
 
-    if device_type_from_sharding_infos in ["cuda", "mtia"]:
+    if storage_device_type_from_sharding_infos in ["cuda", "mtia"]:
         if sharding_type == ShardingType.TABLE_WISE.value:
             return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
         elif sharding_type == ShardingType.COLUMN_WISE.value:
@@ -215,31 +221,31 @@ def create_infer_embedding_sharding(
                 sharding_infos=sharding_infos,
                 env=env,
                 device=device,
-                device_type_from_sharding_infos=device_type_from_sharding_infos,
+                device_type_from_sharding_infos=storage_device_type_from_sharding_infos,
             )
         else:
             raise ValueError(
-                f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
+                f"Sharding type not supported {sharding_type} for {storage_device_type_from_sharding_infos} sharding"
             )
-    elif device_type_from_sharding_infos == "cpu" or isinstance(
-        device_type_from_sharding_infos, tuple
+    elif storage_device_type_from_sharding_infos in ["cpu", "ssd"] or isinstance(
+        storage_device_type_from_sharding_infos, tuple
     ):
         if sharding_type == ShardingType.ROW_WISE.value:
             return InferRwSequenceEmbeddingSharding(
                 sharding_infos=sharding_infos,
                 env=env,
                 device=device,
-                device_type_from_sharding_infos=device_type_from_sharding_infos,
+                device_type_from_sharding_infos=storage_device_type_from_sharding_infos,
             )
         elif sharding_type == ShardingType.TABLE_WISE.value:
             return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
         else:
             raise ValueError(
-                f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
+                f"Sharding type not supported {sharding_type} for {storage_device_type_from_sharding_infos} sharding"
             )
     else:
         raise ValueError(
-            f"Sharding type not supported {sharding_type} for {device_type_from_sharding_infos} sharding"
+            f"Sharding type not supported {sharding_type} for {storage_device_type_from_sharding_infos} sharding"
         )
 
 

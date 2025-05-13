@@ -45,6 +45,10 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingModule,
     ShardingType,
 )
+from torchrec.distributed.fused_params import (
+    FUSED_PARAM_IS_SSD_TABLE,
+    FUSED_PARAM_SSD_TABLE_LIST,
+)
 from torchrec.distributed.sharding.cw_sequence_sharding import (
     CwSequenceEmbeddingSharding,
 )
@@ -184,9 +188,16 @@ def create_sharding_infos_by_sharding_device_group(
         assert param_name in parameter_by_name or param_name in state_dict
         param = parameter_by_name.get(param_name, state_dict[param_name])
 
-        device_group: TypeUnion[str, Tuple[str, ...]] = (
-            get_device_from_parameter_sharding(parameter_sharding)
-        )
+        # if a table name is overridden to be offloaded to ssd storage for inference
+        # update the device group accordingly
+        if fused_params and table_name in fused_params.get(
+            FUSED_PARAM_SSD_TABLE_LIST, {}
+        ):
+            device_group: TypeUnion[str, Tuple[str, ...]] = "ssd"
+        else:
+            device_group: TypeUnion[str, Tuple[str, ...]] = (
+                get_device_from_parameter_sharding(parameter_sharding)
+            )
         if (
             parameter_sharding.sharding_type,
             device_group,
@@ -214,6 +225,8 @@ def create_sharding_infos_by_sharding_device_group(
             per_table_fused_params, parameter_sharding
         )
         per_table_fused_params = convert_to_fbgemm_types(per_table_fused_params)
+        if device_group == "ssd":
+            per_table_fused_params.update({FUSED_PARAM_IS_SSD_TABLE: True})
 
         sharding_type_device_group_to_sharding_infos[
             (parameter_sharding.sharding_type, device_group)
