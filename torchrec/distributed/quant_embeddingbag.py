@@ -430,7 +430,7 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
         self,
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],  # support for hybrid sharding
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         feature_processor: Optional[FeatureProcessorsCollection] = None,
@@ -462,11 +462,22 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
                     f"Feature processor has inconsistent devices. Expected {feature_processor_device}, got {param.device}"
                 )
 
+        total_world_size = 0
+        if isinstance(env, Dict):
+            for _, device_group in self._sharding_type_device_group_to_sharding.keys():
+                devices = (
+                    device_group if isinstance(device_group, tuple) else (device_group,)
+                )
+                for d in devices:
+                    total_world_size += env[d].world_size
+        else:
+            total_world_size = env.world_size
+
         if feature_processor_device is None:
-            for _ in range(env.world_size):
+            for _ in range(total_world_size):
                 self.feature_processors_per_rank.append(feature_processor)
         else:
-            for i in range(env.world_size):
+            for i in range(total_world_size):
                 # Generic copy, for example initailized on cpu but -> sharding as meta
                 self.feature_processors_per_rank.append(
                     copy.deepcopy(feature_processor)
