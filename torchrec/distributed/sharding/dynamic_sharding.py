@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Tuple
 
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from torch.distributed._shard.sharded_tensor import Shard
 from torchrec.distributed.types import (
     ParameterSharding,
@@ -19,6 +20,58 @@ from torchrec.distributed.types import (
     ShardingEnv,
 )
 
+OrderedShardNamesWithSizes = List[Tuple[str, List[int]]]
+"""
+A type alias to represent an ordered shard name and the corresponding shard_size 
+in dim 0 & 1 that were sent to the current rank.
+This is a flattened and pruned nested list, which orders the shards names and 
+sizes in the following priority:
+1. Rank order
+2. Table order
+3. Shard order
+
+<table_x, shard_y> in below examples represent the 2d tensor correlated to a 
+certain table `x`, allocated to rank `z`. The `y` here denotes the order of shards 
+in the module attributes such as state_dict, sharding_plan, etc.. 
+
+`z` != `y` numerically, but the order of shards is based on the order of ranks allocated
+
+Example 1 NOTE: the ordering by rank: 
+Rank 0 sends table_0, shard_0 to Rank 1.
+Rank 2 sends table_1, shard_0 to Rank 1.
+Rank 2 sends table_1, shard_1 to Rank 0
+Rank 3 sends table_0, shard_1 to Rank 0
+
+NOTE: table_1 comes first due to its source rank being 'first'
+On Rank 0:output_tensor = [
+    <table_1, shard_0>, # from rank 2
+    <table_0, shard_1>  # from rank 3
+]
+
+On Rank 1: output_tensor = [
+    <table_0, shard_0>, # from rank 0
+    <table_1, shard_0>  # from rank 2
+]
+
+Example 2: NOTE: ordered by table when ranks are the same
+Rank 0 sends table_1 to Rank 1
+Rank 0 sends table_2 to Rank 1
+
+output_tensor = [
+    <table_0, shard_y>, 
+    <table_1, shard_y>  
+]
+
+Example 3: NOTE: ordered by shard if table and rank are the same
+Rank 0 sends table_1, shard_0 to Rank 1
+Rank 0 sends table_1, shard_1 to Rank 1
+
+Rank 1: output_tensor = [
+    <table_0, shard_0>, 
+    <table_1, shard_1>  
+]
+"""
+
 
 def shards_all_to_all(
     module: ShardedModule[Any, Any, Any, Any],  # pyre-ignore
@@ -26,11 +79,14 @@ def shards_all_to_all(
     device: torch.device,
     changed_sharding_params: Dict[str, ParameterSharding],
     env: ShardingEnv,
+    max_dim_0: int,
+    max_dim_1: int,
     extend_shard_name: Callable[[str], str] = lambda x: x,
-) -> Tuple[List[Tuple[str, int]], torch.Tensor]:
+) -> Tuple[OrderedShardNamesWithSizes, torch.Tensor]:
     """
     Performs an all-to-all communication to redistribute shards across ranks based on new sharding parameters.
-    Assumes ranks are ordered in ParameterSharding.ranks.
+    Assumes ranks are ordered in ParameterSharding.ranks. Implements padding for concatenating, sending and
+    receiving tensors of different sizes in dim 0 or 1.
 
     Args:
         module (ShardedModule[Any, Any, Any, Any]): The module containing sharded tensors to be redistributed.
@@ -46,10 +102,14 @@ def shards_all_to_all(
 
         extend_shard_name (Callable[[str], str], optional): A function to extend shard names to the full name in state_dict.
 
+        max_dim_0 (int): The maximum dimension size of dim 0 across all tables in the module.
+
+        max_dim_1 (int): The maximum dimension size of dim 1 across all tables in the module.
+
     Returns:
-        Tuple[List[Tuple[str, int]], torch.Tensor]: A tuple containing:
-            - A list of shard name and the corresponding shard_size in dim 1 that were sent to the current rank.
-                This is a flattened and pruned nested list, which orders the shards names and sizes by rank, then shard order.
+        Tuple[List[Tuple[str, List[int]]], torch.Tensor]: Two outputs containing:
+            - A list of shard name and the corresponding shard_size in dim 0 & 1 that were sent to the current rank.
+                This is a flattened and pruned nested list, which orders the shards names and sizes by source rank, then shard order.
             - The tensor containing all shards received by the current rank after the all-to-all operation.
     """
     if env.output_dtensor:
@@ -64,8 +124,6 @@ def shards_all_to_all(
     input_splits_per_rank = [[0] * world_size for _ in range(world_size)]
     output_splits_per_rank = [[0] * world_size for _ in range(world_size)]
 
-    # 0 by default, as current rank may be recieving 0 shards
-    num_embeddings_received = 0
     output_tensor_tensor_count = 0
     shard_names_to_lengths_by_src_rank = [[] for _ in range(world_size)]
     local_table_to_input_tensor_by_dst_rank = [[] for _ in range(world_size)]
@@ -86,29 +144,20 @@ def shards_all_to_all(
             src_rank = src_ranks[i]
 
             shard_size = sharded_t.metadata().shards_metadata[i].shard_sizes
-            shard_size_dim_1 = shard_size[1]
-            input_splits_per_rank[src_rank][dst_rank] += shard_size_dim_1
-            output_splits_per_rank[dst_rank][src_rank] += shard_size_dim_1
+            input_splits_per_rank[src_rank][dst_rank] += max_dim_0
+            output_splits_per_rank[dst_rank][src_rank] += max_dim_0
             if src_rank == rank:
                 local_shards = sharded_t.local_shards()
                 assert len(local_shards) == 1
-                local_table_to_input_tensor_by_dst_rank[dst_rank].append(
-                    sharded_t.local_shards()[0].tensor
+                cur_t = pad_tensor_to_max_dims(
+                    sharded_t.local_shards()[0].tensor, max_dim_0, max_dim_1
                 )
+                local_table_to_input_tensor_by_dst_rank[dst_rank].append(cur_t)
             if dst_rank == rank:
                 shard_names_to_lengths_by_src_rank[src_rank].append(
-                    (shard_name, shard_size_dim_1)
+                    (shard_name, shard_size)
                 )
-                # NOTE: Only need to update num_embeddings_received to be the
-                # num_embeddings of shards if this rank is actually recieving
-                # any tensors
-                if num_embeddings_received == 0:
-                    num_embeddings_received = shard_size[0]
-                else:
-                    # TODO: for 2D and row-wise, shard_sizes in dim 0 may be variable
-                    # For now, assume that shard_sizes in dim 0 are all the same
-                    assert num_embeddings_received == shard_size[0]
-                output_tensor_tensor_count += shard_size[1]
+                output_tensor_tensor_count += max_dim_0
 
     local_input_splits = input_splits_per_rank[rank]
     local_output_splits = output_splits_per_rank[rank]
@@ -121,16 +170,13 @@ def shards_all_to_all(
                     local_input_tensor,
                     shard_info,
                 ),
-                dim=1,
+                dim=0,
             )
 
-    # Transposing the Tensors - because we are concatenating them along dimension 1
-    # This is because dim 0 size may be different for different shards
-    # whereas dim 1 size is the same for all shards as dim 1 size = num_embeddings per table
+    max_embedding_size = max_dim_1
     local_output_tensor = torch.empty(
-        [output_tensor_tensor_count, num_embeddings_received], device=device
+        [output_tensor_tensor_count, max_embedding_size], device=device
     )
-    local_input_tensor = local_input_tensor.T.contiguous()
 
     assert sum(local_output_splits) == len(local_output_tensor)
     assert sum(local_input_splits) == len(local_input_tensor)
@@ -153,22 +199,23 @@ def shards_all_to_all(
 
 def update_state_dict_post_resharding(
     state_dict: Dict[str, ShardedTensor],
-    ordered_shard_names_and_lengths: List[Tuple[str, int]],
+    ordered_shard_names_and_lengths: OrderedShardNamesWithSizes,
     output_tensor: torch.Tensor,
     new_sharding_params: Dict[str, ParameterSharding],
     curr_rank: int,
+    max_dim_0: int,
     extend_shard_name: Callable[[str], str] = lambda x: x,
 ) -> Dict[str, ShardedTensor]:
     """
     Updates and returns the given state_dict with new placements and
     local_shards based on the output tensor of the AllToAll collective.
+    Removes padding from the output tensor in dim 0 and 1 if necessary.
 
     Args:
         state_dict (Dict[str, Any]): The state dict to be updated with new shard placements and local shards.
 
-        shard_names_by_src_rank (List[Tuple[str, int]]): A list of shard name and the corresponding shard_size in dim 1
-        that were sent to the current rank. This is a flattened and pruned nested list, which orders the shards names and
-        sizes by rank, then shard order.
+        ordered_shard_names_and_lengths (List[Tuple[str, List[int]]]): A list of shard name and the corresponding shard_size.
+            This is a flattened and pruned nested list, which orders the shards names and sizes by rank, then shard order.
 
         output_tensor (torch.Tensor): The tensor containing the output data from the AllToAll operation.
 
@@ -176,6 +223,10 @@ def update_state_dict_post_resharding(
             This should only contain shard names that were updated during the AllToAll operation.
 
         curr_rank (int): The current rank of the process in the distributed environment.
+
+        max_dim_0 (int): The maximum dimension size of dim 0 across all tables in the module. Only dim 0
+            is needed here to slice the output tensor correctly, as removing the padding will only reference
+            the original shard sizes stored in ordered_shard_names_and_lengths.
 
         extend_shard_name (Callable[[str], str], optional): A function to extend shard names to the full name in state_dict.
 
@@ -187,10 +238,12 @@ def update_state_dict_post_resharding(
     shard_name_to_local_output_tensor: Dict[str, torch.Tensor] = {}
 
     for shard_name, shard_size in ordered_shard_names_and_lengths:
-        end_slice_index = slice_index + shard_size
-        shard_name_to_local_output_tensor[shard_name] = output_tensor[
-            slice_index:end_slice_index
-        ].T
+        end_slice_index = slice_index + max_dim_0
+        cur_t = output_tensor[slice_index:end_slice_index]
+        cur_t = pad_tensor_to_max_dims(
+            cur_t, shard_size[0], shard_size[1], remove_padding=True
+        )
+        shard_name_to_local_output_tensor[shard_name] = cur_t
         slice_index = end_slice_index
 
     for shard_name, param in new_sharding_params.items():
@@ -234,3 +287,80 @@ def update_module_sharding_plan(
     for table_name, param_sharding in changed_sharding_params.items():
         current_plan[table_name] = param_sharding
     return
+
+
+def get_largest_dims_from_state_dict(
+    state_dict: Dict[str, ShardedTensor],
+) -> Tuple[int, int]:
+    """
+    Returns the largest dimension size of dim 0 and 1 across all tables in a module.
+
+    Args:
+        state_dict (Dict[str, ShardedTensor]): The state dict containing the sharded tensors.
+
+    Returns:
+        List[int]: A list of the largest dimension size of each table in the state_dict.
+    """
+    max_dim_0 = 0
+    max_dim_1 = 0
+    for sharded_t in state_dict.values():
+        for shard in sharded_t.metadata().shards_metadata:
+            max_dim_0 = max(max_dim_0, shard.shard_sizes[0])
+            max_dim_1 = max(max_dim_1, shard.shard_sizes[1])
+
+    return max_dim_0, max_dim_1
+
+
+def get_largest_dims_from_sharding_plan_updates(
+    sharding_plan_updates: Dict[str, ParameterSharding],
+) -> Tuple[int, int]:
+    """
+    Returns the largest dimension size of dim 0 and 1 across all tables in a module.
+
+    Args:
+        state_dict (Dict[str, ShardedTensor]): The state dict containing the sharded tensors.
+
+    Returns:
+        List[int]: A list of the largest dimension size of each table in the state_dict.
+    """
+    max_dim_0 = 0
+    max_dim_1 = 0
+    for _, param in sharding_plan_updates.items():
+        assert hasattr(param.sharding_spec, "shards")
+        for shard in param.sharding_spec.shards:  # pyre-ignore
+            max_dim_0 = max(max_dim_0, shard.shard_sizes[0])
+            max_dim_1 = max(max_dim_1, shard.shard_sizes[1])
+
+    return max_dim_0, max_dim_1
+
+
+def pad_tensor_to_max_dims(
+    t: torch.Tensor,
+    expected_dim_0: int,
+    expected_dim_1: int,
+    remove_padding: bool = False,
+) -> torch.Tensor:
+    """
+    Pads a tensor on the right and bottom with zeros.
+
+    Args:
+        tensor (torch.Tensor): The tensor to be padded.
+        pad_right (int): The number of zeros to pad on the right.
+        pad_bottom (int): The number of zeros to pad on the bottom.
+
+    Returns:
+        torch.Tensor: The padded tensor.
+    """
+    pad_right = expected_dim_1 - t.size(1)
+    pad_bottom = expected_dim_0 - t.size(0)
+    return F.pad(
+        input=t,
+        pad=(
+            0,
+            pad_right,
+            0,
+            pad_bottom,
+        ),  # right and bottom
+        mode="constant",
+        value=0,
+    )
