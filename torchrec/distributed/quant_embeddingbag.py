@@ -224,6 +224,7 @@ class ShardedQuantEmbeddingBagCollection(
         self._is_weighted: bool = module.is_weighted()
         self._lookups: List[nn.Module] = []
         self._create_lookups(fused_params, device)
+        self._fused_params = fused_params
 
         # Ensure output dist is set for post processing from an inference runtime (ie. setting device from runtime).
         self._output_dists: torch.nn.ModuleList = torch.nn.ModuleList()
