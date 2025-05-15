@@ -703,7 +703,7 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.TABLE_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.TRUE,
-                    "inductor",
+                    "aot_eager",
                     _TestConfig(),
                 ),
                 (
@@ -711,7 +711,7 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.COLUMN_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.TRUE,
-                    "inductor",
+                    "aot_eager",
                     _TestConfig(),
                 ),
                 (
@@ -719,7 +719,7 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.TABLE_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.FALSE,
-                    "inductor",
+                    "aot_eager",
                     _TestConfig(),
                 ),
                 (
@@ -727,7 +727,7 @@ class TestPt2Train(MultiProcessTestBase):
                     ShardingType.COLUMN_WISE.value,
                     _InputType.SINGLE_BATCH,
                     _ConvertToVariableBatch.FALSE,
-                    "inductor",
+                    "aot_eager",
                     _TestConfig(),
                 ),
             ]
