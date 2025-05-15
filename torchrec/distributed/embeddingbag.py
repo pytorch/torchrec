@@ -58,6 +58,7 @@ from torchrec.distributed.fused_params import (
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
 from torchrec.distributed.sharding.dynamic_sharding import (
+    get_largest_dims_from_sharding_plan_updates,
     shards_all_to_all,
     update_module_sharding_plan,
     update_state_dict_post_resharding,
@@ -1545,6 +1546,11 @@ class ShardedEmbeddingBagCollection(
         # Deleting all lookups
         self._lookups.clear()
 
+        # Get max dim size to enable padding for all_to_all
+        max_dim_0, max_dim_1 = get_largest_dims_from_sharding_plan_updates(
+            changed_sharding_params
+        )
+
         local_shard_names_by_src_rank, local_output_tensor = shards_all_to_all(
             module=self,
             state_dict=current_state,
@@ -1552,6 +1558,8 @@ class ShardedEmbeddingBagCollection(
             changed_sharding_params=changed_sharding_params,
             env=env,
             extend_shard_name=self.extend_shard_name,
+            max_dim_0=max_dim_0,
+            max_dim_1=max_dim_1,
         )
 
         current_state = update_state_dict_post_resharding(
@@ -1561,6 +1569,7 @@ class ShardedEmbeddingBagCollection(
             new_sharding_params=changed_sharding_params,
             curr_rank=dist.get_rank(),
             extend_shard_name=self.extend_shard_name,
+            max_dim_0=max_dim_0,
         )
 
         for name, param in changed_sharding_params.items():
