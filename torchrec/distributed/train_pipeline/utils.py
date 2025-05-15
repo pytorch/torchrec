@@ -7,6 +7,8 @@
 
 # pyre-strict
 import abc
+
+import contextlib
 import copy
 import itertools
 import logging
@@ -21,6 +23,7 @@ from typing import (
     Callable,
     cast,
     Dict,
+    Generator,
     Generic,
     Iterable,
     Iterator,
@@ -1834,6 +1837,28 @@ def _prefetch_embeddings(
     return data_per_sharded_module
 
 
+@contextlib.contextmanager
+def use_context_for_postprocs(
+    pipelined_postprocs: List[PipelinedPostproc],
+    next_batch_context: TrainPipelineContext,
+) -> Generator[None, None, None]:
+    """
+    Temporarily set pipelined postproc context for next iter to populate cache.
+    """
+    # Save original context for model fwd
+    original_contexts = [p.get_context() for p in pipelined_postprocs]
+
+    # Temporarily set context for next iter to populate cache
+    for postproc_mod in pipelined_postprocs:
+        postproc_mod.set_context(next_batch_context)
+
+    yield
+
+    # Restore context for model fwd
+    for module, context in zip(pipelined_postprocs, original_contexts):
+        module.set_context(context)
+
+
 class SparseDataDistUtil(Generic[In]):
     """
     Helper class exposing methods for sparse data dist and prefetch pipelining.
@@ -1845,6 +1870,7 @@ class SparseDataDistUtil(Generic[In]):
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
         prefetch_stream (Optional[torch.cuda.Stream]): Stream on which model prefetch runs
             Defaults to `None`. This needs to be passed in to enable prefetch pipelining.
+        pipeline_postproc (bool): whether to pipeline postproc modules. Defaults to `False`.
 
     Example::
         sdd = SparseDataDistUtil(
