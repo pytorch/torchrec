@@ -384,6 +384,14 @@ class RecMetric(nn.Module, abc.ABC):
         if "enable_pt2_compile" in kwargs:
             del kwargs["enable_pt2_compile"]
 
+        # pyre-fixme[8]: Attribute has type `bool`; used as `Union[bool,
+        #  Dict[str, Any]]`.
+        self._should_clone_update_inputs: bool = kwargs.get(
+            "should_clone_update_inputs", False
+        )
+        if "should_clone_update_inputs" in kwargs:
+            del kwargs["should_clone_update_inputs"]
+
         if self._window_size < self._batch_size:
             raise ValueError(
                 f"Local window size must be larger than batch size. Got local window size {self._window_size} and batch size {self._batch_size}."
@@ -541,6 +549,35 @@ class RecMetric(nn.Module, abc.ABC):
     def _check_nonempty_weights(self, weights: torch.Tensor) -> torch.Tensor:
         return torch.gt(torch.count_nonzero(weights, dim=-1), 0)
 
+    def clone_update_inputs(
+        self,
+        predictions: RecModelOutput,
+        labels: RecModelOutput,
+        weights: Optional[RecModelOutput],
+        **kwargs: Dict[str, Any],
+    ) -> tuple[
+        RecModelOutput, RecModelOutput, Optional[RecModelOutput], Dict[str, Any]
+    ]:
+        def clone_rec_model_output(
+            rec_model_output: RecModelOutput,
+        ) -> RecModelOutput:
+            if isinstance(rec_model_output, torch.Tensor):
+                return rec_model_output.clone()
+            else:
+                return {k: v.clone() for k, v in rec_model_output.items()}
+
+        predictions = clone_rec_model_output(predictions)
+        labels = clone_rec_model_output(labels)
+        if weights is not None:
+            weights = clone_rec_model_output(weights)
+
+        if "required_inputs" in kwargs:
+            kwargs["required_inputs"] = {
+                k: v.clone() for k, v in kwargs["required_inputs"].items()
+            }
+
+        return predictions, labels, weights, kwargs
+
     def _update(
         self,
         *,
@@ -550,6 +587,11 @@ class RecMetric(nn.Module, abc.ABC):
         **kwargs: Dict[str, Any],
     ) -> None:
         with torch.no_grad():
+            if self._should_clone_update_inputs:
+                predictions, labels, weights, kwargs = self.clone_update_inputs(
+                    predictions, labels, weights, **kwargs
+                )
+
             if self._compute_mode in [
                 RecComputeMode.FUSED_TASKS_COMPUTATION,
                 RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
