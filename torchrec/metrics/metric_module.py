@@ -370,7 +370,6 @@ def _generate_rec_metrics(
             kwargs = metric_def.arguments
 
         kwargs["enable_pt2_compile"] = metrics_config.enable_pt2_compile
-        kwargs["should_clone_update_inputs"] = metrics_config.should_clone_update_inputs
 
         rec_tasks: List[RecTaskInfo] = []
         if metric_def.rec_tasks and metric_def.rec_task_indices:
