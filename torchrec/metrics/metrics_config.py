@@ -170,6 +170,8 @@ class MetricsConfig:
             update if the inputs are invalid. Invalid inputs include the case where all
             examples have 0 weights for a batch.
         enable_pt2_compile (bool): whether to enable PT2 compilation for metrics.
+        should_clone_update_inputs (bool): whether to clone the inputs of update(). This
+            prevents CUDAGraph error on overwritting tensor outputs by subsequent runs.
     """
 
     rec_tasks: List[RecTaskInfo] = field(default_factory=list)
@@ -184,6 +186,7 @@ class MetricsConfig:
     compute_on_all_ranks: bool = False
     should_validate_update: bool = False
     enable_pt2_compile: bool = False
+    should_clone_update_inputs: bool = False
 
 
 DefaultTaskInfo = RecTaskInfo(
