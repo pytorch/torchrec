@@ -10,7 +10,8 @@
 import copy
 import enum
 import unittest
-from typing import List
+from contextlib import contextmanager
+from typing import Generator, List
 from unittest.mock import MagicMock
 
 import torch
@@ -43,6 +44,29 @@ class ModelType(enum.Enum):
 
 
 class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_rewrite_model_apply_jit(self) -> None:
+        @contextmanager
+        def apply_jit_context(events: list[str]) -> Generator[None, None, None]:
+            events.append("__enter__")
+            yield
+            events.append("__exit__")
+
+        events = []
+        _rewrite_model(
+            model=self._setup_model(),
+            context=TrainPipelineContext(),
+            dist_stream=None,
+            apply_jit=True,
+            apply_jit_context=apply_jit_context(events),
+        )
+
+        self.assertEqual(events, ["__enter__", "__exit__"])
+
     # pyre-fixme[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         not torch.cuda.is_available(),

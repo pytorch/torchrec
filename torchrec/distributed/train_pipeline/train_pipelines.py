@@ -393,6 +393,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             (applicable to 2D sharding only)
             if set and DMP collection is enabled for 2D sharding,
             sync DMPs every N batches (default to 1, i.e. every batch, None to disable)
+        apply_jit_context (Optional[ContextManager]): a context manager that
+            will surround the application of the JIT
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -413,6 +415,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         ] = None,
         dmp_collection_sync_interval_batches: Optional[int] = 1,
         enqueue_batch_after_forward: bool = False,
+        apply_jit_context: Optional[ContextManager[None]] = None,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -420,6 +423,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._execute_all_batches = execute_all_batches
         self._apply_jit = apply_jit
         self._enqueue_batch_after_forward = enqueue_batch_after_forward
+        self._apply_jit_context = apply_jit_context
 
         if device.type == "cuda":
             # use two data streams to support two concurrent batches
@@ -716,6 +720,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             apply_jit=self._apply_jit,
             pipelined_forward=pipelined_forward,
             pipeline_postproc=self._pipeline_postproc,
+            apply_jit_context=self._apply_jit_context,
         )
         # initializes input dist, so we can override input dist forwards
         self.start_sparse_data_dist(batch, context)
@@ -904,6 +909,8 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
         TODO: pipeline_postproc, custom_model_fwd, strict
         use_emb_lookuo_stream (bool): if true invoke the compute_and_output_dist
             (for batch i+1) using a new stream, else re-using the data_dist stream
+        apply_jit_context (ContextManager): a context manager that will surround the
+            application of the JIT
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -922,6 +929,7 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
         ] = None,
         strict: bool = False,
         emb_lookup_stream: str = "data_dist",  # new, current, data_dist (default)
+        apply_jit_context: Optional[ContextManager[None]] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -932,6 +940,7 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
             context_type=EmbeddingTrainPipelineContext,
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
+            apply_jit_context=apply_jit_context,
         )
         if emb_lookup_stream == "new":
             self._emb_lookup_stream: Optional[torch.Stream] = (
@@ -1066,6 +1075,8 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             (applicable to 2D sharding only)
             if set and DMP collection is enabled for 2D sharding,
             sync DMPs every N batches (default to 1, i.e. every batch, None to disable)
+        apply_jit_context (ContextManager): a context manager that will surround the
+            application of the JIT
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -1086,6 +1097,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
         ] = None,
         strict: bool = False,
         dmp_collection_sync_interval_batches: Optional[int] = 1,
+        apply_jit_context: Optional[ContextManager[None]] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -1097,6 +1109,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
             dmp_collection_sync_interval_batches=dmp_collection_sync_interval_batches,
+            apply_jit_context=apply_jit_context,
         )
         self._start_batch = start_batch
         self._stash_gradients = stash_gradients
@@ -1378,6 +1391,8 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         execute_all_batches (bool): executes remaining batches in pipeline after
             exhausting dataloader iterator.
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+        apply_jit_context (ContextManager): a context manager that will surround the
+            application of the JIT
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -1394,6 +1409,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
+        apply_jit_context: Optional[ContextManager[None]] = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -1404,6 +1420,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             context_type=PrefetchTrainPipelineContext,
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
+            apply_jit_context=apply_jit_context,
         )
         self._context = PrefetchTrainPipelineContext(version=0)
         self._prefetch_stream: Optional[torch.Stream] = (
@@ -1535,6 +1552,8 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         device (torch.device): device where device transfer, sparse data dist, and
             forward/backward pass will happen.
         apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+        apply_jit_context (Optional[ContextManager]): a context manager that
+            will surround the application of the JIT
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -1546,8 +1565,16 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         apply_jit: bool = False,
+        apply_jit_context: Optional[ContextManager[None]] = None,
     ) -> None:
-        super().__init__(model, optimizer, device, True, apply_jit)
+        super().__init__(
+            model,
+            optimizer,
+            device,
+            True,
+            apply_jit,
+            apply_jit_context=apply_jit_context,
+        )
         self._batch_loader: Optional[DataLoadingThread[In]] = None
 
     def __del__(self) -> None:
@@ -1909,6 +1936,7 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
         custom_model_fwd: Optional[
             Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
         ] = None,
+        apply_jit_context: Optional[ContextManager[None]] = None,
     ) -> None:
         super().__init__(
             model,
@@ -1919,6 +1947,7 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
             context_type,
             pipeline_postproc,
             custom_model_fwd,
+            apply_jit_context=apply_jit_context,
         )
 
         torch._logging.set_logs(compiled_autograd_verbose=True)
