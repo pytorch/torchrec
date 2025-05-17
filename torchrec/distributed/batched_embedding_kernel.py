@@ -29,6 +29,7 @@ from typing import (
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_table_batched_embeddings_ops_common import BackendType
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
@@ -55,6 +56,7 @@ from torchrec.distributed.composable.table_batched_embedding_slice import (
 from torchrec.distributed.embedding_kernel import (
     BaseEmbedding,
     create_virtual_sharded_tensors,
+    create_virtual_table_local_metadata,
     get_state_dict,
 )
 from torchrec.distributed.embedding_types import (
@@ -206,7 +208,9 @@ def _populate_zero_collision_tbe_params(
     bucket_sizes: List[int] = [size for _, _, size in sharded_local_buckets]
 
     tbe_params["kv_zch_params"] = KVZCHParams(
-        bucket_offsets=bucket_offsets, bucket_sizes=bucket_sizes
+        bucket_offsets=bucket_offsets,
+        bucket_sizes=bucket_sizes,
+        enable_optimizer_offloading=False,
     )
 
 
@@ -283,6 +287,53 @@ class ZeroCollisionKeyValueEmbeddingFusedOptimizer(FusedOptimizer):
             table_name_to_weight_count_per_rank
         )
 
+        # pyre-ignore [33]
+        state: Dict[Any, Any] = {}
+        param_group: Dict[str, Any] = {
+            "params": [],
+            "lr": emb_module.get_learning_rate(),
+        }
+
+        params: Dict[str, Union[torch.Tensor, ShardedTensor]] = {}
+
+        sorted_id_tensors = (
+            [
+                sharded_t._local_shards[0].tensor
+                for sharded_t in self._sharded_embedding_weight_ids
+            ]
+            if self._sharded_embedding_weight_ids is not None
+            else None
+        )
+
+        all_optimizer_states = emb_module.get_optimizer_state(
+            sorted_id_tensor=sorted_id_tensors
+        )
+        opt_param_list = [param["momentum1"] for param in all_optimizer_states]
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            emb_table.local_metadata.placement._device = torch.device("cpu")
+        opt_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy, opt_param_list, self._pg
+        )
+
+        for (
+            emb_config,
+            sharded_weight,
+            opt_sharded_t,
+        ) in zip(
+            emb_table_config_copy,
+            sharded_embedding_weights_by_table,
+            opt_sharded_t_list,
+        ):
+            param_key = emb_config.name + ".weight"
+            state[sharded_weight] = {}
+            param_group["params"].append(sharded_weight)
+            params[param_key] = sharded_weight
+
+            state[sharded_weight][f"{emb_config.name}.momentum1"] = opt_sharded_t
+
+        super().__init__(params, state, [param_group])
+
     def zero_grad(self, set_to_none: bool = False) -> None:
         # pyre-ignore [16]
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
@@ -291,6 +342,59 @@ class ZeroCollisionKeyValueEmbeddingFusedOptimizer(FusedOptimizer):
     def step(self, closure: Any = None) -> None:
         # pyre-ignore [16]
         self._emb_module.set_learning_rate(self.param_groups[0]["lr"])
+
+    def set_sharded_embedding_weight_ids(
+        self, sharded_embedding_weight_ids: Optional[List[ShardedTensor]]
+    ) -> None:
+        self._sharded_embedding_weight_ids = sharded_embedding_weight_ids
+
+    def _post_state_dict_hook(self, curr_state: Dict[str, Any]) -> None:
+        logger.info("update optimizer state dict in state_dict_post_hook")
+        embedding_weight_ids = (
+            [
+                sharded_t._local_shards[0].tensor
+                for sharded_t in self._sharded_embedding_weight_ids
+            ]
+            if self._sharded_embedding_weight_ids is not None
+            else None
+        )
+        all_optimizer_states = self._emb_module.get_optimizer_state(
+            embedding_weight_ids, no_snapshot=False, should_flush=True
+        )
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            emb_table.local_metadata.placement._device = torch.device("cpu")
+
+        # The order of table_config is determined so put it as outer-loop for consistent traverse order across ranks
+        for table_config, opt_states in zip(
+            emb_table_config_copy,
+            all_optimizer_states,
+        ):
+            for key, sharded_t_dict in curr_state.items():
+                # update zero collision table's optimizer state
+                if f".{table_config.name}.weight" in key:
+                    for (_, opt_state_t), (sharded_t_k, sharded_t) in zip(
+                        opt_states.items(), sharded_t_dict.items()
+                    ):
+                        logger.info(
+                            f"update optimizer state for table {table_config.name} with state shape {opt_state_t.shape}, rank={self._my_rank}, weight_count_per_rank={self._table_name_to_weight_count_per_rank.get(table_config.name, None)}"
+                        )
+                        sharded_t.local_shards()[0].tensor = opt_state_t
+                        create_virtual_table_local_metadata(
+                            # pyre-ignore [6]
+                            table_config.local_metadata,
+                            opt_state_t,
+                            self._my_rank,
+                        )
+                        for shard in sharded_t.local_shards():
+                            shard.metadata = table_config.local_metadata
+                        new_sharded_t = ShardedTensor._init_from_local_shards(
+                            sharded_t.local_shards(),
+                            None,
+                            None,
+                            process_group=self._pg,
+                        )
+                        sharded_t_dict[sharded_t_k] = new_sharded_t
 
 
 class EmbeddingFusedOptimizer(FusedOptimizer):
@@ -1149,6 +1253,16 @@ class ZeroCollisionKeyValueEmbedding(
         compute_kernel = config.embedding_tables[0].compute_kernel
         embedding_location = compute_kernel_to_embedding_location(compute_kernel)
 
+        # every split_embeding_weights call is expensive, since it iterates over all the elements in the backend kv db
+        # use split weights result cache so that multiple calls in the same train iteration will only trigger once
+        self._split_weights_res: Optional[
+            Tuple[
+                List[ShardedTensor],
+                List[ShardedTensor],
+                List[ShardedTensor],
+            ]
+        ] = None
+
         self._emb_module: SSDTableBatchedEmbeddingBags = SSDTableBatchedEmbeddingBags(
             embedding_specs=list(zip(self._num_embeddings, self._local_cols)),
             feature_table_map=self._feature_table_map,
@@ -1161,11 +1275,17 @@ class ZeroCollisionKeyValueEmbedding(
         logger.info(
             f"tbe_unique_id:{self._emb_module.tbe_unique_id} => table name to count dict:{self.table_name_to_count}"
         )
-
-        self._optim: KeyValueEmbeddingFusedOptimizer = KeyValueEmbeddingFusedOptimizer(
-            config,
-            self._emb_module,
-            pg,
+        self._table_name_to_weight_count_per_rank: Dict[str, List[int]] = {}
+        self._init_sharded_split_embedding_weights()  # this will populate self._split_weights_res
+        self._optim: ZeroCollisionKeyValueEmbeddingFusedOptimizer = (
+            ZeroCollisionKeyValueEmbeddingFusedOptimizer(
+                config,
+                self._emb_module,
+                sharded_embedding_weights_by_table=self._split_weights_res[0],  # pyre-ignore[16]
+                table_name_to_weight_count_per_rank=self._table_name_to_weight_count_per_rank,
+                sharded_embedding_weight_ids=self._split_weights_res[1],
+                pg=pg,
+            )
         )
         self._param_per_table: Dict[str, nn.Parameter] = dict(
             _gen_named_parameters_by_table_ssd_pmt(
@@ -1289,7 +1409,7 @@ class ZeroCollisionKeyValueEmbedding(
     # pyre-ignore [15]
     def named_split_embedding_weights(
         self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
-    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor]]:
+    ) -> Iterator[Tuple[str, PartiallyMaterializedTensor | torch.Tensor]]:
         assert (
             remove_duplicate
         ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
@@ -1299,6 +1419,55 @@ class ZeroCollisionKeyValueEmbedding(
         ):
             key = append_prefix(prefix, f"{config.name}.weight")
             yield key, tensor
+
+    # initialize sharded _split_weights_res if it's None
+    # this method is used to generate sharded embedding weights once for all following state_dict
+    # calls in checkpointing and publishing.
+    # When training is resumed, the cached value will be reset to None and the value needs to be
+    # rebuilt for next checkpointing and publishing, as the weight id, weight embedding will be updated
+    # during training in backend k/v store.
+    def _init_sharded_split_embedding_weights(
+        self, prefix: str = "", force_regenerate: bool = False
+    ) -> None:
+        if not force_regenerate and self._split_weights_res is not None:
+            return
+
+        pmt_list, weight_ids_list, bucket_cnt_list = self.split_embedding_weights(
+            no_snapshot=False,
+            should_flush=True,
+        )
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            emb_table.local_metadata.placement._device = torch.device("cpu")
+
+        pmt_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy,
+            pmt_list,
+            self._pg,
+            prefix,
+        )
+        weight_id_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy, weight_ids_list, self._pg, prefix  # pyre-ignore
+        )
+        bucket_cnt_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy,
+            # pyre-ignore [6]
+            bucket_cnt_list,
+            self._pg,
+            prefix,
+        )
+        # pyre-ignore
+        assert len(pmt_list) == len(weight_ids_list) == len(bucket_cnt_list)
+        assert (
+            len(pmt_sharded_t_list)
+            == len(weight_id_sharded_t_list)
+            == len(bucket_cnt_sharded_t_list)
+        )
+        self._split_weights_res = (
+            pmt_sharded_t_list,
+            weight_id_sharded_t_list,
+            bucket_cnt_sharded_t_list,
+        )
 
     def get_named_split_embedding_weights_snapshot(self, prefix: str = "") -> Iterator[
         Tuple[
@@ -1315,43 +1484,12 @@ class ZeroCollisionKeyValueEmbedding(
         optional ShardedTensor for weight_id
         optional ShardedTensor for bucket_cnt
         """
-        if self._split_weights_res is not None:
-            pmt_sharded_t_list = self._split_weights_res[0]
-            # pyre-ignore
-            weight_id_sharded_t_list = self._split_weights_res[1]
-            bucket_cnt_sharded_t_list = self._split_weights_res[2]
-            for table_idx, pmt_sharded_t in enumerate(pmt_sharded_t_list):
-                table_config = self._config.embedding_tables[table_idx]
-                key = append_prefix(prefix, f"{table_config.name}")
+        self._init_sharded_split_embedding_weights()
+        self._optim.set_sharded_embedding_weight_ids(self._split_weights_res[1])  # pyre-ignore[16]
 
-                yield key, pmt_sharded_t, weight_id_sharded_t_list[
-                    table_idx
-                ], bucket_cnt_sharded_t_list[table_idx]
-            return
-
-        pmt_list, weight_ids_list, bucket_cnt_list = self.split_embedding_weights(
-            no_snapshot=False
-        )
-        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
-        for emb_table in emb_table_config_copy:
-            emb_table.local_metadata.placement._device = torch.device("cpu")
-
-        pmt_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy, pmt_list, self._pg, prefix
-        )
-        weight_id_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy, weight_ids_list, self._pg, prefix  # pyre-ignore
-        )
-        bucket_cnt_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy, bucket_cnt_list, self._pg, prefix  # pyre-ignore
-        )
-        # pyre-ignore
-        assert len(pmt_list) == len(weight_ids_list) == len(bucket_cnt_list)
-        assert (
-            len(pmt_sharded_t_list)
-            == len(weight_id_sharded_t_list)
-            == len(bucket_cnt_sharded_t_list)
-        )
+        pmt_sharded_t_list = self._split_weights_res[0]
+        weight_id_sharded_t_list = self._split_weights_res[1]
+        bucket_cnt_sharded_t_list = self._split_weights_res[2]
         for table_idx, pmt_sharded_t in enumerate(pmt_sharded_t_list):
             table_config = self._config.embedding_tables[table_idx]
             key = append_prefix(prefix, f"{table_config.name}")
@@ -1359,12 +1497,6 @@ class ZeroCollisionKeyValueEmbedding(
             yield key, pmt_sharded_t, weight_id_sharded_t_list[
                 table_idx
             ], bucket_cnt_sharded_t_list[table_idx]
-
-        self._split_weights_res = (
-            pmt_sharded_t_list,
-            weight_id_sharded_t_list,
-            bucket_cnt_sharded_t_list,
-        )
 
     def flush(self) -> None:
         """
@@ -1381,16 +1513,19 @@ class ZeroCollisionKeyValueEmbedding(
         self.emb_module.lxu_cache_state.fill_(-1)
 
     # pyre-ignore [15]
-    def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
-        List[PartiallyMaterializedTensor],
+    def split_embedding_weights(
+        self, no_snapshot: bool = True, should_flush: bool = True
+    ) -> Tuple[
+        List[PartiallyMaterializedTensor] | List[torch.Tensor],
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
-        return self.emb_module.split_embedding_weights(no_snapshot)
+        return self.emb_module.split_embedding_weights(no_snapshot, should_flush)
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         # reset split weights during training
         self._split_weights_res = None
+        self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
 
         return self.emb_module(
             indices=features.values().long(),
