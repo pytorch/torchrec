@@ -1707,11 +1707,9 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         self,
         runnable: RunnableType,
         event: Optional[torch.Event],
-        inputs: Optional[In],
+        inputs: In,
         stream: torch.Stream,
     ) -> StageOutputWithEvent:
-        if inputs is None:
-            return (None, None)
         with self._stream_context(stream):
             # If there is no previous event, data is entering the pipeline
             if event is not None:
@@ -1755,6 +1753,11 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
         """
         stage = self._pipeline_stages[stage_idx]
 
+        if self._debug_mode:
+            logger.info(
+                f"Running ## Pipeline Stage {stage_idx} : {stage.name} for batch {batch_offset + self._num_steps} ##",
+            )
+
         with record_function(
             f"## Pipeline Stage {stage_idx} : {stage.name} for batch {batch_offset + self._num_steps} ##"
         ):
@@ -1766,23 +1769,40 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
                 assert batch_to_wait_with_event is not None
                 batch_to_wait, event = batch_to_wait_with_event
 
-            new_result = self._run_with_event(
-                runnable=stage.runnable,
-                event=event,
-                inputs=batch_to_wait,
-                stream=stage.stream,
-            )
+            if batch_to_wait is not None:
+                if self._debug_mode:
+                    logger.info(
+                        f"Executing ## Pipeline Stage {stage_idx} : {stage.name} for batch {batch_offset + self._num_steps} ##",
+                    )
+                new_result = self._run_with_event(
+                    runnable=stage.runnable,
+                    event=event,
+                    inputs=batch_to_wait,
+                    stream=stage.stream,
+                )
+            else:
+                if self._debug_mode:
+                    logger.info(
+                        f"Skipping due to None ## Pipeline Stage {stage_idx} : {stage.name} for batch {batch_offset + self._num_steps} ##",
+                    )
+                new_result = (None, None)
+                if (
+                    data_exhausted_callback := stage.data_exhausted_callback
+                ) is not None:
+                    data_exhausted_callback()
 
         self._stage_outputs[batch_offset] = new_result
         if self._debug_mode:
             logger.info(
-                f"Running ## Pipeline Stage {stage_idx} : {stage.name} for batch {batch_offset + self._num_steps} ##",
+                f"Finshed ## Pipeline Stage {stage_idx} : {stage.name} for batch {batch_offset + self._num_steps} ##",
             )
 
         if fill and (fill_callback := stage.fill_callback) is not None:
             if self._debug_mode:
-                logger.info(f"Finished callback for {stage.name}")
+                logger.info(f"Started callback for {stage.name}")
             fill_callback()
+            if self._debug_mode:
+                logger.info(f"Finished callback for {stage.name}")
 
         return new_result
 
@@ -1868,6 +1888,9 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
 
         self._num_steps += 1
 
+        if self._debug_mode:
+            logger.info(f"Starting pipeline step {self._num_steps}")
+
         for stage_idx in range(self.num_stages):
             stage_output_idx = self.num_stages - 1 - stage_idx
             self._run_stage(
@@ -1888,6 +1911,8 @@ class StagedTrainPipeline(TrainPipeline[In, Optional[StageOut]]):
             self.flush_end()
             return self.progress(dataloader_iter)
 
+        if self._debug_mode:
+            logger.info(f"Finished pipeline step {self._num_steps}")
         return out
 
 
