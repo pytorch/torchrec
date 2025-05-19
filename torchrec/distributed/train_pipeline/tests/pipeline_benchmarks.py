@@ -10,8 +10,7 @@
 #!/usr/bin/env python3
 
 import copy
-import os
-from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 
 import click
 

@@ -33,6 +33,13 @@ import torch
 from torch.autograd.profiler import record_function
 from torchrec.distributed.dist_data import KJTAllToAllTensorsAwaitable
 from torchrec.distributed.model_parallel import ShardedModule
+from torchrec.distributed.train_pipeline.pipeline_context import (
+    EmbeddingTrainPipelineContext,
+    In,
+    Out,
+    PrefetchTrainPipelineContext,
+    TrainPipelineContext,
+)
 from torchrec.distributed.train_pipeline.utils import (
     _override_input_dist_forwards,
     _pipeline_detach_model,
@@ -45,19 +52,14 @@ from torchrec.distributed.train_pipeline.utils import (
     _wait_for_events,
     DataLoadingThread,
     EmbeddingPipelinedForward,
-    EmbeddingTrainPipelineContext,
-    In,
     InSyncEmbeddingPipelinedForward,
-    Out,
     PipelinedForward,
     PipelinedPostproc,
     PipelineStage,
     PrefetchPipelinedForward,
-    PrefetchTrainPipelineContext,
     RunnableType,
     StageOut,
     StageOutputWithEvent,
-    TrainPipelineContext,
     use_context_for_postprocs,
 )
 from torchrec.distributed.types import Awaitable
