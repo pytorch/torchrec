@@ -1921,6 +1921,7 @@ class SparseDataDistUtil(Generic[In]):
         data_dist_stream: torch.Stream,
         apply_jit: bool = False,
         prefetch_stream: Optional[torch.Stream] = None,
+        pipeline_postproc: bool = False,
     ) -> None:
         super().__init__()
         self.model = model
@@ -1967,6 +1968,7 @@ class SparseDataDistUtil(Generic[In]):
         # correctness invariant. However, if that changes, having invariants monitored/enforced
         # during exhastion phase might become necessary.
         self._exhausting_mode = False
+        self._pipeline_postproc = pipeline_postproc
 
     @property
     def _with_prefetch(self) -> bool:
@@ -2206,6 +2208,7 @@ class SparseDataDistUtil(Generic[In]):
             batch=batch,
             apply_jit=self.apply_jit,
             pipelined_forward=self._pipelined_forward,
+            pipeline_postproc=self._pipeline_postproc,
             default_stream=self._default_stream,
         )
         # Setting the stage for the first batch
