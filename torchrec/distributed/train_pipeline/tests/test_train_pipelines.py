@@ -2165,7 +2165,8 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 name="start_sparse_data_dist",
                 runnable=sdd.start_sparse_data_dist,
                 stream=sdd.data_dist_stream,
-                fill_callback=sdd.wait_sparse_data_dist,
+                fill_callback=sdd.wait_sdd_fill_callback,
+                data_exhausted_callback=sdd.data_exhausted_callback,
             ),
         ]
         pipeline = StagedTrainPipeline(
@@ -2232,7 +2233,8 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 name="start_sparse_data_dist",
                 runnable=sdd.start_sparse_data_dist,
                 stream=sdd.data_dist_stream,
-                fill_callback=sdd.wait_sparse_data_dist,
+                fill_callback=sdd.wait_sdd_fill_callback,
+                data_exhausted_callback=sdd.data_exhausted_callback,
             ),
         ]
 
@@ -2343,7 +2345,8 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 name="start_sparse_data_dist",
                 runnable=sdd.start_sparse_data_dist,
                 stream=sdd.data_dist_stream,
-                fill_callback=sdd.wait_sparse_data_dist,
+                fill_callback=sdd.wait_sdd_fill_callback,
+                data_exhausted_callback=sdd.data_exhausted_callback,
             ),
         ]
 
@@ -2536,7 +2539,8 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
                 name="start_sparse_data_dist",
                 runnable=sdd.start_sparse_data_dist,
                 stream=sdd.data_dist_stream,
-                fill_callback=sdd.wait_sparse_data_dist,
+                fill_callback=sdd.wait_sdd_fill_callback,
+                data_exhausted_callback=sdd.data_exhausted_callback,
             ),
             PipelineStage(
                 name="prefetch",
