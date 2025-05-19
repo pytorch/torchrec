@@ -14,7 +14,7 @@ import itertools
 import logging
 from collections import defaultdict, deque, OrderedDict
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from itertools import chain
 from threading import Event, Thread
@@ -40,7 +40,6 @@ from typing import (
 import torch
 from torch import distributed as dist
 from torch.utils.hooks import RemovableHandle
-from torchrec.distributed.types import LazyAwaitable
 
 if not torch._running_with_deploy():
     from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
@@ -66,6 +65,13 @@ from torchrec.distributed.embedding_sharding import (
 )
 from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
+from torchrec.distributed.train_pipeline.pipeline_context import (
+    EmbeddingTrainPipelineContext,
+    In,
+    Out,  # noqa
+    PrefetchTrainPipelineContext,
+    TrainPipelineContext,
+)
 
 from torchrec.distributed.types import Awaitable, LazyNoWait
 
@@ -74,88 +80,9 @@ from torchrec.streamable import Multistreamable, Pipelineable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-import torch
-
-In = TypeVar("In", bound=Pipelineable)
 StageOut = TypeVar("StageOut", bound=Pipelineable)
-Out = TypeVar("Out")
-
 RunnableType = Callable[..., StageOut]
 StageOutputWithEvent = Tuple[Optional[StageOut], Optional[torch.Event]]
-
-
-@dataclass
-class TrainPipelineContext:
-    """
-    Context information for a `TrainPipelineSparseDist` instance.
-
-    Attributes:
-        input_dist_splits_requests (Dict[str, Awaitable[Any]]): Stores input dist
-            requests in the splits awaitable stage, which occurs after starting the
-            input dist.
-        input_dist_tensors_requests (Dict[str, Awaitable[Any]]): Stores input dist
-            requests in the tensors awaitable stage, which occurs after calling `wait()`
-            on the splits awaitable.
-        module_contexts (Dict[str, Multistreamable]): Stores module contexts from the
-            input dist for the current batch.
-        module_contexts_next_batch (Dict[str, Multistreamable]): Stores module contexts
-            from the input dist for the next batch. (only for version 0)
-        fused_splits_awaitables (List[Tuple[List[str], FusedKJTListSplitsAwaitable]]):
-            List of fused splits input dist awaitable and the corresponding module names
-            of each awaitable.
-        event: Optional[torch.cuda.Event]: Event to record the completion of this stage
-        index: Optional[int]: Index of the current batch.
-        version: int = 0; support for backward compatiblity
-    """
-
-    # pyre-ignore [4]
-    input_dist_splits_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
-    # pyre-ignore [4]
-    input_dist_tensors_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
-    module_contexts: Dict[str, Multistreamable] = field(default_factory=dict)
-    module_contexts_next_batch: Dict[str, Multistreamable] = field(
-        default_factory=dict
-    )  # deprecated: to support legacy code
-    fused_splits_awaitables: List[Tuple[List[str], FusedKJTListSplitsAwaitable]] = (
-        field(default_factory=list)
-    )
-    events: List[torch.Event] = field(default_factory=list)
-    postproc_fwd_results: Dict[str, Any] = field(default_factory=dict)
-    index: Optional[int] = None
-    version: int = (
-        0  # 1 is current version, 0 is deprecated but supported for backward compatibility
-    )
-
-
-@dataclass
-class PrefetchTrainPipelineContext(TrainPipelineContext):
-    module_input_post_prefetch: Dict[str, Multistreamable] = field(default_factory=dict)
-    module_contexts_post_prefetch: Dict[str, Multistreamable] = field(
-        default_factory=dict
-    )
-    module_input_post_prefetch_next_batch: Dict[str, Multistreamable] = field(
-        default_factory=dict
-    )
-    module_contexts_post_prefetch_next_batch: Dict[str, Multistreamable] = field(
-        default_factory=dict
-    )
-
-
-@dataclass
-class EmbeddingTrainPipelineContext(TrainPipelineContext):
-    embedding_a2a_requests: Dict[
-        str,
-        Union[
-            LazyAwaitable[Multistreamable],
-            # ManagedCollisionEC/EBC returns tuple of awaitables
-            Tuple[
-                LazyAwaitable[KeyedTensor], LazyAwaitable[Optional[KeyedJaggedTensor]]
-            ],
-        ],
-    ] = field(default_factory=dict)
-    embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
-    embedding_features: List[List[Union[str, List[str]]]] = field(default_factory=list)
-    detached_embedding_tensors: List[List[torch.Tensor]] = field(default_factory=list)
 
 
 @dataclass
