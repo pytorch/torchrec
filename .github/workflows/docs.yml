@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         include:
-         - os: linux.20_04.4x
+         - os: linux.24_04.4x
            python-version: 3.9
            python-tag: "py39"
     steps:
@@ -29,7 +29,8 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get -y install python3-pip
-        sudo pip3 install --upgrade pip
+        sudo apt upgrade python3-pip
+        pip --version
     - name: Setup conda
       run: |
         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
