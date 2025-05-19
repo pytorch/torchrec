@@ -22,6 +22,8 @@ from torchrec.metrics.rec_metric import (
 
 ERROR_SUM = "error_sum"
 WEIGHTED_NUM_SAMPES = "weighted_num_samples"
+LABEL_SUM = "label_sum"
+LABEL_SQUARED_SUM = "label_squared_sum"
 
 
 def compute_mse(
@@ -40,6 +42,19 @@ def compute_rmse(
     ).double()
 
 
+def compute_r_squared(
+    error_sum: torch.Tensor,
+    weighted_num_samples: torch.Tensor,
+    label_sum: torch.Tensor,
+    label_squared_sum: torch.Tensor,
+) -> torch.Tensor:
+    total_sum = (
+        label_squared_sum.double()
+        - torch.square(label_sum.double()) / weighted_num_samples.double()
+    )
+    return torch.where(total_sum == 0.0, 1.0, 1.0 - error_sum / total_sum).double()
+
+
 def compute_error_sum(
     labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
 ) -> torch.Tensor:
@@ -48,11 +63,15 @@ def compute_error_sum(
 
 
 def get_mse_states(
-    labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+    labels: torch.Tensor,
+    predictions: torch.Tensor,
+    weights: torch.Tensor,
 ) -> Dict[str, torch.Tensor]:
     return {
         "error_sum": compute_error_sum(labels, predictions, weights),
         "weighted_num_samples": torch.sum(weights, dim=-1),
+        "label_sum": torch.sum(weights * labels, dim=-1),
+        "label_squared_sum": torch.sum(weights * torch.square(labels), dim=-1),
     }
 
 
@@ -64,7 +83,13 @@ class MSEMetricComputation(RecMetricComputation):
     See the docstring of RecMetricComputation for more detail.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        include_r_squared: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        self._include_r_squared: bool = include_r_squared
         super().__init__(*args, **kwargs)
         self._add_state(
             "error_sum",
@@ -75,6 +100,20 @@ class MSEMetricComputation(RecMetricComputation):
         )
         self._add_state(
             "weighted_num_samples",
+            torch.zeros(self._n_tasks, dtype=torch.double),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            "label_sum",
+            torch.zeros(self._n_tasks, dtype=torch.double),
+            add_window_state=True,
+            dist_reduce_fx="sum",
+            persistent=True,
+        )
+        self._add_state(
+            "label_squared_sum",
             torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
@@ -101,7 +140,7 @@ class MSEMetricComputation(RecMetricComputation):
             self._aggregate_window_state(state_name, state_value, num_samples)
 
     def _compute(self) -> List[MetricComputationReport]:
-        return [
+        reports = [
             MetricComputationReport(
                 name=MetricName.MSE,
                 metric_prefix=MetricPrefix.LIFETIME,
@@ -135,6 +174,32 @@ class MSEMetricComputation(RecMetricComputation):
                 ),
             ),
         ]
+
+        if self._include_r_squared:
+            reports += [
+                MetricComputationReport(
+                    name=MetricName.R_SQUARED,
+                    metric_prefix=MetricPrefix.LIFETIME,
+                    value=compute_r_squared(
+                        cast(torch.Tensor, self.error_sum),
+                        cast(torch.Tensor, self.weighted_num_samples),
+                        cast(torch.Tensor, self.label_sum),
+                        cast(torch.Tensor, self.label_squared_sum),
+                    ),
+                ),
+                MetricComputationReport(
+                    name=MetricName.R_SQUARED,
+                    metric_prefix=MetricPrefix.WINDOW,
+                    value=compute_r_squared(
+                        self.get_window_state(ERROR_SUM),
+                        self.get_window_state(WEIGHTED_NUM_SAMPES),
+                        self.get_window_state(LABEL_SUM),
+                        self.get_window_state(LABEL_SQUARED_SUM),
+                    ),
+                ),
+            ]
+
+        return reports
 
 
 class MSEMetric(RecMetric):

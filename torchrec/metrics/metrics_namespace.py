@@ -52,6 +52,7 @@ class MetricName(MetricNameBase):
     MSE = "mse"
     MAE = "mae"
     RMSE = "rmse"
+    R_SQUARED = "r_squared"
     AUC = "auc"
     GAUC = "gauc"
     AUPRC = "auprc"
