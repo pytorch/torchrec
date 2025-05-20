@@ -287,7 +287,6 @@ class ModelInput(Pipelineable):
                 offsets_dtype=offsets_dtype,
                 lengths_dtype=lengths_dtype,
                 all_zeros=all_zeros,
-                pin_memory=pin_memory,
             )
             if tables is not None and len(tables) > 0
             else None
@@ -306,7 +305,6 @@ class ModelInput(Pipelineable):
                 offsets_dtype=offsets_dtype,
                 lengths_dtype=lengths_dtype,
                 all_zeros=all_zeros,
-                pin_memory=pin_memory,
             )
             if weighted_tables is not None and len(weighted_tables) > 0
             else None
@@ -317,8 +315,16 @@ class ModelInput(Pipelineable):
             else torch.rand((batch_size,), device=device)
         )
         if pin_memory:
+            # all tensors in `ModelInput` should be on pinned memory otherwise
+            # the `_to_copy` (host-to-device) data transfer still blocks cpu execution
             float_features = float_features.pin_memory()
             label = label.pin_memory()
+            idlist_features: Optional[KeyedJaggedTensor] = (
+                None if idlist_features is None else idlist_features.pin_memory()
+            )
+            idscore_features: Optional[KeyedJaggedTensor] = (
+                None if idscore_features is None else idscore_features.pin_memory()
+            )
         return ModelInput(
             float_features=float_features,
             idlist_features=idlist_features,
@@ -417,18 +423,12 @@ class ModelInput(Pipelineable):
         device: Optional[torch.device] = None,
         use_offsets: bool = False,
         offsets_dtype: torch.dtype = torch.int64,
-        pin_memory: bool = False,
     ) -> KeyedJaggedTensor:
         """
         Assembles a KeyedJaggedTensor (KJT) from the provided per-feature lengths and indices.
 
         This method is used to generate corresponding local_batches and global_batch KJTs.
         It concatenates the lengths and indices for each feature to form a complete KJT.
-
-        The `pin_memory()` call for all KJT tensors are important for training benchmark, and
-        also valid argument for the prod training scenario: TrainModelInput should be created
-        on pinned memory for a fast transfer to gpu. For more on pin_memory:
-        https://pytorch.org/tutorials/intermediate/pinmem_nonblock.html#pin-memory
         """
 
         lengths = torch.cat(lengths_per_feature)
@@ -440,11 +440,6 @@ class ModelInput(Pipelineable):
                 [torch.tensor([0], device=device), lengths.cumsum(0)]
             ).to(offsets_dtype)
             lengths = None
-        if pin_memory:
-            indices = indices.pin_memory()
-            lengths = lengths.pin_memory() if lengths is not None else None
-            weights = weights.pin_memory() if weights is not None else None
-            offsets = offsets.pin_memory() if offsets is not None else None
         return KeyedJaggedTensor(features, indices, weights, lengths, offsets)
 
     @staticmethod
@@ -463,7 +458,6 @@ class ModelInput(Pipelineable):
         offsets_dtype: torch.dtype = torch.int64,
         lengths_dtype: torch.dtype = torch.int64,
         all_zeros: bool = False,
-        pin_memory: bool = False,
     ) -> KeyedJaggedTensor:
         features, lengths_per_feature, indices_per_feature = (
             ModelInput._create_features_lengths_indices(
@@ -486,7 +480,6 @@ class ModelInput(Pipelineable):
             device=device,
             use_offsets=use_offsets,
             offsets_dtype=offsets_dtype,
-            pin_memory=pin_memory,
         )
 
     @staticmethod
