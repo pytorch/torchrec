@@ -15,6 +15,8 @@ from typing import Dict, List, Optional
 import torch
 
 from torch import nn
+
+from torchrec.pt2.checks import is_non_strict_exporting
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.types import CopyMixIn
 
@@ -188,9 +190,21 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
                 self.position_weights_dict[key] = self.position_weights[key]
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
-        cat_seq = torch.ops.fbgemm.offsets_range(
-            features.offsets().long(), torch.numel(features.values())
-        )
+        # TODO unflattener doesnt work well with aten.to at submodule boundaries
+        if is_non_strict_exporting():
+            offsets = features.offsets()
+            if offsets.dtype == torch.int64:
+                cat_seq = torch.ops.fbgemm.offsets_range(
+                    features.offsets(), torch.numel(features.values())
+                )
+            else:
+                cat_seq = torch.ops.fbgemm.offsets_range(
+                    features.offsets().long(), torch.numel(features.values())
+                )
+        else:
+            cat_seq = torch.ops.fbgemm.offsets_range(
+                features.offsets().long(), torch.numel(features.values())
+            )
 
         return KeyedJaggedTensor(
             keys=features.keys(),
