@@ -260,6 +260,44 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self._test_ebc([eb1_config, eb2_config], features)
 
+    def test_multiple_kernels_per_ebc_table(self) -> None:
+        class TestModule(torch.nn.Module):
+            def __init__(self, m: torch.nn.Module) -> None:
+                super().__init__()
+                self.m = m
+
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=16, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f2"],
+            use_virtual_table=True,
+        )
+        eb3_config = EmbeddingBagConfig(
+            name="t3", embedding_dim=16, num_embeddings=10, feature_names=["f3"]
+        )
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config, eb3_config])
+        model = TestModule(ebc)
+        qebc = trec_infer.modules.quantize_embeddings(
+            model,
+            dtype=torch.int8,
+            inplace=True,
+            per_table_weight_dtype={"t1": torch.float16},
+        )
+        self.assertTrue(isinstance(qebc.m, QuantEmbeddingBagCollection))
+        # feature name should be consistent with the order of grouped embeddings
+        self.assertEqual(qebc.m._feature_names, ["f1", "f3", "f2"])
+
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3"],
+            values=torch.as_tensor([0, 1, 2]),
+            lengths=torch.as_tensor([1, 1, 1]),
+        )
+        self._test_ebc([eb1_config, eb2_config, eb3_config], features)
+
     # pyre-ignore
     @given(
         data_type=st.sampled_from(
@@ -741,6 +779,93 @@ class EmbeddingCollectionTest(unittest.TestCase):
             else:
                 self.assertEqual(config.name, "t2")
                 self.assertEqual(config.data_type, DataType.INT8)
+
+    def test_multiple_kernels_per_ec_table(self) -> None:
+        class TestModule(torch.nn.Module):
+            def __init__(self, m: torch.nn.Module) -> None:
+                super().__init__()
+                self.m = m
+
+        eb1_config = EmbeddingConfig(
+            name="t1", embedding_dim=16, num_embeddings=10, feature_names=["f1"]
+        )
+        eb2_config = EmbeddingConfig(
+            name="t2",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f2"],
+            use_virtual_table=True,
+        )
+        eb3_config = EmbeddingConfig(
+            name="t3",
+            embedding_dim=16,
+            num_embeddings=10,
+            feature_names=["f3"],
+        )
+        ec = EmbeddingCollection(tables=[eb1_config, eb2_config, eb3_config])
+        model = TestModule(ec)
+        qconfig_spec_keys: List[Type[torch.nn.Module]] = [EmbeddingCollection]
+        quant_mapping: Dict[Type[torch.nn.Module], Type[torch.nn.Module]] = {
+            EmbeddingCollection: QuantEmbeddingCollection
+        }
+        qec = trec_infer.modules.quantize_embeddings(
+            model,
+            dtype=torch.int8,
+            additional_qconfig_spec_keys=qconfig_spec_keys,
+            additional_mapping=quant_mapping,
+            inplace=True,
+            per_table_weight_dtype={
+                "t1": torch.float16,
+                "t2": torch.float16,
+                "t3": torch.float16,
+            },
+        )
+        self.assertTrue(isinstance(qec.m, QuantEmbeddingCollection))
+        # feature name should be consistent with the order of grouped embeddings
+        self.assertEqual(qec.m._feature_names, ["f1", "f3", "f2"])
+
+        # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
+        configs = model.m.embedding_configs()
+        self.assertEqual(len(configs), 3)
+        features = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3"],
+            values=torch.as_tensor(
+                [
+                    5,
+                    1,
+                    0,
+                    0,
+                    4,
+                    3,
+                    4,
+                    9,
+                    2,
+                    2,
+                    3,
+                    3,
+                    1,
+                    5,
+                    0,
+                    7,
+                    5,
+                    0,
+                    9,
+                    9,
+                    3,
+                    5,
+                    6,
+                    6,
+                    9,
+                    3,
+                    7,
+                    8,
+                    7,
+                    7,
+                ]
+            ),
+            lengths=torch.as_tensor([9, 12, 9]),
+        )
+        self._test_ec(tables=[eb3_config, eb1_config, eb2_config], features=features)
 
     def test_different_quantization_dtype_per_ebc_table(self) -> None:
         class TestModule(torch.nn.Module):

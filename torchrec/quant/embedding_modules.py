@@ -357,7 +357,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._is_weighted = is_weighted
         self._embedding_bag_configs: List[EmbeddingBagConfig] = tables
         self._key_to_tables: Dict[
-            Tuple[PoolingType, DataType], List[EmbeddingBagConfig]
+            Tuple[PoolingType, DataType, bool], List[EmbeddingBagConfig]
         ] = defaultdict(list)
         self._feature_names: List[str] = []
         self._feature_splits: List[int] = []
@@ -379,14 +379,16 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             if table.name in table_names:
                 raise ValueError(f"Duplicate table name {table.name}")
             table_names.add(table.name)
+            key = (table.pooling, table.use_virtual_table)
             # pyre-ignore
-            self._key_to_tables[table.pooling].append(table)
+            self._key_to_tables[key].append(table)
 
         location = (
             EmbeddingLocation.HOST if device.type == "cpu" else EmbeddingLocation.DEVICE
         )
 
-        for pooling, emb_configs in self._key_to_tables.items():
+        for key, emb_configs in self._key_to_tables.items():
+            pooling = key[0]
             embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
@@ -756,7 +758,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
         self._output_dtype = output_dtype
         self._device = device
         self.row_alignment = row_alignment
-        self._key_to_tables: Dict[DataType, List[EmbeddingConfig]] = defaultdict(list)
+        self._key_to_tables: Dict[Tuple[DataType, bool], List[EmbeddingConfig]] = (
+            defaultdict(list)
+        )
         self._feature_names: List[str] = []
         self._features_order: Optional[List[int]] = None
 
@@ -778,12 +782,11 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                     + f" Violating case: {table.name}'s embedding_dim {table.embedding_dim} !="
                     + f" {self._embedding_dim}"
                 )
-            key = table.data_type
+            key = (table.data_type, table.use_virtual_table)
             self._key_to_tables[key].append(table)
-            self._feature_names.extend(table.feature_names)
         self._feature_splits: List[int] = []
         for key, emb_configs in self._key_to_tables.items():
-            data_type = key
+            data_type = key[0]
             embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
@@ -808,6 +811,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                         table_name_to_quantized_weights[table.name]
                     )
                 feature_table_map.extend([idx] * table.num_features())
+                # move to here to make sure feature_names order is consistent with the embedding groups
+                self._feature_names.extend(table.feature_names)
+
             emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=embedding_specs,
                 pooling_mode=PoolingMode.NONE,
@@ -852,7 +858,9 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                         "weight_qbias", qbias
                     )
 
-        self._embedding_names_by_batched_tables: Dict[DataType, List[str]] = {
+        self._embedding_names_by_batched_tables: Dict[
+            Tuple[DataType, bool], List[str]
+        ] = {
             key: list(itertools.chain(*get_embedding_names_by_table(table)))
             for key, table in self._key_to_tables.items()
         }
