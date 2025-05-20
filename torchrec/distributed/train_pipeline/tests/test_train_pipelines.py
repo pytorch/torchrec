@@ -47,6 +47,7 @@ from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
 )
+from torchrec.distributed.train_pipeline.pipeline_context import TrainPipelineContext
 from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
     TrainPipelineSparseDistTestBase,
 )
@@ -73,7 +74,6 @@ from torchrec.distributed.train_pipeline.utils import (
     PostprocArgInfoStep,
     SparseDataDistUtil,
     StageOut,
-    TrainPipelineContext,
 )
 from torchrec.distributed.types import (
     ModuleSharder,

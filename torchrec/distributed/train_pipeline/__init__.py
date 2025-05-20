@@ -8,6 +8,11 @@
 # pyre-strict
 
 
+from torchrec.distributed.train_pipeline.pipeline_context import (  # noqa
+    In,
+    Out,
+    TrainPipelineContext,
+)
 from torchrec.distributed.train_pipeline.train_pipelines import (  # noqa
     EvalPipelineSparseDist,  # noqa
     PrefetchTrainPipelineSparseDist,  # noqa
@@ -30,10 +35,7 @@ from torchrec.distributed.train_pipeline.utils import (  # noqa
     ArgInfoStepFactory,  # noqa
     CallArgs,  # noqa
     DataLoadingThread,  # noqa
-    In,  # noqa
-    Out,  # noqa
     SparseDataDistUtil,  # noqa
     StageOut,  # noqa
     Tracer,  # noqa
-    TrainPipelineContext,  # noqa
 )
