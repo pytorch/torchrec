@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import copy
 from typing import Any, Callable, Dict, List, Tuple
 
 import torch
@@ -14,6 +15,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch.distributed._shard.sharded_tensor import Shard
 from torchrec.distributed.types import (
+    EmbeddingModuleShardingPlan,
     ParameterSharding,
     ShardedModule,
     ShardedTensor,
@@ -363,4 +365,26 @@ def pad_tensor_to_max_dims(
         ),  # right and bottom
         mode="constant",
         value=0,
+    )
+
+
+# Utils
+def output_sharding_plan_delta(
+    old_plan: EmbeddingModuleShardingPlan, new_plan: EmbeddingModuleShardingPlan
+) -> EmbeddingModuleShardingPlan:
+    """
+    Compute and return a new sharding plan that is the delta
+    between new and old embedding module plans. Assumes that the old and new plan
+    have the same number of parameters/tables.
+
+    This is useful for Dynamic Sharding since Resharding API takes in only the
+    ParameterSharding or shards that needs to be moved.
+    """
+    assert len(old_plan) == len(new_plan)
+    return EmbeddingModuleShardingPlan(
+        {
+            k: copy.deepcopy(v)
+            for k, v in new_plan.items()
+            if v.ranks != old_plan[k].ranks
+        }
     )

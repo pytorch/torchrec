@@ -35,6 +35,7 @@ from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     EnumerableShardingSpec,
     ModuleSharder,
+    ParameterSharding,
     ShardedModule,
     ShardingEnv,
     ShardingEnv2D,
@@ -611,6 +612,84 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         for _, m in module.named_modules():
             if hasattr(m, "reset_parameters"):
                 m.reset_parameters()
+
+    def reshard(
+        self,
+        sharded_module_fqn: str,
+        changed_shard_to_params: Dict[str, ParameterSharding],
+    ) -> None:
+        """
+        Reshards an already-sharded module in the DMP given a set of ParameterShardings to change placements.
+
+        This method allows you to dynamically change the sharding strategy for a specific module
+        without recreating the entire DMP. It's particularly useful for:
+        1. Adapting to changing requirements during training
+        2. Implementing progressive sharding strategies
+        3. Rebalancing load across devices
+        4. A/B Testing different sharding plans
+
+        Args:
+            path_to_sharded_module (str): The path to the sharded module in the DMP.
+                For example, "sparse.ebc".
+            changed_shard_to_params (Dict[str, ParameterSharding]): A dictionary mapping
+                parameter names to their new ParameterSharding configurations. Includes
+                only the shards that needs to be moved.
+
+        Example:
+            ```
+            # Original sharding plan might have table sharded across 2 GPUs
+            original_plan = {
+                "table_0': ParameterSharding(
+                    sharding_type="table_wise",
+                    ranks=[0, 1, 2, 3],
+                    sharding_spec=EnumerableShardingSpec(...)
+                )
+            }
+
+            # New sharding plan to shard across 4 GPUs
+            new_plan = {
+                "weight": ParameterSharding(
+                    sharding_type="table_wise",
+                    ranks=[0, 1, 2, 3],
+                    sharding_spec=EnumerableShardingSpec(...)
+                )
+            }
+
+            # Helper function for only selecting the delta between original and new plan
+            changed_sharding_params = output_sharding_plan_delta(new_plan)
+
+            # Reshard the module and redistribute the tensors
+            model.reshard("embedding_module", changed_sharding_params)
+            ```
+
+        Notes:
+            - The sharder for the module must implement a `reshard` method
+            - Resharding involves redistributing tensor data across devices, which can be expensive
+            - After resharding, the optimizer state is maintained for the module
+            - The sharding plan is updated to reflect the new configuration
+        """
+        steps = sharded_module_fqn.split(".")
+        sharded_module = self.module
+        for s in steps:
+            sharded_module = getattr(sharded_module, s)
+
+        assert isinstance(sharded_module, ShardedModule)
+        assert changed_shard_to_params is not None
+        sharder_key = sharded_module.unsharded_module_type
+        sharder = self._sharder_map[sharder_key]
+        assert hasattr(
+            sharder, "reshard"
+        ), "reshard is not implemented for this sharder"
+        sharded_module = sharder.reshard(  # pyre-ignore
+            sharded_module,
+            changed_shard_to_params,
+            self._env,
+            self.device,
+        )
+
+        self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
+        self._plan.plan[sharded_module_fqn] = sharded_module.module_sharding_plan
+        return sharded_module
 
 
 class DMPCollection(DistributedModelParallel):
