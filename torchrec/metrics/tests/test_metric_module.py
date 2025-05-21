@@ -19,6 +19,10 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.distributed as dist
 import torch.distributed.launcher as pet
+from torchrec.distributed.test_utils.multi_process import (
+    MultiProcessContext,
+    MultiProcessTestBase,
+)
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.metric_module import (
     generate_metric_module,
@@ -32,7 +36,7 @@ from torchrec.metrics.metrics_config import (
     BatchSizeStage,
     DefaultMetricsConfig,
     DefaultTaskInfo,
-    EmptyMetricsConfig,
+    MetricsConfig,
     RecMetricDef,
     RecMetricEnum,
 )
@@ -40,6 +44,7 @@ from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.rec_metric import RecMetricList, RecTaskInfo
 from torchrec.metrics.test_utils import gen_test_batch, get_launch_config
 from torchrec.metrics.throughput import ThroughputMetric
+from torchrec.test_utils import seed_and_log, skip_if_asan_class
 
 METRIC_MODULE_PATH = "torchrec.metrics.metric_module"
 
@@ -603,3 +608,86 @@ class MetricModuleTest(unittest.TestCase):
         no_bss_metric_module.load_state_dict(state_dict)
         # Make sure num_batch wasn't created on the throughput module (and no exception was thrown above)
         self.assertFalse(hasattr(no_bss_metric_module.throughput_metric, "_num_batch"))
+
+
+def metric_module_gather_state(
+    rank: int,
+    world_size: int,
+    backend: str,
+    config: MetricsConfig,
+    batch_size: int,
+    local_size: Optional[int] = None,
+) -> None:
+    """
+    We compare the computed values of the metric module using the get_pre_compute_states API.
+    """
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        metric_module = generate_metric_module(
+            TestMetricModule,
+            metrics_config=config,
+            batch_size=batch_size,
+            world_size=world_size,
+            my_rank=rank,
+            state_metrics_mapping={},
+            device=ctx.device,
+            process_group=ctx.pg,
+        )
+
+        test_batches = []
+        for _ in range(100):
+            test_batch = gen_test_batch(batch_size)
+            for k in test_batch.keys():
+                test_batch[k] = test_batch[k].to(ctx.device)
+            # save to re run
+            test_batches.append(test_batch)
+            metric_module.update(test_batch)
+
+        computed_value = metric_module.compute()
+        states = metric_module.get_pre_compute_states(pg=ctx.pg)  # pyre-ignore[6]
+
+        torch.distributed.barrier(ctx.pg)
+        # Compare to computing metrics on metric module that loads from pre_compute_states
+        new_metric_module = generate_metric_module(
+            TestMetricModule,
+            metrics_config=config,
+            batch_size=batch_size,
+            world_size=1,
+            my_rank=0,
+            state_metrics_mapping={},
+            device=torch.device(f"cuda:{rank}"),
+            process_group=dist.new_group(ranks=[rank], backend="nccl"),
+        )
+        new_metric_module.load_pre_compute_states(states)
+        new_computed_value = new_metric_module.compute()
+
+        for metric, tensor in computed_value.items():
+            new_tensor = new_computed_value[metric]
+            torch.testing.assert_close(tensor, new_tensor, check_device=False)
+
+
+@skip_if_asan_class
+class MetricModuleDistributedTest(MultiProcessTestBase):
+
+    @seed_and_log
+    def setUp(self, backend: str = "nccl") -> None:
+        super().setUp()
+        self.backend = backend
+
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.skipTest("CUDA required for distributed test")
+
+    def test_metric_module_gather_state(self) -> None:
+        world_size = 2
+        backend = "nccl"
+        metrics_config = DefaultMetricsConfig
+        batch_size = 128
+
+        self._run_multi_process_test(
+            callable=metric_module_gather_state,
+            world_size=world_size,
+            backend=backend,
+            batch_size=batch_size,
+            config=metrics_config,
+        )
