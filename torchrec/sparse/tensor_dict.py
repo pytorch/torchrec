@@ -15,6 +15,7 @@ from tensordict import TensorDict
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
+@torch.fx.wrap
 def maybe_td_to_kjt(
     features: KeyedJaggedTensor, keys: Optional[List[str]] = None
 ) -> KeyedJaggedTensor:
