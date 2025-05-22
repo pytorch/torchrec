@@ -479,6 +479,10 @@ class RecMetric(nn.Module, abc.ABC):
                 yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _unfused_tasks_iter(self, compute_scope: str) -> ComputeIterType:
+        """
+        For each task, we generate an associated RecMetricComputation object for it.
+        This would mean in the states of each RecMetricComputation object, the n_tasks dimension is 1.
+        """
         for task, metric_computation in zip(self._tasks, self._metrics_computations):
             metric_computation.pre_compute()
             for metric_report in getattr(
@@ -494,6 +498,7 @@ class RecMetric(nn.Module, abc.ABC):
                     or metric_computation.has_valid_update[0] > 0
                     else torch.zeros_like(metric_report.value)
                 )
+                # ultimately compute result comes here, and is then written to tensorboard, for fused tasks we need to know the metric prefix val and description
                 yield task, metric_report.name, valid_metric_value, compute_scope + metric_report.metric_prefix.value, metric_report.description
 
     def _fuse_update_buffers(self) -> Dict[str, RecModelOutput]:
