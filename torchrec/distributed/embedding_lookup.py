@@ -14,13 +14,14 @@ from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_table_batched_embeddings_ops_common import BackendType
 from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
 )
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
-from fbgemm_gpu.tbe.ssd.training import BackendType, SSDTableBatchedEmbeddingBags
+from fbgemm_gpu.tbe.ssd.training import SSDTableBatchedEmbeddingBags
 from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
     PartiallyMaterializedTensor,
 )

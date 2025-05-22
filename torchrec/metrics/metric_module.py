@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Type, Union
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+from torch.distributed.tensor import DeviceMesh
 from torch.profiler import record_function
 from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
@@ -353,6 +354,125 @@ class RecMetricModule(nn.Module):
 
     def get_required_inputs(self) -> Optional[List[str]]:
         return self.rec_metrics.get_required_inputs()
+
+    def _get_throughput_metric_states(
+        self, metric: ThroughputMetric
+    ) -> Dict[str, Dict[str, torch.Tensor]]:
+        states = {}
+        # this doesn't use `state_dict` as some buffers are not persistent
+        for name, buf in metric.named_buffers():
+            states[name] = buf
+        return {metric._metric_name.value: states}
+
+    def _get_metric_states(
+        self,
+        metric: RecMetric,
+        world_size: int,
+        process_group: Union[dist.ProcessGroup, DeviceMesh],
+    ) -> Dict[str, Dict[str, Union[torch.Tensor, List[torch.Tensor]]]]:
+        metric_computations = metric._metrics_computations
+        tasks = metric._tasks
+
+        state_aggregated = {}
+        for task, metric_computation in zip(tasks, metric_computations):
+            inputs = []
+            state_aggregated[task.name] = {}
+            for attr, reduction_fn in metric_computation._reductions.items():
+                inputs.append((attr, getattr(metric_computation, attr), reduction_fn))
+
+            # TODO: do one all gather call per metric, instead of one per state
+            # this may require more logic as shapes of states are not guranteed to be same
+            # may need padding
+            for state, tensor, reduction_fn in inputs:
+                gather_list = [torch.empty_like(tensor) for _ in range(world_size)]
+                dist.all_gather(gather_list, tensor, group=process_group)
+                state_aggregated[task.name][state] = (
+                    reduction_fn(torch.stack(gather_list))
+                    if reduction_fn is not None
+                    else gather_list
+                )
+
+        return state_aggregated
+
+    def get_pre_compute_states(
+        self, pg: Union[dist.ProcessGroup, DeviceMesh]
+    ) -> Dict[str, Dict[str, Dict[str, Union[torch.Tensor, List[torch.Tensor]]]]]:
+        """
+        This function returns the states per rank for each metric to be saved. The states are are aggregated by the state defined reduction_function.
+        This can be optionall disabled by setting ``reduce_metrics`` to False. The output on each rank is identical.
+
+        Each metric has N number of tasks associated with it. This is reflected in the metric state, where the size of the tensor is
+        typically (n_tasks, 1). Depending on the `RecComputeMode` the metric is in, the number of tasks can be 1 or len(tasks).
+
+        The output of the data is defined as nested dictionary, a dict of ``metric._namespace`` each mapping to a dict of tasks and their states and associated tensors:
+            metric : str -> { task : {state : tensor or list[tensor]} }
+
+        This differs from the state dict such that the metric states are gathered to all ranks within the process group and the reduction function is
+        applied to them. Typical state dict exposes just the metric states that live on the rank it's called from.
+
+        Args:
+            pg (Union[dist.ProcessGroup, DeviceMesh]): the process group to use for all gather.
+            reduce_metrics (bool): whether to reduce the metrics or not. Default is True.
+
+        Returns:
+            Dict[str, Dict[str, Dict[str, torch.Tensor]]]: the states for each metric to be saved
+        """
+        if isinstance(pg, DeviceMesh):
+            process_group: dist.ProcessGroup = pg.get_group(mesh_dim="shard")
+        else:
+            process_group: dist.ProcessGroup = pg
+        aggregated_states = {}
+        world_size = dist.get_world_size(
+            process_group
+        )  # Under 2D parallel context, this should be sharding world size
+
+        for metric in self.rec_metrics.rec_metrics:
+            aggregated_states[metric._namespace.value] = self._get_metric_states(
+                metric,
+                world_size,
+                process_group,
+            )
+
+        # throughput metric requires special handling, since it's not a RecMetric
+        throughput_metric = self.throughput_metric
+        if throughput_metric is not None:
+            aggregated_states[throughput_metric._namespace.value] = (
+                self._get_throughput_metric_states(throughput_metric)
+            )
+
+        return aggregated_states
+
+    def load_pre_compute_states(
+        self,
+        source: Dict[
+            str, Dict[str, Dict[str, Union[torch.Tensor, List[torch.Tensor]]]]
+        ],
+    ) -> None:
+        """
+        Load states from ``get_pre_compute_states``. This is called on every rank, no collectives are called in this function.
+
+        Args:
+            source (Dict[str, Dict[str, Union[torch.Tensor, List[torch.Tensor]]]]): the source states to load from. This
+                is the output of ``get_pre_compute_states``.
+
+        Returns:
+            None
+        """
+        for metric in self.rec_metrics.rec_metrics:
+            states = source[metric._namespace.value]
+            for task, metric_computation in zip(
+                metric._tasks, metric._metrics_computations
+            ):
+                state = states[task.name]
+                for attr, tensor in state.items():
+                    setattr(metric_computation, attr, tensor)
+
+        if self.throughput_metric is not None:
+            states = source[self.throughput_metric._namespace.value][
+                self.throughput_metric._metric_name.value  # pyre-ignore[16]
+            ]
+            for name, buf in self.throughput_metric.named_buffers():  # pyre-ignore[16]
+                buf.copy_(states[name])
 
 
 def _generate_rec_metrics(
