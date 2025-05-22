@@ -68,13 +68,17 @@ def _compute_auc_helper(
         # TODO - [add flag to set bining dyamically] for use with soft labels, >=0.039 --> 1, <0.039 --> 0
         sorted_labels = torch.ge(sorted_labels, 0.039).to(dtype=sorted_labels.dtype)
     sorted_weights = torch.index_select(weights, dim=0, index=sorted_indices)
-    cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)
-    cum_tp = torch.cumsum(sorted_weights * sorted_labels, dim=0)
-    auc = torch.where(
-        cum_fp[-1] * cum_tp[-1] == 0,
-        0.5,  # 0.5 is the no-signal default value for auc.
-        torch.trapz(cum_tp, cum_fp) / cum_fp[-1] / cum_tp[-1],
-    )
+    if sorted_weights.numel() > 0:
+        cum_fp = torch.cumsum(sorted_weights * (1.0 - sorted_labels), dim=0)
+        cum_tp = torch.cumsum(sorted_weights * sorted_labels, dim=0)
+        auc = torch.where(
+            cum_fp[-1] * cum_tp[-1] == 0,
+            0.5,  # 0.5 is the no-signal default value for auc.
+            torch.trapz(cum_tp, cum_fp) / cum_fp[-1] / cum_tp[-1],
+        )
+    else:
+        # if empty predictions, default value
+        auc = torch.tensor(0.5, device=sorted_weights.device)
     return auc
 
 
