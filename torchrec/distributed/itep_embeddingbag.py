@@ -134,7 +134,6 @@ class ShardedITEPEmbeddingBagCollection(
             pruning_interval=module._itep_module.pruning_interval,
             enable_pruning=module._itep_module.enable_pruning,
             pg=env.process_group,
-            itep_logger=module._itep_module.itep_logger,
         )
 
     def prefetch(
