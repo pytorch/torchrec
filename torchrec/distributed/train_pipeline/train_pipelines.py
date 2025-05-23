@@ -40,6 +40,7 @@ from torchrec.distributed.train_pipeline.pipeline_context import (
     PrefetchTrainPipelineContext,
     TrainPipelineContext,
 )
+from torchrec.distributed.train_pipeline.tracing import PipelinedPostproc
 from torchrec.distributed.train_pipeline.utils import (
     _override_input_dist_forwards,
     _pipeline_detach_model,
@@ -54,7 +55,6 @@ from torchrec.distributed.train_pipeline.utils import (
     EmbeddingPipelinedForward,
     InSyncEmbeddingPipelinedForward,
     PipelinedForward,
-    PipelinedPostproc,
     PipelineStage,
     PrefetchPipelinedForward,
     RunnableType,

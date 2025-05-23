@@ -48,8 +48,15 @@ from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
 )
 from torchrec.distributed.train_pipeline.pipeline_context import TrainPipelineContext
+from torchrec.distributed.train_pipeline.postproc import PipelinedPostproc
 from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
     TrainPipelineSparseDistTestBase,
+)
+from torchrec.distributed.train_pipeline.tracing import (
+    GetAttrArgInfoStep,
+    GetItemArgInfoStep,
+    NoopArgInfoStep,
+    PostprocArgInfoStep,
 )
 from torchrec.distributed.train_pipeline.train_pipelines import (
     EvalPipelineSparseDist,
@@ -65,13 +72,8 @@ from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
     EmbeddingPipelinedForward,
     get_h2d_func,
-    GetAttrArgInfoStep,
-    GetItemArgInfoStep,
-    NoopArgInfoStep,
     PipelinedForward,
-    PipelinedPostproc,
     PipelineStage,
-    PostprocArgInfoStep,
     SparseDataDistUtil,
     StageOut,
 )
