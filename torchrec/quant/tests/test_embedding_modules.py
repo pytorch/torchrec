@@ -289,7 +289,7 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self.assertTrue(isinstance(qebc.m, QuantEmbeddingBagCollection))
         # feature name should be consistent with the order of grouped embeddings
-        self.assertEqual(qebc.m._feature_names, ["f1", "f3", "f2"])
+        self.assertEqual(qebc.m._feature_names, ["f1", "f3", "f2"])  # pyre-ignore[16]
 
         features = KeyedJaggedTensor(
             keys=["f1", "f2", "f3"],
@@ -822,7 +822,7 @@ class EmbeddingCollectionTest(unittest.TestCase):
         )
         self.assertTrue(isinstance(qec.m, QuantEmbeddingCollection))
         # feature name should be consistent with the order of grouped embeddings
-        self.assertEqual(qec.m._feature_names, ["f1", "f3", "f2"])
+        self.assertEqual(qec.m._feature_names, ["f1", "f3", "f2"])  # pyre-ignore[16]
 
         # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
         configs = model.m.embedding_configs()

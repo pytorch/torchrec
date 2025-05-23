@@ -33,7 +33,7 @@ def populate_fx_names(
         ):
             table_names = []
             for config in emb_configs:
-                table_names.append(config.name)
+                table_names.append(config.name)  # pyre-ignore[16]
             joined_table_names = ",".join(table_names)
             # pyre-fixme[16]: `Module` has no attribute `_fx_path`.
             emb_module._fx_path = f"emb_module.{joined_table_names}"
