@@ -12,7 +12,7 @@ from typing import Mapping, Optional, Tuple, Union
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class ITEPLogger(ABC):
+class PruningLogger(ABC):
     @abstractmethod
     def log_table_eviction_info(
         self,
@@ -30,7 +30,7 @@ class ITEPLogger(ABC):
         pass
 
 
-class ITEPLoggerDefault(ITEPLogger):
+class PruningLoggerDefault(PruningLogger):
     """
     noop logger as a default
     """
@@ -39,7 +39,7 @@ class ITEPLoggerDefault(ITEPLogger):
         self,
     ) -> None:
         """
-        Initialize ITEPLoggerScuba.
+        Initialize PruningScubaLogger.
         """
         pass
 
