@@ -319,10 +319,10 @@ class ModelInput(Pipelineable):
             # the `_to_copy` (host-to-device) data transfer still blocks cpu execution
             float_features = float_features.pin_memory()
             label = label.pin_memory()
-            idlist_features: Optional[KeyedJaggedTensor] = (
+            idlist_features = (
                 None if idlist_features is None else idlist_features.pin_memory()
             )
-            idscore_features: Optional[KeyedJaggedTensor] = (
+            idscore_features = (
                 None if idscore_features is None else idscore_features.pin_memory()
             )
         return ModelInput(
