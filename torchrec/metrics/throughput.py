@@ -99,7 +99,7 @@ class ThroughputMetric(nn.Module):
             )
 
         if window_seconds > MAX_WINDOW_TS:
-            logger.warn(
+            logger.warning(
                 f"window_seconds is greater than {MAX_WINDOW_TS}, capping to {MAX_WINDOW_TS} to make sure window_qps is not staled"
             )
             window_seconds = MAX_WINDOW_TS

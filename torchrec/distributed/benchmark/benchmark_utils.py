@@ -498,7 +498,7 @@ def cmd_conf(*configs: Any) -> Callable:
                 if field.name not in names:
                     names.add(field.name)
                 else:
-                    logger.warn(f"WARNING: duplicate argument {field.name}")
+                    logger.warning(f"WARNING: duplicate argument {field.name}")
                     continue
                 rtf = click.option(
                     f"--{field.name}", type=field.type, default=field.default
