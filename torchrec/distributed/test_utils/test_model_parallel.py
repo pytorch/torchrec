@@ -40,6 +40,10 @@ class ModelParallelTestShared(MultiProcessTestBase):
         self.num_weighted_features = 2
         self.num_shared_features = 2
 
+        self.table_names = [
+            "table_" + str(i)
+            for i in range(self.num_features + self.num_shared_features)
+        ]
         self.tables = []
         self.mean_tables = []
         self.weighted_tables = []
@@ -63,7 +67,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i),
+                name=self.table_names[i],
                 feature_names=["feature_" + str(i)],
                 data_type=data_type,
             )
@@ -73,7 +77,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i + self.num_features),
+                name=self.table_names[i + self.num_features],
                 feature_names=["feature_" + str(i)],
                 data_type=data_type,
             )
@@ -85,7 +89,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i),
+                name=self.table_names[i],
                 feature_names=["feature_" + str(i)],
                 pooling=PoolingType.MEAN,
                 data_type=data_type,
@@ -97,7 +101,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i + self.num_features),
+                name=self.table_names[i + self.num_features],
                 feature_names=["feature_" + str(i)],
                 pooling=PoolingType.MEAN,
                 data_type=data_type,
@@ -385,8 +389,8 @@ class ModelParallelBase(ModelParallelTestShared):
             backend=self.backend,
             qcomms_config=qcomms_config,
             constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
+                table_name: ParameterConstraints(min_partition=4)
+                for table_name in self.table_names
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
@@ -466,8 +470,8 @@ class ModelParallelBase(ModelParallelTestShared):
             backend=self.backend,
             qcomms_config=qcomms_config,
             constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
+                table_name: ParameterConstraints(min_partition=4)
+                for table_name in self.table_names
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
@@ -681,8 +685,8 @@ class ModelParallelBase(ModelParallelTestShared):
             ],
             backend=self.backend,
             constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
+                table_name: ParameterConstraints(min_partition=4)
+                for table_name in self.table_names
             },
             variable_batch_per_feature=True,
             has_weighted_tables=False,
@@ -700,24 +704,25 @@ class ModelParallelBase(ModelParallelTestShared):
         sharding_type=st.just(ShardingType.COLUMN_WISE.value),
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_multiple_kernels(
         self, sharding_type: str, data_type: DataType
     ) -> None:
         if self.backend == "gloo":
             self.skipTest("ProcessGroupGloo does not support reduce_scatter")
+        fused_params = {"prefetch_pipeline": True}
         constraints = {
-            table.name: ParameterConstraints(
+            table_name: ParameterConstraints(
                 min_partition=4,
                 compute_kernels=(
                     [EmbeddingComputeKernel.FUSED.value]
                     if i % 2 == 0
                     else [EmbeddingComputeKernel.FUSED_UVM_CACHING.value]
                 ),
+                sharding_types=[sharding_type],
             )
-            for i, table in enumerate(self.tables)
+            for i, table_name in enumerate(self.table_names)
         }
-        fused_params = {"prefetch_pipeline": True}
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[EmbeddingBagCollectionSharder(fused_params=fused_params)],
