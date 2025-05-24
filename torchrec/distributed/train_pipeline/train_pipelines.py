@@ -40,6 +40,18 @@ from torchrec.distributed.train_pipeline.pipeline_context import (
     PrefetchTrainPipelineContext,
     TrainPipelineContext,
 )
+from torchrec.distributed.train_pipeline.pipeline_stage import (
+    PipelineStage,
+    RunnableType,
+    StageOut,
+    StageOutputWithEvent,
+)
+from torchrec.distributed.train_pipeline.runtime_forwards import (
+    EmbeddingPipelinedForward,
+    InSyncEmbeddingPipelinedForward,
+    PipelinedForward,
+    PrefetchPipelinedForward,
+)
 from torchrec.distributed.train_pipeline.tracing import PipelinedPostproc
 from torchrec.distributed.train_pipeline.utils import (
     _override_input_dist_forwards,
@@ -52,14 +64,6 @@ from torchrec.distributed.train_pipeline.utils import (
     _wait_for_batch,
     _wait_for_events,
     DataLoadingThread,
-    EmbeddingPipelinedForward,
-    InSyncEmbeddingPipelinedForward,
-    PipelinedForward,
-    PipelineStage,
-    PrefetchPipelinedForward,
-    RunnableType,
-    StageOut,
-    StageOutputWithEvent,
     use_context_for_postprocs,
 )
 from torchrec.distributed.types import Awaitable
