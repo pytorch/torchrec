@@ -19,6 +19,7 @@ from parameterized import parameterized
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.test_utils.test_model import ModelInput, TestNegSamplingModule
 from torchrec.distributed.train_pipeline.pipeline_context import TrainPipelineContext
+from torchrec.distributed.train_pipeline.runtime_forwards import PipelinedForward
 
 from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
     TrainPipelineSparseDistTestBase,
@@ -30,7 +31,7 @@ from torchrec.distributed.train_pipeline.tracing import (
     NodeArgsHelper,
     PipelinedPostproc,
 )
-from torchrec.distributed.train_pipeline.utils import _rewrite_model, PipelinedForward
+from torchrec.distributed.train_pipeline.utils import _rewrite_model
 from torchrec.distributed.types import ShardingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
