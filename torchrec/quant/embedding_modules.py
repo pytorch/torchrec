@@ -379,7 +379,10 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
             if table.name in table_names:
                 raise ValueError(f"Duplicate table name {table.name}")
             table_names.add(table.name)
-            key = (table.pooling, table.use_virtual_table)
+            if hasattr(table, "use_virtual_table"):
+                key = (table.pooling, table.use_virtual_table)
+            else:
+                key = (table.pooling, False)
             # pyre-ignore
             self._key_to_tables[key].append(table)
 
@@ -781,7 +784,10 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                     + f" Violating case: {table.name}'s embedding_dim {table.embedding_dim} !="
                     + f" {self._embedding_dim}"
                 )
-            key = (table.data_type, table.use_virtual_table)
+            if hasattr(table, "use_virtual_table"):
+                key = (table.data_type, table.use_virtual_table)
+            else:
+                key = (table.data_type, False)
             self._key_to_tables[key].append(table)
         self._feature_splits: List[int] = []
         for key, emb_configs in self._key_to_tables.items():
