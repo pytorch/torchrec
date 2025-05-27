@@ -430,7 +430,7 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
         self,
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],  # support for hybrid sharding
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         feature_processor: Optional[FeatureProcessorsCollection] = None,
@@ -462,11 +462,33 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
                     f"Feature processor has inconsistent devices. Expected {feature_processor_device}, got {param.device}"
                 )
 
+        world_sizes = []
+        if isinstance(env, Dict):
+            for (
+                embedding_configs
+            ) in self._sharding_type_device_group_to_sharding_infos.values():
+                world_sizes.append(
+                    # ensures that the same device is used for this sharding type
+                    env[
+                        get_device_for_first_shard_from_sharding_infos(
+                            embedding_configs
+                        )
+                    ].world_size
+                )
+        else:
+            world_sizes.append(env.world_size)
+
+        # TODO(hcxu): fully support hybrid sharding with feature_processors_per_rank: ModuleList(ModuleList())
+        assert (
+            len(world_sizes) == 1
+        ), "Sharding across multiple (sharding type, device type) for FeatureProcessedEmbeddingBagCollection is not supported yet"
+
+        total_world_size = world_sizes[-1]
         if feature_processor_device is None:
-            for _ in range(env.world_size):
+            for _ in range(total_world_size):
                 self.feature_processors_per_rank.append(feature_processor)
         else:
-            for i in range(env.world_size):
+            for i in range(total_world_size):
                 # Generic copy, for example initailized on cpu but -> sharding as meta
                 self.feature_processors_per_rank.append(
                     copy.deepcopy(feature_processor)
