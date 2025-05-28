@@ -255,6 +255,18 @@ def move_to_copy_nodes_to_device(
     return unflattened_module
 
 
+def _check_graph_node(mod: nn.Module, fqn: str) -> bool:
+    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `nodes`.
+    for node in mod.graph.nodes:
+        if node.op == "call_module" and node.target == fqn:
+            return True
+    if "." not in fqn:
+        return False
+    curr, fqn = fqn.split(".", maxsplit=1)
+    mod = getattr(mod, curr)
+    return _check_graph_node(mod, fqn)
+
+
 def _short_circuit_pytree_ebc_regroup(module: nn.Module) -> nn.Module:
     """
     Bypass pytree flatten and unflatten function between EBC and KTRegroupAsDict to avoid key-order issue.
@@ -271,7 +283,15 @@ def _short_circuit_pytree_ebc_regroup(module: nn.Module) -> nn.Module:
                 continue
             ebc_fqns.append(fqn)
         elif isinstance(m, KTRegroupAsDict):
-            regroup_fqns.append(fqn)
+            # check if the KTRegroupAsDict is used. Otherwise we can skip pruning graph.
+            if _check_graph_node(module, fqn):
+                regroup_fqns.append(fqn)
+            else:
+                logger.warning(
+                    "a KTRegroupAsDict module is ignored from the graph, probably it's replaced "
+                    "by a customized regroup module in the forward, and likely there's perf impact."
+                )
+
     if len(ebc_fqns) == len(regroup_fqns) == 0:
         # nothing happens if there is no EBC or KTRegroupAsDict (e.g., the PEA case)
         return module

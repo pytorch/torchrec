@@ -21,7 +21,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.embedding_types import ShardedEmbeddingTable, ShardingType
 from torchrec.distributed.types import Shard, ShardedTensor, ShardedTensorMetadata
 from torchrec.modules.embedding_modules import reorder_inverse_indices
-from torchrec.modules.itep_logger import ITEPLogger, ITEPLoggerDefault
+from torchrec.modules.pruning_logger import PruningLogger, PruningLoggerDefault
 
 from torchrec.sparse.jagged_tensor import _pin_and_move, _to_offsets, KeyedJaggedTensor
 
@@ -73,7 +73,7 @@ class GenericITEPModule(nn.Module):
         pruning_interval: int = 1001,  # Default pruning interval 1001 iterations
         pg: Optional[dist.ProcessGroup] = None,
         table_name_to_sharding_type: Optional[Dict[str, str]] = None,
-        itep_logger: Optional[ITEPLogger] = None,
+        scuba_logger: Optional[PruningLogger] = None,
     ) -> None:
         super(GenericITEPModule, self).__init__()
 
@@ -90,10 +90,10 @@ class GenericITEPModule(nn.Module):
         )
         self.table_name_to_sharding_type = table_name_to_sharding_type
 
-        self.itep_logger: ITEPLogger = (
-            itep_logger if itep_logger is not None else ITEPLoggerDefault()
+        self.scuba_logger: PruningLogger = (
+            scuba_logger if scuba_logger is not None else PruningLoggerDefault()
         )
-        self.itep_logger.log_run_info()
+        self.scuba_logger.log_run_info()
 
         # Map each feature to a physical address_lookup/row_util buffer
         self.feature_table_map: Dict[str, int] = {}
@@ -167,13 +167,6 @@ class GenericITEPModule(nn.Module):
             except KeyError:
                 # in dummy mode, we don't have the feature_table_map or reversed_feature_table_map
                 pass
-
-        self.itep_logger.log_table_eviction_info(
-            iteration=None,
-            rank=None,
-            table_to_sizes_mapping=table_to_sizes_mapping,
-            eviction_tables=logged_eviction_mapping,
-        )
 
         # Print the sorted mapping
         logger.info(f"ITEP: table name to eviction ratio {sorted_mapping}")
