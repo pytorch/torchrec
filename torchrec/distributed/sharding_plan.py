@@ -410,6 +410,20 @@ ParameterShardingGenerator = Callable[
 ]
 
 
+def get_sharding_constructor_from_type(
+    sharding_type: ShardingType,
+) -> Callable[..., ParameterShardingGenerator]:
+    sharding_type_to_constructor = {
+        ShardingType.TABLE_WISE: table_wise,
+        ShardingType.ROW_WISE: row_wise,
+        ShardingType.COLUMN_WISE: column_wise,
+        ShardingType.TABLE_ROW_WISE: table_row_wise,
+        ShardingType.GRID_SHARD: grid_shard,
+        ShardingType.DATA_PARALLEL: data_parallel,
+    }
+    return sharding_type_to_constructor[sharding_type]
+
+
 def data_parallel() -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::DATA_PARALLEL` for construct_module_sharding_plan.
