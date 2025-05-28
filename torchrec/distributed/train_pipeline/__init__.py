@@ -13,6 +13,10 @@ from torchrec.distributed.train_pipeline.pipeline_context import (  # noqa
     Out,
     TrainPipelineContext,
 )
+from torchrec.distributed.train_pipeline.pipeline_stage import (  # noqa
+    SparseDataDistUtil,  # noqa
+    StageOut,  # noqa
+)
 from torchrec.distributed.train_pipeline.tracing import (  # noqa
     ArgInfoStepFactory,  # noqa
     Tracer,  # noqa
@@ -37,6 +41,4 @@ from torchrec.distributed.train_pipeline.utils import (  # noqa
     _to_device,  # noqa
     _wait_for_batch,  # noqa
     DataLoadingThread,  # noqa
-    SparseDataDistUtil,  # noqa
-    StageOut,  # noqa
 )
