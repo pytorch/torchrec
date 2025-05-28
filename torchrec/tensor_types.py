@@ -76,7 +76,6 @@ class UIntXTensor(torch.Tensor):
     @staticmethod
     def __new__(cls, N: int, elem):
         assert elem.dtype is torch.uint8
-        # pyre-ignore
         return torch.Tensor._make_wrapper_subclass(
             cls, up_size(N, elem.shape), dtype=torch.uint8
         )
