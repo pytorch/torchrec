@@ -12,12 +12,13 @@
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
+from torchrec.modules.embedding_configs import data_type_to_dtype
 from torchrec.sparse.jagged_tensor import (
     _desugar_keyed_tensors,
     _kt_regroup_arguments,
     KeyedTensor,
 )
-from torchrec.types import CacheMixin
+from torchrec.types import CacheMixin, DataType
 
 
 @torch.fx.wrap
@@ -131,7 +132,12 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
 
     """
 
-    def __init__(self, groups: List[List[str]], keys: List[str]) -> None:
+    def __init__(
+        self,
+        groups: List[List[str]],
+        keys: List[str],
+        emb_dtype: Optional[DataType] = None,
+    ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         assert len(groups) == len(keys), "Groups and keys should have same length"
@@ -145,6 +151,7 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         self._splits: List[int] = []
         self._idx_key_pairs: List[Tuple[int, str]] = []
         self._permute_pooled_embs_impl = PermuteMultiEmbedding(groups)
+        self._emb_dtype = emb_dtype
 
     def _init_fbgemm_regroup(self, kts: List[KeyedTensor]) -> None:
         self._use_fbgemm_regroup = True
@@ -190,18 +197,26 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         self._splits = splits
         self._idx_key_pairs = idx_key_pairs
 
+    def embedding_cast(self, embs: List[torch.Tensor]) -> List[torch.Tensor]:
+        if self._emb_dtype is None:
+            return embs
+        dtype = data_type_to_dtype(self._emb_dtype)
+        return [emb.to(dtype=dtype) for emb in embs]
+
     def forward(self, keyed_tensors: List[KeyedTensor]) -> Dict[str, torch.Tensor]:
         if not self._is_inited:
             module_init(self, keyed_tensors)
 
         if self._use_fbgemm_regroup:
             values = _get_kts_values(keyed_tensors)
+            values = self.embedding_cast(values)
             permuted_values = self._permute_pooled_embs_impl(values)
             return _to_tensor_dict(self._keys, permuted_values)
         else:
             permuted_values = _permuted_values(
                 keyed_tensors, self._idx_key_pairs, self._dim
             )
+            permuted_values = self.embedding_cast([permuted_values])[0]
             splitted_values = torch.split(permuted_values, self._splits, dim=self._dim)
             return _to_tensor_dict(self._keys, splitted_values)
 

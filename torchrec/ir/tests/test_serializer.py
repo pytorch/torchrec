@@ -22,7 +22,6 @@ from torchrec.ir.utils import (
     encapsulate_ir_modules,
     mark_dynamic_kjt,
 )
-
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import (
@@ -32,6 +31,7 @@ from torchrec.modules.feature_processor_ import (
 from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
+from torchrec.types import DataType
 
 
 class CompoundModule(nn.Module):
@@ -747,3 +747,80 @@ class TestJsonSerializer(unittest.TestCase):
         deserialized_out = deserialized_model(id_list_features)
         for key in eager_out.keys():
             torch.testing.assert_close(deserialized_out[key], eager_out[key])
+
+    def test_cast_in_regroup(self) -> None:
+        class Model(nn.Module):
+            def __init__(self, ebc, fpebc, regroup):
+                super().__init__()
+                self.ebc = ebc
+                self.fpebc = fpebc
+                self.regroup = regroup
+
+            def forward(
+                self,
+                features: KeyedJaggedTensor,
+            ) -> Dict[str, torch.Tensor]:
+                kt1 = self.ebc(features)
+                kt2 = self.fpebc(features)
+                return self.regroup([kt1, kt2])
+
+        tb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1", "f2"],
+        )
+        tb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=4,
+            num_embeddings=10,
+            feature_names=["f3", "f4"],
+        )
+        tb3_config = EmbeddingBagConfig(
+            name="t3",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f5"],
+        )
+
+        ebc = EmbeddingBagCollection(
+            tables=[tb1_config, tb3_config],
+            is_weighted=False,
+        )
+        max_feature_lengths = {"f3": 100, "f4": 100}
+        fpebc = FeatureProcessedEmbeddingBagCollection(
+            EmbeddingBagCollection(
+                tables=[tb2_config],
+                is_weighted=True,
+            ),
+            PositionWeightedModuleCollection(
+                max_feature_lengths=max_feature_lengths,
+            ),
+        )
+        data_type = DataType.BF16
+
+        regroup = KTRegroupAsDict(
+            [["f1", "f3", "f5"], ["f2", "f4"]], ["odd", "even"], emb_dtype=data_type
+        )
+        model = Model(ebc, fpebc, regroup)
+        self.assertEqual(model.regroup._emb_dtype, data_type)
+
+        id_list_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3", "f4", "f5"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3, 4, 5, 6, 7, 8, 9, 1, 1, 2]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]),
+        )
+        # Serialize EBC
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+        ep = torch.export.export(
+            model,
+            (id_list_features,),
+            {},
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=(tuple(sparse_fqns)),
+        )
+
+        unflatten_ep = torch.export.unflatten(ep)
+        deserialized = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        self.assertEqual(deserialized.regroup._emb_dtype, data_type)  # pyre-ignore[16]
