@@ -957,3 +957,25 @@ class DMPCollection(DistributedModelParallel):
 
         _find_sharded_modules(self._dmp_wrapped_module)
         return sharded_modules
+
+    @property
+    def sharding_pg(self) -> dist.ProcessGroup:
+        """
+        Returns the process group used for this ranks sharding.
+        """
+        return self._sharding_pg
+
+    @property
+    def replica_pg(self) -> dist.ProcessGroup:
+        """
+        Returns the process group used for this ranks replication.
+        """
+        return self._replica_pg
+
+    @property
+    def device_mesh(self) -> DeviceMesh:
+        """
+        Returns the device mesh used for 2D parallelism.
+        Contains two dimensions: "replicate" and "shard".
+        """
+        return self._device_mesh
