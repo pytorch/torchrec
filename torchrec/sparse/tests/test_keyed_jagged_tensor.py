@@ -1017,6 +1017,34 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             lengths=torch.tensor([], device=torch.device("meta")),
         )
 
+    def test_vbe_kjt_stride(self) -> None:
+        stride_per_key_per_rank = [[2], [1]]
+        inverse_indices = torch.tensor([[0, 1, 0], [0, 0, 0]])
+        kjt_1 = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([5, 6, 7, 1, 2, 3, 0, 1]),
+            lengths=torch.tensor([3, 3, 2]),
+            stride_per_key_per_rank=stride_per_key_per_rank,
+            inverse_indices=(["f1", "f2"], inverse_indices),
+        )
+        kjt_2 = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([5, 6, 7, 1, 2, 3, 0, 1]),
+            lengths=torch.tensor([3, 3, 2]),
+            stride_per_key_per_rank_tensor=torch.tensor(stride_per_key_per_rank),
+            inverse_indices=(["f1", "f2"], inverse_indices),
+        )
+
+        self.assertEqual(kjt_1.stride(), inverse_indices.shape[1])
+        self.assertEqual(kjt_1.stride_per_key_per_rank(), stride_per_key_per_rank)
+        self.assertEqual(
+            kjt_1._stride_per_key_per_rank_optional, stride_per_key_per_rank
+        )
+        self.assertEqual(kjt_2.stride_per_key_per_rank(), stride_per_key_per_rank)
+        self.assertEqual(
+            kjt_2._stride_per_key_per_rank_optional, stride_per_key_per_rank
+        )
+
 
 class TestKeyedJaggedTensorScripting(unittest.TestCase):
     def test_scriptable_forward(self) -> None:
