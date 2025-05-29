@@ -703,6 +703,27 @@ class ParameterConstraints:
     device_group: Optional[str] = None
     key_value_params: Optional[KeyValueParams] = None
 
+    def __hash__(self) -> int:
+        return hash(
+            (
+                tuple(self.sharding_types) if self.sharding_types else None,
+                tuple(self.compute_kernels) if self.compute_kernels else None,
+                self.min_partition,
+                tuple(self.pooling_factors),
+                tuple(self.num_poolings) if self.num_poolings else None,
+                tuple(self.batch_sizes) if self.batch_sizes else None,
+                self.is_weighted,
+                self.cache_params,
+                self.enforce_hbm,
+                self.stochastic_rounding,
+                self.bounds_check_mode,
+                tuple(self.feature_names) if self.feature_names else None,
+                self.output_dtype,
+                self.device_group,
+                self.key_value_params,
+            )
+        )
+
 
 class PlannerErrorType(Enum):
     """
