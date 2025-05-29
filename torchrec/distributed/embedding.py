@@ -315,6 +315,7 @@ class EmbeddingCollectionContext(Multistreamable):
         for ctx in self.sharding_contexts:
             ctx.record_stream(stream)
         for f in self.input_features:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             f.record_stream(stream)
         for r in self.reverse_indices:
             r.record_stream(stream)
@@ -892,6 +893,10 @@ class ShardedEmbeddingCollection(
                     _model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
+                    # pyre-fixme[16]: `Module` has no attribute
+                    #  `_in_backward_optimizers`.
+                    # pyre-fixme[16]: `Tensor` has no attribute
+                    #  `_in_backward_optimizers`.
                     self.embeddings[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
@@ -1110,6 +1115,8 @@ class ShardedEmbeddingCollection(
             if sharding_type == ShardingType.DATA_PARALLEL.value:
                 pg = self._env.process_group
                 with torch.no_grad():
+                    # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                    #  `TypeUnion[Module, Tensor]`.
                     dist.broadcast(param.data, src=0, group=pg)
 
     def _generate_permute_indices_per_feature(

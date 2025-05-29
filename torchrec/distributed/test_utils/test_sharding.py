@@ -671,6 +671,9 @@ def alter_global_ebc_dtype(model: nn.Module) -> None:
         if isinstance(ebc, EmbeddingBagCollection) and ebc._is_weighted:
             with torch.no_grad():
                 for bag in ebc.embedding_bags.values():
+                    # pyre-fixme[16]: `Module` has no attribute `weight`.
+                    # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                    #  `Union[Module, Tensor]`.
                     bag.weight = torch.nn.Parameter(bag.weight.float())
 
 

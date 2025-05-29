@@ -840,6 +840,8 @@ def _gen_named_parameters_by_table_ssd_pmt(
     for table_config, pmt in zip(config.embedding_tables, pmts):
         table_name = table_config.name
         emb_table = pmt
+        # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+        #  `Union[PartiallyMaterializedTensor, Tensor]`.
         weight: nn.Parameter = nn.Parameter(emb_table)
         # pyre-ignore
         weight._in_backward_optimizers = [EmptyFusedOptimizer()]
@@ -1229,6 +1231,10 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
+        # pyre-fixme[7]: Expected `Tuple[List[PartiallyMaterializedTensor],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]` but got
+        #  `Tuple[Union[List[PartiallyMaterializedTensor], List[Tensor]],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]`.
         return self.emb_module.split_embedding_weights(no_snapshot)
 
 
@@ -2027,6 +2033,10 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
+        # pyre-fixme[7]: Expected `Tuple[List[PartiallyMaterializedTensor],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]` but got
+        #  `Tuple[Union[List[PartiallyMaterializedTensor], List[Tensor]],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]`.
         return self.emb_module.split_embedding_weights(no_snapshot)
 
 

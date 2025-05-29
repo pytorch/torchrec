@@ -282,7 +282,12 @@ class TowerQPSMetric(RecMetric):
                     task_labels = labels[task.name].view(1, -1)
                     if self._should_validate_update:
                         has_valid_weights = torch.ones(
-                            1, dtype=torch.bool, device=metric_.has_valid_update.device
+                            1,
+                            dtype=torch.bool,
+                            # pyre-fixme[6]: For 3rd argument expected `Union[None,
+                            #  int, str, device]` but got `Union[device, Tensor,
+                            #  Module]`.
+                            device=metric_.has_valid_update.device,
                         )
                         if weights is not None and task.name in weights:
                             has_valid_weights = torch.gt(
@@ -297,9 +302,12 @@ class TowerQPSMetric(RecMetric):
                                 0,
                             )
                         if has_valid_weights[0]:
+                            # pyre-fixme[29]: `Union[(self: TensorBase, other:
+                            #  Tensor) -> Tensor, Tensor, Module]` is not a function.
                             metric_.has_valid_update.logical_or_(has_valid_weights)
                         else:
                             continue
+                    # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                     metric_.update(
                         predictions=None,
                         labels=task_labels,

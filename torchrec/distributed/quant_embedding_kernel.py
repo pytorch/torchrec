@@ -380,9 +380,13 @@ class QuantBatchedEmbeddingBag(
         ):
             yield append_prefix(prefix, f"{config.name}.weight"), weight
             if self._quant_state_dict_split_scale_bias:
+                # pyre-fixme[7]: Expected `Iterator[Tuple[str, Tensor]]` but got
+                #  `Generator[Tuple[str, Optional[Tensor]], Any, Any]`.
                 yield append_prefix(
                     prefix, f"{config.name}.weight_qscale"
                 ), weight_qscale
+                # pyre-fixme[7]: Expected `Iterator[Tuple[str, Tensor]]` but got
+                #  `Generator[Tuple[str, Optional[Tensor]], Any, Any]`.
                 yield append_prefix(prefix, f"{config.name}.weight_qbias"), weight_qbias
 
     def split_embedding_weights(
@@ -552,9 +556,13 @@ class QuantBatchedEmbedding(
         ):
             yield append_prefix(prefix, f"{config.name}.weight"), weight
             if self._quant_state_dict_split_scale_bias:
+                # pyre-fixme[7]: Expected `Iterator[Tuple[str, Tensor]]` but got
+                #  `Generator[Tuple[str, Optional[Tensor]], Any, Any]`.
                 yield append_prefix(
                     prefix, f"{config.name}.weight_qscale"
                 ), weight_qscale
+                # pyre-fixme[7]: Expected `Iterator[Tuple[str, Tensor]]` but got
+                #  `Generator[Tuple[str, Optional[Tensor]], Any, Any]`.
                 yield append_prefix(prefix, f"{config.name}.weight_qbias"), weight_qbias
 
     @classmethod

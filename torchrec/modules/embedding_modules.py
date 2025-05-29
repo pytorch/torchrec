@@ -210,6 +210,8 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface):
                 len(embedding_config.feature_names) * [embedding_config.embedding_dim]
             )
 
+        # pyre-fixme[8]: Attribute has type `device`; used as `Union[Module, device,
+        #  Tensor]`.
         self._device: torch.device = device or torch.device("cpu")
         self._embedding_names: List[str] = [
             embedding
@@ -441,6 +443,8 @@ class EmbeddingCollection(EmbeddingCollectionInterface):
                 dtype=dtype,
             )
             if config.init_fn is not None:
+                # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                #  `Union[Module, Tensor]`.
                 config.init_fn(self.embeddings[config.name].weight)
 
             if not config.feature_names:

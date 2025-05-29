@@ -501,6 +501,8 @@ class ShardedEmbeddingTowerCollection(
         # create mapping of logical towers to physical towers
         tables_per_lt: List[Set[str]] = []
         for tower in module.towers:
+            # pyre-fixme[6]: For 1st argument expected `EmbeddingTower` but got
+            #  `Module`.
             lt_tables = set(tower_sharder.shardable_parameters(tower).keys())
             tables_per_lt.append(lt_tables)
             # check the tables in a logical tower are on same physical tower
@@ -546,6 +548,8 @@ class ShardedEmbeddingTowerCollection(
             self._kjt_num_features_per_pt.append(len(kjt_names))
             self._wkjt_num_features_per_pt.append(len(wkjt_names))
 
+        # pyre-fixme[9]: local_towers has type `List[Tuple[str, EmbeddingTower]]`;
+        #  used as `List[Tuple[str, Module]]`.
         local_towers: List[Tuple[str, EmbeddingTower]] = [
             (str(i), tower)
             for i, tower in enumerate(module.towers)
@@ -603,6 +607,8 @@ class ShardedEmbeddingTowerCollection(
         # Setup output dists for quantized comms
         output_dists = nn.ModuleList()
         for embedding in self.embeddings.values():
+            # pyre-fixme[6]: For 1st argument expected `Iterable[Module]` but got
+            #  `Union[Module, Tensor]`.
             output_dists.extend(embedding._output_dists)
         self._output_dists: nn.ModuleList = output_dists
 
@@ -780,10 +786,13 @@ class ShardedEmbeddingTowerCollection(
             # pyre-ignore [16]
             destination._metadata = OrderedDict()
         for i, embedding in self.embeddings.items():
+            # pyre-fixme[19]: Expected 0 positional arguments.
             embedding.state_dict(
                 destination, prefix + f"towers.{i}.embedding.", keep_vars
             )
         for i, interaction in self.interactions.items():
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `state_dict`.
             interaction.module.state_dict(
                 destination, prefix + f"towers.{i}.interaction.", keep_vars
             )
@@ -792,6 +801,9 @@ class ShardedEmbeddingTowerCollection(
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
         return CombinedOptimizer(
+            # pyre-fixme[6]: For 1st argument expected `List[Union[Tuple[str,
+            #  KeyedOptimizer], KeyedOptimizer]]` but got `List[Tuple[str,
+            #  Union[Module, Tensor]]]`.
             [
                 (f"towers.{tower_index}.embedding", embedding.fused_optimizer)
                 for tower_index, embedding in self.embeddings.items()
@@ -809,6 +821,8 @@ class ShardedEmbeddingTowerCollection(
             )
         for i, interaction in self.interactions.items():
             yield from (
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `named_parameters`.
                 interaction.module.named_parameters(
                     append_prefix(prefix, f"towers.{i}.interaction"), recurse
                 )
@@ -825,6 +839,8 @@ class ShardedEmbeddingTowerCollection(
             )
         for i, interaction in self.interactions.items():
             yield from (
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `named_buffers`.
                 interaction.module.named_buffers(
                     append_prefix(prefix, f"towers.{i}.interaction"), recurse
                 )
@@ -833,6 +849,7 @@ class ShardedEmbeddingTowerCollection(
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for i, embedding in self.embeddings.items():
             yield from (
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 embedding.sharded_parameter_names(
                     append_prefix(prefix, f"towers.{i}.embedding")
                 )
@@ -840,6 +857,8 @@ class ShardedEmbeddingTowerCollection(
         for i, interaction in self.interactions.items():
             yield from (
                 key
+                # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+                #  attribute `named_parameters`.
                 for key, _ in interaction.module.named_parameters(
                     append_prefix(prefix, f"towers.{i}.interaction")
                 )
@@ -993,6 +1012,8 @@ class EmbeddingTowerCollectionSharder(BaseEmbeddingSharder[EmbeddingTowerCollect
 
         named_parameters: Dict[str, nn.Parameter] = {}
         for tower in module.towers:
+            # pyre-fixme[6]: For 1st argument expected `EmbeddingTower` but got
+            #  `Module`.
             named_parameters.update(self._tower_sharder.shardable_parameters(tower))
         return named_parameters
 

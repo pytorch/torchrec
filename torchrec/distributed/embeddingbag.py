@@ -972,6 +972,10 @@ class ShardedEmbeddingBagCollection(
                     _model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
+                    # pyre-fixme[16]: `Module` has no attribute
+                    #  `_in_backward_optimizers`.
+                    # pyre-fixme[16]: `Tensor` has no attribute
+                    #  `_in_backward_optimizers`.
                     self.embedding_bags[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
@@ -1137,6 +1141,8 @@ class ShardedEmbeddingBagCollection(
             if sharding_type == ShardingType.DATA_PARALLEL.value:
                 pg = self._env.process_group
                 with torch.no_grad():
+                    # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                    #  `Union[Module, Tensor]`.
                     dist.broadcast(param.data, src=0, group=pg)
 
     def _create_input_dist(
