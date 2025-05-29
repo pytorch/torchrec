@@ -7,26 +7,29 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Mapping, Optional, Tuple, Union
+from contextlib import contextmanager
+from dataclasses import dataclass
+from types import SimpleNamespace
+from typing import Generator, Optional
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class PruningLogger(ABC):
-    @abstractmethod
-    def log_table_eviction_info(
-        self,
-        iteration: Optional[Union[bool, float, int]],
-        rank: Optional[int],
-        table_to_sizes_mapping: Mapping[str, Tuple[int, int]],
-        eviction_tables: Mapping[str, float],
-    ) -> None:
-        pass
+@dataclass
+class PruningLogBase(object):
+    pass
 
+
+class PruningLogger(ABC):
+    @classmethod
     @abstractmethod
-    def log_run_info(
-        self,
-    ) -> None:
+    @contextmanager
+    def pruning_logger(
+        cls,
+        event: str,
+        trainer: Optional[str] = None,
+        publisher: Optional[str] = None,
+    ) -> Generator[object, None, None]:
         pass
 
 
@@ -35,26 +38,12 @@ class PruningLoggerDefault(PruningLogger):
     noop logger as a default
     """
 
-    def __init__(
-        self,
-    ) -> None:
-        """
-        Initialize PruningScubaLogger.
-        """
-        pass
-
-    def log_table_eviction_info(
-        self,
-        iteration: Optional[Union[bool, float, int]],
-        rank: Optional[int],
-        table_to_sizes_mapping: Mapping[str, Tuple[int, int]],
-        eviction_tables: Mapping[str, float],
-    ) -> None:
-        logger.info(
-            f"iteration={iteration}, rank={rank}, table_to_sizes_mapping={table_to_sizes_mapping}, eviction_tables={eviction_tables}"
-        )
-
-    def log_run_info(
-        self,
-    ) -> None:
-        pass
+    @classmethod
+    @contextmanager
+    def pruning_logger(
+        cls,
+        event: str,
+        trainer: Optional[str] = None,
+        publisher: Optional[str] = None,
+    ) -> Generator[object, None, None]:
+        yield SimpleNamespace()
