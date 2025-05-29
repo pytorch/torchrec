@@ -48,6 +48,11 @@ from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
 )
 from torchrec.distributed.train_pipeline.pipeline_context import TrainPipelineContext
+from torchrec.distributed.train_pipeline.pipeline_stage import (
+    PipelineStage,
+    SparseDataDistUtil,
+    StageOut,
+)
 from torchrec.distributed.train_pipeline.postproc import PipelinedPostproc
 from torchrec.distributed.train_pipeline.runtime_forwards import (
     EmbeddingPipelinedForward,
@@ -73,13 +78,7 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     TrainPipelineSparseDistCompAutograd,
 )
 from torchrec.distributed.train_pipeline.types import CallArgs
-from torchrec.distributed.train_pipeline.utils import (
-    DataLoadingThread,
-    get_h2d_func,
-    PipelineStage,
-    SparseDataDistUtil,
-    StageOut,
-)
+from torchrec.distributed.train_pipeline.utils import DataLoadingThread, get_h2d_func
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingEnv,

@@ -395,7 +395,7 @@ class RecMetricModule(nn.Module):
         return state_aggregated
 
     def get_pre_compute_states(
-        self, pg: Union[dist.ProcessGroup, DeviceMesh]
+        self, pg: Optional[Union[dist.ProcessGroup, DeviceMesh]] = None
     ) -> Dict[str, Dict[str, Dict[str, Union[torch.Tensor, List[torch.Tensor]]]]]:
         """
         This function returns the states per rank for each metric to be saved. The states are are aggregated by the state defined reduction_function.
@@ -411,16 +411,16 @@ class RecMetricModule(nn.Module):
         applied to them. Typical state dict exposes just the metric states that live on the rank it's called from.
 
         Args:
-            pg (Union[dist.ProcessGroup, DeviceMesh]): the process group to use for all gather.
-            reduce_metrics (bool): whether to reduce the metrics or not. Default is True.
+            pg (Optional[Union[dist.ProcessGroup, DeviceMesh]]): the process group to use for all gather, defaults to WORLD process group.
 
         Returns:
             Dict[str, Dict[str, Dict[str, torch.Tensor]]]: the states for each metric to be saved
         """
-        if isinstance(pg, DeviceMesh):
-            process_group: dist.ProcessGroup = pg.get_group(mesh_dim="shard")
-        else:
-            process_group: dist.ProcessGroup = pg
+        pg = pg if pg is not None else dist.group.WORLD
+        process_group: dist.ProcessGroup = (  # pyre-ignore[9]
+            pg.get_group(mesh_dim="shard") if isinstance(pg, DeviceMesh) else pg
+        )
+
         aggregated_states = {}
         world_size = dist.get_world_size(
             process_group

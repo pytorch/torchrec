@@ -671,7 +671,9 @@ class ShardedManagedCollisionCollection(
                     vals.append(feature_split.values() + offset)
                 remapped_ids_ret.append(torch.cat(vals).view(-1, 1))
             else:
-                remapped_ids_ret.append(kjt.values() + self._table_to_offset[tables[0]])
+                remapped_ids_ret.append(
+                    (kjt.values() + self._table_to_offset[tables[0]]).unsqueeze(-1)
+                )
         return remapped_ids_ret
 
     def global_to_local_index(
