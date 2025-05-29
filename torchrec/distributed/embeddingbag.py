@@ -1531,15 +1531,9 @@ class ShardedEmbeddingBagCollection(
         current_state = self.state_dict()
         # TODO: Save Optimizers
 
-        saved_weights = {}
         # TODO: Saving lookups tensors to CPU to eventually avoid recreating them completely again
-        for i, lookup in enumerate(self._lookups):
-            for attribute, tbe_module in lookup.named_modules():
-                if type(tbe_module) is DenseTableBatchedEmbeddingBagsCodegen:
-                    saved_weights[str(i) + "." + attribute] = tbe_module.weights.cpu()
-                    # Note: lookup.purge should delete tbe_module and weights
-                    # del tbe_module.weights
-                    # del tbe_module
+        # TODO: Ensure lookup tensors are actually being deleted
+        for _, lookup in enumerate(self._lookups):
             # pyre-ignore
             lookup.purge()
 
@@ -1602,6 +1596,12 @@ class ShardedEmbeddingBagCollection(
             )
             for embedding_configs in self.sharding_type_to_sharding_infos.values()
         ]
+
+        # Reset input dists
+        self._has_uninitialized_input_dist = True
+        self._input_dists: List[nn.Module] = []
+        self._features_order: List[int] = []
+        self._feature_splits: List[int] = []
 
         self._create_lookups()
         self._update_output_dist()
