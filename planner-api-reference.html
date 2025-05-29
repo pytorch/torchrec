@@ -503,6 +503,18 @@ for sharding.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.planner.planners.EmbeddingShardingPlanner.hash_planner_context_inputs">
+<span class="sig-name descname"><span class="pre">hash_planner_context_inputs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.hash_planner_context_inputs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates a hash for all planner inputs except for partitioner, proposer, performance model, and stats.
+These are all the inputs needed to verify whether a previously generated sharding plan is still valid in a new context.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Generates a hash capturing topology, batch size, enumerator, storage reservation, stats and constraints.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan">
 <span class="sig-name descname"><span class="pre">plan</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sharders</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">ModuleSharder</span><span class="p"><span class="pre">[</span></span><span class="pre">Module</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrec.distributed.types.ShardingPlan" title="torchrec.distributed.types.ShardingPlan"><span class="pre">ShardingPlan</span></a></span></span><a class="headerlink" href="#torchrec.distributed.planner.planners.EmbeddingShardingPlanner.plan" title="Permalink to this definition">¶</a></dt>
 <dd><p>Provides an optimized sharding plan for a given module with shardable parameters
