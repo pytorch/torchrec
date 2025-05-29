@@ -2354,24 +2354,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             )
             if segment == len(self._keys):
                 # no torch slicing required
-                split_list.append(
-                    KeyedJaggedTensor(
-                        keys=self._keys,
-                        values=self._values,
-                        weights=self.weights_or_none(),
-                        lengths=self._lengths,
-                        offsets=self._offsets,
-                        stride=self._stride,
-                        stride_per_key_per_rank=stride_per_key_per_rank,
-                        stride_per_key=None,
-                        length_per_key=self._length_per_key,
-                        lengths_offset_per_key=None,
-                        offset_per_key=self._offset_per_key,
-                        index_per_key=self._index_per_key,
-                        jt_dict=self._jt_dict,
-                        inverse_indices=None,
-                    )
-                )
+                split_list.append(self)
             elif segment == 0:
                 empty_int_list: List[int] = torch.jit.annotate(List[int], [])
                 split_list.append(
