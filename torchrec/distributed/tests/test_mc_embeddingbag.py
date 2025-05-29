@@ -210,6 +210,8 @@ def _test_sharding(  # noqa C901
 
         apply_optimizer_in_backward(
             RowWiseAdagrad,
+            # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but got
+            #  `Iterable[Union[Module, Tensor]]`.
             [
                 sparse_arch._mc_ebc._embedding_bag_collection.embedding_bags[
                     "table_0"
@@ -276,6 +278,8 @@ def _test_sharding_and_remapping(  # noqa C901
 
         apply_optimizer_in_backward(
             RowWiseAdagrad,
+            # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but got
+            #  `Iterable[Union[Module, Tensor]]`.
             [
                 sparse_arch._mc_ebc._embedding_bag_collection.embedding_bags[
                     "table_0"
@@ -386,6 +390,8 @@ def _test_in_place_embd_weight_update(  # noqa C901
         )
         apply_optimizer_in_backward(
             RowWiseAdagrad,
+            # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but got
+            #  `Iterable[Union[Module, Tensor]]`.
             [
                 sparse_arch._mc_ebc._embedding_bag_collection.embedding_bags[
                     "table_0"

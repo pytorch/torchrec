@@ -284,6 +284,8 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
         # Case 2: Running `.apply()` after running first forward pass will succeed.
         net(torch.tensor(2.0))
         net.apply(init_weights)
+        # pyre-fixme[6]: For 1st argument expected `Tensor` but got `Union[Tensor,
+        #  Module]`.
         self.assertTrue(torch.allclose(net[0].param, torch.tensor(7.0)))
 
         # Case 3: Running `.lazy_apply()` without running first forward pass will succeed,

@@ -58,8 +58,10 @@ class ModelInput(Pipelineable):
         """
         self.float_features.record_stream(stream)
         if isinstance(self.idlist_features, KeyedJaggedTensor):
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             self.idlist_features.record_stream(stream)
         if isinstance(self.idscore_features, KeyedJaggedTensor):
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             self.idscore_features.record_stream(stream)
         self.label.record_stream(stream)
 

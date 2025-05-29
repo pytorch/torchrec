@@ -997,6 +997,8 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         )
 
     @torch.jit.unused
+    # pyre-fixme[14]: `record_stream` overrides method defined in `Multistreamable`
+    #  inconsistently.
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         self._values.record_stream(stream)
         weights = self._weights
@@ -2705,6 +2707,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return _jt_dict
 
     @torch.jit.unused
+    # pyre-fixme[14]: `record_stream` overrides method defined in `Multistreamable`
+    #  inconsistently.
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         self._values.record_stream(stream)
         weights = self._weights
@@ -3317,6 +3321,8 @@ class KeyedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         return ret
 
     @torch.jit.unused
+    # pyre-fixme[14]: `record_stream` overrides method defined in `Multistreamable`
+    #  inconsistently.
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         self._values.record_stream(stream)
 
