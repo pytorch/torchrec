@@ -41,13 +41,18 @@ from torchrec.distributed.planner.utils import prod, sharder_name
 from torchrec.distributed.types import (
     CacheStatistics,
     CommOp,
+    KeyValueParams,
     ModuleSharder,
     PipelineType,
     ShardingType,
 )
-from torchrec.modules.embedding_configs import DATA_TYPE_NUM_BITS
+from torchrec.distributed.utils import none_throws
+from torchrec.modules.embedding_configs import BaseEmbeddingConfig, DATA_TYPE_NUM_BITS
 
-from torchrec.modules.embedding_modules import EmbeddingBagCollectionInterface
+from torchrec.modules.embedding_modules import (
+    EmbeddingBagCollectionInterface,
+    EmbeddingCollectionInterface,
+)
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -985,11 +990,12 @@ class EmbeddingStorageEstimator(ShardEstimator):
         if not sharder_map:
             assert not sharding_options, "sharder_map not provided for sharding_options"
             return
-
+        virtual_table_sharding_options_and_embedding_configs: List[
+            Tuple[ShardingOption, BaseEmbeddingConfig]
+        ] = []
         for sharding_option in sharding_options:
             sharder_key = sharder_name(type(sharding_option.module[1]))
             sharder = sharder_map[sharder_key]
-
             caching_ratio = sharding_option.cache_load_factor
             # TODO: remove after deprecating fused_params in sharder
             if caching_ratio is None:
@@ -998,20 +1004,20 @@ class EmbeddingStorageEstimator(ShardEstimator):
                     if hasattr(sharder, "fused_params") and sharder.fused_params
                     else None
                 )
-
-            num_poolings = (
-                cast(List[float], self._constraints[sharding_option.name].num_poolings)
+            constraints: Optional[ParameterConstraints] = (
+                self._constraints.get(sharding_option.name, None)
                 if self._constraints
-                and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].num_poolings
+                else None
+            )
+            num_poolings = (
+                constraints.num_poolings
+                if constraints and constraints.num_poolings
                 else [1.0] * sharding_option.num_inputs
             )
             assert len(num_poolings) == sharding_option.num_inputs
             batch_sizes = (
-                cast(List[int], self._constraints[sharding_option.name].batch_sizes)
-                if self._constraints
-                and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].batch_sizes
+                constraints.batch_sizes
+                if constraints and constraints.batch_sizes
                 else [sharding_option.batch_size] * sharding_option.num_inputs
             )
 
@@ -1060,6 +1066,21 @@ class EmbeddingStorageEstimator(ShardEstimator):
             )
             for shard, storage in zip(sharding_option.shards, shard_storages):
                 shard.storage = storage
+
+            if hasattr(sharding_option.module[1], "_embedding_configs"):
+                embedding_config = [
+                    config
+                    for config in sharding_option.module[1]._embedding_configs  # pyre-ignore
+                    if config.name == sharding_option.name
+                ]
+                if embedding_config and embedding_config[0].use_virtual_table:
+                    virtual_table_sharding_options_and_embedding_configs.append(
+                        (sharding_option, embedding_config[0])
+                    )
+
+        calculate_key_value_kernel_storage(
+            virtual_table_sharding_options_and_embedding_configs, self._constraints
+        )
 
 
 def calculate_pipeline_io_cost(
@@ -1151,6 +1172,7 @@ def calculate_shard_storages(
         output_data_type_size (int): number of bytes of output data type.
         pipeline_type: PipelineType: pipeline type if for training.
         is_inference: bool, whether the model is for inference.
+        key_value_params (Optional[KeyValueParams]): fused params for SSD/DRAM KV cache.
 
     Returns:
         List[Storage]: storage object for each device in topology.
@@ -1184,13 +1206,6 @@ def calculate_shard_storages(
         # TODO(wangj): for ssd/dram kv, most likely we use absolute L1 cache size instead of caching ratio, as denominator is huge
         hbm_storage = round(ddr_storage * caching_ratio)
         table_cached = True
-    if compute_kernel in {
-        EmbeddingComputeKernel.KEY_VALUE.value,
-        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
-        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
-    }:
-        # TODO(wangj): update this to the L2 cache usage and add SSD usage
-        ddr_storage = 0
 
     optimizer_class = getattr(tensor, "_optimizer_classes", [None])[0]
 
@@ -1211,6 +1226,18 @@ def calculate_shard_storages(
         optimizer_class=optimizer_class,
         is_inference=is_inference,
     )
+
+    if compute_kernel in {
+        EmbeddingComputeKernel.KEY_VALUE.value,
+        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
+    }:
+        # TODO(wangj): is this expected?
+
+        # In case of SSD/DRAM KV cache, we calculate the sizes at TBE level instead of shard level
+        # We set them 0 here and add them in calculate_key_value_kernel_storage
+        hbm_specific_sizes = [0 for _ in hbm_specific_sizes]
+        ddr_specific_sizes = [0 for _ in ddr_specific_sizes]
 
     hbm_sizes: List[int] = [
         (
@@ -1565,6 +1592,84 @@ def _get_optimizer_multipler(
         return 1 / shape[-1]
     else:
         return 1
+
+
+def calculate_key_value_kernel_storage(
+    sharding_options_and_embedding_configs: List[
+        Tuple[ShardingOption, BaseEmbeddingConfig]
+    ],
+    constraints: Optional[Dict[str, ParameterConstraints]] = None,
+) -> None:
+    """
+    Estimates the storage cost of tables using key value kernels.
+
+    This function estimates the storage requirements for tables that use key-value
+    kernels in an embedding collection. It assumes that all virtual tables will share the same TBE caches and divides the cache sizes proportionally to the number of rows.
+
+    Args:
+        sharding_options_and_embedding_configs (List[Tuple[ShardingOption, BaseEmbeddingConfig]]):
+            A list of tuples containing sharding options and their corresponding
+            embedding configurations for virtual tables in the EmbeddingCollection.
+        constraints (Optional[Dict[str, ParameterConstraints]]): A dictionary of
+            parameter constraints, which must include key-value parameters for
+            storage estimation.
+    """
+    if len(sharding_options_and_embedding_configs) == 0:
+        return
+    # TODO: Ideally we should compute the GroupedEmbeddingConfigs to determine correctly the number of TBEs that will be created.
+    # However, that requires actually sharding the module, which we don't do in planner. So for now, we assume that all tables will be in the same TBE.
+    # We should be able to create sharded_tables_per_rank and call group_tables(0) without sharding the module.
+
+    compute_kernel = sharding_options_and_embedding_configs[0][0].compute_kernel
+    assert compute_kernel in {
+        EmbeddingComputeKernel.KEY_VALUE.value,
+        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
+    }, "Incorrect compute kernel for virtual table. Expected KEY_VALUE or SSD_VIRTUAL_TABLE or DRAM_VIRTUAL_TABLE, got {}".format(
+        compute_kernel
+    )
+    key_value_params: Optional[KeyValueParams] = none_throws(
+        none_throws(
+            constraints,
+            "Expected constraints with KeyValueParams populated for Embedding Collection with Virtual Tables",
+        ).get(sharding_options_and_embedding_configs[0][0].name, None),
+        "Expected KeyValueParams in constraints for embedding compute kernel: {}".format(
+            compute_kernel
+        ),
+    ).key_value_params
+    assert (
+        key_value_params is not None
+    ), "key_value_params cannot be None in ParameterConstraints of planner for embedding compute kernel: {}".format(
+        compute_kernel
+    )
+    assert (
+        key_value_params.max_l1_cache_size is not None
+    ), "key_value_params.max_l1_cache_size cannot be None in ParameterConstraints of planner for embedding compute kernel: {}".format(
+        compute_kernel
+    )
+    assert (
+        key_value_params.l2_cache_size is not None
+    ), "key_value_params.l2_cache_size cannot be None in ParameterConstraints of planner for embedding compute kernel: {}".format(
+        compute_kernel
+    )
+    # In case of SSD/DRAM KV cache, we distribute the L1 and L2 cache sizes to each virtual table shard proportionally to the number of rows.
+    total_rows: int = sum(
+        [
+            embedding_config.num_embeddings
+            for _, embedding_config in sharding_options_and_embedding_configs
+        ]
+    )
+    # L1 cache size in in MB
+    hbm_size = none_throws(key_value_params.max_l1_cache_size) * 1024 * 1024
+
+    # L2 cache size in in GB
+    ddr_size = none_throws(key_value_params.l2_cache_size) * 1024 * 1024 * 1024
+    for sharding_option, embedding_config in sharding_options_and_embedding_configs:
+        rows: int = embedding_config.num_embeddings
+        for shard in sharding_option.shards:
+            # Each shard has the same L1 and L2 cache sizes
+            none_throws(shard.storage).hbm += math.ceil(hbm_size * rows / total_rows)
+            none_throws(shard.storage).ddr += math.ceil(ddr_size * rows / total_rows)
 
 
 class EmbeddingOffloadStats(CacheStatistics):
