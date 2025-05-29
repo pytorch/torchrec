@@ -498,14 +498,10 @@ class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
 
 
 @skip_if_asan_class
-@unittest.skipIf(
-    torch.cuda.device_count() <= 3,
-    "Not enough GPUs, this test requires at least four GPUs",
-)
 class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
     @unittest.skipIf(
-        torch.cuda.device_count() <= 3,
-        "Not enough GPUs, this test requires at least four GPUs",
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
     )
     @given(  # pyre-ignore
         sharder_type=st.sampled_from(
