@@ -598,6 +598,67 @@ parameters in the result. Defaults to True.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.reshard">
+<span class="sig-name descname"><span class="pre">reshard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sharded_module_fqn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">changed_shard_to_params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ParameterSharding</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.reshard" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reshards an already-sharded module in the DMP given a set of ParameterShardings to change placements.</p>
+<p>This method allows you to dynamically change the sharding strategy for a specific module
+without recreating the entire DMP. It’s particularly useful for:
+1. Adapting to changing requirements during training
+2. Implementing progressive sharding strategies
+3. Rebalancing load across devices
+4. A/B Testing different sharding plans</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path_to_sharded_module</strong> (<em>str</em>) – The path to the sharded module in the DMP.
+For example, “sparse.ebc”.</p></li>
+<li><p><strong>changed_shard_to_params</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><em>ParameterSharding</em><em>]</em>) – A dictionary mapping
+parameter names to their new ParameterSharding configurations. Includes
+only the shards that needs to be moved.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p><a href="#id1"><span class="problematic" id="id2">``</span></a>`
+# Original sharding plan might have table sharded across 2 GPUs
+original_plan = {</p>
+<blockquote>
+<div><dl class="simple">
+<dt>“table_0’: ParameterSharding(</dt><dd><p>sharding_type=”table_wise”,
+ranks=[0, 1, 2, 3],
+sharding_spec=EnumerableShardingSpec(…)</p>
+</dd>
+</dl>
+<p>)</p>
+</div></blockquote>
+<p>}</p>
+<p># New sharding plan to shard across 4 GPUs
+new_plan = {</p>
+<blockquote>
+<div><dl class="simple">
+<dt>“weight”: ParameterSharding(</dt><dd><p>sharding_type=”table_wise”,
+ranks=[0, 1, 2, 3],
+sharding_spec=EnumerableShardingSpec(…)</p>
+</dd>
+</dl>
+<p>)</p>
+</div></blockquote>
+<p>}</p>
+<p># Helper function for only selecting the delta between original and new plan
+changed_sharding_params = output_sharding_plan_delta(new_plan)</p>
+<p># Reshard the module and redistribute the tensors
+model.reshard(“embedding_module”, changed_sharding_params)
+<a href="#id3"><span class="problematic" id="id4">``</span></a><a href="#id5"><span class="problematic" id="id6">`</span></a></p>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>The sharder for the module must implement a <cite>reshard</cite> method</p></li>
+<li><p>Resharding involves redistributing tensor data across devices, which can be expensive</p></li>
+<li><p>After resharding, the optimizer state is maintained for the module</p></li>
+<li><p>The sharding plan is updated to reflect the new configuration</p></li>
+</ul>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrec.distributed.model_parallel.DistributedModelParallel.state_dict">
 <span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#torchrec.distributed.model_parallel.DistributedModelParallel.state_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Return a dictionary containing references to the whole state of the module.</p>
