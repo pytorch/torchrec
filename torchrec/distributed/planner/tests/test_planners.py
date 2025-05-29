@@ -14,10 +14,15 @@ import torch
 from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
-from torchrec.distributed.planner import ParameterConstraints
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.perf_models import NoopPerfModel
 from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
 from torchrec.distributed.planner.proposers import EmbeddingOffloadScaleupProposer
+from torchrec.distributed.planner.storage_reservations import (
+    HeuristicalStorageReservation,
+)
 from torchrec.distributed.planner.types import (
+    ParameterConstraints,
     PlannerError,
     PlannerErrorType,
     ShardingOption,
@@ -292,6 +297,79 @@ class TestEmbeddingShardingPlannerWithConstraints(unittest.TestCase):
                 constraint.bounds_check_mode, sharding_option.bounds_check_mode
             )
             self.assertEqual(constraint.is_weighted, sharding_option.is_weighted)
+
+
+class TestEmbeddingShardingHashPlannerContextInputs(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.topology = Topology(
+            local_world_size=8,
+            world_size=1,
+            compute_device="cuda",
+        )
+        self.batch_size = 128
+        self.enumerator = EmbeddingEnumerator(
+            topology=self.topology, batch_size=self.batch_size
+        )
+        self.storage_reservation = HeuristicalStorageReservation(percentage=0.15)
+        self.perf_model = NoopPerfModel(topology=self.topology)
+        self.constraints = {"table1": ParameterConstraints()}
+
+    def test_hash_equality(self) -> None:
+        planner1 = EmbeddingShardingPlanner(
+            topology=self.topology,
+            batch_size=self.batch_size,
+            enumerator=self.enumerator,
+            storage_reservation=self.storage_reservation,
+            performance_model=self.perf_model,
+            constraints=self.constraints,
+        )
+
+        planner2 = EmbeddingShardingPlanner(
+            topology=self.topology,
+            batch_size=self.batch_size,
+            enumerator=self.enumerator,
+            storage_reservation=self.storage_reservation,
+            performance_model=self.perf_model,
+            constraints=self.constraints,
+        )
+
+        self.assertEqual(
+            planner1.hash_planner_context_inputs(),
+            planner2.hash_planner_context_inputs(),
+            "Hashes should be equal for identical planners",
+        )
+
+    def test_hash_inequality(self) -> None:
+        planner1 = EmbeddingShardingPlanner(
+            topology=self.topology,
+            batch_size=self.batch_size,
+            enumerator=self.enumerator,
+            storage_reservation=self.storage_reservation,
+            performance_model=self.perf_model,
+            constraints=self.constraints,
+        )
+
+        different_topology = Topology(
+            local_world_size=8,
+            world_size=2,  # Different world size
+            compute_device="cuda",
+        )
+
+        planner2 = EmbeddingShardingPlanner(
+            topology=different_topology,  # Different topology
+            batch_size=self.batch_size * 2,  # Different batch size
+            enumerator=self.enumerator,
+            storage_reservation=self.storage_reservation,
+            performance_model=self.perf_model,
+            constraints=self.constraints,
+        )
+
+        self.assertNotEqual(
+            planner1.hash_planner_context_inputs(),
+            planner2.hash_planner_context_inputs(),
+            "Hashes should be different for different planners",
+        )
 
 
 class AutoSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
