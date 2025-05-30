@@ -135,6 +135,8 @@ class KJTList(Multistreamable):
         return iter(self.features)
 
     @torch.jit._drop
+    # pyre-fixme[14]: `record_stream` overrides method defined in `Multistreamable`
+    #  inconsistently.
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features:
             feature.record_stream(stream)
@@ -160,6 +162,7 @@ class InputDistOutputs(Multistreamable):
 
     def record_stream(self, stream: torch.Stream) -> None:
         for feature in self.features:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             feature.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
             self.unbucketize_permute_tensor.record_stream(stream)
@@ -189,6 +192,7 @@ class ListOfKJTList(Multistreamable):
     @torch.jit._drop
     def record_stream(self, stream: torch.Stream) -> None:
         for feature in self.features_list:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             feature.record_stream(stream)
 
     @torch.jit._drop

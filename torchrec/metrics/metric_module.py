@@ -377,6 +377,8 @@ class RecMetricModule(nn.Module):
         for task, metric_computation in zip(tasks, metric_computations):
             inputs = []
             state_aggregated[task.name] = {}
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `items`.
             for attr, reduction_fn in metric_computation._reductions.items():
                 inputs.append((attr, getattr(metric_computation, attr), reduction_fn))
 
@@ -427,7 +429,10 @@ class RecMetricModule(nn.Module):
         )  # Under 2D parallel context, this should be sharding world size
 
         for metric in self.rec_metrics.rec_metrics:
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `value`.
             aggregated_states[metric._namespace.value] = self._get_metric_states(
+                # pyre-fixme[6]: For 1st argument expected `RecMetric` but got `Module`.
                 metric,
                 world_size,
                 process_group,
@@ -459,9 +464,18 @@ class RecMetricModule(nn.Module):
             None
         """
         for metric in self.rec_metrics.rec_metrics:
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `value`.
             states = source[metric._namespace.value]
             for task, metric_computation in zip(
-                metric._tasks, metric._metrics_computations
+                # pyre-fixme[6]: For 1st argument expected `Iterable[_T1]` but got
+                #  `Union[Module, Tensor]`.
+                # pyre-fixme[6]: For 2nd argument expected `Iterable[_T2]` but got
+                #  `Union[Module, Tensor]`.
+                metric._tasks,
+                # pyre-fixme[6]: For 2nd argument expected `Iterable[_T2]` but got
+                #  `Union[Module, Tensor]`.
+                metric._metrics_computations,
             ):
                 state = states[task.name]
                 for attr, tensor in state.items():

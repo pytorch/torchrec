@@ -181,6 +181,7 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
         else:
             # in case of EBC, embeddings are KeyedTensor
             assert isinstance(embeddings, KeyedTensor)
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             embeddings.record_stream(cur_stream)
             tensor = embeddings.values()
             detached_tensor = tensor.detach().requires_grad_()

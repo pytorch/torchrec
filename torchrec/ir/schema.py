@@ -54,3 +54,4 @@ class PositionWeightedModuleCollectionMetadata:
 class KTRegroupAsDictMetadata:
     groups: List[List[str]]
     keys: List[str]
+    emb_dtype: Optional[str]

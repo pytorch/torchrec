@@ -60,6 +60,7 @@ class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
                     continue
                 value.record_stream(stream)
         if self.remapped_kjt is not None:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             self.remapped_kjt.record_stream(stream)
 
 

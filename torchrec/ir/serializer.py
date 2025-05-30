@@ -411,6 +411,11 @@ class KTRegroupAsDictJsonSerializer(JsonSerializer):
             # pyre-fixme[6]: For 2nd argument expected `List[List[str]]` but got
             #  `Union[Module, Tensor]`.
             groups=module._groups,
+            emb_dtype=(
+                module._emb_dtype.value  # pyre-ignore[16]
+                if module._emb_dtype is not None
+                else None
+            ),
         )
         return metadata.__dict__
 
@@ -425,6 +430,9 @@ class KTRegroupAsDictJsonSerializer(JsonSerializer):
         return KTRegroupAsDict(
             keys=metadata.keys,
             groups=metadata.groups,
+            emb_dtype=(
+                DataType(metadata.emb_dtype) if metadata.emb_dtype is not None else None
+            ),
         )
 
 

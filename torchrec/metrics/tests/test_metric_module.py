@@ -643,7 +643,7 @@ def metric_module_gather_state(
             metric_module.update(test_batch)
 
         computed_value = metric_module.compute()
-        states = metric_module.get_pre_compute_states(pg=ctx.pg)  # pyre-ignore[6]
+        states = metric_module.get_pre_compute_states(pg=ctx.pg)
 
         torch.distributed.barrier(ctx.pg)
         # Compare to computing metrics on metric module that loads from pre_compute_states

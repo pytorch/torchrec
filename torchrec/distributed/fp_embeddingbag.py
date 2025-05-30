@@ -83,6 +83,8 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
             self._is_collection = True
         else:
             self._feature_processors = torch.nn.ModuleDict(
+                # pyre-fixme[29]: `Union[(self: ModuleDict) -> ItemsView[str,
+                #  Module], Module, Tensor]` is not a function.
                 module._feature_processors.items()
             )
             self._is_collection = False

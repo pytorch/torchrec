@@ -230,6 +230,7 @@ class ShardedQuantEmbeddingModuleState(
                         qmetadata = ShardMetadata(
                             shard_offsets=metadata.shard_offsets,
                             shard_sizes=[
+                                # pyre-fixme[16]: `Optional` has no attribute `shape`.
                                 tbe_split_qparam.shape[0],
                                 tbe_split_qparam.shape[1],
                             ],
@@ -237,6 +238,7 @@ class ShardedQuantEmbeddingModuleState(
                             placement=table.local_metadata.placement,
                         )
                         # TODO(ivankobzarev): "meta" sharding support: cleanup when copy to "meta" moves all tensors to "meta"
+                        # pyre-fixme[16]: `Optional` has no attribute `device`.
                         if qmetadata.placement.device != tbe_split_qparam.device:
                             qmetadata.placement = _remote_device(
                                 tbe_split_qparam.device
@@ -246,6 +248,8 @@ class ShardedQuantEmbeddingModuleState(
                             #  List[Shard]]` but got `Union[Tensor, Module]`.
                             table_name_to_local_shards,
                             table.name,
+                            # pyre-fixme[6]: For 1st argument expected `Tensor` but
+                            #  got `Optional[Tensor]`.
                             Shard(tensor=tbe_split_qparam, metadata=qmetadata),
                         )
                     # end of weight_qscale & weight_qbias section

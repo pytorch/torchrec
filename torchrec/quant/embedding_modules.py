@@ -1081,6 +1081,7 @@ class QuantManagedCollisionEmbeddingCollection(EmbeddingCollection):
         for (
             managed_collision_module
         ) in self._managed_collision_collection._managed_collision_modules.values():
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             managed_collision_module.reset_inference_mode()
 
     def to(

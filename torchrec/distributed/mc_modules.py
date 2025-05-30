@@ -352,6 +352,7 @@ class ShardedManagedCollisionCollection(
                     self._sharding_features[-1].extend(table.feature_names)
                     self._feature_names.extend(table.feature_names)
                     self._managed_collision_modules[table.name] = (
+                        # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                         mc_module.rebuild_with_output_id_range(
                             output_id_range=(
                                 new_min_output_id,
@@ -361,7 +362,9 @@ class ShardedManagedCollisionCollection(
                             device=self._device,
                         )
                     )
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     zch_size = self._managed_collision_modules[table.name].output_size()
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     input_size = self._managed_collision_modules[
                         table.name
                     ].input_size()
@@ -436,11 +439,13 @@ class ShardedManagedCollisionCollection(
         ):
             assert isinstance(sharding, BaseRwEmbeddingSharding)
             feature_num_buckets: List[int] = [
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 self._managed_collision_modules[self._feature_to_table[f]].buckets()
                 for f in sharding_features
             ]
 
             input_sizes: List[int] = [
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 self._managed_collision_modules[self._feature_to_table[f]].input_size()
                 for f in sharding_features
             ]
@@ -622,6 +627,7 @@ class ShardedManagedCollisionCollection(
                                 lengths=kjt.lengths(),
                             )
                         }
+                        # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                         mc_input = mc_module.preprocess(mc_input)
                         output.update(mc_input)
                         ti += 1
@@ -720,7 +726,9 @@ class ShardedManagedCollisionCollection(
                         )
                     }
                     mcm = self._managed_collision_modules[table]
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     mc_input = mcm.profile(mc_input)
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     mc_input = mcm.remap(mc_input)
                     mc_input = self.global_to_local_index(mc_input)
                     output.update(mc_input)
@@ -736,7 +744,9 @@ class ShardedManagedCollisionCollection(
                     )
                 }
                 mcm = self._managed_collision_modules[table]
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 mc_input = mcm.profile(mc_input)
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 mc_input = mcm.remap(mc_input)
                 mc_input = self.global_to_local_index(mc_input)
                 values = mc_input[table].values()
@@ -758,6 +768,7 @@ class ShardedManagedCollisionCollection(
             table,
             managed_collision_module,
         ) in self._managed_collision_modules.items():
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             global_indices_to_evict = managed_collision_module.evict()
             local_indices_to_evict = None
             if global_indices_to_evict is not None:
@@ -773,6 +784,7 @@ class ShardedManagedCollisionCollection(
             table,
             managed_collision_module,
         ) in self._managed_collision_modules.items():
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             open_slots[table] = managed_collision_module.open_slots()
         return open_slots
 
@@ -1054,6 +1066,7 @@ class ShardedQuantManagedCollisionCollection(
                         for x in table.global_metadata.shards_metadata
                     ] + [table.num_embeddings]
                     mc_module = module._managed_collision_modules[table.name]
+                    # pyre-fixme[16]: `Module` has no attribute `_is_inference`.
                     mc_module._is_inference = True
                     self._managed_collision_modules[table.name] = mc_module
                     self._sharding_tables[-1].append(table.name)
@@ -1067,6 +1080,7 @@ class ShardedQuantManagedCollisionCollection(
                         new_min_output_id = global_meta_data[i].shard_offsets[0]
                         new_range_size = global_meta_data[i].shard_sizes[0]
                         self._managed_collision_modules_per_rank[i][table.name] = (
+                            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                             mc_module.rebuild_with_output_id_range(
                                 output_id_range=(
                                     new_min_output_id,
@@ -1089,6 +1103,7 @@ class ShardedQuantManagedCollisionCollection(
                             new_range_size,
                         ]
 
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     input_size = self._managed_collision_modules[
                         table.name
                     ].input_size()
@@ -1150,11 +1165,13 @@ class ShardedQuantManagedCollisionCollection(
                     sharding_features.extend(table.feature_names)
 
             feature_num_buckets: List[int] = [
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 self._managed_collision_modules[self._feature_to_table[f]].buckets()
                 for f in sharding_features
             ]
 
             input_sizes: List[int] = [
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 self._managed_collision_modules[self._feature_to_table[f]].input_size()
                 for f in sharding_features
             ]
@@ -1238,6 +1255,7 @@ class ShardedQuantManagedCollisionCollection(
                                 lengths=kjt.lengths(),
                             )
                         }
+                        # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                         mc_input = mc_module.preprocess(mc_input)
                         output.update(mc_input)
                         ti += 1

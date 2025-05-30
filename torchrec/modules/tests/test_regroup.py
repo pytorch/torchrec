@@ -11,10 +11,12 @@ import unittest
 
 import torch
 import torch.fx
-
+from hypothesis import given, settings, strategies as st, Verbosity
+from torchrec.modules.embedding_configs import data_type_to_dtype
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import _all_keys_used_once, KeyedTensor
 from torchrec.sparse.tests.utils import build_groups, build_kts
+from torchrec.types import DataType
 
 
 class KTRegroupAsDictTest(unittest.TestCase):
@@ -171,3 +173,25 @@ class KTRegroupAsDictTest(unittest.TestCase):
         eager_out = regroup_module(self.kts)
         for key in out.keys():
             torch.allclose(out[key], eager_out[key])
+
+    # pyre-ignore[56]
+    @given(data_type=st.sampled_from([DataType.BF16, DataType.FP16]))
+    @settings(verbosity=Verbosity.verbose, max_examples=20)
+    def test_regroup_cast(self, data_type: DataType) -> None:
+        dtype = data_type_to_dtype(data_type)
+        groups = build_groups(
+            kts=self.kts, num_groups=self.num_groups, skips=True, duplicates=True
+        )
+        assert _all_keys_used_once(self.kts, groups) is False
+
+        regroup_module = KTRegroupAsDict(groups=groups, keys=self.keys)
+        cast_regroup = KTRegroupAsDict(
+            groups=groups, keys=self.keys, emb_dtype=data_type
+        )
+
+        eager_out = regroup_module(self.kts)
+        cast_out = cast_regroup(self.kts)
+
+        for key in eager_out.keys():
+            self.assertEqual(cast_out[key].dtype, dtype)
+            torch.allclose(cast_out[key], eager_out[key].to(dtype))

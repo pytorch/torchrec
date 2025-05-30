@@ -457,6 +457,7 @@ class ShardedInferenceTensorPool(
             ids = dist_input[i]
             values = dist_values[i]
             deduped_ids, dedup_permutation = deterministic_dedup(ids)
+            # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
             shard.update(deduped_ids, values[dedup_permutation])
 
     # pyre-fixme[7]: Expected `Tensor` but got implicit return value of `None`.
