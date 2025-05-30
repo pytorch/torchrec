@@ -108,7 +108,7 @@ class GenericITEPModule(nn.Module):
             self.last_pruned_iter: int = -1
             self.pg: Optional[dist.ProcessGroup] = pg
 
-            if self.lookups is not None:
+            if self.lookups:
                 self.init_itep_state()
             else:
                 logger.info(
