@@ -12,7 +12,7 @@
 import logging
 import operator
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, Union
 
 import torch
 
@@ -32,6 +32,13 @@ from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 DEFAULT_SERIALIZER_CLS = SerializerInterface
 DYNAMIC_DIMS: Dict[str, int] = defaultdict(int)
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+def qualname(m: Union[nn.Module, type[nn.Module]]) -> str:
+    if isinstance(m, nn.Module):
+        return type(m).__module__ + "." + type(m).__qualname__
+    else:
+        return m.__module__ + "." + m.__qualname__
 
 
 def get_device(tensors: List[Optional[torch.Tensor]]) -> Optional[torch.device]:
@@ -115,7 +122,7 @@ def encapsulate_ir_modules(
     preserve_fqns: List[str] = []  # fqns of the serialized modules
     children: List[str] = []  # fqns of the children that need further serialization
     # handle current module, and find the children which need further serialization
-    if type(module).__name__ in serializer.module_to_serializer_cls:
+    if qualname(module) in serializer.module_to_serializer_cls:
         children = serializer.encapsulate_module(module)
         preserve_fqns.append(fqn)
     else:
