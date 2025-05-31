@@ -21,6 +21,7 @@ from torchrec.ir.utils import (
     decapsulate_ir_modules,
     encapsulate_ir_modules,
     mark_dynamic_kjt,
+    qualname,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -524,7 +525,7 @@ class TestJsonSerializer(unittest.TestCase):
 
         eager_out = model(id_list_features)
 
-        JsonSerializer.module_to_serializer_cls["CompoundModule"] = (
+        JsonSerializer.module_to_serializer_cls[qualname(CompoundModule)] = (
             CompoundModuleSerializer
         )
         # Serialize
