@@ -71,7 +71,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
 )
 from torchrec.distributed.utils import CopyableMixin
-from torchrec.inference.modules import set_pruning_data
+from torchrec.inference.modules import set_pruning_data, shard_quant_model
 from torchrec.modules.embedding_configs import (
     data_type_to_sparse_type,
     dtype_to_data_type,
@@ -901,15 +901,15 @@ def shard_qebc(
 
     # We want to leave quant_model unchanged to compare the results with it
     quant_model_copy = copy.deepcopy(mi.quant_model)
-    sharded_model = _shard_modules(
-        module=quant_model_copy,
+    sharded_model, _ = shard_quant_model(
+        model=quant_model_copy,
         # pyre-fixme[6]: For 2nd argument expected
         #  `Optional[List[ModuleSharder[Module]]]` but got `List[TestQuantEBCSharder]`.
         sharders=[sharder],
-        device=device,
-        plan=plan,
+        sharding_device=str(device),
         # pyre-ignore
-        env=ShardingEnv.from_local(world_size=mi.topology.world_size, rank=0),
+        world_size=mi.topology.world_size,
+        sharding_plan=plan,
     )
     return sharded_model
 
