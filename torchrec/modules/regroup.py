@@ -63,16 +63,22 @@ class PermuteMultiEmbedding(torch.nn.Module):
 
     Args:
         groups (List[List[str]]): Groups from KTRegroupAsDict
-
+        multi_device (bool): Whether to move buffers to current guarded device
     """
 
-    def __init__(self, groups: List[List[str]]) -> None:
+    def __init__(self, groups: List[List[str]], multi_device: bool = False) -> None:
         super().__init__()
         self._groups = groups
         self.register_buffer("_permutes", torch.empty(0), persistent=False)
         self.register_buffer("_in_shapes", torch.empty(0), persistent=False)
         self.register_buffer("_out_shapes", torch.empty(0), persistent=False)
         self._out_lengths: Optional[List[int]] = None
+
+        # When multi_device is True, the input values could be on
+        # different devices when the model got loaded,
+        # We need to move buffer to the device of the first value
+        # in the input list.
+        self._multi_device = multi_device
 
     def init_tensors(
         self,
@@ -94,11 +100,21 @@ class PermuteMultiEmbedding(torch.nn.Module):
         self._out_shapes = self._out_shapes.to(device)
 
     def forward(self, values: List[torch.Tensor]) -> List[torch.Tensor]:
+        permutes = self._permutes
+        in_shapes = self._in_shapes
+        out_shapes = self._out_shapes
+        if self._multi_device:
+            device = values[0].device
+            # Non-blocking, assume permute_multi_embedding will be called with in the same stream
+            permutes = permutes.to(device, non_blocking=True)
+            in_shapes = in_shapes.to(device, non_blocking=True)
+            out_shapes = out_shapes.to(device, non_blocking=True)
+
         return torch.ops.fbgemm.permute_multi_embedding(
             values,
-            self._permutes,
-            self._in_shapes,
-            self._out_shapes,
+            permutes,
+            in_shapes,
+            out_shapes,
             self._out_lengths,
         )
 
@@ -118,6 +134,7 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
     Args:
         groups (List[List[str]]): features per output group
         keys (List[str]): key of each output group
+        multi_device (bool): Whether to move buffers to current guarded device
 
     Example::
 
@@ -137,6 +154,7 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         groups: List[List[str]],
         keys: List[str],
         emb_dtype: Optional[DataType] = None,
+        multi_device: bool = False,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
@@ -150,7 +168,7 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         self._use_fbgemm_regroup: bool = False
         self._splits: List[int] = []
         self._idx_key_pairs: List[Tuple[int, str]] = []
-        self._permute_pooled_embs_impl = PermuteMultiEmbedding(groups)
+        self._permute_pooled_embs_impl = PermuteMultiEmbedding(groups, multi_device)
         self._emb_dtype = emb_dtype
 
     def _init_fbgemm_regroup(self, kts: List[KeyedTensor]) -> None:
