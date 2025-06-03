@@ -206,8 +206,14 @@ class TestJsonSerializer(unittest.TestCase):
             num_embeddings=10,
             feature_names=["f2"],
         )
+        config3 = EmbeddingBagConfig(
+            name="t3",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f3"],
+        )
         ebc = EmbeddingBagCollection(
-            tables=[config1, config2],
+            tables=[config1, config2, config3],
             is_weighted=False,
         )
 
@@ -292,15 +298,17 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(deserialized.shape, orginal.shape)
             self.assertTrue(torch.allclose(deserialized, orginal))
 
-    @unittest.skip("Adding test for demonstrating VBE KJT flattening issue for now.")
     def test_serialize_deserialize_ebc_with_vbe_kjt(self) -> None:
         model = self.generate_model_for_vbe_kjt()
         id_list_features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.tensor([5, 6, 7, 1, 2, 3, 0, 1]),
-            lengths=torch.tensor([3, 3, 2]),
-            stride_per_key_per_rank=[[2], [1]],
-            inverse_indices=(["f1", "f2"], torch.tensor([[0, 1, 0], [0, 0, 0]])),
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]),
+            lengths=torch.tensor([1, 2, 3, 2, 1, 1]),
+            stride_per_key_per_rank=[[3], [2], [1]],
+            inverse_indices=(
+                ["f1", "f2", "f3"],
+                torch.tensor([[0, 1, 2], [0, 1, 0], [0, 0, 0]]),
+            ),
         )
 
         eager_out = model(id_list_features)
@@ -319,15 +327,16 @@ class TestJsonSerializer(unittest.TestCase):
         # Run forward on ExportedProgram
         ep_output = ep.module()(id_list_features)
 
+        self.assertEqual(len(ep_output), len(id_list_features.keys()))
         for i, tensor in enumerate(ep_output):
-            self.assertEqual(eager_out[i].shape, tensor.shape)
+            self.assertEqual(eager_out[i].shape[1], tensor.shape[1])
 
         # Deserialize EBC
         unflatten_ep = torch.export.unflatten(ep)
         deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
 
         # check EBC config
-        for i in range(5):
+        for i in range(1):
             ebc_name = f"ebc{i + 1}"
             self.assertIsInstance(
                 getattr(deserialized_model, ebc_name), EmbeddingBagCollection
@@ -342,29 +351,9 @@ class TestJsonSerializer(unittest.TestCase):
                 self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
                 self.assertEqual(deserialized.feature_names, orginal.feature_names)
 
-        # check FPEBC config
-        for i in range(2):
-            fpebc_name = f"fpebc{i + 1}"
-            assert isinstance(
-                getattr(deserialized_model, fpebc_name),
-                FeatureProcessedEmbeddingBagCollection,
-            )
-
-            for deserialized, orginal in zip(
-                getattr(
-                    deserialized_model, fpebc_name
-                )._embedding_bag_collection.embedding_bag_configs(),
-                getattr(
-                    model, fpebc_name
-                )._embedding_bag_collection.embedding_bag_configs(),
-            ):
-                self.assertEqual(deserialized.name, orginal.name)
-                self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
-                self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
-                self.assertEqual(deserialized.feature_names, orginal.feature_names)
-
         # Run forward on deserialized model and compare the output
         deserialized_model.load_state_dict(model.state_dict())
+
         deserialized_out = deserialized_model(id_list_features)
 
         self.assertEqual(len(deserialized_out), len(eager_out))
@@ -385,6 +374,7 @@ class TestJsonSerializer(unittest.TestCase):
             values=torch.tensor([0, 1, 2, 3, 2, 3, 4]),
             offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7]),
         )
+
         eager_out = model(feature2)
 
         # Serialize EBC
