@@ -14,6 +14,8 @@ import operator
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import fbgemm_gpu.sparse_ops  # noqa: F401, E402
+
 import torch
 from torch.autograd.profiler import record_function
 from torch.fx._pytree import register_pytree_flatten_spec, TreeSpec
