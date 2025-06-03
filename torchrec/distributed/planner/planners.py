@@ -437,9 +437,11 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     run_time=end_time - start_time,
                     best_plan=best_plan,
                     constraints=self._constraints,
+                    enumerator=self._enumerator,
                     sharders=sharders,
                     debug=self._debug,
                 )
+            logger.info(f"Found sharding plan {sharding_plan}")
             return sharding_plan
         else:
             global_storage_capacity = reduce(

@@ -696,7 +696,6 @@ def create_test_model(
 
     mi.model = TorchTypesModelInputWrapper(
         TestSparseNN(
-            # pyre-ignore [6]
             tables=mi.tables,
             weighted_tables=mi.weighted_tables,
             num_float_features=mi.num_float_features,
