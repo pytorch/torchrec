@@ -437,7 +437,6 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     run_time=end_time - start_time,
                     best_plan=best_plan,
                     constraints=self._constraints,
-                    enumerator=self._enumerator,
                     sharders=sharders,
                     debug=self._debug,
                 )
