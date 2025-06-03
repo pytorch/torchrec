@@ -441,6 +441,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                     sharders=sharders,
                     debug=self._debug,
                 )
+            logger.info(f"Found sharding plan {sharding_plan}")
             return sharding_plan
         else:
             global_storage_capacity = reduce(
