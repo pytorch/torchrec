@@ -155,13 +155,34 @@ class KTRegroupAsDictTest(unittest.TestCase):
         for key in out.keys():
             torch.allclose(out[key], eager_out[key])
 
+    def test_fx_and_jit_regroup_with_multi_device(self) -> None:
+        groups = build_groups(
+            kts=self.kts, num_groups=self.num_groups, skips=False, duplicates=False
+        )
+        assert _all_keys_used_once(self.kts, groups) is True
+
+        regroup_module = KTRegroupAsDict(groups=groups, keys=self.keys)
+        # first pass
+        regroup_module(self.kts)
+
+        # now trace
+        gm = torch.fx.symbolic_trace(regroup_module)
+        jit_gm = torch.jit.script(gm)
+
+        out = jit_gm(self.kts)
+        eager_out = regroup_module(self.kts)
+        for key in out.keys():
+            torch.allclose(out[key], eager_out[key])
+
     def test_fx_and_jit_regroup_skips_and_duplicates(self) -> None:
         groups = build_groups(
             kts=self.kts, num_groups=self.num_groups, skips=True, duplicates=True
         )
         assert _all_keys_used_once(self.kts, groups) is False
 
-        regroup_module = KTRegroupAsDict(groups=groups, keys=self.keys)
+        regroup_module = KTRegroupAsDict(
+            groups=groups, keys=self.keys, multi_device=True
+        )
         # first pass
         regroup_module(self.kts)
 
