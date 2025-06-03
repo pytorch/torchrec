@@ -88,7 +88,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 else:
                     self._replicate_params.append(param)
         logger.info(
-            f"Optimizer found {sharded_param_cnt} dist params and {len(self._replicate_params)} replicate params."
+            f"Clipping [Rank {dist.get_rank()}] Optimizer found {sharded_param_cnt} dist params and {len(self._replicate_params)} replicate params."
         )
 
         # Sanity check: this path is currently not used in any production.
