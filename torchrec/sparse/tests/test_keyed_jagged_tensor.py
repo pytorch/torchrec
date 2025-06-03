@@ -1017,6 +1017,23 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             lengths=torch.tensor([], device=torch.device("meta")),
         )
 
+    def test_flatten_unflatten_with_vbe(self) -> None:
+        kjt = KeyedJaggedTensor(
+            keys=["f1", "f2"],
+            values=torch.tensor([5, 6, 7, 1, 2, 3, 0, 1]),
+            lengths=torch.tensor([3, 3, 2]),
+            stride_per_key_per_rank=[[2], [1]],
+            inverse_indices=(["f1", "f2"], torch.tensor([[0, 1, 0], [0, 0, 0]])),
+        )
+
+        flat_kjt, spec = pytree.tree_flatten(kjt)
+        unflattened_kjt = pytree.tree_unflatten(flat_kjt, spec)
+
+        self.assertEqual(
+            kjt.stride_per_key_per_rank(), unflattened_kjt.stride_per_key_per_rank()
+        )
+        self.assertEqual(kjt.inverse_indices(), unflattened_kjt.inverse_indices())
+
 
 class TestKeyedJaggedTensorScripting(unittest.TestCase):
     def test_scriptable_forward(self) -> None:
