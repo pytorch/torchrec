@@ -237,7 +237,7 @@ class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
         state: Dict[Any, Any] = {}
         param_group: Dict[str, Any] = {
             "params": [],
-            "lr": emb_module.get_learning_rate(),
+            "lr": emb_module.optimizer_args.learning_rate,
         }
 
         params: Dict[str, Union[torch.Tensor, ShardedTensor]] = {}
@@ -577,7 +577,7 @@ class EmbeddingFusedOptimizer(FusedOptimizer):
         state: Dict[Any, Any] = {}
         param_group: Dict[str, Any] = {
             "params": [],
-            "lr": emb_module.get_learning_rate(),
+            "lr": emb_module.optimizer_args.learning_rate,
         }
 
         params: Dict[str, Union[torch.Tensor, ShardedTensor]] = {}
