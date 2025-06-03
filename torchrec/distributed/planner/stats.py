@@ -37,7 +37,6 @@ from torchrec.distributed.planner.storage_reservations import (
 )
 from torchrec.distributed.planner.types import (
     CriticalPathEstimate,
-    Enumerator,
     ParameterConstraints,
     Perf,
     ShardingOption,
@@ -158,7 +157,6 @@ class EmbeddingStats(Stats):
         best_plan: List[ShardingOption],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
-        enumerator: Optional[Enumerator] = None,
         debug: bool = True,
     ) -> None:
         """
@@ -1135,7 +1133,6 @@ class NoopEmbeddingStats(Stats):
         best_plan: List[ShardingOption],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
-        enumerator: Optional[Enumerator] = None,
         debug: bool = True,
     ) -> None:
         pass
