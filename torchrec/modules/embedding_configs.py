@@ -249,6 +249,8 @@ class EmbeddingBagConfig(BaseEmbeddingConfig):
     """
 
     pooling: PoolingType = PoolingType.SUM
+    # if True, gradient w.r.t. weight matrix will be a sparse tensor
+    sparse: bool = False
 
 
 @dataclass
