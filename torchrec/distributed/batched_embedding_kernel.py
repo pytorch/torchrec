@@ -303,7 +303,7 @@ class ZeroCollisionKeyValueEmbeddingFusedOptimizer(FusedOptimizer):
                 sharded_t._local_shards[0].tensor
                 for sharded_t in self._sharded_embedding_weight_ids
             ]
-            if self._sharded_embedding_weight_ids is not None
+            if self._sharded_embedding_weight_ids
             else None
         )
 
@@ -1439,7 +1439,13 @@ class ZeroCollisionKeyValueEmbedding(
         )
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
-            emb_table.local_metadata.placement._device = torch.device("cpu")
+            none_throws(
+                none_throws(
+                    emb_table.local_metadata,
+                    f"local_metadata is None for emb_table: {emb_table.name}",
+                ).placement,
+                "placement is None for local_metadata of emb table: {emb_table.name}",
+            )._device = torch.device("cpu")
 
         pmt_sharded_t_list = create_virtual_sharded_tensors(
             emb_table_config_copy,

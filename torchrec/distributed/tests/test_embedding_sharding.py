@@ -35,10 +35,11 @@ from torchrec.distributed.embedding_types import (
     ShardedEmbeddingTable,
 )
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
+from torchrec.distributed.types import ShardedTensorMetadata, ShardMetadata
 from torchrec.modules.embedding_configs import DataType, PoolingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
-WORLD_SIZE = 4
+WORLD_SIZE = 2
 
 
 class TestGetWeightedAverageCacheLoadFactor(unittest.TestCase):
@@ -546,24 +547,16 @@ class TestECBucketMetadata(unittest.TestCase):
         data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
         embedding_dim=st.sampled_from(list(range(160, 320, 40))),
         total_bucket=st.sampled_from([14, 20, 32, 40]),
-        my_rank=st.integers(min_value=0, max_value=WORLD_SIZE),
+        my_rank=st.integers(min_value=0, max_value=WORLD_SIZE - 1),
     )
     @settings(max_examples=10, deadline=10000)
     def test_bucket_metadata_calculation_util(
         self, data_type: DataType, embedding_dim: int, total_bucket: int, my_rank: int
     ) -> None:
-        compute_kernels = [
-            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
-            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
-            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
-            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
-        ]
+        compute_kernels = [EmbeddingComputeKernel.SSD_VIRTUAL_TABLE] * WORLD_SIZE
         fused_params_groups = [
             {"cache_load_factor": 0.5},
-            {"cache_load_factor": 0.5},
-            {"cache_load_factor": 0.5},
-            {"cache_load_factor": 0.5},
-        ]
+        ] * WORLD_SIZE
         tables = [
             ShardedEmbeddingTable(
                 name=f"table_{i}",
@@ -579,8 +572,27 @@ class TestECBucketMetadata(unittest.TestCase):
                 num_embeddings=10000 * (2 * i + 1),
                 total_num_buckets=total_bucket,
                 use_virtual_table=True,
+                local_metadata=ShardMetadata(
+                    shard_offsets=[i * (10000 * (2 * i + 1) // WORLD_SIZE), 0],
+                    shard_sizes=[10000 * (2 * i + 1) // WORLD_SIZE, embedding_dim],
+                    placement=f"rank:{i}/cuda:{i}",
+                ),
+                global_metadata=ShardedTensorMetadata(
+                    shards_metadata=[
+                        ShardMetadata(
+                            shard_offsets=[j * (10000 * (2 * i + 1) // WORLD_SIZE), 0],
+                            shard_sizes=[
+                                10000 * (2 * i + 1) // WORLD_SIZE,
+                                embedding_dim,
+                            ],
+                            placement=f"rank:{j}/cuda:{j}",
+                        )
+                        for j in range(WORLD_SIZE)
+                    ],
+                    size=torch.Size([10000 * (2 * i + 1), embedding_dim]),
+                ),
             )
-            for i in range(len(compute_kernels))
+            for i in range(WORLD_SIZE)
         ]
 
         # since we don't have access to _group_tables_per_rank

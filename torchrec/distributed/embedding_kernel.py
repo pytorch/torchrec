@@ -144,7 +144,7 @@ def create_virtual_sharded_tensors(
         key = get_key_from_embedding_table(embedding_table)
         assert embedding_table.use_virtual_table
 
-        assert embedding_table.global_metadata is not None and pg is not None
+        assert embedding_table.global_metadata is not None
         global_metadata = copy.deepcopy(embedding_table.global_metadata)
         create_virtual_table_global_metadata(global_metadata, my_rank, param)
         key_to_global_metadata[key] = global_metadata
