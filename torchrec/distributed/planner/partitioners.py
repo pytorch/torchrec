@@ -581,13 +581,16 @@ class MemoryBalancedPartitioner(Partitioner):
         self,
         proposal: List[ShardingOption],
         storage_constraint: Topology,
+        perf_model: Optional[PerfModel] = None,
     ) -> List[ShardingOption]:
         """
         Repeatedly calls the GreedyPerfPartitioner to find a plan with perf
         within the tolerance of the original plan that uses the least amount
         of memory.
         """
-        _perf_model: PerfModel = NoopPerfModel(storage_constraint)
+        _perf_model = (
+            perf_model if perf_model else NoopPerfModel(topology=storage_constraint)
+        )
         _partitioner = GreedyPerfPartitioner(
             sort_by=SortBy.PERF, balance_modules=self._balance_modules
         )
