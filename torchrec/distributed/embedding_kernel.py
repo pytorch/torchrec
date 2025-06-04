@@ -33,6 +33,7 @@ from torchrec.distributed.types import (
     ShardedTensorMetadata,
     ShardMetadata,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -93,7 +94,11 @@ def create_virtual_table_global_metadata(
     metadata.tensor_properties.requires_grad = param.requires_grad
 
     offset = 0
-
+    # Manually craft metadata according to the weight_count_per_rank to set correct
+    # metadata for cp loading for non-PMT case, where recalc won't be triggered.
+    # Otherwise it will only set correct size on current rank and
+    # virtual PMT will trigger recalc for the correct global size/offset.
+    # NOTE this currently only works for row-wise sharding
     for rank, shard_metadata in enumerate(metadata.shards_metadata):
         if use_param_size_as_rows:  # respect the param size and treat it as rows
             curr_rank_rows = param.size()[0]  # pyre-ignore[16]
@@ -107,7 +112,8 @@ def create_virtual_table_global_metadata(
                 for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
             shard_metadata.shard_offsets = [
-                offset if dim == 0 else 0 for dim in range(len(param.size()))  # pyre-ignore[6]
+                offset if dim == 0 else 0
+                for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
         elif rank == my_rank:
             curr_rank_rows = param.size()[0]  # pyre-ignore[16]
@@ -118,12 +124,16 @@ def create_virtual_table_global_metadata(
                 for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
             shard_metadata.shard_offsets = [
-                offset if dim == 0 else 0 for dim in range(len(param.size()))  # pyre-ignore[6]
+                offset if dim == 0 else 0
+                for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
         offset += curr_rank_rows
 
     metadata.size = torch.Size(
-        [offset if dim == 0 else param.size(dim) for dim in range(len(param.size()))]  # pyre-ignore[6]
+        [  # pyre-ignore[6]
+            offset if dim == 0 else param.size(dim)
+            for dim in range(len(param.size()))  # pyre-ignore[6]
+        ]
     )
 
 
@@ -177,6 +187,13 @@ def create_virtual_sharded_tensors(
         key_to_global_metadata[key] = global_metadata
 
         local_metadata = copy.deepcopy(global_metadata.shards_metadata[my_rank])
+        local_metadata.placement = none_throws(
+            none_throws(
+                embedding_table.local_metadata,
+                f"local_metadata is None for emb_table: {embedding_table.name}",
+            ).placement,
+            f"placement is None for local_metadata of emb table: {embedding_table.name}",
+        )
 
         key_to_local_shards[key].append(Shard(param, local_metadata))  # pyre-ignore
 
