@@ -402,7 +402,7 @@ def _rewrite_model(  # noqa C901
             input_model.module = graph_model
 
     if non_pipelined_sharded_modules:
-        logger.warn(
+        logger.warning(
             "Sharded modules were not pipelined: %s. "
             + "This should be fixed for pipelining to work to the full extent.",
             ", ".join(non_pipelined_sharded_modules),

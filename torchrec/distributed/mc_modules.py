@@ -416,7 +416,7 @@ class ShardedManagedCollisionCollection(
             ), f"Shared feature is not supported. {num_sharding_features=}, {self._sharding_per_table_feature_splits[-1]=}"
 
             if self._sharding_features[-1] != sharding.feature_names():
-                logger.warn(
+                logger.warning(
                     "The order of tables of this sharding is altered due to grouping: "
                     f"{self._sharding_features[-1]=} vs {sharding.feature_names()=}"
                 )
@@ -1122,7 +1122,7 @@ class ShardedQuantManagedCollisionCollection(
             ), f"Shared feature is not supported. {num_sharding_features=}, {self._sharding_per_table_feature_splits[-1]=}"
 
             if self._sharding_features[-1] != sharding.feature_names():
-                logger.warn(
+                logger.warning(
                     "The order of tables of this sharding is altered due to grouping: "
                     f"{self._sharding_features[-1]=} vs {sharding.feature_names()=}"
                 )
