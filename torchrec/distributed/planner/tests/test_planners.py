@@ -634,3 +634,185 @@ class TestAutoPlannerWithScaleupProposer(unittest.TestCase):
         self.assertTrue(
             any("Min HBM: 0.256 GB on ranks [0, 1]" in line for line in stats)
         )
+
+        constraints = {
+            **{
+                f"table_{i}": ParameterConstraints(
+                    sharding_types=["row_wise"],
+                    compute_kernels=["dram_virtual_table"],
+                    key_value_params=KeyValueParams(
+                        l2_cache_size=64, max_l1_cache_size=128
+                    ),
+                )
+                for i in range(table_count // 2)
+            },
+            **{
+                f"table_{i}": ParameterConstraints(
+                    cache_params=CacheParams(algorithm=CacheAlgorithm.LRU),
+                )
+                for i in range(table_count // 2, table_count)
+            },
+        }
+
+        topology = Topology(
+            world_size=2,
+            hbm_cap=1024 * 1024 * 1024 * 2,
+            ddr_cap=1024 * 1024 * 1024 * 256,
+            compute_device="cuda",
+        )
+
+        planner = EmbeddingShardingPlanner(
+            topology=topology,
+            proposer=EmbeddingOffloadScaleupProposer(),
+            constraints=constraints,
+        )
+        sharding_plan = planner.plan(
+            module=model, sharders=[EmbeddingCollectionSharder()]  # pyre-ignore
+        )
+
+        expected_ranks = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        ranks = [
+            cast(List[int], param_shard.ranks)
+            for param_shard in cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ec"]
+            ).values()
+        ]
+        compute_kernels = {
+            param_shard.compute_kernel
+            for param_shard in cast(
+                EmbeddingModuleShardingPlan, sharding_plan.plan["sparse.ec"]
+            ).values()
+        }
+        self.assertEqual(sorted(expected_ranks), sorted(ranks))
+        self.assertSetEqual(
+            {
+                EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            },
+            compute_kernels,
+        )
+
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=10000,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+                use_virtual_table=True,
+                total_num_buckets=10,
+            )
+            for i in range(table_count // 2)
+        ] + [
+            EmbeddingConfig(
+                num_embeddings=100_000,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(table_count // 2, table_count)
+        ]
+
+        model = TestSparseNN(tables=tables, sparse_device=torch.device("meta"))
+
+        planner = EmbeddingShardingPlanner(
+            topology=topology,
+            proposer=EmbeddingOffloadScaleupProposer(),
+            constraints=constraints,
+        )
+
+        #  L1 cache size > size of embedding table * default cache load factor
+
+        sharding_plan = planner.plan(
+            module=model, sharders=[EmbeddingCollectionSharder()]  # pyre-ignore
+        )
+        for table_index in range(4):
+            shards = sharding_plan.plan["sparse.ec"][
+                f"table_{table_index}"
+            ].sharding_spec.shards
+            self.assertEqual(len(shards), 2)
+            self.assertEqual(shards[0].shard_offsets, [0, 0])
+            self.assertEqual(
+                shards[0].shard_sizes,
+                [5000 if table_index < 2 else 50_000, 64],
+            )
+            self.assertEqual(
+                shards[1].shard_offsets,
+                [5000 if table_index < 2 else 50_000, 0],
+            )
+            self.assertEqual(
+                shards[1].shard_sizes,
+                [5000 if table_index < 2 else 50_000, 64],
+            )
+        stats: List[str] = cast(EmbeddingStats, planner._stats[0])._stats_table
+        # L1 cache size of 64GB > size of embedding table * cache load factor. We use the smaller value.
+        # L2 cache size is 128MB per shard per table
+        self.assertTrue(
+            any(
+                "dram_virtual_table: HBM: 0.002 GB, DDR: 256.0 GB" in line
+                for line in stats
+            )
+        )
+        self.assertTrue(
+            any(
+                "fused_uvm_caching: HBM: 0.011 GB, DDR: 0.048 GB" in line
+                for line in stats
+            )
+        )
+        self.assertTrue(
+            any("Max HBM: 0.007 GB on ranks [0, 1]" in line for line in stats)
+        )
+        self.assertTrue(
+            any("Min HBM: 0.007 GB on ranks [0, 1]" in line for line in stats)
+        )
+
+        # Override cache load factor
+        planner = EmbeddingShardingPlanner(
+            topology=topology,
+            proposer=EmbeddingOffloadScaleupProposer(),
+            constraints=constraints,
+        )
+        sharding_plan = planner.plan(
+            module=model,
+            sharders=[  # pyre-ignore
+                EmbeddingCollectionSharder(fused_params={"cache_load_factor": 0.5})
+            ],
+        )
+        for table_index in range(4):
+            shards = sharding_plan.plan["sparse.ec"][
+                f"table_{table_index}"
+            ].sharding_spec.shards
+            self.assertEqual(len(shards), 2)
+            self.assertEqual(shards[0].shard_offsets, [0, 0])
+            self.assertEqual(
+                shards[0].shard_sizes,
+                [5000 if table_index < 2 else 50_000, 64],
+            )
+            self.assertEqual(
+                shards[1].shard_offsets,
+                [5000 if table_index < 2 else 50_000, 0],
+            )
+            self.assertEqual(
+                shards[1].shard_sizes,
+                [5000 if table_index < 2 else 50_000, 64],
+            )
+        stats: List[str] = cast(EmbeddingStats, planner._stats[0])._stats_table
+        # L1 cache size of 64GB > size of embedding table * cache load factor. We use the smaller value.
+        # L2 cache size is 128MB per shard per table
+        self.assertTrue(
+            any(
+                "dram_virtual_table: HBM: 0.005 GB, DDR: 256.0 GB" in line
+                for line in stats
+            )
+        )
+        self.assertTrue(
+            any(
+                "fused_uvm_caching: HBM: 0.027 GB, DDR: 0.048 GB" in line
+                for line in stats
+            )
+        )
+        self.assertTrue(
+            any("Max HBM: 0.016 GB on ranks [0, 1]" in line for line in stats)
+        )
+        self.assertTrue(
+            any("Min HBM: 0.016 GB on ranks [0, 1]" in line for line in stats)
+        )
