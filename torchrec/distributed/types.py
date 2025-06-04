@@ -9,7 +9,7 @@
 
 import abc
 import operator
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum, unique
 from typing import (
     Any,
@@ -549,7 +549,8 @@ for orig_method_name in torch.fx.graph.reflectable_magic_methods:
 
 
 class ModuleShardingPlan:
-    pass
+    def _serialize(self) -> dict[str, Any]:
+        raise NotImplementedError()
 
 
 class CacheStatistics(abc.ABC):
@@ -772,6 +773,25 @@ class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterShardin
         )
         return out
 
+    def _serialize(self) -> dict[str, Any]:
+        sharding_plan_dict = {}
+        for param_name, param_sharding in self.items():
+            sharding_plan_dict[param_name] = {
+                "sharding_type": param_sharding.sharding_type,
+                "compute_kernel": param_sharding.compute_kernel,
+                "ranks": param_sharding.ranks,
+            }
+            if isinstance(param_sharding.sharding_spec, EnumerableShardingSpec):
+                shards = param_sharding.sharding_spec.shards
+                if shards is not None:
+                    sharding_plan_dict[param_name]["shards"] = []
+                    for shard in shards:
+                        shard_dict = asdict(shard)
+                        shard_dict["placement"] = str(shard_dict["placement"])
+                        sharding_plan_dict[param_name]["shards"].append(shard_dict)
+
+        return sharding_plan_dict
+
 
 @dataclass
 class ShardingPlan:
@@ -804,6 +824,15 @@ class ShardingPlan:
             out += "module: " + module_path
             out += str(module_plan)
         return out
+
+    def _serialize(self) -> dict[str, Any]:
+        sharding_plan_dict = {
+            "plan": {
+                module_path: module_plan._serialize()
+                for module_path, module_plan in self.plan.items()
+            }
+        }
+        return sharding_plan_dict
 
 
 ShardedModuleContext = Multistreamable
@@ -1239,6 +1268,12 @@ class ObjectPoolShardingType(Enum):
 class ObjectPoolShardingPlan(ModuleShardingPlan):
     sharding_type: ObjectPoolShardingType
     inference: bool = False
+
+    def _serialize(self) -> dict[str, Any]:
+        return {
+            "sharding_type": self.sharding_type.name,
+            "inference": self.inference,
+        }
 
 
 @dataclass

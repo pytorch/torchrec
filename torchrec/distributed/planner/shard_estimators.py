@@ -9,6 +9,7 @@
 
 import logging
 import math
+from math import ceil
 from typing import cast, Dict, List, Optional, Tuple, Type
 
 import torch
@@ -22,6 +23,7 @@ from torchrec.distributed.planner.constants import (
     FULL_BLOCK_EMB_DIM,
     HALF_BLOCK_PENALTY,
     kernel_bw_lookup,
+    KV_CACHING_RATIO,
     QUARTER_BLOCK_PENALTY,
     UVM_CACHING_RATIO,
     WEIGHTED_KERNEL_MULTIPLIER,
@@ -1021,6 +1023,11 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 if constraints and constraints.key_value_params
                 else None
             )
+            kv_cache_load_factor: float = (
+                sharder.fused_params.get("cache_load_factor", KV_CACHING_RATIO)
+                if sharder.fused_params
+                else KV_CACHING_RATIO
+            )
 
             # hardcoded as 8 bytes
             # input indices can be of int32, but in TBE they get converted to int64 anyway
@@ -1065,6 +1072,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 is_inference=self._is_inference,
                 multipass_prefetch_max_pass=mpp_conf.num_passes if mpp_conf else None,
                 key_value_params=key_value_params,
+                kv_cache_load_factor=kv_cache_load_factor,
             )
             for shard, storage in zip(sharding_option.shards, shard_storages):
                 shard.storage = storage
@@ -1134,6 +1142,7 @@ def calculate_shard_storages(
     is_inference: bool = False,
     multipass_prefetch_max_pass: Optional[int] = None,
     key_value_params: Optional[KeyValueParams] = None,
+    kv_cache_load_factor: float = KV_CACHING_RATIO,
 ) -> List[Storage]:
     """
     Calculates estimated storage sizes for each sharded tensor, comprised of input,
@@ -1191,7 +1200,6 @@ def calculate_shard_storages(
         EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
         EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
     }:
-        # TODO(wangj): for ssd/dram kv, most likely we use absolute L1 cache size instead of caching ratio, as denominator is huge
         hbm_storage = round(ddr_storage * caching_ratio)
         table_cached = True
 
@@ -1225,7 +1233,15 @@ def calculate_shard_storages(
         )
 
         hbm_specific_sizes = [
-            (key_value_params.max_l1_cache_size or 0) * 1024 * 1024
+            min(
+                (key_value_params.max_l1_cache_size or 0) * 1024 * 1024,
+                ceil(
+                    tensor.shape[0]  # num_embeddings
+                    * kv_cache_load_factor
+                    * tensor.element_size()  # size of one column
+                    * tensor.shape[1],  # number of columns in embedding
+                ),
+            )
             for _ in hbm_specific_sizes
         ]
         ddr_specific_sizes = [

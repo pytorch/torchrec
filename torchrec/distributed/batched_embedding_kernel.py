@@ -1452,16 +1452,22 @@ class ZeroCollisionKeyValueEmbedding(
             pmt_list,
             self._pg,
             prefix,
+            self._table_name_to_weight_count_per_rank,
         )
         weight_id_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy, weight_ids_list, self._pg, prefix  # pyre-ignore
+            emb_table_config_copy,
+            weight_ids_list,  # pyre-ignore [6]
+            self._pg,
+            prefix,
+            self._table_name_to_weight_count_per_rank,
         )
         bucket_cnt_sharded_t_list = create_virtual_sharded_tensors(
             emb_table_config_copy,
-            # pyre-ignore [6]
-            bucket_cnt_list,
+            bucket_cnt_list,  # pyre-ignore [6]
             self._pg,
             prefix,
+            self._table_name_to_weight_count_per_rank,
+            use_param_size_as_rows=True,
         )
         # pyre-ignore
         assert len(pmt_list) == len(weight_ids_list) == len(bucket_cnt_list)
