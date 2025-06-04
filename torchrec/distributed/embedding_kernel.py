@@ -18,6 +18,7 @@ import torch.distributed as dist
 from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
     PartiallyMaterializedTensor,
 )
+from pyre_extensions import none_throws
 from torch import nn
 from torch.distributed._tensor import DTensor
 from torchrec.distributed.embedding_types import (
@@ -107,7 +108,8 @@ def create_virtual_table_global_metadata(
                 for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
             shard_metadata.shard_offsets = [
-                offset if dim == 0 else 0 for dim in range(len(param.size()))  # pyre-ignore[6]
+                offset if dim == 0 else 0
+                for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
         elif rank == my_rank:
             curr_rank_rows = param.size()[0]  # pyre-ignore[16]
@@ -118,12 +120,16 @@ def create_virtual_table_global_metadata(
                 for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
             shard_metadata.shard_offsets = [
-                offset if dim == 0 else 0 for dim in range(len(param.size()))  # pyre-ignore[6]
+                offset if dim == 0 else 0
+                for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
         offset += curr_rank_rows
 
     metadata.size = torch.Size(
-        [offset if dim == 0 else param.size(dim) for dim in range(len(param.size()))]  # pyre-ignore[6]
+        [  # pyre-ignore[6]
+            offset if dim == 0 else param.size(dim)
+            for dim in range(len(param.size()))  # pyre-ignore[6]
+        ]
     )
 
 
@@ -177,6 +183,13 @@ def create_virtual_sharded_tensors(
         key_to_global_metadata[key] = global_metadata
 
         local_metadata = copy.deepcopy(global_metadata.shards_metadata[my_rank])
+        local_metadata.placement = none_throws(
+            none_throws(
+                embedding_table.local_metadata,
+                f"local_metadata is None for emb_table: {embedding_table.name}",
+            ).placement,
+            f"placement is None for local_metadata of emb table: {embedding_table.name}",
+        )
 
         key_to_local_shards[key].append(Shard(param, local_metadata))  # pyre-ignore
 
