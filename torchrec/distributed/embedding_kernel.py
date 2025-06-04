@@ -66,55 +66,65 @@ def create_virtual_table_local_metadata(
     local_metadata: ShardMetadata,
     param: Union[torch.Tensor, PartiallyMaterializedTensor],
     my_rank: int,
+    offset: Optional[int] = None,
+    weight_count_per_rank: Optional[List[int]] = None,
 ) -> None:
-    local_metadata.shard_sizes = list(param.size())  # pyre-ignore
-    local_metadata.shard_offsets = [0 for _ in range(len(param.size()))]  # pyre-ignore
+    if offset is None:
+        offset = (
+            my_rank
+            if weight_count_per_rank is None
+            else sum(weight_count_per_rank[:my_rank])
+        )
+    local_metadata.shard_sizes = list(param.size())  # pyre-ignore[6]
+    local_metadata.shard_offsets = [
+        offset if dim == 0 else 0 for dim in range(len(param.size()))  # pyre-ignore[6]
+    ]
 
 
 def create_virtual_table_global_metadata(
     metadata: ShardedTensorMetadata,
     my_rank: int,
     param: Union[torch.Tensor, PartiallyMaterializedTensor],
+    weight_count_per_rank: Optional[List[int]],
+    use_param_size_as_rows: bool,
 ) -> None:
     # update tensor properties from local tensor properties, this should be universal for all ranks
     metadata.tensor_properties.dtype = param.dtype
     metadata.tensor_properties.requires_grad = param.requires_grad
 
-    # manually craft metadata, faking the metadata in a way that all other rank only has 0 row
-    # NOTE this currently only works for row-wise sharding
-    fake_total_rows = param.size()[0]  # pyre-ignore
-    metadata.size = torch.Size(
-        [
-            fake_total_rows if dim == 0 else param.size(dim)
-            for dim in range(len(param.size()))  # pyre-ignore
-        ]
-    )
+    offset = 0
 
     for rank, shard_metadata in enumerate(metadata.shards_metadata):
+        if use_param_size_as_rows:  # respect the param size and treat it as rows
+            curr_rank_rows = param.size()[0]  # pyre-ignore[16]
+        else:
+            curr_rank_rows = (
+                weight_count_per_rank[rank] if weight_count_per_rank is not None else 1
+            )
         if rank < my_rank:
-            shard_metadata.shard_sizes = [  # pyre-ignore
-                0 if dim == 0 else param.size(dim)
-                # pyre-ignore
-                for dim in range(len(param.size()))
+            shard_metadata.shard_sizes = [
+                curr_rank_rows if dim == 0 else param.size(dim)
+                for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
             shard_metadata.shard_offsets = [
-                0 for _ in range(len(param.size()))  # pyre-ignore
+                offset if dim == 0 else 0 for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
         elif rank == my_rank:
-            create_virtual_table_local_metadata(shard_metadata, param, my_rank)
+            curr_rank_rows = param.size()[0]  # pyre-ignore[16]
+            create_virtual_table_local_metadata(shard_metadata, param, my_rank, offset)
         else:
-            # pyre-ignore
             shard_metadata.shard_sizes = [
-                0 if dim == 0 else param.size(dim)
-                # pyre-ignore
-                for dim in range(len(param.size()))
+                curr_rank_rows if dim == 0 else param.size(dim)
+                for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
-            # pyre-ignore
             shard_metadata.shard_offsets = [
-                param.size(0) if dim == 0 else 0
-                # pyre-ignore
-                for dim in range(len(param.size()))
+                offset if dim == 0 else 0 for dim in range(len(param.size()))  # pyre-ignore[6]
             ]
+        offset += curr_rank_rows
+
+    metadata.size = torch.Size(
+        [offset if dim == 0 else param.size(dim) for dim in range(len(param.size()))]  # pyre-ignore[6]
+    )
 
 
 def create_virtual_sharded_tensors(
@@ -122,6 +132,8 @@ def create_virtual_sharded_tensors(
     params: Union[List[torch.Tensor], List[PartiallyMaterializedTensor]],
     pg: Optional[dist.ProcessGroup] = None,
     prefix: str = "",
+    table_name_to_weight_count_per_rank: Optional[Dict[str, List[int]]] = None,
+    use_param_size_as_rows: bool = False,
 ) -> List[ShardedTensor]:
     """
     Create virtual sharded tensors for the given embedding tables and parameters.
@@ -139,6 +151,14 @@ def create_virtual_sharded_tensors(
     def get_key_from_embedding_table(embedding_table: ShardedEmbeddingTable) -> str:
         return prefix + f"{embedding_table.name}"
 
+    def get_weight_count_per_rank(table_name: str) -> Optional[List[int]]:
+        return (
+            table_name_to_weight_count_per_rank.get(table_name, None)
+            if table_name_to_weight_count_per_rank
+            and table_name in table_name_to_weight_count_per_rank.keys()
+            else None
+        )
+
     my_rank = dist.get_rank()
     for embedding_table, param in zip(embedding_tables, params):
         key = get_key_from_embedding_table(embedding_table)
@@ -146,12 +166,17 @@ def create_virtual_sharded_tensors(
 
         assert embedding_table.global_metadata is not None
         global_metadata = copy.deepcopy(embedding_table.global_metadata)
-        create_virtual_table_global_metadata(global_metadata, my_rank, param)
+        weight_count_per_rank = get_weight_count_per_rank(embedding_table.name)
+        create_virtual_table_global_metadata(
+            global_metadata,
+            my_rank,
+            param,
+            weight_count_per_rank,
+            use_param_size_as_rows,
+        )
         key_to_global_metadata[key] = global_metadata
 
-        assert embedding_table.local_metadata is not None
-        local_metadata = copy.deepcopy(embedding_table.local_metadata)
-        create_virtual_table_local_metadata(local_metadata, param, my_rank)
+        local_metadata = copy.deepcopy(global_metadata.shards_metadata[my_rank])
 
         key_to_local_shards[key].append(Shard(param, local_metadata))  # pyre-ignore
 

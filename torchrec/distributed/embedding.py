@@ -30,6 +30,7 @@ from torch import distributed as dist, nn
 from torch.autograd.profiler import record_function
 from torch.distributed._shard.sharding_spec import EnumerableShardingSpec
 from torch.distributed._tensor import DTensor
+from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_lookup import PartiallyMaterializedTensor
@@ -506,6 +507,7 @@ class ShardedEmbeddingCollection(
             )
         self._need_indices: bool = module.need_indices()
         self._inverse_indices_permute_per_sharding: Optional[List[torch.Tensor]] = None
+        self._skip_missing_weight_key: List[str] = []
 
         for index, (sharding, lookup) in enumerate(
             zip(
@@ -705,9 +707,8 @@ class ShardedEmbeddingCollection(
 
                 # for loading state_dict into virtual table, we skip the weights assignment
                 # if needed, for now this should be handled separately outside of load_state_dict call
-                state_dict[weight_key] = self._model_parallel_name_to_local_shards[
-                    table_name
-                ][0].tensor
+                self._skip_missing_weight_key.append(weight_key)
+                del state_dict[weight_key]
                 continue
 
             key = f"{prefix}embeddings.{table_name}.weight"
@@ -1087,11 +1088,22 @@ class ShardedEmbeddingCollection(
                         virtual_table_sharded_t_map[table_name][1],
                     )
 
+        def _post_load_state_dict_hook(
+            module: "ShardedEmbeddingCollection",
+            incompatible_keys: _IncompatibleKeys,
+        ) -> None:
+            if incompatible_keys.missing_keys:
+                # has to remove the key inplace
+                for skip_key in module._skip_missing_weight_key:
+                    if skip_key in incompatible_keys.missing_keys:
+                        incompatible_keys.missing_keys.remove(skip_key)
+
         self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)
         self._register_load_state_dict_pre_hook(
             self._pre_load_state_dict_hook, with_module=True
         )
+        self.register_load_state_dict_post_hook(_post_load_state_dict_hook)
 
         self.reset_parameters()
 
