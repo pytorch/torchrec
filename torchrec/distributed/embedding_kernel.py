@@ -255,7 +255,9 @@ def get_state_dict(
         qscale = None
         qbias = None
         if is_quant:
-            # For QUANT* param is Tuple[torch.Tensor, Optional[torch.Tensor]] where first argument is the weight table, the second is optional quantization extra information, depending on quantization type. e.g. for fbgemm rowwise quantization this is scale and shift for each row.
+            # For QUANT* param is Tuple[torch.Tensor, Optional[torch.Tensor]] where first argument is
+            # the weight table, the second is optional quantization extra information, depending on
+            # quantization type. e.g. for fbgemm rowwise quantization this is scale and shift for each row.
             assert isinstance(param, tuple)
             qscale = param[1]
             qbias = param[2]
