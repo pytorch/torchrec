@@ -121,7 +121,7 @@ class GenericITEPModule(nn.Module):
         pruned_indices_total_length: torch.Tensor,
         cur_iter: int,
     ) -> None:
-        with self.pruning_logger.pruning_logger(event="ITEP_EVICTION"):
+        with self.pruning_logger.pruning_logger(event="ITEP_EVICTION") as log_details:
             table_name_to_eviction_ratio = {}
             buffer_idx_to_eviction_ratio = {}
             buffer_idx_to_sizes = {}
@@ -178,6 +178,7 @@ class GenericITEPModule(nn.Module):
 
             # Print the sorted mapping
             logger.info(f"ITEP: table name to eviction ratio {sorted_mapping}")
+            log_details.__setattr__("table_to_pruned_ratio", logged_eviction_mapping)
 
             # Calculate percentage of indiced updated/evicted during ITEP iter
             pruned_indices_ratio = (
