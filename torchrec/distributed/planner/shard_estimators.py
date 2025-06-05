@@ -1261,7 +1261,7 @@ def calculate_shard_storages(
                 count_ephemeral_storage_cost=count_ephemeral_storage_cost,
                 is_inference=is_inference,
             )
-            if compute_device == "cuda"
+            if compute_device in {"cuda", "mtia"}
             else 0
         )
         for input_size, output_size, hbm_specific_size in zip(
@@ -1273,7 +1273,7 @@ def calculate_shard_storages(
     ddr_sizes: List[int] = [
         (
             input_size + output_size + ddr_specific_size
-            if compute_device in {"cpu", "mtia"} and not is_inference
+            if compute_device == "cpu" and not is_inference
             else ddr_specific_size
         )
         for input_size, output_size, ddr_specific_size in zip(

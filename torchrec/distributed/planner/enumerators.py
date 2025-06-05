@@ -80,7 +80,9 @@ class EmbeddingEnumerator(Enumerator):
         self._use_exact_enumerate_order: bool = (
             use_exact_enumerate_order if use_exact_enumerate_order else False
         )
-        memory_type = "hbm_cap" if topology.compute_device == "cuda" else "ddr_cap"
+        memory_type = (
+            "hbm_cap" if topology.compute_device in {"cuda", "mtia"} else "ddr_cap"
+        )
         self._device_memory_sizes: Optional[
             List[int]
         ] = (  # only used with custom topology where memory is different within a topology

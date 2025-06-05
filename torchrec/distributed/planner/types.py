@@ -284,7 +284,7 @@ class Topology:
         self._world_size = world_size
 
         hbm_per_device = [0] * world_size
-        if self._compute_device == "cuda":
+        if self._compute_device == "cuda" or self._compute_device == "mtia":
             hbm_per_device = [hbm_cap if hbm_cap else HBM_CAP] * world_size
         ddr_cap_per_rank = [ddr_cap if ddr_cap else DDR_CAP] * world_size
 
