@@ -1638,6 +1638,15 @@ class ShardedEmbeddingBagCollection(
         update_module_sharding_plan(self, changed_sharding_params)
         return
 
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        for lookup in self._lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            if hasattr(lookup, "create_rocksdb_hard_link_snapshot") and callable(
+                lookup.create_rocksdb_hard_link_snapshot()
+            ):
+                lookup.create_rocksdb_hard_link_snapshot()
+
     @property
     def fused_optimizer(self) -> KeyedOptimizer:
         return self._optim

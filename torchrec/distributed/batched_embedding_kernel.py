@@ -1225,6 +1225,13 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
 
+    # Todo: [Raahul46]: Add a intermediate parent class between embedding and kv to support these functions
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        """
+        Create a RocksDB checkpoint. This is needed before we call state_dict() for publish.
+        """
+        self.emb_module.create_rocksdb_hard_link_snapshot()
+
     # pyre-ignore [15]
     def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
         List[PartiallyMaterializedTensor],
@@ -1524,6 +1531,12 @@ class ZeroCollisionKeyValueEmbedding(
         # TODO: move the following to SSD TBE.
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
+
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        """
+        Create a RocksDB checkpoint. This is needed before we call state_dict() for publish.
+        """
+        self.emb_module.create_rocksdb_hard_link_snapshot()
 
     # pyre-ignore [15]
     def split_embedding_weights(
@@ -2037,6 +2050,12 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         # TODO: move the following to SSD TBE.
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
+
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        """
+        Create a RocksDB checkpoint. This is needed before we call state_dict() for publish.
+        """
+        self.emb_module.create_rocksdb_hard_link_snapshot()
 
     # pyre-ignore [15]
     def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
