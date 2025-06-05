@@ -1444,7 +1444,7 @@ class ZeroCollisionKeyValueEmbedding(
                     emb_table.local_metadata,
                     f"local_metadata is None for emb_table: {emb_table.name}",
                 ).placement,
-                "placement is None for local_metadata of emb table: {emb_table.name}",
+                f"placement is None for local_metadata of emb table: {emb_table.name}",
             )._device = torch.device("cpu")
 
         pmt_sharded_t_list = create_virtual_sharded_tensors(
