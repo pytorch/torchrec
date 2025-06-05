@@ -519,8 +519,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             storage_map = {
                 "cuda": ParameterStorage.HBM,
                 "cpu": ParameterStorage.DDR,
-                # TODO: Update it later. Setting for MTIA is same as CPU's for now.
-                "mtia": ParameterStorage.DDR,
+                "mtia": ParameterStorage.HBM,
             }
             return {
                 storage_map[compute_device_type].value: get_tensor_size_bytes(tensor)
