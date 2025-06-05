@@ -1435,7 +1435,6 @@ class ZeroCollisionKeyValueEmbedding(
 
         pmt_list, weight_ids_list, bucket_cnt_list = self.split_embedding_weights(
             no_snapshot=False,
-            should_flush=True,
         )
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
@@ -1528,7 +1527,7 @@ class ZeroCollisionKeyValueEmbedding(
 
     # pyre-ignore [15]
     def split_embedding_weights(
-        self, no_snapshot: bool = True, should_flush: bool = True
+        self, no_snapshot: bool = True, should_flush: bool = False
     ) -> Tuple[
         Union[List[PartiallyMaterializedTensor], List[torch.Tensor]],
         Optional[List[torch.Tensor]],
