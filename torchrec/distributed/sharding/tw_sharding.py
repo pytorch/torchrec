@@ -73,6 +73,7 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         env: ShardingEnv,
         device: Optional[torch.device] = None,
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
+        storage_device_type_from_sharding_infos: Optional[str] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._env: ShardingEnv = env
@@ -98,6 +99,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[self._rank]
+        )
+        self._storage_device_type_from_sharding_infos: Optional[str] = (
+            storage_device_type_from_sharding_infos
         )
 
     def _shard(
