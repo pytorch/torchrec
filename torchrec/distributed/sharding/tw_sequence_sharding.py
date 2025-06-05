@@ -38,7 +38,12 @@ from torchrec.distributed.sharding.tw_sharding import (
     TwSparseFeaturesDist,
 )
 from torchrec.distributed.types import Awaitable, CommOp, QuantizedCommCodecs
+from torchrec.modules.utils import _fx_trec_get_feature_length
+from torchrec.quant.embedding_modules import _get_batching_hinted_output
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+
+torch.fx.wrap("_get_batching_hinted_output")
+torch.fx.wrap("_fx_trec_get_feature_length")
 
 
 class TwSequenceEmbeddingDist(
@@ -169,9 +174,13 @@ class InferTwSequenceEmbeddingDist(
         self,
         device: torch.device,
         world_size: int,
+        storage_device_type_from_sharding_infos: Optional[str] = None,
     ) -> None:
         super().__init__()
         self._dist: SeqEmbeddingsAllToOne = SeqEmbeddingsAllToOne(device, world_size)
+        self._storage_device_type_from_sharding_infos: Optional[str] = (
+            storage_device_type_from_sharding_infos
+        )
 
     def forward(
         self,
@@ -190,7 +199,27 @@ class InferTwSequenceEmbeddingDist(
         Returns:
             Awaitable[torch.Tensor]: awaitable of sequence embeddings.
         """
-        return self._dist(local_embs)
+        assert (
+            sharding_ctx is not None
+        ), "sharding ctx should not be None for InferTwSequenceEmbeddingDist"
+        if (
+            self._storage_device_type_from_sharding_infos is None
+            or self._storage_device_type_from_sharding_infos not in ["cpu", "ssd"]
+        ):
+            local_embs = [
+                _get_batching_hinted_output(
+                    _fx_trec_get_feature_length(
+                        sharding_ctx.features[i],
+                        # pyre-fixme [16]
+                        sharding_ctx.embedding_names_per_rank[i],
+                    ),
+                    local_emb,
+                )
+                for i, local_emb in enumerate(local_embs)
+            ]
+            return self._dist(local_embs)
+        else:
+            return local_embs
 
 
 class InferTwSequenceEmbeddingSharding(
@@ -239,4 +268,5 @@ class InferTwSequenceEmbeddingSharding(
             # pyre-fixme [6]
             device,
             self._world_size,
+            self._storage_device_type_from_sharding_infos,
         )
