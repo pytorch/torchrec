@@ -8,6 +8,11 @@ on:
     branches:
       - nightly
       - main
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
   workflow_dispatch:
 
 jobs:

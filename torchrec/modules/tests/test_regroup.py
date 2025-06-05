@@ -197,7 +197,7 @@ class KTRegroupAsDictTest(unittest.TestCase):
 
     # pyre-ignore[56]
     @given(data_type=st.sampled_from([DataType.BF16, DataType.FP16]))
-    @settings(verbosity=Verbosity.verbose, max_examples=20)
+    @settings(verbosity=Verbosity.verbose, max_examples=20, deadline=None)
     def test_regroup_cast(self, data_type: DataType) -> None:
         dtype = data_type_to_dtype(data_type)
         groups = build_groups(

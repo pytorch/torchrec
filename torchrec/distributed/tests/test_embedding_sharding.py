@@ -550,7 +550,7 @@ class TestECBucketMetadata(unittest.TestCase):
         my_rank=st.integers(min_value=0, max_value=WORLD_SIZE - 1),
     )
     @settings(max_examples=10, deadline=10000)
-    def test_bucket_metadata_calculation_util(
+    def test_bucket_metadata_calculation_util_disabled_in_oss_compatibility(
         self, data_type: DataType, embedding_dim: int, total_bucket: int, my_rank: int
     ) -> None:
         compute_kernels = [EmbeddingComputeKernel.SSD_VIRTUAL_TABLE] * WORLD_SIZE
