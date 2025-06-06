@@ -687,7 +687,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             self.device,
         )
 
-        self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
+        # Need to use .module to maintain FQN consistency
+        self._optim: CombinedOptimizer = self._init_optim(
+            self._dmp_wrapped_module.module  # pyre-ignore
+        )
         self._plan.plan[sharded_module_fqn] = sharded_module.module_sharding_plan
         return sharded_module
 

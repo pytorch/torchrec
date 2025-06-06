@@ -8,8 +8,6 @@
 # pyre-strict
 
 
-import copy
-
 import random
 import unittest
 
@@ -21,7 +19,7 @@ import torch
 
 from hypothesis import assume, given, settings, Verbosity
 
-from torch import nn
+from torch import nn, optim
 
 from torchrec import distributed as trec_dist, EmbeddingBagCollection, KeyedJaggedTensor
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -531,8 +529,10 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
             [
                 None,
                 {
+                    "embedding_bags": (optim.Adagrad, {"lr": 0.04}),
+                },
+                {
                     "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
-                    "embeddings": (torch.optim.SGD, {"lr": 0.2}),
                 },
             ]
         ),

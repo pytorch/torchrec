@@ -27,9 +27,6 @@ from typing import (
 
 import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
-from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
-    DenseTableBatchedEmbeddingBagsCodegen,
-)
 from tensordict import TensorDict
 from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
@@ -61,6 +58,7 @@ from torchrec.distributed.sharding.dynamic_sharding import (
     get_largest_dims_from_sharding_plan_updates,
     shards_all_to_all,
     update_module_sharding_plan,
+    update_optimizer_state_post_resharding,
     update_state_dict_post_resharding,
 )
 from torchrec.distributed.sharding.grid_sharding import GridPooledEmbeddingSharding
@@ -1535,7 +1533,7 @@ class ShardedEmbeddingBagCollection(
             return
 
         current_state = self.state_dict()
-        # TODO: Save Optimizers
+        has_optimizer = len(self._optim._optims) > 0
 
         # TODO: Saving lookups tensors to CPU to eventually avoid recreating them completely again
         # TODO: Ensure lookup tensors are actually being deleted
@@ -1550,6 +1548,7 @@ class ShardedEmbeddingBagCollection(
         max_dim_0, max_dim_1 = get_largest_dims_from_sharding_plan_updates(
             changed_sharding_params
         )
+        old_optimizer_state = self._optim.state_dict() if has_optimizer else None
 
         local_shard_names_by_src_rank, local_output_tensor = shards_all_to_all(
             module=self,
@@ -1560,16 +1559,7 @@ class ShardedEmbeddingBagCollection(
             extend_shard_name=self.extend_shard_name,
             max_dim_0=max_dim_0,
             max_dim_1=max_dim_1,
-        )
-
-        current_state = update_state_dict_post_resharding(
-            state_dict=current_state,
-            ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-            output_tensor=local_output_tensor,
-            new_sharding_params=changed_sharding_params,
-            curr_rank=dist.get_rank(),
-            extend_shard_name=self.extend_shard_name,
-            max_dim_0=max_dim_0,
+            optimizer_state=old_optimizer_state,
         )
 
         for name, param in changed_sharding_params.items():
@@ -1615,8 +1605,6 @@ class ShardedEmbeddingBagCollection(
         if env.process_group and dist.get_backend(env.process_group) != "fake":
             self._initialize_torch_state(skip_registering=True)
 
-        self.load_state_dict(current_state)
-
         # update optimizer
         optims = []
         for lookup in self._lookups:
@@ -1634,6 +1622,35 @@ class ShardedEmbeddingBagCollection(
                     optims.append(("", tbe_module.fused_optimizer))
 
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
+
+        if has_optimizer:
+            split_index = len(local_output_tensor) // 2
+            local_weight_tensors = local_output_tensor[:split_index]
+            local_optimizer_tensors = local_output_tensor[split_index:]
+            # Modifies new_opt_state in place and returns it
+            optimizer_state = update_optimizer_state_post_resharding(
+                old_opt_state=old_optimizer_state,  # pyre-ignore
+                new_opt_state=copy.deepcopy(self._optim.state_dict()),
+                ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
+                output_tensor=local_optimizer_tensors,
+                max_dim_0=max_dim_0,
+            )
+
+            self._optim.load_state_dict(optimizer_state)
+        else:
+            local_weight_tensors = local_output_tensor
+
+        current_state = update_state_dict_post_resharding(
+            state_dict=current_state,
+            ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
+            output_tensor=local_weight_tensors,
+            new_sharding_params=changed_sharding_params,
+            curr_rank=dist.get_rank(),
+            extend_shard_name=self.extend_shard_name,
+            max_dim_0=max_dim_0,
+        )
+
+        self.load_state_dict(current_state)
 
         update_module_sharding_plan(self, changed_sharding_params)
         return
