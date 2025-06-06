@@ -499,6 +499,7 @@ def shard_quant_model(
     device_memory_size: Optional[int] = None,
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ddr_cap: Optional[int] = None,
+    sharding_plan: Optional[ShardingPlan] = None,
 ) -> Tuple[torch.nn.Module, ShardingPlan]:
     """
     Shard a quantized TorchRec model, used for generating the most optimal model for inference and
@@ -534,6 +535,20 @@ def shard_quant_model(
         quant_model = quantize_inference_model(module)
         sharded_model, _ = shard_quant_model(quant_model)
     """
+
+    if sharding_plan is not None:
+        model = _shard_modules(
+            module=model,
+            device=torch.device(sharding_device),
+            plan=sharding_plan,
+            env=trec_dist.ShardingEnv.from_local(
+                world_size,
+                0,
+            ),
+            sharders=sharders if sharders else DEFAULT_SHARDERS,
+        )
+
+        return model, sharding_plan
 
     if constraints is None:
         table_fqns = []
