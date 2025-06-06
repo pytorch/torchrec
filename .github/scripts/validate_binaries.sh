@@ -130,7 +130,8 @@ conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
 
 conda run -n "${CONDA_ENV}" python --version
 
-if [[ ${MATRIX_GPU_ARCH_VERSION} != '12.4' ]]; then
+# we only have one cuda version for pypi build
+if [[ ${MATRIX_GPU_ARCH_VERSION} != '12.6' ]]; then
     exit 0
 fi
 
