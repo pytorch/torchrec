@@ -21,6 +21,7 @@ from torchrec.ir.utils import (
     decapsulate_ir_modules,
     encapsulate_ir_modules,
     mark_dynamic_kjt,
+    qualname,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -524,7 +525,7 @@ class TestJsonSerializer(unittest.TestCase):
 
         eager_out = model(id_list_features)
 
-        JsonSerializer.module_to_serializer_cls["CompoundModule"] = (
+        JsonSerializer.module_to_serializer_cls[qualname(CompoundModule)] = (
             CompoundModuleSerializer
         )
         # Serialize
@@ -824,3 +825,33 @@ class TestJsonSerializer(unittest.TestCase):
         unflatten_ep = torch.export.unflatten(ep)
         deserialized = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
         self.assertEqual(deserialized.regroup._emb_dtype, data_type)  # pyre-ignore[16]
+
+    def test_qualname(self) -> None:
+        tb1_config = EmbeddingBagConfig(
+            name="t1",
+            embedding_dim=3,
+            num_embeddings=10,
+            feature_names=["f1", "f2"],
+        )
+        tb3_config = EmbeddingBagConfig(
+            name="t3",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f5"],
+        )
+
+        ebc = EmbeddingBagCollection(
+            tables=[tb1_config, tb3_config],
+            is_weighted=False,
+        )
+
+        # for an instance it should return the full qualified class name
+        self.assertEqual(
+            qualname(ebc), "torchrec.modules.embedding_modules.EmbeddingBagCollection"
+        )
+
+        # for a class type it should also return the full qualified class namme
+        self.assertEqual(
+            qualname(EmbeddingBagCollection),
+            "torchrec.modules.embedding_modules.EmbeddingBagCollection",
+        )

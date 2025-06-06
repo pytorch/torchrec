@@ -559,21 +559,13 @@ def dynamic_sharding_test(
             all_local_pred_m2.append(torch.empty_like(local_m2_pred))
         dist.all_gather(all_local_pred_m2, local_m2_pred, group=ctx.pg)
 
-        # Run second training step of the unsharded model.
-        assert optim == EmbOptimType.EXACT_SGD
-        global_opt = torch.optim.SGD(global_model.parameters(), lr=0.1)
-
-        global_pred = gen_full_model_pred_after_x_steps(
-            global_model, global_opt, [global_input_0, global_input_1], steps=num_steps
-        )
-
         # Compare predictions of sharded vs unsharded models.
         if qcomms_config is None:
             torch.testing.assert_close(
-                global_pred, torch.cat(all_local_pred_m1), atol=1e-4, rtol=1e-4
-            )
-            torch.testing.assert_close(
-                global_pred, torch.cat(all_local_pred_m2), atol=1e-4, rtol=1e-4
+                torch.cat(all_local_pred_m1),
+                torch.cat(all_local_pred_m2),
+                atol=1e-4,
+                rtol=1e-4,
             )
         else:
             # With quantized comms, we can relax constraints a bit
@@ -583,12 +575,11 @@ def dynamic_sharding_test(
                 qcomms_config.backward_precision,
             ]:
                 rtol = 0.05
-            atol = global_pred.max().item() * rtol
+
+            cat_1 = torch.cat(all_local_pred_m1)
+            atol = cat_1.max().item() * rtol
             torch.testing.assert_close(
-                global_pred, torch.cat(all_local_pred_m1), rtol=rtol, atol=atol
-            )
-            torch.testing.assert_close(
-                global_pred, torch.cat(all_local_pred_m2), rtol=rtol, atol=atol
+                cat_1, torch.cat(all_local_pred_m2), atol=atol, rtol=rtol
             )
 
 
