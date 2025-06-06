@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
   pull_request:
 
+
 jobs:
   build_docs_job:
     runs-on: ${{ matrix.os }}
@@ -16,89 +17,90 @@ jobs:
     strategy:
       matrix:
         include:
-         - os: linux.20_04.4x
-           python-version: 3.9
-           python-tag: "py39"
+          - os: linux.24_04.4x
+            python-version: 3.9
+            python-tag: "py39"
     steps:
-    - name: Check ldd --version
-      run: ldd --version
-    - name: Checkout
-      uses: actions/checkout@v4
-    # Update references
-    - name: Update pip
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install python3-pip
-        sudo pip3 install --upgrade pip
-    - name: Setup conda
-      run: |
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda
-    - name: setup Path
-      run: |
-        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
-    - name: create conda env
-      run: |
-        conda create --name build_binary python=${{ matrix.python-version }}
-        conda info
-    - name: check python version no Conda
-      run: |
-        python --version
-    - name: check python version
-      run: |
-        conda run -n build_binary python --version
-    - name: Install gcc
-      shell: bash
-      run: |
-        sudo apt-get install build-essential
-    - name: setup Path
-      run: |
-        echo /usr/local/bin >> $GITHUB_PATH
-    - name: Install PyTorch
-      shell: bash
-      run: |
-        conda run -n build_binary pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
-    - name: Install fbgemm
-      run: |
-        conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
-    - name: Install torchmetrics
-      run: |
-        conda run -n build_binary pip install torchmetrics==1.0.3
-    - name: Install TorchRec
-      run: |
-        conda run -n build_binary pip install -r requirements.txt
-        conda run -n build_binary python setup.py bdist_wheel --python-tag=${{ matrix.python-tag }}
-    - name: Test fbgemm_gpu and torchrec installation
-      shell: bash
-      run: |
-        conda run -n build_binary \
-          python -c "import fbgemm_gpu"
-        conda run -n build_binary \
-          python -c "import torchrec"
-    - name: Build the docset
-      run: |
-        conda run -n build_binary python -m pip install -r docs/requirements.txt
-        cd ./docs
-        conda run -n build_binary make html
-        cd ..
-    - name: Upload Built-Docs
-      uses: actions/upload-artifact@v4
-      with:
-        name: Built-Docs
-        path: docs/build/html/
-    - name: Get output time
-      run: echo "The time was ${{ steps.build.outputs.time }}"
-    - name: Deploy
-      if: github.ref == 'refs/heads/main'
-      uses: JamesIves/github-pages-deploy-action@releases/v3
-      with:
+      - name: Check ldd --version
+        run: ldd --version
+      - name: Checkout
+        uses: actions/checkout@v4
+      # Update references
+      - name: Update pip
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install python3-pip
+          sudo pip3 install --upgrade pip
+      - name: Setup conda
+        run: |
+          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+          bash ~/miniconda.sh -b -p $HOME/miniconda
+      - name: setup Path
+        run: |
+          echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+          echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+      - name: create conda env
+        run: |
+          conda create --name build_binary python=${{ matrix.python-version }}
+          conda info
+      - name: check python version no Conda
+        run: |
+          python --version
+      - name: check python version
+        run: |
+          conda run -n build_binary python --version
+      - name: Install gcc
+        shell: bash
+        run: |
+          sudo apt-get install build-essential
+      - name: setup Path
+        run: |
+          echo /usr/local/bin >> $GITHUB_PATH
+      - name: Install PyTorch
+        shell: bash
+        run: |
+          conda run -n build_binary pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
+      - name: Install fbgemm
+        run: |
+          conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+      - name: Install torchmetrics
+        run: |
+          conda run -n build_binary pip install torchmetrics==1.0.3
+      - name: Install TorchRec
+        run: |
+          conda run -n build_binary pip install -r requirements.txt
+          conda run -n build_binary python setup.py bdist_wheel --python-tag=${{ matrix.python-tag }}
+      - name: Test fbgemm_gpu and torchrec installation
+        shell: bash
+        run: |
+          conda run -n build_binary \
+            python -c "import fbgemm_gpu"
+          conda run -n build_binary \
+            python -c "import torchrec"
+      - name: Build the docset
+        run: |
+          conda run -n build_binary python -m pip install -r docs/requirements.txt
+          cd ./docs
+          conda run -n build_binary make html
+          cd ..
+      - name: Upload Built-Docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Built-Docs
+          path: docs/build/html/
+      - name: Get output time
+        run: echo "The time was ${{ steps.build.outputs.time }}"
+      - name: Deploy
+        if: github.ref == 'refs/heads/main'
+        uses: JamesIves/github-pages-deploy-action@releases/v3
+        with:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: gh-pages # The branch the action should deploy to.
           FOLDER: docs/build/html # The folder the action should deploy.
 
   doc-preview:
-    runs-on: [linux.2xlarge]
+    runs-on:
+      - linux.2xlarge
     needs: build_docs_job
     if: ${{ github.event_name == 'pull_request' }}
     steps:

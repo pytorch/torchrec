@@ -12,6 +12,7 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   workflow_dispatch:
 
+
 permissions:
   id-token: write
   contents: read
@@ -27,26 +28,26 @@ jobs:
       with-rocm: false
   filter-matrix:
     needs: generate-matrix
-    runs-on: linux.20_04.4x
+    runs-on: linux.24_04.4x
     outputs:
       matrix: ${{ steps.filter.outputs.matrix }}
     steps:
-    - uses: actions/setup-python@v4
-    - name: Checkout torchrec repository
-      uses: actions/checkout@v4
-      with:
-        repository: pytorch/torchrec
-    - name: Filter Generated Built Matrix
-      id: filter
-      env:
-        MAT: ${{ needs.generate-matrix.outputs.matrix }}
-      run: |
-        set -ex
-        pwd
-        ls
-        MATRIX_BLOB="$(python .github/scripts/filter.py)"
-        echo "${MATRIX_BLOB}"
-        echo "matrix=${MATRIX_BLOB}" >> "${GITHUB_OUTPUT}"
+      - uses: actions/setup-python@v4
+      - name: Checkout torchrec repository
+        uses: actions/checkout@v4
+        with:
+          repository: pytorch/torchrec
+      - name: Filter Generated Built Matrix
+        id: filter
+        env:
+          MAT: ${{ needs.generate-matrix.outputs.matrix }}
+        run: |
+          set -ex
+          pwd
+          ls
+          MATRIX_BLOB="$(python .github/scripts/filter.py)"
+          echo "${MATRIX_BLOB}"
+          echo "matrix=${MATRIX_BLOB}" >> "${GITHUB_OUTPUT}"
   build:
     needs: filter-matrix
     name: pytorch/torchrec
