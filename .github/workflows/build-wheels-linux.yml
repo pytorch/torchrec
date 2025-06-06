@@ -41,6 +41,7 @@ jobs:
         id: filter
         env:
           MAT: ${{ needs.generate-matrix.outputs.matrix }}
+          CHANNEL: release
         run: |
           set -ex
           pwd
