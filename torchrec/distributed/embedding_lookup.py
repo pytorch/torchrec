@@ -399,6 +399,11 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             emb_module.flush()
 
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        for emb_module in self._emb_modules:
+            if isinstance(emb_module, KeyValueEmbedding):
+                emb_module.create_rocksdb_hard_link_snapshot()
+
     def purge(self) -> None:
         for emb_module in self._emb_modules:
             # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
@@ -722,6 +727,11 @@ class GroupedPooledEmbeddingsLookup(
         for emb_module in self._emb_modules:
             # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             emb_module.flush()
+
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        for emb_module in self._emb_modules:
+            if isinstance(emb_module, KeyValueEmbedding):
+                emb_module.create_rocksdb_hard_link_snapshot()
 
     def purge(self) -> None:
         for emb_module in self._emb_modules:
