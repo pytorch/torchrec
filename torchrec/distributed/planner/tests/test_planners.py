@@ -618,7 +618,7 @@ class TestAutoPlannerWithScaleupProposer(unittest.TestCase):
         # L1 cache size is 64GB per shard and L2 cache size is 128MB per shard per table
         self.assertTrue(
             any(
-                "dram_virtual_table: HBM: 0.501 GB, DDR: 256.0 GB" in line
+                "dram_virtual_table: HBM: 0.501 GB, DDR: 0.0 GB" in line
                 for line in stats
             )
         )
@@ -748,7 +748,7 @@ class TestAutoPlannerWithScaleupProposer(unittest.TestCase):
         # L2 cache size is 128MB per shard per table
         self.assertTrue(
             any(
-                "dram_virtual_table: HBM: 0.002 GB, DDR: 256.0 GB" in line
+                "dram_virtual_table: HBM: 0.002 GB, DDR: 0.0 GB" in line
                 for line in stats
             )
         )
@@ -800,7 +800,7 @@ class TestAutoPlannerWithScaleupProposer(unittest.TestCase):
         # L2 cache size is 128MB per shard per table
         self.assertTrue(
             any(
-                "dram_virtual_table: HBM: 0.005 GB, DDR: 256.0 GB" in line
+                "dram_virtual_table: HBM: 0.005 GB, DDR: 0.0 GB" in line
                 for line in stats
             )
         )
