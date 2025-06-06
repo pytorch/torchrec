@@ -22,10 +22,6 @@ conda run -n build_binary python --version
 # installation instructions on following page
 # https://github.com/pytorch/torchrec#installations
 
-if [[ ${MATRIX_GPU_ARCH_TYPE} = 'rocm' ]]; then
-    echo "We don't support rocm"
-    exit 0
-fi
 
 # figure out CUDA VERSION
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
