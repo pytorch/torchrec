@@ -39,3 +39,4 @@ jobs:
       repository: "pytorch/torchrec"
       smoke_test: "source ./.github/scripts/validate_binaries.sh"
       with_cuda: enable
+      with_rocm: false
