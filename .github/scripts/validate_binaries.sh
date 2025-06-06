@@ -10,11 +10,11 @@ export PYTORCH_CUDA_PKG=""
 export CONDA_ENV="build_binary"
 
 if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
-    echo "Conda doesn't support 3.13t yet, you can just try \`conda create -n test python=3.13t\`"
-    exit 0
+    # use conda-forge to install python3.13t
+    conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
+else
+    conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
 fi
-
-conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
 
 conda run -n build_binary python --version
 
@@ -22,10 +22,6 @@ conda run -n build_binary python --version
 # installation instructions on following page
 # https://github.com/pytorch/torchrec#installations
 
-if [[ ${MATRIX_GPU_ARCH_TYPE} = 'rocm' ]]; then
-    echo "We don't support rocm"
-    exit 0
-fi
 
 # figure out CUDA VERSION
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
