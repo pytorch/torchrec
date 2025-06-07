@@ -69,6 +69,18 @@ jobs:
             python-version: '3.12'
             python-tag: "py312"
             cuda-tag: "cu128"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.13'
+            python-tag: "py313"
+            cuda-tag: "cu118"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.13'
+            python-tag: "py313"
+            cuda-tag: "cu126"
+          - os: linux.g5.12xlarge.nvidia.gpu
+            python-version: '3.13'
+            python-tag: "py313"
+            cuda-tag: "cu128"
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     permissions:
       id-token: write
