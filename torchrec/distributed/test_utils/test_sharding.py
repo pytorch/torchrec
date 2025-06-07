@@ -541,6 +541,8 @@ def dynamic_sharding_test(
         )
 
         local_m1_dmp.reshard("sparse.ebc", new_module_sharding_plan_delta)
+        # Must recreate local_m1_opt, because current local_m1_opt is a copy of underlying fused_opt
+        local_m1_opt = CombinedOptimizer([local_m1_dmp.fused_optimizer, dense_m1_optim])
 
         local_m1_pred = gen_full_pred_after_one_step(
             local_m1_dmp, local_m1_opt, local_input_1
@@ -954,7 +956,12 @@ def gen_full_pred_after_one_step(
     opt: torch.optim.Optimizer,
     input: ModelInput,
     skip_inference: bool = False,
+    skip_training: bool = False,
 ) -> torch.Tensor:
+    if skip_training:
+        model.train(False)
+        output = model(input)
+        return output
     # Run a single training step of the global model.
     opt.zero_grad()
     model.train(True)
@@ -1120,3 +1127,32 @@ def generate_rank_placements(
         placement = sorted(random.sample(range(world_size), ranks_per_table))
         placements.append(placement)
     return placements
+
+
+def compare_opt_local_t(
+    opt_1: CombinedOptimizer,
+    opt_2: CombinedOptimizer,
+    table_id: int,
+    rtol: float = 1e-4,
+    atol: float = 1e-4,
+) -> None:
+    """
+    Helper function to compare the optimizer state of two models after one training step.
+    Useful for debugging sharding tests to see which model weights are different
+    """
+    # TODO: update logic to be generic other embedding modules
+    t1 = (
+        opt_1.state_dict()["state"][
+            "sparse.ebc.embedding_bags.table_" + str(table_id) + ".weight"
+        ]["table_" + str(table_id) + ".momentum1"]
+        .local_shards()[0]
+        .tensor
+    )
+    t2 = (
+        opt_2.state_dict()["state"][
+            "sparse.ebc.embedding_bags.table_" + str(table_id) + ".weight"
+        ]["table_" + str(table_id) + ".momentum1"]
+        .local_shards()[0]
+        .tensor
+    )
+    torch.testing.assert_close(t1, t2, rtol=rtol, atol=atol)
