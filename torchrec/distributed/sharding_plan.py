@@ -621,7 +621,8 @@ def row_wise(
 
 
 def column_wise(
-    ranks: List[int],
+    ranks: Optional[List[int]] = None,
+    size_per_rank: Optional[List[int]] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::COLUMN_WISE` for construct_module_sharding_plan.
@@ -648,22 +649,41 @@ def column_wise(
         device_type: str,
         sharder: ModuleSharder[nn.Module],
     ) -> ParameterSharding:
-        if param.shape[1] % len(ranks) != 0:
-            raise ValueError(
-                f"column dim of {param.shape[1]} cannot be evenly divided across {ranks}"
-            )
-        shard_dim = param.shape[1] // len(ranks)
-        size_and_offsets = _get_parameter_size_offsets(
-            param,
-            ShardingType.COLUMN_WISE,
-            local_size,
-            world_size,
-            col_wise_shard_dim=shard_dim,
-        )
+        if size_per_rank is None:
+            assert ranks is not None
 
-        size_offset_ranks = []
-        for (size, offset), rank in zip(size_and_offsets, ranks):
-            size_offset_ranks.append((size, offset, rank))
+            if param.shape[1] % len(ranks) != 0:
+                raise ValueError(
+                    f"column dim of {param.shape[1]} cannot be evenly divided across {ranks}"
+                )
+            shard_dim = param.shape[1] // len(ranks)
+            size_and_offsets = _get_parameter_size_offsets(
+                param,
+                ShardingType.COLUMN_WISE,
+                local_size,
+                world_size,
+                col_wise_shard_dim=shard_dim,
+            )
+
+            size_offset_ranks = []
+            for (size, offset), rank in zip(size_and_offsets, ranks):
+                size_offset_ranks.append((size, offset, rank))
+        else:
+            size_offset_ranks = []
+            (rows, cols) = param.shape
+            cur_offset = 0
+            prev_offset = 0
+            for rank, cur_size in enumerate(size_per_rank):
+                cur_offset += cur_size
+                cur_offset = min(cur_offset, cols)
+                cur_cols = cur_offset - prev_offset
+                size_offset_ranks.append(([rows, cur_cols], [0, prev_offset], rank))
+                prev_offset = cur_offset
+
+            if cur_offset < cols:
+                raise ValueError(
+                    f"Cannot fit tensor of {rows, cols} into sizes_ranks_placements = {size_per_rank}"
+                )
 
         return _get_parameter_sharding(
             param,

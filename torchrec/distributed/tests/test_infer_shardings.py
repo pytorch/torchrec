@@ -476,6 +476,129 @@ class InferShardingsTest(unittest.TestCase):
     )
     # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
     @given(
+        weight_dtype=st.sampled_from([torch.qint8]),
+        device_type=st.sampled_from(["cuda"]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_uneven_cw(self, weight_dtype: torch.dtype, device_type: str) -> None:
+        num_embeddings = 64
+        emb_dim = 512
+        dim_1 = 63
+        dim_2 = 128
+        dim_3 = 65
+        dim_4 = 256
+        local_size = 4
+        world_size = 4
+        batch_size = 4
+        local_device = torch.device(f"{device_type}:0")
+        mi = create_test_model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+        )
+        non_sharded_model = mi.quant_model
+        expected_ranks: List[int] = [0, 1, 2, 3]
+        expected_shards = [
+            [
+                (
+                    (0, 0, num_embeddings, dim_1),
+                    placement(device_type, expected_ranks[0], world_size),
+                ),
+                (
+                    (0, dim_1, num_embeddings, dim_2),
+                    placement(device_type, expected_ranks[1], world_size),
+                ),
+                (
+                    (0, dim_1 + dim_2, num_embeddings, dim_3),
+                    placement(device_type, expected_ranks[2], world_size),
+                ),
+                (
+                    (0, dim_1 + dim_2 + dim_3, num_embeddings, dim_4),
+                    placement(device_type, expected_ranks[3], world_size),
+                ),
+            ]
+        ]
+        sharder = TestQuantEBCSharder(
+            sharding_type=ShardingType.COLUMN_WISE.value,
+            kernel_type=EmbeddingComputeKernel.QUANT.value,
+            shardable_params=[table.name for table in mi.tables],
+        )
+        module_plan = construct_module_sharding_plan(
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no
+            #  attribute `sparse`.
+            non_sharded_model._module.sparse.ebc,
+            per_param_sharding={
+                "table_0": column_wise(size_per_rank=[dim_1, dim_2, dim_3, dim_4]),
+            },
+            # pyre-ignore
+            sharder=sharder,
+            local_size=local_size,
+            world_size=world_size,
+            device_type=device_type,
+        )
+        plan = ShardingPlan(plan={"_module.sparse.ebc": module_plan})
+
+        sharded_model = shard_qebc(
+            mi=mi,
+            sharding_type=ShardingType.COLUMN_WISE,
+            device=local_device,
+            expected_shards=expected_shards,
+            plan=plan,
+        )
+
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        torch.testing.assert_close(non_sharded_output, sharded_output)
+
+        gm: torch.fx.GraphModule = symbolic_trace(sharded_model)
+        gm_script = torch.jit.script(gm)
+        gm_script_output = gm_script(*inputs[0])
+        torch.testing.assert_close(sharded_output, gm_script_output)
+
+        weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
+
+        for table_name, expected_shard in zip(["table_0"], expected_shards):
+            unsharded_weight_fqn = (
+                f"_module.sparse.ebc.embedding_bags.{table_name}.weight"
+            )
+            for (offset_r, offset_c, size_r, size_c), rank in expected_shard:
+                tbe_idx = int(rank.split(":")[-1])
+                sharded_weight_fqn: str = (
+                    f"_module.sparse.ebc.tbes.{tbe_idx}.0.{table_name}.weight"
+                )
+
+                assert sharded_weight_fqn in weights_spec
+                wspec = weights_spec[sharded_weight_fqn]
+                assert wspec.fqn == unsharded_weight_fqn
+                assert wspec.shard_sizes == [size_r, size_c]
+                assert wspec.shard_offsets == [offset_r, offset_c]
+                assert wspec.sharding_type == ShardingType.COLUMN_WISE.value
+
+                for qcomp in ["qscale", "qbias"]:
+                    sharded_weight_qcomp_fqn: str = f"{sharded_weight_fqn}_{qcomp}"
+                    assert sharded_weight_qcomp_fqn in weights_spec
+                    wqcomp_spec = weights_spec[sharded_weight_qcomp_fqn]
+                    assert wqcomp_spec.fqn == f"{unsharded_weight_fqn}_{qcomp}"
+                    assert wqcomp_spec.shard_sizes == [size_r, 2]
+                    assert wqcomp_spec.shard_offsets == [0, 0]
+                    assert wqcomp_spec.sharding_type == ShardingType.COLUMN_WISE.value
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-fixme[56]Pyre was not able to infer the type of argument `hypothesis.strategies.booleans()` to decorator factory `hypothesis.given`.
+    @given(
         emb_dim=st.sampled_from([192, 128]),
         test_permute=st.booleans(),
         weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),

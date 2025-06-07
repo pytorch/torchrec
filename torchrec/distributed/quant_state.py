@@ -149,6 +149,7 @@ class ShardedQuantEmbeddingModuleState(
         # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
         #  `_table_name_to_tensors_list_qbias`.
         self._table_name_to_tensors_list_qbias: Dict[str, List[torch.Tensor]] = {}
+        _table_name_to_shard_idx: Dict[str, int] = {}
 
         for tbe, config in tbes.items():
             for (tbe_split_w, tbe_split_qscale, tbe_split_qbias), table in zip(
@@ -164,6 +165,12 @@ class ShardedQuantEmbeddingModuleState(
                 assert table.local_metadata
                 metadata: ShardMetadata = copy.deepcopy(table.local_metadata)
                 metadata.shard_sizes = [tbe_split_w.size(0), tbe_split_w.size(1)]
+
+                if table.name not in _table_name_to_shard_idx:
+                    _table_name_to_shard_idx[table.name] = 0
+
+                column_idx = _table_name_to_shard_idx[table.name]
+                _table_name_to_shard_idx[table.name] = column_idx + 1
 
                 # TODO(ivankobzarev): "meta" sharding support: cleanup when copy to "meta" moves all tensors to "meta"
                 # pyre-ignore
@@ -199,12 +206,6 @@ class ShardedQuantEmbeddingModuleState(
                 ]:
                     assert table.local_metadata
                     metadata: ShardMetadata = copy.deepcopy(table.local_metadata)
-                    shard_sizes = metadata.shard_sizes
-                    shard_offsets = metadata.shard_offsets
-
-                    shard_sizes_cols = shard_sizes[1]
-                    shard_offsets_cols = shard_offsets[1]
-
                     parameter_sharding: ParameterSharding = (
                         table_name_to_parameter_sharding[table.name]
                     )
@@ -221,7 +222,6 @@ class ShardedQuantEmbeddingModuleState(
                                 torch.empty([])
                             ] * num_shards
 
-                        column_idx = int(shard_offsets_cols / shard_sizes_cols)
                         # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[No...
                         table_name_to_tensors_list[table.name][
                             column_idx
