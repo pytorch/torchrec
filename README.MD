@@ -40,13 +40,13 @@ Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html
 
 1. Install pytorch. See [pytorch documentation](https://pytorch.org/get-started/locally/).
    ```
-   CUDA 12.4
+   CUDA 12.8
 
-   pip install torch --index-url https://download.pytorch.org/whl/nightly/cu124
+   pip install torch --index-url https://download.pytorch.org/whl/nightly/cu128
 
-   CUDA 12.1
+   CUDA 12.6
 
-   pip install torch --index-url https://download.pytorch.org/whl/nightly/cu121
+   pip install torch --index-url https://download.pytorch.org/whl/nightly/cu126
 
    CUDA 11.8
 
@@ -65,13 +65,13 @@ Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html
 
 3. Install FBGEMM.
    ```
-   CUDA 12.4
+   CUDA 12.8
 
-   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu124
+   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu128
 
-   CUDA 12.1
+   CUDA 12.6
 
-   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu121
+   pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cu126
 
    CUDA 11.8
 
@@ -92,7 +92,7 @@ Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html
    python setup.py install develop
    ```
 
-5. Test the installation (use torchx-nightly for 3.11; for 3.12, torchx currently doesn't work).
+5. Test the installation.
    ```
    GPU mode
 
