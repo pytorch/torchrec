@@ -3,6 +3,8 @@ name: Build Dynamic Embedding Wheels
 on:
   workflow_dispatch:
   pull_request:
+    paths:
+      - "contrib/*"
     branches:
       - main
   push:
