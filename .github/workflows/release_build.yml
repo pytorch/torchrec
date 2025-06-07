@@ -10,6 +10,7 @@ on:
         required: false
   workflow_dispatch:
 
+
 jobs:
 
   # build on cpu hosts and upload to GHA
@@ -18,198 +19,209 @@ jobs:
     strategy:
       matrix:
         include:
-         - os: linux.2xlarge
-           python-version: 3.9
-           python-tag: "py39"
-           cuda-tag: "cu124"
-         - os: linux.2xlarge
-           python-version: '3.10'
-           python-tag: "py310"
-           cuda-tag: "cu124"
-         - os: linux.2xlarge
-           python-version: '3.11'
-           python-tag: "py311"
-           cuda-tag: "cu124"
-         - os: linux.2xlarge
-           python-version: '3.12'
-           python-tag: "py312"
-           cuda-tag: "cu124"
+          - os: linux.2xlarge
+            python-version: 3.9
+            python-tag: "py39"
+            cuda-tag: "cu126"
+          - os: linux.2xlarge
+            python-version: '3.10'
+            python-tag: "py310"
+            cuda-tag: "cu126"
+          - os: linux.2xlarge
+            python-version: '3.11'
+            python-tag: "py311"
+            cuda-tag: "cu126"
+          - os: linux.2xlarge
+            python-version: '3.12'
+            python-tag: "py312"
+            cuda-tag: "cu126"
+          - os: linux.2xlarge
+            python-version: '3.13'
+            python-tag: "py313"
+            cuda-tag: "cu126"
     steps:
-    # Checkout the repository to the GitHub Actions runner
-    - name: Check ldd --version
-      run: ldd --version
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Update pip
-      run: |
-        sudo yum update -y
-        sudo yum -y install git python3-pip
-    - name: Setup conda
-      run: |
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda -u
-    - name: setup Path
-      run: |
-        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
-    - name: create conda env
-      run: |
-        conda create --name build_binary python=${{ matrix.python-version }}
-        conda info
-    - name: check python version no Conda
-      run: |
-        python --version
-    - name: check python version
-      run: |
-        conda run -n build_binary python --version
-    - name: Install C/C++ compilers
-      run: |
-        sudo yum install -y gcc gcc-c++
-    - name: Install PyTorch and CUDA
-      shell: bash
-      run: |
-        conda run -n build_binary pip install torch
-    - name: Install fbgemm
-      shell: bash
-      run: |
-        conda run -n build_binary pip install numpy
-        conda run -n build_binary pip install fbgemm-gpu
-    - name: Install Dependencies
-      shell: bash
-      run: |
-        conda run -n build_binary python -m pip install -r requirements.txt
-    - name: Test Installation of dependencies
-      run: |
-        conda run -n build_binary python -c "import torch.distributed"
-        echo "torch.distributed succeeded"
-        conda run -n build_binary python -c "import skbuild"
-        echo "skbuild succeeded"
-        conda run -n build_binary python -c "import numpy"
-        echo "numpy succeeded"
-    # for the conda run with quotes, we have to use "\" and double quotes
-    # here is the issue: https://github.com/conda/conda/issues/10972
-    - name: Build TorchRec
-      env:
-        OFFICIAL_RELEASE: 1
-      run: |
-        rm -r dist || true
-        conda run -n build_binary \
-          python setup.py bdist_wheel \
-          --python-tag=${{ matrix.python-tag }}
-    - name: Upload wheel as GHA artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
-        path: dist/torchrec-*.whl
+      # Checkout the repository to the GitHub Actions runner
+      - name: Check ldd --version
+        run: ldd --version
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Update pip
+        run: |
+          sudo yum update -y
+          sudo yum -y install git python3-pip
+      - name: Setup conda
+        run: |
+          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+          bash ~/miniconda.sh -b -p $HOME/miniconda -u
+      - name: setup Path
+        run: |
+          echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+          echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+      - name: create conda env
+        run: |
+          conda create --name build_binary python=${{ matrix.python-version }}
+          conda info
+      - name: check python version no Conda
+        run: |
+          python --version
+      - name: check python version
+        run: |
+          conda run -n build_binary python --version
+      - name: Install C/C++ compilers
+        run: |
+          sudo yum install -y gcc gcc-c++
+      - name: Install PyTorch and CUDA
+        shell: bash
+        run: |
+          conda run -n build_binary pip install torch
+      - name: Install fbgemm
+        shell: bash
+        run: |
+          conda run -n build_binary pip install numpy
+          conda run -n build_binary pip install fbgemm-gpu
+      - name: Install Dependencies
+        shell: bash
+        run: |
+          conda run -n build_binary python -m pip install -r requirements.txt
+      - name: Test Installation of dependencies
+        run: |
+          conda run -n build_binary python -c "import torch.distributed"
+          echo "torch.distributed succeeded"
+          conda run -n build_binary python -c "import skbuild"
+          echo "skbuild succeeded"
+          conda run -n build_binary python -c "import numpy"
+          echo "numpy succeeded"
+      # for the conda run with quotes, we have to use "\" and double quotes
+      # here is the issue: https://github.com/conda/conda/issues/10972
+      - name: Build TorchRec
+        env:
+          OFFICIAL_RELEASE: 1
+        run: |
+          rm -r dist || true
+          conda run -n build_binary \
+            python setup.py bdist_wheel \
+            --python-tag=${{ matrix.python-tag }}
+      - name: Upload wheel as GHA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+          path: dist/torchrec-*.whl
 
   # download from GHA, sanity check on gpu and push to pypi
   sanity_check_on_gpu_and_push:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [linux.g5.12xlarge.nvidia.gpu]
-        python-version: [3.9, "3.10", "3.11", "3.12"]
-        cuda-tag: ["cu124"]
+        os:
+          - linux.g5.12xlarge.nvidia.gpu
+        python-version:
+          - 3.9
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+        cuda-tag:
+          - "cu126"
     needs: build_on_cpu
     # the glibc version should match the version of the one we used to build the binary
     # for this case, it's 2.26
     steps:
-    - name: Check ldd --version
-      run: ldd --version
-    - name: check cpu info
-      shell: bash
-      run: |
-        cat /proc/cpuinfo
-    - name: check distribution info
-      shell: bash
-      run: |
-        cat /proc/version
-    - name: Display EC2 information
-      shell: bash
-      run: |
-        set -euo pipefail
-        function get_ec2_metadata() {
-          # Pulled from instance metadata endpoint for EC2
-          # see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
-          category=$1
-            curl -H "X-aws-ec2-metadata-token: $(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 30")" -fsSL "http://169.254.169.254/latest/meta-data/${category}"
-        }
-        echo "ami-id: $(get_ec2_metadata ami-id)"
-        echo "instance-id: $(get_ec2_metadata instance-id)"
-        echo "instance-type: $(get_ec2_metadata instance-type)"
-    - name: check gpu info
-      shell: bash
-      run: |
-        sudo yum install lshw -y
-        sudo lshw -C display
-    # Checkout the repository to the GitHub Actions runner
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Update pip
-      run: |
-        sudo yum update -y
-        sudo yum -y install git python3-pip
-    - name: Setup conda
-      run: |
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
-        bash ~/miniconda.sh -b -p $HOME/miniconda
-    - name: setup Path
-      run: |
-        echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
-        echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
-    - name: create conda env
-      run: |
-        conda create --name build_binary python=${{ matrix.python-version }}
-        conda info
-    - name: check python version no Conda
-      run: |
-        python --version
-    - name: check python version
-      run: |
-        conda run -n build_binary python --version
-    - name: Install C/C++ compilers
-      run: |
-        sudo yum install -y gcc gcc-c++
-    - name: Install PyTorch and CUDA
-      shell: bash
-      run: |
-        conda run -n build_binary pip install torch
-    # download wheel from GHA
-    - name: Install fbgemm
-      shell: bash
-      run: |
-        conda run -n build_binary pip install numpy
-        conda run -n build_binary pip install fbgemm-gpu
-    - name: Install torchmetrics
-      shell: bash
-      run: |
-        conda run -n build_binary pip install torchmetrics==1.0.3
-    - name: Download wheel
-      uses: actions/download-artifact@v4
-      with:
-        name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
-    - name: Display structure of downloaded files
-      run: ls -R
-    - name: Install TorchRec
-      run: |
-        rm -r dist || true
-        conda run -n build_binary python -m pip install *.whl
-    - name: Test fbgemm_gpu and torchrec installation
-      shell: bash
-      run: |
-        conda run -n build_binary \
-          python -c "import fbgemm_gpu"
-        conda run -n build_binary \
-          python -c "import torchrec"
-    # Push to Pypi
-    - name: Push TorchRec Binary to PYPI
-      env:
+      - name: Check ldd --version
+        run: ldd --version
+      - name: check cpu info
+        shell: bash
+        run: |
+          cat /proc/cpuinfo
+      - name: check distribution info
+        shell: bash
+        run: |
+          cat /proc/version
+      - name: Display EC2 information
+        shell: bash
+        run: |
+          set -euo pipefail
+          function get_ec2_metadata() {
+            # Pulled from instance metadata endpoint for EC2
+            # see https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+            category=$1
+              curl -H "X-aws-ec2-metadata-token: $(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 30")" -fsSL "http://169.254.169.254/latest/meta-data/${category}"
+          }
+          echo "ami-id: $(get_ec2_metadata ami-id)"
+          echo "instance-id: $(get_ec2_metadata instance-id)"
+          echo "instance-type: $(get_ec2_metadata instance-type)"
+      - name: check gpu info
+        shell: bash
+        run: |
+          sudo yum install lshw -y
+          sudo lshw -C display
+      # Checkout the repository to the GitHub Actions runner
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Update pip
+        run: |
+          sudo yum update -y
+          sudo yum -y install git python3-pip
+      - name: Setup conda
+        run: |
+          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh
+          bash ~/miniconda.sh -b -p $HOME/miniconda
+      - name: setup Path
+        run: |
+          echo "/home/ec2-user/miniconda/bin" >> $GITHUB_PATH
+          echo "CONDA=/home/ec2-user/miniconda" >> $GITHUB_PATH
+      - name: create conda env
+        run: |
+          conda create --name build_binary python=${{ matrix.python-version }}
+          conda info
+      - name: check python version no Conda
+        run: |
+          python --version
+      - name: check python version
+        run: |
+          conda run -n build_binary python --version
+      - name: Install C/C++ compilers
+        run: |
+          sudo yum install -y gcc gcc-c++
+      - name: Install PyTorch and CUDA
+        shell: bash
+        run: |
+          conda run -n build_binary pip install torch
+      # download wheel from GHA
+      - name: Install fbgemm
+        shell: bash
+        run: |
+          conda run -n build_binary pip install numpy
+          conda run -n build_binary pip install fbgemm-gpu
+      - name: Install torchmetrics
+        shell: bash
+        run: |
+          conda run -n build_binary pip install torchmetrics==1.0.3
+      - name: Download wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: torchrec_${{ matrix.python-version }}_${{ matrix.cuda-tag }}.whl
+      - name: Display structure of downloaded files
+        run: ls -R
+      - name: Install TorchRec
+        run: |
+          rm -r dist || true
+          conda run -n build_binary python -m pip install *.whl
+      - name: Test fbgemm_gpu and torchrec installation
+        shell: bash
+        run: |
+          conda run -n build_binary \
+            python -c "import fbgemm_gpu"
+          conda run -n build_binary \
+            python -c "import torchrec"
+      # Push to Pypi
+      - name: Push TorchRec Binary to PYPI
+        env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-      run: |
-        conda run -n build_binary python -m pip install twine
-        conda run -n build_binary \
-          python -m twine upload \
-            --username __token__ \
-            --password "$PYPI_TOKEN" \
-            --skip-existing \
-            torchrec-*.whl
+        run: |
+          conda run -n build_binary python -m pip install twine
+          conda run -n build_binary \
+            python -m twine upload \
+              --username __token__ \
+              --password "$PYPI_TOKEN" \
+              --skip-existing \
+              torchrec-*.whl
