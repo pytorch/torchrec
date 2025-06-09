@@ -452,6 +452,9 @@ def dynamic_sharding_test(
 
         new_per_param_sharding = {}
 
+        assert len(sharders) == 1
+        # pyre-ignore
+        kernel_type = sharders[0]._kernel_type
         # Construct parameter shardings
         for i in range(num_tables):
             table_name = tables[i].name
@@ -466,7 +469,7 @@ def dynamic_sharding_test(
             )
             # TODO: CW sharding constructor takes in different args
             new_per_param_sharding[table_name] = sharding_type_constructor(
-                rank=new_ranks[i][0]
+                rank=new_ranks[i][0], compute_kernel=kernel_type
             )
 
         new_module_sharding_plan = construct_module_sharding_plan(
