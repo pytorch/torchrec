@@ -191,7 +191,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
 
     def __init__(
         self,
-        zch_size: int,
+        zch_size: int,  # number of embeddings in the table
         device: torch.device,
         total_num_buckets: int,
         max_probe: int = 128,
@@ -213,9 +213,12 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
                 zch_size % total_num_buckets == 0
             ), f"please pass output segments if not uniform buckets {zch_size=}, {total_num_buckets=}"
             output_segments = [
-                (zch_size // total_num_buckets) * bucket
-                for bucket in range(total_num_buckets + 1)
-            ]
+                (zch_size // total_num_buckets)
+                * bucket  # output_segments is a list of first indices of each bucket, along with the last index of the last bucket
+                for bucket in range(
+                    total_num_buckets + 1
+                )  # for example, if the table size is 100 and total_num_buckets is 4, then the table is divided into 4 buckets, each with size 100//4=25, and the first indices of each bucket are 0, 25, 50, 75
+            ]  # combining with the last index of the last bucket, the output_segments is [0, 25, 50, 75, 100]
 
         super().__init__(
             device=device,
