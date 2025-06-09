@@ -55,6 +55,25 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 @dataclass
 class RunOptions:
+    """
+    Configuration options for running sparse neural network benchmarks.
+
+    This class defines the parameters that control how the benchmark is executed,
+    including distributed training settings, batch configuration, and profiling options.
+
+    Args:
+        world_size (int): Number of processes/GPUs to use for distributed training.
+            Default is 2.
+        num_batches (int): Number of batches to process during the benchmark.
+            Default is 10.
+        sharding_type (ShardingType): Strategy for sharding embedding tables across devices.
+            Default is ShardingType.TABLE_WISE (entire tables are placed on single devices).
+        input_type (str): Type of input format to use for the model.
+            Default is "kjt" (KeyedJaggedTensor).
+        profile (str): Directory to save profiling results. If empty, profiling is disabled.
+            Default is "" (disabled).
+    """
+
     world_size: int = 2
     num_batches: int = 10
     sharding_type: ShardingType = ShardingType.TABLE_WISE
@@ -64,6 +83,22 @@ class RunOptions:
 
 @dataclass
 class EmbeddingTablesConfig:
+    """
+    Configuration for embedding tables used in sparse neural network benchmarks.
+
+    This class defines the parameters for generating embedding tables with both weighted
+    and unweighted features. It provides a method to generate the actual embedding bag
+    configurations that can be used to create embedding tables.
+
+    Args:
+        num_unweighted_features (int): Number of unweighted features to generate.
+            Default is 100.
+        num_weighted_features (int): Number of weighted features to generate.
+            Default is 100.
+        embedding_feature_dim (int): Dimension of the embedding vectors.
+            Default is 512.
+    """
+
     num_unweighted_features: int = 100
     num_weighted_features: int = 100
     embedding_feature_dim: int = 512
@@ -74,6 +109,21 @@ class EmbeddingTablesConfig:
         List[EmbeddingBagConfig],
         List[EmbeddingBagConfig],
     ]:
+        """
+        Generate embedding bag configurations for both unweighted and weighted features.
+
+        This method creates two lists of EmbeddingBagConfig objects:
+        1. Unweighted tables: Named as "table_{i}" with feature names "feature_{i}"
+        2. Weighted tables: Named as "weighted_table_{i}" with feature names "weighted_feature_{i}"
+
+        For both types, the number of embeddings scales with the feature index,
+        calculated as max(i + 1, 100) * 1000.
+
+        Returns:
+            Tuple[List[EmbeddingBagConfig], List[EmbeddingBagConfig]]: A tuple containing
+            two lists - the first for unweighted embedding tables and the second for
+            weighted embedding tables.
+        """
         tables = [
             EmbeddingBagConfig(
                 num_embeddings=max(i + 1, 100) * 1000,
@@ -97,12 +147,50 @@ class EmbeddingTablesConfig:
 
 @dataclass
 class PipelineConfig:
+    """
+    Configuration for training pipelines used in sparse neural network benchmarks.
+
+    This class defines the parameters for configuring the training pipeline and provides
+    a method to generate the appropriate pipeline instance based on the configuration.
+
+    Args:
+        pipeline (str): The type of training pipeline to use. Options include:
+            - "base": Basic training pipeline
+            - "sparse": Pipeline optimized for sparse operations
+            - "fused": Pipeline with fused sparse distribution
+            - "semi": Semi-synchronous training pipeline
+            - "prefetch": Pipeline with prefetching for sparse distribution
+            Default is "base".
+        emb_lookup_stream (str): The stream to use for embedding lookups.
+            Only used by certain pipeline types (e.g., "fused").
+            Default is "data_dist".
+    """
+
     pipeline: str = "base"
     emb_lookup_stream: str = "data_dist"
 
     def generate_pipeline(
         self, model: nn.Module, opt: torch.optim.Optimizer, device: torch.device
     ) -> Union[TrainPipelineBase, TrainPipelineSparseDist]:
+        """
+        Generate a training pipeline instance based on the configuration.
+
+        This method creates and returns the appropriate training pipeline object
+        based on the pipeline type specified in the configuration. Different
+        pipeline types are optimized for different training scenarios.
+
+        Args:
+            model (nn.Module): The model to be trained.
+            opt (torch.optim.Optimizer): The optimizer to use for training.
+            device (torch.device): The device to run the training on.
+
+        Returns:
+            Union[TrainPipelineBase, TrainPipelineSparseDist]: An instance of the
+            appropriate training pipeline class based on the configuration.
+
+        Raises:
+            RuntimeError: If an unknown pipeline type is specified.
+        """
         _pipeline_cls: Dict[
             str, Type[Union[TrainPipelineBase, TrainPipelineSparseDist]]
         ] = {
@@ -228,6 +316,10 @@ def runner(
     input_config: TestSparseNNInputConfig,
     pipeline_config: PipelineConfig,
 ) -> None:
+    # Ensure GPUs are available and we have enough of them
+    assert (
+        torch.cuda.is_available() and torch.cuda.device_count() >= world_size
+    ), "CUDA not available or insufficient GPUs for the requested world_size"
 
     torch.autograd.set_detect_anomaly(True)
     with MultiProcessContext(
