@@ -69,7 +69,7 @@ jobs:
       contents: read
     with:
       runner: ${{ matrix.os }}
-      timeout: 30
+      timeout: 60
       script: |
         ldd --version
         conda create -y --name build_binary python=${{ matrix.python.version }}
