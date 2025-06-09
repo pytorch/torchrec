@@ -46,11 +46,10 @@ class ScalarLogger(torch.nn.Module):
     ) -> None:
         super().__init__()
 
-        # persist scalar logger steps in checkpoint to make sure it is not reset after training job restarted
         self.register_buffer(
             ScalarLogger.STEPS_BUFFER,
             torch.tensor(1, dtype=torch.int64),
-            persistent=True,
+            persistent=False,
         )
 
         self._name: str = name
