@@ -1245,7 +1245,8 @@ def calculate_shard_storages(
             for _ in hbm_specific_sizes
         ]
         ddr_specific_sizes = [
-            (key_value_params.l2_cache_size or 0) * 1024 * 1024 * 1024
+            # TODO: revisit the logic for SSD virtual table
+            0
             for _ in ddr_specific_sizes
         ]
 
