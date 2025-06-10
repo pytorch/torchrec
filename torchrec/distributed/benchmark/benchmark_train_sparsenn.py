@@ -26,6 +26,8 @@ from torchrec.distributed.benchmark.benchmark_utils import benchmark_func, cmd_c
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
+from torchrec.distributed.planner.types import ParameterConstraints
 
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
@@ -69,17 +71,24 @@ class RunOptions:
             Default is 10.
         sharding_type (ShardingType): Strategy for sharding embedding tables across devices.
             Default is ShardingType.TABLE_WISE (entire tables are placed on single devices).
+        compute_kernel (EmbeddingComputeKernel): Compute kernel to use for embedding tables.
+            Default is EmbeddingComputeKernel.FUSED.
         input_type (str): Type of input format to use for the model.
             Default is "kjt" (KeyedJaggedTensor).
         profile (str): Directory to save profiling results. If empty, profiling is disabled.
             Default is "" (disabled).
+        planner_type (str): Type of sharding planner to use. Options are:
+            - "embedding": EmbeddingShardingPlanner (default)
+            - "hetero": HeteroEmbeddingShardingPlanner
     """
 
     world_size: int = 2
     num_batches: int = 10
     sharding_type: ShardingType = ShardingType.TABLE_WISE
+    compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.FUSED
     input_type: str = "kjt"
     profile: str = ""
+    planner_type: str = "embedding"
 
 
 @dataclass
@@ -272,6 +281,48 @@ def _generate_model(
     )
 
 
+def _generate_planner(
+    planner_type: str,
+    topology: Topology,
+    tables: Optional[List[EmbeddingBagConfig]],
+    weighted_tables: Optional[List[EmbeddingBagConfig]],
+    sharding_type: ShardingType,
+    compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.FUSED,
+) -> Union[EmbeddingShardingPlanner, HeteroEmbeddingShardingPlanner]:
+    # Create parameter constraints for tables
+    constraints = {}
+
+    if tables is not None:
+        for table in tables:
+            constraints[table.name] = ParameterConstraints(
+                sharding_types=[sharding_type.value],
+                compute_kernels=[compute_kernel.value],
+                device_group="cuda",
+            )
+
+    if weighted_tables is not None:
+        for table in weighted_tables:
+            constraints[table.name] = ParameterConstraints(
+                sharding_types=[sharding_type.value],
+                compute_kernels=[compute_kernel.value],
+                device_group="cuda",
+            )
+
+    if planner_type == "embedding":
+        return EmbeddingShardingPlanner(
+            topology=topology,
+            constraints=constraints if constraints else None,
+        )
+    elif planner_type == "hetero":
+        topology_groups = {"cuda": topology}
+        return HeteroEmbeddingShardingPlanner(
+            topology_groups=topology_groups,
+            constraints=constraints if constraints else None,
+        )
+    else:
+        raise RuntimeError(f"Unknown planner type: {planner_type}")
+
+
 def _generate_sharded_model_and_optimizer(
     model: nn.Module,
     sharding_type: str,
@@ -279,7 +330,12 @@ def _generate_sharded_model_and_optimizer(
     pg: dist.ProcessGroup,
     device: torch.device,
     fused_params: Optional[Dict[str, Any]] = None,
-    planner: Optional[EmbeddingShardingPlanner] = None,
+    planner: Optional[
+        Union[
+            EmbeddingShardingPlanner,
+            HeteroEmbeddingShardingPlanner,
+        ]
+    ] = None,
 ) -> Tuple[nn.Module, Optimizer]:
     sharder = TestEBCSharder(
         sharding_type=sharding_type,
@@ -343,19 +399,27 @@ def runner(
             dense_device=ctx.device,
         )
 
-        # Create a planner for sharding
-        planner = EmbeddingShardingPlanner(
-            topology=Topology(
-                local_world_size=get_local_size(world_size),
-                world_size=world_size,
-                compute_device=ctx.device.type,
-            )
+        # Create a topology for sharding
+        topology = Topology(
+            local_world_size=get_local_size(world_size),
+            world_size=world_size,
+            compute_device=ctx.device.type,
+        )
+
+        # Create a planner for sharding based on the specified type
+        planner = _generate_planner(
+            planner_type=run_option.planner_type,
+            topology=topology,
+            tables=tables,
+            weighted_tables=weighted_tables,
+            sharding_type=run_option.sharding_type,
+            compute_kernel=run_option.compute_kernel,
         )
 
         sharded_model, optimizer = _generate_sharded_model_and_optimizer(
             model=unsharded_model,
             sharding_type=run_option.sharding_type.value,
-            kernel_type=EmbeddingComputeKernel.FUSED.value,
+            kernel_type=run_option.compute_kernel.value,
             # pyre-ignore
             pg=ctx.pg,
             device=ctx.device,
