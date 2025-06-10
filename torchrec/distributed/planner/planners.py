@@ -8,6 +8,7 @@
 # pyre-strict
 
 import copy
+import hashlib
 import logging
 import time
 from functools import reduce
@@ -279,7 +280,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             sharders,
         )
 
-    def hash_planner_context_inputs(self) -> int:
+    def hash_planner_context_inputs(self) -> str:
         """
         Generates a hash for all planner inputs except for partitioner, proposer, performance model, and stats.
         These are all the inputs needed to verify whether a previously generated sharding plan is still valid in a new context.
@@ -287,15 +288,17 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         Returns:
             Generates a hash capturing topology, batch size, enumerator, storage reservation, stats and constraints.
         """
-        return hash(
-            (
-                self._topology,
-                self._batch_size,
-                self._enumerator,
-                self._storage_reservation,
-                frozenset(self._constraints.items()) if self._constraints else None,
-            )
-        )
+        hashable_list = [
+            self._topology,
+            self._batch_size,
+            self._enumerator,
+            self._storage_reservation,
+            frozenset(self._constraints.items()) if self._constraints else None,
+        ]
+        serialized_list = str(hashable_list).encode("utf-8")
+        hash_object = hashlib.sha256(serialized_list)
+        hash_digest = hash_object.hexdigest()
+        return hash_digest
 
     def plan(
         self,
