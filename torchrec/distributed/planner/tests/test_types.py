@@ -18,6 +18,7 @@ from torchrec.distributed.planner.types import (
     ParameterConstraints,
     Shard,
     ShardingOption,
+    Topology,
 )
 from torchrec.distributed.types import (
     BoundsCheckMode,
@@ -212,6 +213,54 @@ class TestShardingOption(unittest.TestCase):
             shards=[Shard(size=shard_size, offset=offset) for offset in shard_offsets],
         )
         self.assertEqual(sharding_option.is_pooled, False)
+
+
+class TestTopologyHash(unittest.TestCase):
+    def test_hash_equality(self) -> None:
+        # Create two identical Topology instances
+        topology1 = Topology(
+            world_size=2,
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        topology2 = Topology(
+            world_size=2,
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        # Verify that the hash values are equal
+        self.assertEqual(
+            topology1._hash(),
+            topology2._hash(),
+            "Hashes should be equal for identical Topology instances",
+        )
+
+    def test_hash_inequality(self) -> None:
+        # Create two different Topology instances
+        topology1 = Topology(
+            world_size=2,
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        topology2 = Topology(
+            world_size=4,  # Different world_size
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        # Verify that the hash values are different
+        self.assertNotEqual(
+            topology1._hash(),
+            topology2._hash(),
+            "Hashes should be different for different Topology instances",
+        )
 
 
 class TestParameterConstraintsHash(unittest.TestCase):

@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+import hashlib
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
@@ -248,6 +249,10 @@ class BasicCommsBandwidths(GeneralizedCommsBandwidth):
 
 
 class Topology:
+    """
+    Representation of a network of devices in a cluster.
+    """
+
     def __init__(
         self,
         world_size: int,
@@ -395,6 +400,40 @@ class Topology:
         topology_repr += f"local_world_size={self._local_world_size} \n"
         topology_repr += str(self._comms_bandwidths) + "\n"
         return topology_repr
+
+    def _hash(self) -> str:
+        """
+        Compute a consistent hash value for this Topology instance.
+
+        Returns:
+            str: A hash value for this Topology instance.
+        """
+
+        # Compute hbms and ddrs from the decives
+        hbms = [device.storage.hbm for device in self._devices]
+        ddrs = [device.storage.ddr for device in self._devices]
+
+        # Combine all attributes into a hashable tuple
+        hashable_list = [
+            self._world_size,
+            self._compute_device,
+            hbms,
+            ddrs,
+            self._local_world_size,
+            self._hbm_mem_bw,
+            self._ddr_mem_bw,
+            self._hbm_to_ddr_mem_bw,
+            self._comms_bandwidths.intra_host_bw,
+            self._comms_bandwidths.inter_host_bw,
+            self._bwd_compute_multiplier,
+            self._weighted_feature_bwd_compute_multiplier,
+            self._uneven_sharding_perf_multiplier,
+        ]
+
+        serialized_list = str(hashable_list).encode("utf-8")
+        hash_object = hashlib.sha256(serialized_list)
+        hash_digest = hash_object.hexdigest()
+        return hash_digest
 
 
 # ---- INPUT / OUTPUT ----- #
@@ -912,6 +951,7 @@ class Stats(abc.ABC):
         best_plan: List[ShardingOption],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        enumerator: Optional[Enumerator] = None,
         debug: bool = False,
     ) -> None:
         """
