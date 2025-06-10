@@ -51,6 +51,7 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     TrainPipelineSemiSync,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
+from torchrec.fb.distributed.planner.lp_planner import LinearProgrammingPlanner
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -73,6 +74,9 @@ class RunOptions:
             Default is "kjt" (KeyedJaggedTensor).
         profile (str): Directory to save profiling results. If empty, profiling is disabled.
             Default is "" (disabled).
+        planner_type (str): Type of sharding planner to use. Options are:
+            - "embedding": EmbeddingShardingPlanner (default)
+            - "lp": LinearProgrammingPlanner
     """
 
     world_size: int = 2
@@ -80,6 +84,7 @@ class RunOptions:
     sharding_type: ShardingType = ShardingType.TABLE_WISE
     input_type: str = "kjt"
     profile: str = ""
+    planner_type: str = "embedding"
 
 
 @dataclass
@@ -272,6 +277,33 @@ def _generate_model(
     )
 
 
+def _generate_planner(
+    planner_type: str,
+    topology: Topology,
+) -> Union[EmbeddingShardingPlanner, LinearProgrammingPlanner]:
+    """
+    Generate a sharding planner based on the specified planner type.
+
+    Args:
+        planner_type (str): Type of planner to generate. Options are:
+            - "embedding": EmbeddingShardingPlanner (default)
+            - "lp": LinearProgrammingPlanner
+        topology (Topology): The topology to use for the planner.
+
+    Returns:
+        Union[EmbeddingShardingPlanner, LinearProgrammingPlanner]: The generated planner.
+
+    Raises:
+        RuntimeError: If an unknown planner type is specified.
+    """
+    if planner_type == "embedding":
+        return EmbeddingShardingPlanner(topology=topology)
+    elif planner_type == "lp":
+        return LinearProgrammingPlanner(topology=topology)
+    else:
+        raise RuntimeError(f"Unknown planner type: {planner_type}")
+
+
 def _generate_sharded_model_and_optimizer(
     model: nn.Module,
     sharding_type: str,
@@ -279,7 +311,7 @@ def _generate_sharded_model_and_optimizer(
     pg: dist.ProcessGroup,
     device: torch.device,
     fused_params: Optional[Dict[str, Any]] = None,
-    planner: Optional[EmbeddingShardingPlanner] = None,
+    planner: Optional[Union[EmbeddingShardingPlanner, LinearProgrammingPlanner]] = None,
 ) -> Tuple[nn.Module, Optimizer]:
     sharder = TestEBCSharder(
         sharding_type=sharding_type,
@@ -343,13 +375,17 @@ def runner(
             dense_device=ctx.device,
         )
 
-        # Create a planner for sharding
-        planner = EmbeddingShardingPlanner(
-            topology=Topology(
-                local_world_size=get_local_size(world_size),
-                world_size=world_size,
-                compute_device=ctx.device.type,
-            )
+        # Create a topology for sharding
+        topology = Topology(
+            local_world_size=get_local_size(world_size),
+            world_size=world_size,
+            compute_device=ctx.device.type,
+        )
+
+        # Create a planner for sharding based on the specified type
+        planner = _generate_planner(
+            planner_type=run_option.planner_type,
+            topology=topology,
         )
 
         sharded_model, optimizer = _generate_sharded_model_and_optimizer(
