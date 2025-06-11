@@ -229,8 +229,7 @@ class PipelineConfig:
             raise RuntimeError(f"unknown pipeline option {self.pipeline}")
 
 
-@click.command()
-@cmd_conf(RunOptions, EmbeddingTablesConfig, TestSparseNNInputConfig, PipelineConfig)
+@cmd_conf
 def main(
     run_option: RunOptions,
     table_config: EmbeddingTablesConfig,
