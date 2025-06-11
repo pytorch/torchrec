@@ -6,7 +6,9 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
-from typing import Dict, List, Optional, Union
+import logging as logger
+from collections import OrderedDict
+from typing import Dict, Iterable, List, Optional, Union
 
 import torch
 
@@ -30,7 +32,10 @@ UPDATE_MODE_MAP: Dict[TrackingMode, EmbdUpdateMode] = {
 }
 
 # Tracking is current only supported for ShardedEmbeddingCollection and ShardedEmbeddingBagCollection.
-SUPPORTED_MODULES = Union[ShardedEmbeddingCollection, ShardedEmbeddingBagCollection]
+SUPPORTED_MODULES_TO_PREFIX = {
+    ShardedEmbeddingCollection: ".embeddings",
+    ShardedEmbeddingBagCollection: ".embedding_bags",
+}
 
 
 class ModelDeltaTracker:
@@ -49,6 +54,8 @@ class ModelDeltaTracker:
             call.
         delete_on_read (bool, optional): whether to delete the tracked ids after all consumers have read them.
         mode (TrackingMode, optional): tracking mode to use from supported tracking modes. Default: TrackingMode.ID_ONLY.
+        fqns_to_skip (Iterable[str], optional): list of FQNs to skip tracking. Default: None.
+
     """
 
     DEFAULT_CONSUMER: str = "default"
@@ -59,11 +66,15 @@ class ModelDeltaTracker:
         consumers: Optional[List[str]] = None,
         delete_on_read: bool = True,
         mode: TrackingMode = TrackingMode.ID_ONLY,
+        fqns_to_skip: Iterable[str] = (),
     ) -> None:
         self._model = model
         self._consumers: List[str] = consumers or [self.DEFAULT_CONSUMER]
         self._delete_on_read = delete_on_read
         self._mode = mode
+        self._fqn_to_feature_map: Dict[str, List[str]] = {}
+        self._fqns_to_skip: Iterable[str] = fqns_to_skip
+        self.fqn_to_feature_names()
         pass
 
     def record_lookup(self, kjt: KeyedJaggedTensor, states: torch.Tensor) -> None:
@@ -85,14 +96,40 @@ class ModelDeltaTracker:
         """
         return {}
 
-    def fqn_to_feature_names(self, module: nn.Module) -> Dict[str, List[str]]:
+    def fqn_to_feature_names(self) -> Dict[str, List[str]]:
         """
-        Returns a mapping from FQN to feature names for a given module.
+        Returns a mapping of FQN to feature names from all Supported Modules [EmbeddingCollection and EmbeddingBagCollection] present in the given model.
+        """
+        if (self._fqn_to_feature_map is not None) and len(self._fqn_to_feature_map) > 0:
+            return self._fqn_to_feature_map
 
-        Args:
-            module (nn.Module): the module to retrieve feature names for.
-        """
-        return {}
+        fqn_to_feature_names: Dict[str, List[str]] = OrderedDict()
+        for fqn, named_module in self._model.named_modules():
+            # Skipping partial FQNs present in fqns_to_skip
+            # TODO: Validate if we need to support more complex patterns for skipping fqns
+            if type(named_module) in SUPPORTED_MODULES_TO_PREFIX:
+                for table_name, config in named_module._table_name_to_config.items():
+                    embedding_fqn = (
+                        fqn.replace("_dmp_wrapped_module.module.", "")
+                        + SUPPORTED_MODULES_TO_PREFIX[type(named_module)]
+                        + f".{table_name}"
+                    )
+
+                    should_skip = False
+                    for fqn_to_skip in self._fqns_to_skip:
+                        if fqn_to_skip in embedding_fqn:
+                            logger.info(
+                                f"Skipping {fqn} because it is part of fqns_to_skip"
+                            )
+                            should_skip = True
+                            break
+                    if should_skip:
+                        continue
+                    if embedding_fqn not in fqn_to_feature_names:
+                        fqn_to_feature_names[embedding_fqn] = []
+                    fqn_to_feature_names[embedding_fqn].extend(config.feature_names)
+        self._fqn_to_feature_map = fqn_to_feature_names
+        return fqn_to_feature_names
 
     def clear(self, consumer: Optional[str] = None) -> None:
         """
