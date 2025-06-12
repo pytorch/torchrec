@@ -430,7 +430,7 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
         self,
         module: EmbeddingBagCollectionInterface,
         table_name_to_parameter_sharding: Dict[str, ParameterSharding],
-        env: ShardingEnv,
+        env: Union[ShardingEnv, Dict[str, ShardingEnv]],  # support for hybrid sharding
         fused_params: Optional[Dict[str, Any]] = None,
         device: Optional[torch.device] = None,
         feature_processor: Optional[FeatureProcessorsCollection] = None,
@@ -462,11 +462,30 @@ class ShardedQuantFeatureProcessedEmbeddingBagCollection(
                     f"Feature processor has inconsistent devices. Expected {feature_processor_device}, got {param.device}"
                 )
 
-        if feature_processor_device is None:
-            for _ in range(env.world_size):
-                self.feature_processors_per_rank.append(feature_processor)
+        if isinstance(env, Dict):
+            expected_device_type = "cuda"
+            for (
+                embedding_configs
+            ) in self._sharding_type_device_group_to_sharding_infos.values():
+                # throws if not all shards only have the expected device type
+                shard_device_type = get_device_from_sharding_infos(embedding_configs)
+                if isinstance(shard_device_type, tuple):
+                    raise RuntimeError(
+                        f"Sharding across multiple device types for FeatureProcessedEmbeddingBagCollection is not supported yet, got {shard_device_type}",
+                    )
+                assert (
+                    shard_device_type == expected_device_type
+                ), f"Expected {expected_device_type} but got {shard_device_type} for FeatureProcessedEmbeddingBagCollection sharding device type"
+
+            # TODO(hcxu): support hybrid sharding with feature_processors_per_rank: ModuleList(ModuleList()), if compatible
+            world_size = env[expected_device_type].world_size
         else:
-            for i in range(env.world_size):
+            world_size = env.world_size
+
+        if feature_processor_device is None:
+            self.feature_processors_per_rank += [feature_processor] * world_size
+        else:
+            for i in range(world_size):
                 # Generic copy, for example initailized on cpu but -> sharding as meta
                 self.feature_processors_per_rank.append(
                     copy.deepcopy(feature_processor)
