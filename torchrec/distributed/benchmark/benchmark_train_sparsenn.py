@@ -23,7 +23,9 @@ from torch import nn, optim
 from torch.optim import Optimizer
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.benchmark.benchmark_utils import benchmark_func, cmd_conf
+from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
@@ -31,7 +33,6 @@ from torchrec.distributed.test_utils.multi_process import (
 )
 from torchrec.distributed.test_utils.test_input import (
     ModelInput,
-    TdModelInput,
     TestSparseNNInputConfig,
 )
 from torchrec.distributed.test_utils.test_model import (
@@ -278,23 +279,31 @@ def _generate_sharded_model_and_optimizer(
     pg: dist.ProcessGroup,
     device: torch.device,
     fused_params: Optional[Dict[str, Any]] = None,
+    planner: Optional[EmbeddingShardingPlanner] = None,
 ) -> Tuple[nn.Module, Optimizer]:
     sharder = TestEBCSharder(
         sharding_type=sharding_type,
         kernel_type=kernel_type,
         fused_params=fused_params,
     )
+
+    sharders = [cast(ModuleSharder[nn.Module], sharder)]
+
+    # Use planner if provided
+    plan = None
+    if planner is not None:
+        if pg is not None:
+            plan = planner.collective_plan(model, sharders, pg)
+        else:
+            plan = planner.plan(model, sharders)
+
     sharded_model = DistributedModelParallel(
         module=copy.deepcopy(model),
         env=ShardingEnv.from_process_group(pg),
         init_data_parallel=True,
         device=device,
-        sharders=[
-            cast(
-                ModuleSharder[nn.Module],
-                sharder,
-            )
-        ],
+        sharders=sharders,
+        plan=plan,
     ).to(device)
     optimizer = optim.SGD(
         [
@@ -334,6 +343,15 @@ def runner(
             dense_device=ctx.device,
         )
 
+        # Create a planner for sharding
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(
+                local_world_size=get_local_size(world_size),
+                world_size=world_size,
+                compute_device=ctx.device.type,
+            )
+        )
+
         sharded_model, optimizer = _generate_sharded_model_and_optimizer(
             model=unsharded_model,
             sharding_type=run_option.sharding_type.value,
@@ -345,6 +363,7 @@ def runner(
                 "optimizer": EmbOptimType.EXACT_ADAGRAD,
                 "learning_rate": 0.1,
             },
+            planner=planner,
         )
         bench_inputs = _generate_data(
             tables=tables,

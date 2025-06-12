@@ -55,7 +55,7 @@ def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
     """
     moving a tensor from cpu to cuda using pinned memory (non_blocking) is generally faster
     """
-    if is_torchdynamo_compiling():
+    if is_pt2_compiling():
         # TODO: remove once FakeTensor supports pin_memory() and to(..., non_blocking=True)
         return tensor.to(device=device)
 

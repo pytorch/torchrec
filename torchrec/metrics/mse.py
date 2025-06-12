@@ -110,14 +110,14 @@ class MSEMetricComputation(RecMetricComputation):
             torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
-            persistent=True,
+            persistent=include_r_squared,
         )
         self._add_state(
             "label_squared_sum",
             torch.zeros(self._n_tasks, dtype=torch.double),
             add_window_state=True,
             dist_reduce_fx="sum",
-            persistent=True,
+            persistent=include_r_squared,
         )
 
     def update(
