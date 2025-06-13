@@ -294,7 +294,11 @@ def generate_sharded_model_and_optimizer(
     kernel_type: str,
     pg: dist.ProcessGroup,
     device: torch.device,
-    fused_params: Optional[Dict[str, Any]] = None,
+    fused_params: Dict[str, Any],
+    dense_optimizer: str = "SGD",
+    dense_lr: float = 0.1,
+    dense_momentum: Optional[float] = None,
+    dense_weight_decay: Optional[float] = None,
     planner: Optional[
         Union[
             EmbeddingShardingPlanner,
@@ -302,13 +306,11 @@ def generate_sharded_model_and_optimizer(
         ]
     ] = None,
 ) -> Tuple[nn.Module, Optimizer]:
-    # Ensure fused_params is always a dictionary
-    fused_params_dict = {} if fused_params is None else fused_params
 
     sharder = TestEBCSharder(
         sharding_type=sharding_type,
         kernel_type=kernel_type,
-        fused_params=fused_params_dict,
+        fused_params=fused_params,
     )
     sharders = [cast(ModuleSharder[nn.Module], sharder)]
 
@@ -328,14 +330,40 @@ def generate_sharded_model_and_optimizer(
         sharders=sharders,
         plan=plan,
     ).to(device)
-    optimizer = optim.SGD(
-        [
-            param
-            for name, param in sharded_model.named_parameters()
-            if "sparse" not in name
-        ],
-        lr=0.1,
-    )
+
+    # Get dense parameters
+    dense_params = [
+        param
+        for name, param in sharded_model.named_parameters()
+        if "sparse" not in name
+    ]
+
+    # Create optimizer based on the specified type
+    optimizer_classes = {
+        "sgd": optim.SGD,
+        "adam": optim.Adam,
+        "adagrad": optim.Adagrad,
+        "rmsprop": optim.RMSprop,
+        "adadelta": optim.Adadelta,
+        "adamw": optim.AdamW,
+        "adamax": optim.Adamax,
+        "nadam": optim.NAdam,
+        "asgd": optim.ASGD,
+        "lbfgs": optim.LBFGS,
+    }
+    optimizer_class = optimizer_classes.get(dense_optimizer.lower(), optim.SGD)
+
+    # Create optimizer with momentum and/or weight_decay if provided
+    optimizer_kwargs = {"lr": dense_lr}
+
+    if dense_momentum is not None:
+        optimizer_kwargs["momentum"] = dense_momentum
+
+    if dense_weight_decay is not None:
+        optimizer_kwargs["weight_decay"] = dense_weight_decay
+
+    optimizer = optimizer_class(dense_params, **optimizer_kwargs)  # pyre-ignore[6]
+
     return sharded_model, optimizer
 
 
