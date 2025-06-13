@@ -8,17 +8,29 @@
 # pyre-strict
 
 import unittest
-from typing import cast
+from typing import cast, Dict, Optional
 from unittest.mock import MagicMock
 
 import torch
+from torch import multiprocessing
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.planner import EmbeddingShardingPlanner
+from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
+from torchrec.distributed.planner.perf_models import NoopPerfModel
+from torchrec.distributed.planner.storage_reservations import (
+    HeuristicalStorageReservation,
+)
 
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
     Shard,
     ShardingOption,
     Topology,
+)
+from torchrec.distributed.test_utils.multi_process import (
+    MultiProcessContext,
+    MultiProcessTestBase,
 )
 from torchrec.distributed.types import (
     BoundsCheckMode,
@@ -348,3 +360,75 @@ class TestParameterConstraintsHash(unittest.TestCase):
         self.assertNotEqual(
             hash(pc1), hash(pc2), "Hashes should be different for different instances"
         )
+
+
+def _test_hashing_consistency(
+    rank: int,
+    world_size: int,
+    backend: str,
+    return_hash_dict: Dict[str, int],
+    local_size: Optional[int] = None,
+) -> None:
+    with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        topology = Topology(
+            local_world_size=8,
+            world_size=1,
+            compute_device="cuda",
+        )
+        batch_size = 128
+        enumerator = EmbeddingEnumerator(topology=topology, batch_size=batch_size)
+        eb_config = EmbeddingBagConfig(
+            name="table_0",
+            embedding_dim=160,
+            num_embeddings=10000,
+            feature_names=["f1"],
+            data_type=DataType.FP16,
+        )
+        module = EmbeddingBagCollection(
+            tables=[eb_config],
+            is_weighted=False,
+            device=torch.device(
+                "meta"
+            ),  # Using meta device for now since only getting search space
+        )
+        sharders = [EmbeddingBagCollectionSharder()]
+        enumerator.enumerate(module, sharders)  # pyre-ignore
+        storage_reservation = HeuristicalStorageReservation(percentage=0.15)
+        constraints = {"table1": ParameterConstraints()}
+
+        storage_reservation.reserve(
+            topology=topology,
+            batch_size=batch_size,
+            module=module,
+            sharders=sharders,  # pyre-ignore
+            constraints=constraints,
+        )
+        perf_model = NoopPerfModel(topology=topology)
+
+        planner1 = EmbeddingShardingPlanner(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=enumerator,
+            storage_reservation=storage_reservation,
+            performance_model=perf_model,
+            constraints=constraints,
+        )
+
+        h = planner1.hash_planner_context_inputs()
+        return_hash_dict[str(rank)] = h
+
+
+class TestConsistentHashingBetweenProcesses(MultiProcessTestBase):
+
+    def test_hash_consistency(self) -> None:
+        # planner
+        world_size = 2
+        return_hash_dict = multiprocessing.Manager().dict()
+        self._run_multi_process_test(
+            callable=_test_hashing_consistency,
+            world_size=world_size,
+            backend="nccl" if torch.cuda.is_available() else "gloo",
+            return_hash_dict=return_hash_dict,
+        )
+        hashes = return_hash_dict.values()
+        assert hashes[0] == hashes[1], "hash values are different."
