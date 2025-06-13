@@ -129,11 +129,13 @@ fi
 if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
     # use conda-forge to install python3.13t
     conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
+    conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
 else
     conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
 fi
 
-conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
+
+conda run -n "${CONDA_ENV}" python --version
 
 # we only have one cuda version for pypi build
 if [[ ${MATRIX_GPU_ARCH_VERSION} != '12.6' ]]; then
