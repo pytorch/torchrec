@@ -401,8 +401,8 @@ class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
     )
     @given(  # pyre-ignore
         num_tables=st.sampled_from([2, 3, 4]),
@@ -445,8 +445,8 @@ class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
     )
     @given(  # pyre-ignore
         num_tables=st.sampled_from([2, 3, 4]),
