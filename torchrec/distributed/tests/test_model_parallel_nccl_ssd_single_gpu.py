@@ -12,6 +12,7 @@ import unittest
 from typing import cast, List, OrderedDict, Union
 
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import given, settings, strategies as st, Verbosity
@@ -27,6 +28,7 @@ from torchrec.distributed.embedding_types import (
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import ParameterConstraints
+from torchrec.distributed.test_utils.test_model import TestSparseNN
 from torchrec.distributed.test_utils.test_model_parallel_base import (
     ModelParallelSingleRankBase,
 )
@@ -34,6 +36,7 @@ from torchrec.distributed.test_utils.test_sharding import (
     copy_state_dict,
     create_test_sharder,
     SharderType,
+    sharding_single_rank_test_single_process,
 )
 from torchrec.distributed.tests.test_sequence_model import (
     TestEmbeddingCollectionSharder,
@@ -45,6 +48,7 @@ from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
     EmbeddingConfig,
 )
+from torchrec.optim import RowWiseAdagrad
 
 
 def _load_split_embedding_weights(
@@ -539,6 +543,72 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
             self._train_models(m1, m2, batch)
         self._eval_models(m1, m2, batch, is_deterministic=is_deterministic)
         self._compare_models(m1, m2, is_deterministic=is_deterministic)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-fixme[56]
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                # TODO: uncomment when ssd ckpt support cw sharding
+                # ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                # TODO: uncomment when ssd ckpt support cw sharding
+                # ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        dtype=st.sampled_from([DataType.FP32, DataType.FP16]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=6, deadline=None)
+    def test_ssd_mixed_kernels_with_vbe(
+        self,
+        sharding_type: str,
+        dtype: DataType,
+    ) -> None:
+        self._set_table_weights_precision(dtype)
+        fused_params = {
+            "prefetch_pipeline": True,
+        }
+        constraints = {
+            table.name: ParameterConstraints(
+                min_partition=4,
+                compute_kernels=(
+                    [EmbeddingComputeKernel.FUSED.value]
+                    if i % 2 == 0
+                    else [EmbeddingComputeKernel.KEY_VALUE.value]
+                ),
+                sharding_types=[sharding_type],
+            )
+            for i, table in enumerate(self.tables)
+        }
+        optimizer_config = (RowWiseAdagrad, {"lr": 0.001, "eps": 0.001})
+        pg = dist.GroupMember.WORLD
+
+        assert pg is not None, "Process group is not initialized"
+        sharding_single_rank_test_single_process(
+            pg=pg,
+            device=self.device,
+            rank=0,
+            world_size=1,
+            # pyre-fixme[6]: The intake type should be `type[TestSparseNNBase]`
+            model_class=TestSparseNN,
+            embedding_groups={},
+            tables=self.tables,
+            # pyre-fixme[6]
+            sharders=[EmbeddingBagCollectionSharder(fused_params=fused_params)],
+            optim=EmbOptimType.EXACT_SGD,
+            # The optimizer config here will overwrite the SGD optimizer above
+            apply_optimizer_in_backward_config={
+                "embedding_bags": optimizer_config,
+                "embeddings": optimizer_config,
+            },
+            constraints=constraints,
+            variable_batch_per_feature=True,
+        )
 
     @unittest.skipIf(
         not torch.cuda.is_available(),
