@@ -39,6 +39,7 @@ from torchrec.metrics.metrics_config import (
     MetricsConfig,
     RecMetricDef,
     RecMetricEnum,
+    ThroughputDef,
 )
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.rec_metric import RecMetricList, RecTaskInfo
@@ -681,7 +682,20 @@ class MetricModuleDistributedTest(MultiProcessTestBase):
     def test_metric_module_gather_state(self) -> None:
         world_size = 2
         backend = "nccl"
-        metrics_config = DefaultMetricsConfig
+        # use NE to test torch.Tensor state and AUC to test List[torch.Tensor] state
+        metrics_config = MetricsConfig(
+            rec_tasks=[DefaultTaskInfo],
+            rec_metrics={
+                RecMetricEnum.NE: RecMetricDef(
+                    rec_tasks=[DefaultTaskInfo], window_size=_DEFAULT_WINDOW_SIZE
+                ),
+                RecMetricEnum.AUC: RecMetricDef(
+                    rec_tasks=[DefaultTaskInfo], window_size=_DEFAULT_WINDOW_SIZE
+                ),
+            },
+            throughput_metric=ThroughputDef(),
+            state_metrics=[],
+        )
         batch_size = 128
 
         self._run_multi_process_test(
