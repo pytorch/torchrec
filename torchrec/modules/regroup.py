@@ -155,6 +155,7 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         keys: List[str],
         emb_dtype: Optional[DataType] = None,
         multi_device: bool = False,
+        use_index_select: bool = False,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
@@ -169,7 +170,30 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         self._splits: List[int] = []
         self._idx_key_pairs: List[Tuple[int, str]] = []
         self._permute_pooled_embs_impl = PermuteMultiEmbedding(groups, multi_device)
+        self._multi_device = multi_device
         self._emb_dtype = emb_dtype
+        self._indexes: List[Optional[torch.Tensor]] = [None for _ in self._keys]
+        self._use_index_select = use_index_select
+
+    def _init_index_select(
+        self,
+        permutes: torch.Tensor,
+    ) -> None:
+        indexes: List[List[int]] = [[] for _ in self._keys]
+        for permute in permutes:
+            in_tensor, out_tensor, in_offset, out_offset, tensor_length, next_emb = (
+                int(permute_value) for permute_value in permute
+            )
+            assert in_tensor == 0, f"Only support index select on dim 0, {permute}"
+            assert (
+                out_tensor < len(self._keys) and out_tensor >= 0
+            ), f"No key to match output tensor {out_tensor}"
+            assert (
+                next_emb == 0
+            ), f"Only support next_emb 0 for all permutes with index select. {next_emb}"
+            assert out_offset == len(indexes[out_tensor])
+            indexes[out_tensor] += [in_offset + i for i in range(0, tensor_length)]
+        self._indexes: List[torch.Tensor] = [torch.tensor(i) for i in indexes]
 
     def _init_fbgemm_regroup(self, kts: List[KeyedTensor]) -> None:
         self._use_fbgemm_regroup = True
@@ -180,6 +204,8 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
             lengths,
             self._groups,
         )
+        if self._use_index_select:
+            return self._init_index_select(permutes)
         # no need to pin_memory() or to(..., non_blocking=True) since occurs only once
         self._permute_pooled_embs_impl.init_tensors(
             permutes,
@@ -221,6 +247,18 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         dtype = data_type_to_dtype(self._emb_dtype)
         return [emb.to(dtype=dtype) for emb in embs]
 
+    def _get_indexes(self, values: List[torch.Tensor]) -> List[torch.Tensor]:
+        indexes = self._indexes
+        for index in indexes:
+            assert index is not None, "Indexes should be initialized"
+        if self._multi_device:
+            device = values[0].device
+            # Non-blocking, assume permute_multi_embedding will be called with in the same stream
+            # pyre-ignore [16]: already check for not None
+            indexes = [_indexes.to(device, non_blocking=True) for _indexes in indexes]
+
+        return indexes
+
     def forward(self, keyed_tensors: List[KeyedTensor]) -> Dict[str, torch.Tensor]:
         if not self._is_inited:
             module_init(self, keyed_tensors)
@@ -228,7 +266,13 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         if self._use_fbgemm_regroup:
             values = _get_kts_values(keyed_tensors)
             values = self.embedding_cast(values)
-            permuted_values = self._permute_pooled_embs_impl(values)
+            if self._use_index_select:
+                permuted_values = [
+                    torch.index_select(values[0], 1, indexes)
+                    for indexes in self._get_indexes(values)
+                ]
+            else:
+                permuted_values = self._permute_pooled_embs_impl(values)
             return _to_tensor_dict(self._keys, permuted_values)
         else:
             permuted_values = _permuted_values(
