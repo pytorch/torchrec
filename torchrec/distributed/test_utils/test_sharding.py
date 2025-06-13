@@ -16,6 +16,9 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
+    PartiallyMaterializedTensor,
+)
 from torch.distributed._tensor import DeviceMesh, DTensor
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
@@ -610,12 +613,16 @@ def copy_state_dict(
 
         if isinstance(tensor, ShardedTensor):
             for local_shard in tensor.local_shards():
+                # Tensors like `PartiallyMaterializedTensor` do not provide
+                # `ndim` property, so use shape length here as a workaround
+                ndim = len(local_shard.tensor.shape)
                 assert (
-                    global_tensor.ndim == local_shard.tensor.ndim
-                ), f"global_tensor.ndim: {global_tensor.ndim}, local_shard.tensor.ndim: {local_shard.tensor.ndim}"
+                    global_tensor.ndim == ndim
+                ), f"global_tensor.ndim: {global_tensor.ndim}, local_shard.tensor.ndim: {ndim}"
                 assert (
                     global_tensor.dtype == local_shard.tensor.dtype
                 ), f"global tensor dtype: {global_tensor.dtype}, local tensor dtype: {local_shard.tensor.dtype}"
+
                 shard_meta = local_shard.metadata
                 t = global_tensor.detach()
                 if t.ndim == 1:
@@ -632,7 +639,13 @@ def copy_state_dict(
                     ]
                 else:
                     raise ValueError("Tensors with ndim > 2 are not supported")
-                local_shard.tensor.copy_(t)
+
+                if isinstance(local_shard.tensor, PartiallyMaterializedTensor):
+                    local_shard.tensor.wrapped.set_range(
+                        0, 0, t.size(0), t.to(device="cpu")
+                    )
+                else:
+                    local_shard.tensor.copy_(t)
         elif isinstance(tensor, DTensor):
             for local_shard, global_offset in zip(
                 tensor.to_local().local_shards(),
