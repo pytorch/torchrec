@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import copy
 import logging
 from typing import Dict, List, Optional, Set, Tuple, Union
 
@@ -102,6 +103,11 @@ class EmbeddingEnumerator(Enumerator):
                 EmbeddingStorageEstimator(topology=topology, constraints=constraints),
             ]
 
+        # Initializing caching for enumerate
+        self._last_stored_search_space: Optional[List[ShardingOption]] = None
+        self._last_stored_module: Optional[nn.Module] = None
+        self._last_stored_sharders: Optional[List[ModuleSharder[nn.Module]]] = None
+
     def enumerate(
         self,
         module: nn.Module,
@@ -117,6 +123,12 @@ class EmbeddingEnumerator(Enumerator):
         Returns:
             List[ShardingOption]: valid sharding options with values populated.
         """
+
+        if (
+            self._last_stored_module == module
+            and self._last_stored_sharders == sharders
+        ):
+            return copy.deepcopy(self._last_stored_search_space)  # pyre-ignore
 
         self._sharder_map = {
             sharder_name(sharder.module_type): sharder for sharder in sharders
@@ -230,7 +242,19 @@ class EmbeddingEnumerator(Enumerator):
 
         self.populate_estimates(sharding_options)
 
+        self._last_stored_module = module
+        self._last_stored_sharders = sharders
+
+        # Caching the search space with a copy of sharding options, to avoid unexpected modifications to list
+        self._last_stored_search_space = copy.deepcopy(sharding_options)
         return sharding_options
+
+    @property
+    def last_stored_search_space(self) -> Optional[List[ShardingOption]]:
+        # NOTE: This is the last search space stored by enumerate(...), do not use
+        # this field in place of actually calling enumerate(...) as it will varie for each
+        # module/sharders passed in.
+        return self._last_stored_search_space
 
     def populate_estimates(self, sharding_options: List[ShardingOption]) -> None:
         for estimator in self._estimators:
