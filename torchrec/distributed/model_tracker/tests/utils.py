@@ -9,7 +9,7 @@
 
 #!/usr/bin/env python3
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import cast, Dict, Iterable, List, Optional, Union
 
 import torch
 
@@ -17,12 +17,7 @@ from torch import nn
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import ParameterConstraints
 from torchrec.distributed.types import ShardingType
-from torchrec.modules.embedding_configs import (
-    DataType,
-    EmbeddingBagConfig,
-    EmbeddingConfig,
-    PoolingType,
-)
+from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
@@ -36,22 +31,13 @@ class EmbeddingTableProps:
     Properties of an embedding table.
 
     Args:
-        name (str): name of the table
-        num_embeddings (int): number of embeddings in the table
-        embedding_dim (int): dimension of each embedding
-        sharding_type (ShardingType): sharding type of the table
-        feature_names (List[str]): list of feature names associated with the table
-        pooling (PoolingType): pooling type of the table
-        data_type (DataType): data type of the table
+        embedding_table_config: Config of the embedding table of Union(EmbeddingConfig or EmbeddingBagConfig)
+        sharding (ShardingType): sharding type of the table
         weight_type (WeightedType): weight
     """
 
-    num_embeddings: int
-    embedding_dim: int
+    embedding_table_config: Union[EmbeddingConfig, EmbeddingBagConfig]
     sharding: ShardingType
-    feature_names: List[str]
-    pooling: PoolingType
-    data_type: DataType = DataType.FP32
     is_weighted: bool = False
 
 
@@ -140,7 +126,7 @@ class TestEBCModel(nn.Module):
 
 
 def create_ec_model(
-    tables: Dict[str, EmbeddingTableProps],
+    tables: Iterable[EmbeddingTableProps],
     device: Optional[torch.device] = None,
 ) -> nn.Module:
     """
@@ -155,21 +141,14 @@ def create_ec_model(
     """
     return TestECModel(
         tables=[
-            EmbeddingConfig(
-                name=name,
-                embedding_dim=table.embedding_dim,
-                num_embeddings=table.num_embeddings,
-                feature_names=table.feature_names,
-                data_type=table.data_type,
-            )
-            for name, table in tables.items()
+            cast(EmbeddingConfig, table.embedding_table_config) for table in tables
         ],
         device=device,
     )
 
 
 def create_ebc_model(
-    tables: Dict[str, EmbeddingTableProps],
+    tables: Iterable[EmbeddingTableProps],
     device: Optional[torch.device] = None,
 ) -> nn.Module:
     """
@@ -184,22 +163,14 @@ def create_ebc_model(
     """
     return TestEBCModel(
         tables=[
-            EmbeddingBagConfig(
-                name=name,
-                embedding_dim=table.embedding_dim,
-                num_embeddings=table.num_embeddings,
-                feature_names=table.feature_names,
-                data_type=table.data_type,
-                pooling=table.pooling,
-            )
-            for name, table in tables.items()
+            cast(EmbeddingBagConfig, table.embedding_table_config) for table in tables
         ],
         device=device,
     )
 
 
 def generate_planner_constraints(
-    tables: Dict[str, EmbeddingTableProps],
+    tables: Iterable[EmbeddingTableProps],
 ) -> dict[str, ParameterConstraints]:
     """
     Generate planner constraints for the given tables.
@@ -211,12 +182,12 @@ def generate_planner_constraints(
         Dict[str, ParameterConstraints]: planner constraints
     """
     constraints: Dict[str, ParameterConstraints] = {}
-    for name, table in tables.items():
+    for table in tables:
         sharding_types = [table.sharding.value]
-        constraints[name] = ParameterConstraints(
+        constraints[table.embedding_table_config.name] = ParameterConstraints(
             sharding_types=sharding_types,
             compute_kernels=[EmbeddingComputeKernel.FUSED.value],
-            feature_names=table.feature_names,
+            feature_names=table.embedding_table_config.feature_names,
             pooling_factors=[1.0],
         )
     return constraints
