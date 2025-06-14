@@ -29,6 +29,8 @@ from torch.distributed.tensor import DeviceMesh
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
+from torchrec.distributed.model_tracker.model_delta_tracker import ModelDeltaTracker
+from torchrec.distributed.model_tracker.types import DeltaRows, ModelTrackerConfig
 
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.sharding_plan import get_default_sharders
@@ -208,6 +210,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         init_parameters (bool): initialize parameters for modules still on meta device.
         data_parallel_wrapper (Optional[DataParallelWrapper]): custom wrapper for data
             parallel modules.
+        model_tracker_config (Optional[DeltaTrackerConfig]): config for model tracker.
 
     Example::
 
@@ -234,6 +237,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         init_data_parallel: bool = True,
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
+        model_tracker_config: Optional[ModelTrackerConfig] = None,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
@@ -241,6 +245,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self.init_parameters = init_parameters
 
         self._ddp_wrapped: bool = False
+
+        self.has_model_tracker: bool = model_tracker_config is not None
 
         if env is None:
             pg = dist.GroupMember.WORLD
@@ -285,6 +291,11 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
         if init_data_parallel:
             self.init_data_parallel()
+
+        if model_tracker_config is not None:
+            self.model_delta_tracker: ModelDeltaTracker = self._init_delta_tracker(
+                model_tracker_config, self._dmp_wrapped_module
+            )
 
     @property
     def module(self) -> nn.Module:
@@ -343,6 +354,19 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
     def _init_dmp(self, module: nn.Module) -> nn.Module:
         return self._shard_modules_impl(module)
+
+    def _init_delta_tracker(
+        self, model_tracker_config: ModelTrackerConfig, module: nn.Module
+    ) -> ModelDeltaTracker:
+        # Init delta tracker if config is provided
+        return ModelDeltaTracker(
+            model=module,
+            consumers=model_tracker_config.consumers,
+            delete_on_read=model_tracker_config.delete_on_read,
+            auto_compact=model_tracker_config.auto_compact,
+            mode=model_tracker_config.tracking_mode,
+            fqns_to_skip=model_tracker_config.fqns_to_skip,
+        )
 
     def _init_optim(self, module: nn.Module) -> CombinedOptimizer:
         # pyre-ignore [6]
@@ -420,6 +444,25 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 module.reset_parameters()
 
         module.apply(init_parameters)
+
+    def get_model_tracker(self) -> ModelDeltaTracker:
+        """
+        Returns the model tracker if it exists.
+        """
+
+        assert (
+            self.has_model_tracker
+        ), "Model tracker is not initialized. Add ModelTrackerConfig at DistributedModelParallel init."
+        return self.model_delta_tracker
+
+    def get_delta(self, consumer: Optional[str] = None) -> Dict[str, DeltaRows]:
+        """
+        Returns the delta rows for the given consumer.
+        """
+        assert (
+            self.has_model_tracker
+        ), "Model tracker is not initialized. Add ModelTrackerConfig at DistributedModelParallel init."
+        return self.model_delta_tracker.get_delta(consumer)
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
