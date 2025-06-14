@@ -12,7 +12,7 @@ import hashlib
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import cast, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -401,12 +401,15 @@ class Topology:
         topology_repr += str(self._comms_bandwidths) + "\n"
         return topology_repr
 
-    def _hash(self) -> str:
+    def _hash(self) -> int:
         """
         Compute a consistent hash value for this Topology instance.
 
         Returns:
             str: A hash value for this Topology instance.
+
+        NOTE: Not overriding the __hash__ method here to account for other
+        potential variables that may be unchecked by the following list
         """
 
         # Compute hbms and ddrs from the decives
@@ -430,10 +433,7 @@ class Topology:
             self._uneven_sharding_perf_multiplier,
         ]
 
-        serialized_list = str(hashable_list).encode("utf-8")
-        hash_object = hashlib.sha256(serialized_list)
-        hash_digest = hash_object.hexdigest()
-        return hash_digest
+        return hash_sha256_to_int(hashable_list)
 
 
 # ---- INPUT / OUTPUT ----- #
@@ -743,25 +743,25 @@ class ParameterConstraints:
     key_value_params: Optional[KeyValueParams] = None
 
     def __hash__(self) -> int:
-        return hash(
-            (
-                tuple(self.sharding_types) if self.sharding_types else None,
-                tuple(self.compute_kernels) if self.compute_kernels else None,
-                self.min_partition,
-                tuple(self.pooling_factors),
-                tuple(self.num_poolings) if self.num_poolings else None,
-                tuple(self.batch_sizes) if self.batch_sizes else None,
-                self.is_weighted,
-                self.cache_params,
-                self.enforce_hbm,
-                self.stochastic_rounding,
-                self.bounds_check_mode,
-                tuple(self.feature_names) if self.feature_names else None,
-                self.output_dtype,
-                self.device_group,
-                self.key_value_params,
-            )
-        )
+        hashable_list = [
+            tuple(self.sharding_types) if self.sharding_types else None,
+            tuple(self.compute_kernels) if self.compute_kernels else None,
+            self.min_partition,
+            tuple(self.pooling_factors),
+            tuple(self.num_poolings) if self.num_poolings else None,
+            tuple(self.batch_sizes) if self.batch_sizes else None,
+            self.is_weighted,
+            self.cache_params,
+            self.enforce_hbm,
+            self.stochastic_rounding,
+            self.bounds_check_mode,
+            tuple(self.feature_names) if self.feature_names else None,
+            self.output_dtype,
+            self.device_group,
+            self.key_value_params,
+        ]
+
+        return hash_sha256_to_int(hashable_list)
 
 
 class PlannerErrorType(Enum):
@@ -802,6 +802,10 @@ class StorageReservation(abc.ABC):
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Topology: ...
+
+    @property
+    @abc.abstractmethod
+    def last_reserved_topology(self) -> Optional[Topology]: ...
 
 
 class PerfModel(abc.ABC):
@@ -967,3 +971,56 @@ class CriticalPathEstimate:
 
     def total(self) -> float:
         return self.comms_estimate + self.comp_estimate
+
+
+# ---- Types Utils ---- #
+def hash_sha256_to_int(hashable_list: List[Any]) -> int:  # pyre-ignore
+    """
+    Hashes the given data using SHA256 and returns the hash as an integer
+    """
+    serialized_list = str(hashable_list).encode("utf-8")
+    hash_object = hashlib.sha256(serialized_list)
+    hash_digest = hash_object.hexdigest()
+    return int(hash_digest, 16)
+
+
+def hash_planner_context_inputs(
+    topology: Topology,
+    batch_size: int,
+    enumerator: Enumerator,
+    storage_reservation: StorageReservation,
+    constraints: Optional[Dict[str, ParameterConstraints]],
+    # pyre-ignore
+    hash_function: Callable[[List[Any]], int] = hash_sha256_to_int,
+) -> int:
+    assert hasattr(
+        enumerator, "last_stored_search_space"
+    ), "This enumerator is not compatible with hashing"
+    assert (
+        enumerator.last_stored_search_space is not None  # pyre-ignore
+    ), "Unable to hash planner context without an enumerator that has a precomputed search space"
+    search_space = enumerator.last_stored_search_space
+    storage_reservation_policy = type(storage_reservation).__name__
+
+    assert (
+        storage_reservation._last_reserved_topology is not None  # pyre-ignore
+    ), "Unable to hash planner context without a storage reservation that has a precomputed topology"
+
+    hashable_list = [
+        topology,
+        batch_size,
+        [
+            [
+                shard_option.fqn,
+                shard_option.sharding_type,
+                shard_option.compute_kernel,
+                tuple(shard_option.shards),
+                shard_option.cache_params,
+            ]
+            for shard_option in search_space
+        ],
+        storage_reservation_policy,
+        storage_reservation._last_reserved_topology,
+        constraints.items() if constraints else None,
+    ]
+    return hash_function(hashable_list)

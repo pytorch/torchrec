@@ -163,6 +163,7 @@ class FixedPercentageStorageReservation(StorageReservation):
     def __init__(self, percentage: float) -> None:
         assert percentage >= 0 and percentage <= 1
         self._percentage: float = percentage
+        self._last_reserved_topology: Optional[Topology] = None
 
     def reserve(
         self,
@@ -174,7 +175,13 @@ class FixedPercentageStorageReservation(StorageReservation):
     ) -> Topology:
         reserved_topology = copy.deepcopy(topology)
         _reserve_storage_percentage(reserved_topology, self._percentage)
+        self._last_reserved_topology = reserved_topology
         return reserved_topology
+
+    @property
+    def last_reserved_topology(self) -> Optional[Topology]:
+        "Returns a copy of the cached value of the most recent output from the reserve() method."
+        return copy.deepcopy(self._last_reserved_topology)
 
 
 class HeuristicalStorageReservation(StorageReservation):
@@ -206,6 +213,7 @@ class HeuristicalStorageReservation(StorageReservation):
 
         self._dense_storage: Optional[Storage] = None
         self._kjt_storage: Optional[Storage] = None
+        self._last_reserved_topology: Optional[Topology] = None
 
     def reserve(
         self,
@@ -215,6 +223,7 @@ class HeuristicalStorageReservation(StorageReservation):
         sharders: List[ModuleSharder[nn.Module]],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
     ) -> Topology:
+        # TODO: enable proper caching of topology values through _last_reserved_topology
         reserved_topology = copy.deepcopy(topology)
 
         batch_inputs, shardable_modules = _get_batch_inputs_and_shardable_parameters(
@@ -262,7 +271,13 @@ class HeuristicalStorageReservation(StorageReservation):
                 message=negative_storage_solution,
             )
 
+        self._last_reserved_topology = copy.deepcopy(reserved_topology)
         return reserved_topology
+
+    @property
+    def last_reserved_topology(self) -> Optional[Topology]:
+        "Cached value of the most recent output from the reserve() method."
+        return self._last_reserved_topology
 
 
 class InferenceStorageReservation(StorageReservation):
@@ -291,6 +306,7 @@ class InferenceStorageReservation(StorageReservation):
 
         self._dense_storage: Optional[Storage] = None
         self._kjt_storage: Optional[Storage] = None
+        self._last_reserved_topology: Optional[Topology] = None
 
     def reserve(
         self,
@@ -324,4 +340,9 @@ class InferenceStorageReservation(StorageReservation):
             multiplier=1,
         )
 
+        self._last_reserved_topology = copy.deepcopy(reserved_topology)
+
         return reserved_topology
+
+    def last_reserved_topology(self) -> Optional[Topology]:
+        return copy.deepcopy(self._last_reserved_topology)

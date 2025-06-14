@@ -12,7 +12,7 @@ from typing import cast, List, Optional
 
 import torch
 from torch import nn
-from torchrec import EmbeddingConfig
+from torchrec import EmbeddingBagCollection, EmbeddingConfig
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -306,6 +306,22 @@ class TestEmbeddingShardingPlannerWithConstraints(unittest.TestCase):
 class TestEmbeddingShardingHashPlannerContextInputs(unittest.TestCase):
 
     def setUp(self) -> None:
+        eb_config = EmbeddingBagConfig(
+            name="table_0",
+            embedding_dim=160,
+            num_embeddings=10000,
+            feature_names=["f1"],
+            data_type=DataType.FP16,
+        )
+        module = EmbeddingBagCollection(
+            tables=[eb_config],
+            is_weighted=False,
+            device=torch.device(
+                "meta"
+            ),  # Using meta device for now since only getting search space
+        )
+        sharders = [EmbeddingBagCollectionSharder()]
+
         self.topology = Topology(
             local_world_size=8,
             world_size=1,
@@ -315,9 +331,19 @@ class TestEmbeddingShardingHashPlannerContextInputs(unittest.TestCase):
         self.enumerator = EmbeddingEnumerator(
             topology=self.topology, batch_size=self.batch_size
         )
+        self.enumerator.enumerate(module, sharders)  # pyre-ignore
+
         self.storage_reservation = HeuristicalStorageReservation(percentage=0.15)
         self.perf_model = NoopPerfModel(topology=self.topology)
         self.constraints = {"table1": ParameterConstraints()}
+
+        self.storage_reservation.reserve(
+            topology=self.topology,
+            batch_size=self.batch_size,
+            module=module,
+            sharders=sharders,  # pyre-ignore
+            constraints=self.constraints,
+        )
 
     def test_hash_equality(self) -> None:
         planner1 = EmbeddingShardingPlanner(
