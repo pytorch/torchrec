@@ -776,7 +776,9 @@ class DMPCollection(DistributedModelParallel):
         use_inter_host_allreduce: bool = False,
         custom_all_reduce: Optional[Callable[[List[torch.Tensor]], None]] = None,
     ) -> None:
-        assert device.type == "cuda", "DMPCollection only supports CUDA"
+        assert (
+            device.type == "cuda" or device.type == "mtia"
+        ), "DMPCollection only supports CUDA or MTIA"
         self._device = device
         self._pg: dist.ProcessGroup = global_pg
         self._plan: ShardingPlan = plan
@@ -1013,7 +1015,7 @@ class DMPCollection(DistributedModelParallel):
                             else:
                                 shard_rank = shard.placement._rank * step + group_start
                             shard.placement = _remote_device(
-                                f"rank:{shard_rank}/cuda:{shard_rank % get_local_size()}"
+                                f"rank:{shard_rank}/{self._device.type}:{shard_rank % get_local_size()}"
                             )
         return
 
