@@ -35,6 +35,15 @@ from torchrec.modules.tensor_pool import TensorPool
 from torchrec.modules.utils import deterministic_dedup
 
 
+@torch.fx.wrap
+def index_select_view(
+    output: torch.Tensor,
+    unbucketize_permute: Optional[torch.Tensor],
+    dim: int,
+) -> torch.Tensor:
+    return output[unbucketize_permute].view(-1, dim)
+
+
 class TensorPoolAwaitable(LazyAwaitable[torch.Tensor]):
     def __init__(
         self,
@@ -441,7 +450,7 @@ class ShardedInferenceTensorPool(
 
         output = self._lookup_values_dist(lookup_list)
 
-        return output[unbucketize_permute].view(-1, self._dim)
+        return index_select_view(output, unbucketize_permute, self._dim)
 
     # pyre-ignore
     def _update_values_dist(self, ctx: ObjectPoolShardingContext, values: torch.Tensor):
