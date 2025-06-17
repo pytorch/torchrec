@@ -1419,7 +1419,10 @@ Will cache result in self._jt_dict.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrec.sparse.jagged_tensor.KeyedJaggedTensor.variable_stride_per_key">
 <span class="sig-name descname"><span class="pre">variable_stride_per_key</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#torchrec.sparse.jagged_tensor.KeyedJaggedTensor.variable_stride_per_key" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns whether the KeyedJaggedTensor has variable stride per key.</p>
+<dd><p>Returns whether the KeyedJaggedTensor has variable stride per key.
+NOTE: <cite>self._variable_stride_per_key</cite> could be <cite>False</cite> when <cite>self._stride_per_key_per_rank</cite>
+is not <cite>None</cite>. It might be assigned to False externally/intentionally, usually the
+<cite>self._stride_per_key_per_rank</cite> is trivial.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>whether the KeyedJaggedTensor has variable stride per key.</p>
