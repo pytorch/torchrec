@@ -80,10 +80,6 @@ def _to_offsets(lengths: torch.Tensor) -> torch.Tensor:
     return torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
 
 
-def _to_lengths(offsets: torch.Tensor) -> torch.Tensor:
-    return offsets[1:] - offsets[:-1]
-
-
 @torch.jit.script_if_tracing
 def _batched_lengths_to_offsets(lengths: torch.Tensor) -> torch.Tensor:
     (f, b) = lengths.shape
@@ -1455,33 +1451,6 @@ def _maybe_compute_kjt_to_jt_dict(
 
 
 @torch.fx.wrap
-def _merge_weights_or_none(
-    a_weights: Optional[torch.Tensor],
-    b_weights: Optional[torch.Tensor],
-) -> Optional[torch.Tensor]:
-    assert not (
-        (a_weights is None) ^ (b_weights is None)
-    ), "Can only merge weighted or unweighted KJTs."
-    if a_weights is None:
-        return None
-    # pyre-ignore[6]
-    return torch.cat([a_weights, b_weights], dim=0)
-
-
-@torch.fx.wrap
-def _strides_from_kjt(
-    kjt: "KeyedJaggedTensor",
-) -> Tuple[Optional[int], Optional[List[List[int]]]]:
-    stride, stride_per_key_per_rank = (
-        (None, kjt.stride_per_key_per_rank())
-        if kjt.variable_stride_per_key()
-        else (kjt.stride(), None)
-    )
-
-    return stride, stride_per_key_per_rank
-
-
-@torch.fx.wrap
 def _kjt_empty_like(kjt: "KeyedJaggedTensor") -> "KeyedJaggedTensor":
     # empty like function fx wrapped, also avoids device hardcoding
     stride, stride_per_key_per_rank = (
@@ -1690,18 +1659,6 @@ def _maybe_compute_stride_per_key(
         return [stride] * len(keys)
     else:
         return None
-
-
-def _maybe_compute_variable_stride_per_key(
-    variable_stride_per_key: Optional[bool],
-    stride_per_key_per_rank: Optional[List[List[int]]],
-) -> bool:
-    if variable_stride_per_key is not None:
-        return variable_stride_per_key
-    elif stride_per_key_per_rank is not None:
-        return True
-    else:
-        return False
 
 
 class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
