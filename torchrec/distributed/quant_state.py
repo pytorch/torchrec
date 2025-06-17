@@ -419,6 +419,16 @@ def get_bucket_offsets_per_virtual_table(
     }
 
 
+def get_param_id_from_type(is_sqebc: bool, is_sqmcec: bool, is_sfpebc: bool) -> str:
+    if is_sqebc:
+        return "embedding_bags"
+    elif is_sqmcec:
+        return "_embedding_module.embeddings"
+    elif is_sfpebc:
+        return "_embedding_bag_collection.embedding_bags"
+    return "embeddings"
+
+
 def sharded_tbes_weights_spec(
     sharded_model: torch.nn.Module,
     virtual_table_name_to_bucket_lengths: Optional[Dict[str, list[int]]] = None,
@@ -454,11 +464,14 @@ def sharded_tbes_weights_spec(
         is_sqebc: bool = "ShardedQuantEmbeddingBagCollection" in type_name
         is_sqec: bool = "ShardedQuantEmbeddingCollection" in type_name
         is_sqmcec: bool = "ShardedQuantManagedCollisionEmbeddingCollection" in type_name
+        is_sfpebc: bool = (
+            "ShardedQuantFeatureProcessedEmbeddingBagCollection" in type_name
+        )
 
-        if is_sqebc or is_sqec or is_sqmcec:
+        if is_sqebc or is_sqec or is_sqmcec or is_sfpebc:
             assert (
-                is_sqec + is_sqebc + is_sqmcec == 1
-            ), "Cannot have any two of ShardedQuantEmbeddingBagCollection, ShardedQuantEmbeddingCollection and ShardedQuantManagedCollisionEmbeddingCollection are true"
+                is_sqec + is_sqebc + is_sqmcec + is_sfpebc == 1
+            ), "Cannot have any two of ShardedQuantEmbeddingBagCollection, ShardedQuantEmbeddingCollection, ShardedQuantManagedCollisionEmbeddingCollection and ShardedQuantFeatureProcessedEmbeddingBagCollection are true"
             tbes_configs: Dict[
                 IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
             ] = module.tbes_configs()
@@ -550,8 +563,7 @@ def sharded_tbes_weights_spec(
                         row_offsets,
                         table_metadata.shard_offsets[1],
                     ]
-                    s: str = "embedding_bags" if is_sqebc else "embeddings"
-                    s = ("_embedding_module." if is_sqmcec else "") + s
+                    s: str = get_param_id_from_type(is_sqebc, is_sqmcec, is_sfpebc)
                     unsharded_fqn_weight_prefix: str = f"{module_fqn}.{s}.{table_name}"
                     unsharded_fqn_weight: str = unsharded_fqn_weight_prefix + ".weight"
 
