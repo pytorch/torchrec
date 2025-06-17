@@ -1458,6 +1458,8 @@ class ShardedEmbeddingBagCollection(
                 sharding_type,
             ):
                 embs = lookup(features)
+                if self.post_lookup_tracker_fn is not None:
+                    self.post_lookup_tracker_fn(features, embs)
 
             with maybe_annotate_embedding_event(
                 EmbeddingEvent.OUTPUT_DIST,
@@ -1465,6 +1467,8 @@ class ShardedEmbeddingBagCollection(
                 sharding_type,
             ):
                 awaitables.append(dist(embs, sharding_context))
+                if self.post_odist_tracker_fn is not None:
+                    self.post_odist_tracker_fn()
 
             if sharding_context:
                 batch_size_per_feature_pre_a2a.extend(

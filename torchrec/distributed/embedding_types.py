@@ -9,10 +9,12 @@
 
 import abc
 import copy
+import logging as logger
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import (
     Any,
+    Callable,
     Dict,
     Generic,
     Iterable,
@@ -370,6 +372,10 @@ class ShardedEmbeddingModule(
         self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._output_dists: List[nn.Module] = []
+        self.post_lookup_tracker_fn: Optional[
+            Callable[[KeyedJaggedTensor, torch.Tensor], None]
+        ] = None
+        self.post_odist_tracker_fn: Optional[Callable[..., None]] = None
 
     def prefetch(
         self,
@@ -417,6 +423,41 @@ class ShardedEmbeddingModule(
             lookup.train(mode)
 
         return self
+
+    def register_post_lookup_tracker_fn(
+        self,
+        record_fn: Callable[[KeyedJaggedTensor, torch.Tensor], None],
+    ) -> None:
+        """
+        Register a function to be called after lookup is done. This is used for
+        tracking the lookup results and optimizer states.
+
+        Args:
+            record_fn (Callable[[KeyedJaggedTensor, torch.Tensor], None]): A custom record function to be called after lookup is done.
+
+        """
+        if self.post_lookup_tracker_fn is not None:
+            logger.warning(
+                "[ModelDeltaTracker] Custom record function already defined, overriding with new callable"
+            )
+        self.post_lookup_tracker_fn = record_fn
+
+    def register_post_odist_tracker_fn(
+        self,
+        record_fn: Callable[..., None],
+    ) -> None:
+        """
+        Register a function to be called after registering odist awaitable.
+
+        Args:
+            record_fn (Callable[Callable[..., None]):
+
+        """
+        if self.post_odist_tracker_fn is not None:
+            logger.warning(
+                "[ModelDeltaTracker] Compaction function already defined, overriding with new callable"
+            )
+        self.post_odist_tracker_fn = record_fn
 
     @property
     def unsharded_module_type(self) -> Type[nn.Module]:

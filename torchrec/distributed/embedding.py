@@ -1514,6 +1514,8 @@ class ShardedEmbeddingCollection(
                 EmbeddingEvent.LOOKUP, self._module_fqn, sharding_type
             ):
                 embs = lookup(features)
+                if self.post_lookup_tracker_fn is not None:
+                    self.post_lookup_tracker_fn(features, embs)
 
             with maybe_annotate_embedding_event(
                 EmbeddingEvent.OUTPUT_DIST, self._module_fqn, sharding_type
@@ -1521,6 +1523,8 @@ class ShardedEmbeddingCollection(
                 awaitables_per_sharding.append(
                     odist(embs.view(-1, embedding_dim), sharding_ctx)
                 )
+                if self.post_odist_tracker_fn is not None:
+                    self.post_odist_tracker_fn()
 
             features_before_all2all_per_sharding.append(
                 # pyre-fixme[6]: For 1st argument expected `KeyedJaggedTensor` but
