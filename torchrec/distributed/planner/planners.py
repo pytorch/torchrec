@@ -39,6 +39,7 @@ from torchrec.distributed.planner.storage_reservations import (
 )
 from torchrec.distributed.planner.types import (
     Enumerator,
+    hash_planner_context_inputs,
     ParameterConstraints,
     Partitioner,
     PerfModel,
@@ -280,7 +281,7 @@ class EmbeddingShardingPlanner(ShardingPlanner):
             sharders,
         )
 
-    def hash_planner_context_inputs(self) -> str:
+    def hash_planner_context_inputs(self) -> int:
         """
         Generates a hash for all planner inputs except for partitioner, proposer, performance model, and stats.
         These are all the inputs needed to verify whether a previously generated sharding plan is still valid in a new context.
@@ -288,17 +289,13 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         Returns:
             Generates a hash capturing topology, batch size, enumerator, storage reservation, stats and constraints.
         """
-        hashable_list = [
+        return hash_planner_context_inputs(
             self._topology,
             self._batch_size,
             self._enumerator,
             self._storage_reservation,
-            frozenset(self._constraints.items()) if self._constraints else None,
-        ]
-        serialized_list = str(hashable_list).encode("utf-8")
-        hash_object = hashlib.sha256(serialized_list)
-        hash_digest = hash_object.hexdigest()
-        return hash_digest
+            self._constraints,
+        )
 
     def plan(
         self,
