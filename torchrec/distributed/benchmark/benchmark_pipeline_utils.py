@@ -26,6 +26,8 @@ from torchrec.distributed.test_utils.test_model import (
     TestEBCSharder,
     TestOverArchLarge,
     TestSparseNN,
+    TestTowerCollectionSparseNN,
+    TestTowerSparseNN,
 )
 from torchrec.distributed.train_pipeline import (
     TrainPipelineBase,
@@ -42,6 +44,8 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 @dataclass
 class ModelConfig:
+    model_name: str = "test_sparsenn"
+
     batch_size: int = 8192
     num_float_features: int = 10
     feature_pooling_avg: int = 10
@@ -58,13 +62,32 @@ class ModelConfig:
         weighted_tables: List[EmbeddingBagConfig],
         dense_device: torch.device,
     ) -> nn.Module:
-        return TestSparseNN(
-            tables=tables,
-            weighted_tables=weighted_tables,
-            dense_device=dense_device,
-            sparse_device=torch.device("meta"),
-            over_arch_clazz=TestOverArchLarge,
-        )
+        if self.model_name == "test_sparsenn":
+            return TestSparseNN(
+                tables=tables,
+                weighted_tables=weighted_tables,
+                dense_device=dense_device,
+                sparse_device=torch.device("meta"),
+                over_arch_clazz=TestOverArchLarge,
+            )
+        elif self.model_name == "test_tower_sparsenn":
+            return TestTowerSparseNN(
+                tables=tables,
+                weighted_tables=weighted_tables,
+                dense_device=dense_device,
+                sparse_device=torch.device("meta"),
+                num_float_features=self.num_float_features,
+            )
+        elif self.model_name == "test_tower_collection_sparsenn":
+            return TestTowerCollectionSparseNN(
+                tables=tables,
+                weighted_tables=weighted_tables,
+                dense_device=dense_device,
+                sparse_device=torch.device("meta"),
+                num_float_features=self.num_float_features,
+            )
+        else:
+            raise RuntimeError(f"Unknown model name: {self.model_name}")
 
 
 def generate_tables(
@@ -317,6 +340,7 @@ def generate_sharded_model_and_optimizer(
 
 
 def generate_data(
+    model_class_name: str,
     tables: List[EmbeddingBagConfig],
     weighted_tables: List[EmbeddingBagConfig],
     model_config: ModelConfig,
@@ -336,25 +360,32 @@ def generate_data(
     """
     device = torch.device(model_config.dev_str) if model_config.dev_str else None
 
-    return [
-        ModelInput.generate(
-            batch_size=model_config.batch_size,
-            tables=tables,
-            weighted_tables=weighted_tables,
-            num_float_features=model_config.num_float_features,
-            pooling_avg=model_config.feature_pooling_avg,
-            use_offsets=model_config.use_offsets,
-            device=device,
-            indices_dtype=(
-                torch.int64 if model_config.long_kjt_indices else torch.int32
-            ),
-            offsets_dtype=(
-                torch.int64 if model_config.long_kjt_offsets else torch.int32
-            ),
-            lengths_dtype=(
-                torch.int64 if model_config.long_kjt_lengths else torch.int32
-            ),
-            pin_memory=model_config.pin_memory,
-        )
-        for _ in range(num_batches)
-    ]
+    if (
+        model_class_name == "TestSparseNN"
+        or model_class_name == "TestTowerSparseNN"
+        or model_class_name == "TestTowerCollectionSparseNN"
+    ):
+        return [
+            ModelInput.generate(
+                batch_size=model_config.batch_size,
+                tables=tables,
+                weighted_tables=weighted_tables,
+                num_float_features=model_config.num_float_features,
+                pooling_avg=model_config.feature_pooling_avg,
+                use_offsets=model_config.use_offsets,
+                device=device,
+                indices_dtype=(
+                    torch.int64 if model_config.long_kjt_indices else torch.int32
+                ),
+                offsets_dtype=(
+                    torch.int64 if model_config.long_kjt_offsets else torch.int32
+                ),
+                lengths_dtype=(
+                    torch.int64 if model_config.long_kjt_lengths else torch.int32
+                ),
+                pin_memory=model_config.pin_memory,
+            )
+            for _ in range(num_batches)
+        ]
+    else:
+        raise RuntimeError(f"Unknown model name: {model_config.model_name}")

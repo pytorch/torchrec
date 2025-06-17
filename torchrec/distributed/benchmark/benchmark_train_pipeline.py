@@ -197,6 +197,7 @@ def runner(
             num_poolings=run_option.num_poolings,
         )
         bench_inputs = generate_data(
+            model_class_name=unsharded_model.__class__.__name__,
             tables=tables,
             weighted_tables=weighted_tables,
             model_config=model_config,
