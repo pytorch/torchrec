@@ -166,6 +166,8 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
         else:
             features_dict = features.to_dict()
             for key in self._feature_names:
+                # pyre-fixme[29]: `Union[(self: ModuleDict, key: str) -> Module,
+                #  Module, Tensor]` is not a function.
                 jt = self._feature_processors[key](features_dict[key])
                 values.append(jt.values())
                 lengths.append(jt.lengths())

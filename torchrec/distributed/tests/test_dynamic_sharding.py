@@ -8,22 +8,24 @@
 # pyre-strict
 
 
-import copy
-
 import random
 import unittest
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import hypothesis.strategies as st
 
 import torch
 
-from hypothesis import given, settings, Verbosity
-from torch import nn
+from hypothesis import assume, given, settings, Verbosity
+
+from torch import nn, optim
 
 from torchrec import distributed as trec_dist, EmbeddingBagCollection, KeyedJaggedTensor
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
+from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
+from torchrec.distributed.sharding.dynamic_sharding import output_sharding_plan_delta
 
 from torchrec.distributed.sharding_plan import (
     column_wise,
@@ -37,7 +39,13 @@ from torchrec.distributed.test_utils.multi_process import (
     MultiProcessTestBase,
 )
 from torchrec.distributed.test_utils.test_input import ModelInput
-from torchrec.distributed.test_utils.test_sharding import copy_state_dict
+from torchrec.distributed.test_utils.test_model_parallel import ModelParallelTestShared
+from torchrec.distributed.test_utils.test_sharding import (
+    copy_state_dict,
+    create_test_sharder,
+    generate_rank_placements,
+    SharderType,
+)
 
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
@@ -78,23 +86,6 @@ def generate_embedding_bag_config(
             ),
         )
     return embedding_bag_config
-
-
-def generate_rank_placements(
-    world_size: int,
-    num_tables: int,
-    ranks_per_tables: List[int],
-) -> List[List[int]]:
-    # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
-    placements = []
-    max_rank = world_size - 1
-    if ranks_per_tables == [0]:
-        ranks_per_tables = [random.randint(1, max_rank) for _ in range(num_tables)]
-    for i in range(num_tables):
-        ranks_per_table = ranks_per_tables[i]
-        placement = sorted(random.sample(range(world_size), ranks_per_table))
-        placements.append(placement)
-    return placements
 
 
 def create_test_initial_state_dict(
@@ -212,23 +203,6 @@ def are_sharded_ebc_modules_identical(
             torch.testing.assert_close(val1, val2)
         else:
             assert val1 == val2
-
-
-def output_sharding_plan_delta(
-    old_plan: EmbeddingModuleShardingPlan, new_plan: EmbeddingModuleShardingPlan
-) -> EmbeddingModuleShardingPlan:
-    assert len(old_plan) == len(new_plan)
-    return_plan = copy.deepcopy(new_plan)
-    for shard_name, old_param in old_plan.items():
-        if shard_name not in return_plan:
-            raise ValueError(f"Shard {shard_name} not found in new plan")
-        new_param = return_plan[shard_name]
-        old_ranks = old_param.ranks
-        new_ranks = new_param.ranks
-        if old_ranks == new_ranks:
-            del return_plan[shard_name]
-
-    return return_plan
 
 
 def _test_ebc_resharding(
@@ -354,7 +328,7 @@ def _test_ebc_resharding(
 
 
 @skip_if_asan_class
-class MultiRankDynamicShardingTest(MultiProcessTestBase):
+class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
     def _run_ebc_resharding_test(
         self,
         per_param_sharding: Dict[str, ParameterSharding],
@@ -427,8 +401,8 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
     )
     @given(  # pyre-ignore
         num_tables=st.sampled_from([2, 3, 4]),
@@ -471,8 +445,8 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
         )
 
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
     )
     @given(  # pyre-ignore
         num_tables=st.sampled_from([2, 3, 4]),
@@ -519,3 +493,176 @@ class MultiRankDynamicShardingTest(MultiProcessTestBase):
             world_size,
             data_type,
         )
+
+
+@skip_if_asan_class
+class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    @given(  # pyre-ignore
+        sharder_type=st.sampled_from(
+            [
+                # SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ],
+        ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+            ]
+        ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embedding_bags": (optim.Adagrad, {"lr": 0.04}),
+                },
+                {
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
+                },
+            ]
+        ),
+        variable_batch_size=st.sampled_from(
+            [False]
+        ),  # TODO: Enable variable batch size st.booleans(),
+        data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
+        random_seed=st.integers(0, 1000),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_sharding_tw(
+        self,
+        sharder_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        variable_batch_size: bool,
+        data_type: DataType,
+        random_seed: int,  # Random seed value for deterministically generating sharding plan for resharding
+    ) -> None:
+        """
+        Tests resharding from DMP module interface, rather than EBC level.
+        """
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
+        sharding_type = ShardingType.TABLE_WISE.value
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
+
+        self._test_dynamic_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=self.device,
+                ),
+            ],
+            backend=self.backend,
+            qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
+            data_type=data_type,
+            sharding_type=ShardingType.TABLE_WISE,
+            random_seed=random_seed,
+        )
+
+
+class SingleRankDynamicShardingUtilsTest(unittest.TestCase):
+    def test_output_sharding_plan_delta(self) -> None:
+        """
+        Tests output_sharding_plan_delta function
+        """
+        num_tables = 2
+        # NOTE: even though this is a single rank DS test, setting world_size to 2 here to check
+        # output_sharding_plan_delta function to see if it works correctly at pruning a sharding plan.
+        # Since we don't actually run resharding in this UT, no need to ensure world_size is exactly as ranks used.
+        world_size = 2
+        data_type = DataType.FP32
+        embedding_dim = 16
+        num_embeddings = 4
+
+        # Table wise can only have 1 rank allocated per table:
+        ranks_per_tables = [1 for _ in range(num_tables)]
+        # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
+        old_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+        new_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+
+        while new_ranks == old_ranks:
+            new_ranks = generate_rank_placements(
+                world_size, num_tables, ranks_per_tables
+            )
+        per_param_sharding = {}
+        new_per_param_sharding = {}
+
+        # Construct parameter shardings
+        for i in range(num_tables):
+            per_param_sharding[table_name(i)] = table_wise(rank=old_ranks[i][0])
+            new_per_param_sharding[table_name(i)] = table_wise(rank=new_ranks[i][0])
+
+        embedding_bag_config = generate_embedding_bag_config(
+            data_type, num_tables, embedding_dim, num_embeddings
+        )
+
+        module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding=per_param_sharding,
+            local_size=world_size,
+            world_size=world_size,
+            device_type="cuda" if torch.cuda.is_available() else "cpu",
+        )
+
+        new_module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding=new_per_param_sharding,
+            local_size=world_size,
+            world_size=world_size,
+            device_type="cuda" if torch.cuda.is_available() else "cpu",
+        )
+
+        new_module_sharding_plan_delta = output_sharding_plan_delta(
+            module_sharding_plan, new_module_sharding_plan
+        )
+
+        assert len(new_module_sharding_plan_delta) <= len(new_module_sharding_plan)
+
+        # using t_name instead of table_name to avoid clashing with helper method
+        for t_name, new_sharding in new_module_sharding_plan.items():
+            if new_sharding.ranks != module_sharding_plan[t_name].ranks:
+                assert t_name in new_module_sharding_plan_delta
+                assert (
+                    new_module_sharding_plan_delta[t_name].ranks == new_sharding.ranks
+                )
+                assert (
+                    new_module_sharding_plan_delta[t_name].sharding_type
+                    == new_sharding.sharding_type
+                )
+                assert (
+                    new_module_sharding_plan_delta[t_name].compute_kernel
+                    == new_sharding.compute_kernel
+                )
+                # NOTE there are other attributes to test for equivalence in ParameterSharding type
+                # but the ones included here are the most important.

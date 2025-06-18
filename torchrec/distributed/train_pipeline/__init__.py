@@ -13,6 +13,14 @@ from torchrec.distributed.train_pipeline.pipeline_context import (  # noqa
     Out,
     TrainPipelineContext,
 )
+from torchrec.distributed.train_pipeline.pipeline_stage import (  # noqa
+    SparseDataDistUtil,  # noqa
+    StageOut,  # noqa
+)
+from torchrec.distributed.train_pipeline.tracing import (  # noqa
+    ArgInfoStepFactory,  # noqa
+    Tracer,  # noqa
+)
 from torchrec.distributed.train_pipeline.train_pipelines import (  # noqa
     EvalPipelineSparseDist,  # noqa
     PrefetchTrainPipelineSparseDist,  # noqa
@@ -25,17 +33,12 @@ from torchrec.distributed.train_pipeline.train_pipelines import (  # noqa
     TrainPipelineSparseDist,  # noqa
     TrainPipelineSparseDistCompAutograd,  # noqa
 )
+from torchrec.distributed.train_pipeline.types import ArgInfo, CallArgs  # noqa
 from torchrec.distributed.train_pipeline.utils import (  # noqa
     _override_input_dist_forwards,  # noqa
     _rewrite_model,  # noqa
     _start_data_dist,  # noqa
     _to_device,  # noqa
     _wait_for_batch,  # noqa
-    ArgInfo,  # noqa
-    ArgInfoStepFactory,  # noqa
-    CallArgs,  # noqa
     DataLoadingThread,  # noqa
-    SparseDataDistUtil,  # noqa
-    StageOut,  # noqa
-    Tracer,  # noqa
 )

@@ -12,12 +12,13 @@
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
+from torchrec.modules.embedding_configs import data_type_to_dtype
 from torchrec.sparse.jagged_tensor import (
     _desugar_keyed_tensors,
     _kt_regroup_arguments,
     KeyedTensor,
 )
-from torchrec.types import CacheMixin
+from torchrec.types import CacheMixin, DataType
 
 
 @torch.fx.wrap
@@ -62,16 +63,22 @@ class PermuteMultiEmbedding(torch.nn.Module):
 
     Args:
         groups (List[List[str]]): Groups from KTRegroupAsDict
-
+        multi_device (bool): Whether to move buffers to current guarded device
     """
 
-    def __init__(self, groups: List[List[str]]) -> None:
+    def __init__(self, groups: List[List[str]], multi_device: bool = False) -> None:
         super().__init__()
         self._groups = groups
         self.register_buffer("_permutes", torch.empty(0), persistent=False)
         self.register_buffer("_in_shapes", torch.empty(0), persistent=False)
         self.register_buffer("_out_shapes", torch.empty(0), persistent=False)
         self._out_lengths: Optional[List[int]] = None
+
+        # When multi_device is True, the input values could be on
+        # different devices when the model got loaded,
+        # We need to move buffer to the device of the first value
+        # in the input list.
+        self._multi_device = multi_device
 
     def init_tensors(
         self,
@@ -93,11 +100,21 @@ class PermuteMultiEmbedding(torch.nn.Module):
         self._out_shapes = self._out_shapes.to(device)
 
     def forward(self, values: List[torch.Tensor]) -> List[torch.Tensor]:
+        permutes = self._permutes
+        in_shapes = self._in_shapes
+        out_shapes = self._out_shapes
+        if self._multi_device:
+            device = values[0].device
+            # Non-blocking, assume permute_multi_embedding will be called with in the same stream
+            permutes = permutes.to(device, non_blocking=True)
+            in_shapes = in_shapes.to(device, non_blocking=True)
+            out_shapes = out_shapes.to(device, non_blocking=True)
+
         return torch.ops.fbgemm.permute_multi_embedding(
             values,
-            self._permutes,
-            self._in_shapes,
-            self._out_shapes,
+            permutes,
+            in_shapes,
+            out_shapes,
             self._out_lengths,
         )
 
@@ -117,6 +134,7 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
     Args:
         groups (List[List[str]]): features per output group
         keys (List[str]): key of each output group
+        multi_device (bool): Whether to move buffers to current guarded device
 
     Example::
 
@@ -131,7 +149,13 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
 
     """
 
-    def __init__(self, groups: List[List[str]], keys: List[str]) -> None:
+    def __init__(
+        self,
+        groups: List[List[str]],
+        keys: List[str],
+        emb_dtype: Optional[DataType] = None,
+        multi_device: bool = False,
+    ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.modules.{self.__class__.__name__}")
         assert len(groups) == len(keys), "Groups and keys should have same length"
@@ -144,7 +168,8 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         self._use_fbgemm_regroup: bool = False
         self._splits: List[int] = []
         self._idx_key_pairs: List[Tuple[int, str]] = []
-        self._permute_pooled_embs_impl = PermuteMultiEmbedding(groups)
+        self._permute_pooled_embs_impl = PermuteMultiEmbedding(groups, multi_device)
+        self._emb_dtype = emb_dtype
 
     def _init_fbgemm_regroup(self, kts: List[KeyedTensor]) -> None:
         self._use_fbgemm_regroup = True
@@ -190,18 +215,26 @@ class KTRegroupAsDict(torch.nn.Module, CacheMixin):
         self._splits = splits
         self._idx_key_pairs = idx_key_pairs
 
+    def embedding_cast(self, embs: List[torch.Tensor]) -> List[torch.Tensor]:
+        if self._emb_dtype is None:
+            return embs
+        dtype = data_type_to_dtype(self._emb_dtype)
+        return [emb.to(dtype=dtype) for emb in embs]
+
     def forward(self, keyed_tensors: List[KeyedTensor]) -> Dict[str, torch.Tensor]:
         if not self._is_inited:
             module_init(self, keyed_tensors)
 
         if self._use_fbgemm_regroup:
             values = _get_kts_values(keyed_tensors)
+            values = self.embedding_cast(values)
             permuted_values = self._permute_pooled_embs_impl(values)
             return _to_tensor_dict(self._keys, permuted_values)
         else:
             permuted_values = _permuted_values(
                 keyed_tensors, self._idx_key_pairs, self._dim
             )
+            permuted_values = self.embedding_cast([permuted_values])[0]
             splitted_values = torch.split(permuted_values, self._splits, dim=self._dim)
             return _to_tensor_dict(self._keys, splitted_values)
 

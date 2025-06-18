@@ -43,6 +43,7 @@ class Batch(Pipelineable):
 
     def record_stream(self, stream: torch.Stream) -> None:
         self.dense_features.record_stream(stream)
+        # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
         self.sparse_features.record_stream(stream)
         self.labels.record_stream(stream)
 

@@ -145,6 +145,7 @@ class ManagedCollisionEmbeddingCollectionContext(EmbeddingCollectionContext):
                     continue
                 value.record_stream(stream)
         if self.remapped_kjt is not None:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             self.remapped_kjt.record_stream(stream)
 
 
@@ -213,7 +214,15 @@ def create_infer_embedding_sharding(
 
     if storage_device_type_from_sharding_infos in ["cuda", "mtia"]:
         if sharding_type == ShardingType.TABLE_WISE.value:
-            return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
+            assert isinstance(
+                storage_device_type_from_sharding_infos, str
+            ), "embedding storage device type should always be a str for tw sharding and not a tuple"
+            return InferTwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                storage_device_type_from_sharding_infos=storage_device_type_from_sharding_infos,
+            )
         elif sharding_type == ShardingType.COLUMN_WISE.value:
             return InferCwSequenceEmbeddingSharding(sharding_infos, env, device)
         elif sharding_type == ShardingType.ROW_WISE.value:
@@ -238,7 +247,15 @@ def create_infer_embedding_sharding(
                 device_type_from_sharding_infos=storage_device_type_from_sharding_infos,
             )
         elif sharding_type == ShardingType.TABLE_WISE.value:
-            return InferTwSequenceEmbeddingSharding(sharding_infos, env, device)
+            assert isinstance(
+                storage_device_type_from_sharding_infos, str
+            ), "embedding storage device type should always be a str for tw sharding and not a tuple"
+            return InferTwSequenceEmbeddingSharding(
+                sharding_infos=sharding_infos,
+                env=env,
+                device=device,
+                storage_device_type_from_sharding_infos=storage_device_type_from_sharding_infos,
+            )
         else:
             raise ValueError(
                 f"Sharding type not supported {sharding_type} for {storage_device_type_from_sharding_infos} sharding"
@@ -275,11 +292,17 @@ def _construct_jagged_tensors_tw(
     embedding_names_per_rank: List[List[str]],
     features: KJTList,
     need_indices: bool,
+    storage_device_type: str,
 ) -> Dict[str, JaggedTensor]:
     ret: Dict[str, JaggedTensor] = {}
     for i in range(len(embedding_names_per_rank)):
-        embeddings_i: torch.Tensor = embeddings[i]
+        embeddings_i = embeddings[i]
         features_i: KeyedJaggedTensor = features[i]
+        if storage_device_type in ["ssd", "cpu"]:
+            embeddings_i = _get_batching_hinted_output(
+                _fx_trec_get_feature_length(features_i, embedding_names_per_rank[i]),
+                embeddings_i,
+            )
 
         lengths = features_i.lengths().view(-1, features_i.stride())
         values = features_i.values()
@@ -481,8 +504,15 @@ def _construct_jagged_tensors(
             key_to_feature_permuted_coordinates,
         )
     else:  # sharding_type == ShardingType.TABLE_WISE.value
+        assert isinstance(
+            device_type, str
+        ), "device_type should be a str for tw sharding and not a tuple"
         return _construct_jagged_tensors_tw(
-            embeddings, embedding_names_per_rank, features, need_indices
+            embeddings,
+            embedding_names_per_rank,
+            features,
+            need_indices,
+            str(device_type),
         )
 
 

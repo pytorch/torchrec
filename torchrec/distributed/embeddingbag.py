@@ -27,9 +27,6 @@ from typing import (
 
 import torch
 from fbgemm_gpu.permute_pooled_embedding_modules import PermutePooledEmbeddings
-from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
-    DenseTableBatchedEmbeddingBagsCodegen,
-)
 from tensordict import TensorDict
 from torch import distributed as dist, nn, Tensor
 from torch.autograd.profiler import record_function
@@ -61,6 +58,7 @@ from torchrec.distributed.sharding.dynamic_sharding import (
     get_largest_dims_from_sharding_plan_updates,
     shards_all_to_all,
     update_module_sharding_plan,
+    update_optimizer_state_post_resharding,
     update_state_dict_post_resharding,
 )
 from torchrec.distributed.sharding.grid_sharding import GridPooledEmbeddingSharding
@@ -972,6 +970,10 @@ class ShardedEmbeddingBagCollection(
                     _model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
+                    # pyre-fixme[16]: `Module` has no attribute
+                    #  `_in_backward_optimizers`.
+                    # pyre-fixme[16]: `Tensor` has no attribute
+                    #  `_in_backward_optimizers`.
                     self.embedding_bags[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
@@ -1137,6 +1139,8 @@ class ShardedEmbeddingBagCollection(
             if sharding_type == ShardingType.DATA_PARALLEL.value:
                 pg = self._env.process_group
                 with torch.no_grad():
+                    # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                    #  `Union[Module, Tensor]`.
                     dist.broadcast(param.data, src=0, group=pg)
 
     def _create_input_dist(
@@ -1454,6 +1458,8 @@ class ShardedEmbeddingBagCollection(
                 sharding_type,
             ):
                 embs = lookup(features)
+                if self.post_lookup_tracker_fn is not None:
+                    self.post_lookup_tracker_fn(features, embs)
 
             with maybe_annotate_embedding_event(
                 EmbeddingEvent.OUTPUT_DIST,
@@ -1461,6 +1467,8 @@ class ShardedEmbeddingBagCollection(
                 sharding_type,
             ):
                 awaitables.append(dist(embs, sharding_context))
+                if self.post_odist_tracker_fn is not None:
+                    self.post_odist_tracker_fn()
 
             if sharding_context:
                 batch_size_per_feature_pre_a2a.extend(
@@ -1529,17 +1537,13 @@ class ShardedEmbeddingBagCollection(
             return
 
         current_state = self.state_dict()
-        # TODO: Save Optimizers
+        has_optimizer = len(self._optim._optims) > 0 and all(
+            len(i) > 0 for i in self._optim.state_dict()["state"].values()
+        )
 
-        saved_weights = {}
         # TODO: Saving lookups tensors to CPU to eventually avoid recreating them completely again
-        for i, lookup in enumerate(self._lookups):
-            for attribute, tbe_module in lookup.named_modules():
-                if type(tbe_module) is DenseTableBatchedEmbeddingBagsCodegen:
-                    saved_weights[str(i) + "." + attribute] = tbe_module.weights.cpu()
-                    # Note: lookup.purge should delete tbe_module and weights
-                    # del tbe_module.weights
-                    # del tbe_module
+        # TODO: Ensure lookup tensors are actually being deleted
+        for _, lookup in enumerate(self._lookups):
             # pyre-ignore
             lookup.purge()
 
@@ -1550,6 +1554,7 @@ class ShardedEmbeddingBagCollection(
         max_dim_0, max_dim_1 = get_largest_dims_from_sharding_plan_updates(
             changed_sharding_params
         )
+        old_optimizer_state = self._optim.state_dict() if has_optimizer else None
 
         local_shard_names_by_src_rank, local_output_tensor = shards_all_to_all(
             module=self,
@@ -1560,16 +1565,7 @@ class ShardedEmbeddingBagCollection(
             extend_shard_name=self.extend_shard_name,
             max_dim_0=max_dim_0,
             max_dim_1=max_dim_1,
-        )
-
-        current_state = update_state_dict_post_resharding(
-            state_dict=current_state,
-            ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-            output_tensor=local_output_tensor,
-            new_sharding_params=changed_sharding_params,
-            curr_rank=dist.get_rank(),
-            extend_shard_name=self.extend_shard_name,
-            max_dim_0=max_dim_0,
+            optimizer_state=old_optimizer_state,
         )
 
         for name, param in changed_sharding_params.items():
@@ -1603,13 +1599,17 @@ class ShardedEmbeddingBagCollection(
             for embedding_configs in self.sharding_type_to_sharding_infos.values()
         ]
 
+        # Reset input dists
+        self._has_uninitialized_input_dist = True
+        self._input_dists: List[nn.Module] = []
+        self._features_order: List[int] = []
+        self._feature_splits: List[int] = []
+
         self._create_lookups()
         self._update_output_dist()
 
         if env.process_group and dist.get_backend(env.process_group) != "fake":
             self._initialize_torch_state(skip_registering=True)
-
-        self.load_state_dict(current_state)
 
         # update optimizer
         optims = []
@@ -1629,8 +1629,46 @@ class ShardedEmbeddingBagCollection(
 
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
 
+        if has_optimizer:
+            split_index = len(local_output_tensor) // 2
+            local_weight_tensors = local_output_tensor[:split_index]
+            local_optimizer_tensors = local_output_tensor[split_index:]
+            # Modifies new_opt_state in place and returns it
+            optimizer_state = update_optimizer_state_post_resharding(
+                old_opt_state=old_optimizer_state,  # pyre-ignore
+                new_opt_state=copy.deepcopy(self._optim.state_dict()),
+                ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
+                output_tensor=local_optimizer_tensors,
+                max_dim_0=max_dim_0,
+            )
+
+            self._optim.load_state_dict(optimizer_state)
+        else:
+            local_weight_tensors = local_output_tensor
+
+        current_state = update_state_dict_post_resharding(
+            state_dict=current_state,
+            ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
+            output_tensor=local_weight_tensors,
+            new_sharding_params=changed_sharding_params,
+            curr_rank=dist.get_rank(),
+            extend_shard_name=self.extend_shard_name,
+            max_dim_0=max_dim_0,
+        )
+
+        self.load_state_dict(current_state)
+
         update_module_sharding_plan(self, changed_sharding_params)
         return
+
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        for lookup in self._lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            if hasattr(lookup, "create_rocksdb_hard_link_snapshot") and callable(
+                lookup.create_rocksdb_hard_link_snapshot()
+            ):
+                lookup.create_rocksdb_hard_link_snapshot()
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

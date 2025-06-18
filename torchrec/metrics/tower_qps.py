@@ -227,9 +227,14 @@ class TowerQPSMetric(RecMetric):
                 RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION,
             ]:
                 if not isinstance(labels, torch.Tensor):
-                    raise RecMetricException(
-                        "Fused computation only support where 'labels' is a tensor"
-                    )
+                    try:
+                        labels = torch.stack(
+                            [labels[task.name] for task in self._tasks]
+                        )
+                    except Exception as e:
+                        raise RecMetricException(
+                            f"Failed to convert labels to tensor for fused computation: {e}"
+                        )
                 labels = labels.view(-1, self._batch_size)
                 if self._should_validate_update:
                     # Set the default value to be all True. When weights is None, it's considered
@@ -241,9 +246,14 @@ class TowerQPSMetric(RecMetric):
                     )
                     if weights is not None:
                         if not isinstance(weights, torch.Tensor):
-                            raise RecMetricException(
-                                "Fused computation only support where 'weights' is a tensor"
-                            )
+                            try:
+                                weights = torch.stack(
+                                    [weights[task.name] for task in self._tasks]
+                                )
+                            except Exception as e:
+                                raise RecMetricException(
+                                    f"Failed to convert weights to tensor for fused computation: {e}"
+                                )
                         has_valid_weights = torch.gt(
                             torch.count_nonzero(
                                 weights.view(-1, self._batch_size), dim=-1
@@ -272,7 +282,12 @@ class TowerQPSMetric(RecMetric):
                     task_labels = labels[task.name].view(1, -1)
                     if self._should_validate_update:
                         has_valid_weights = torch.ones(
-                            1, dtype=torch.bool, device=metric_.has_valid_update.device
+                            1,
+                            dtype=torch.bool,
+                            # pyre-fixme[6]: For 3rd argument expected `Union[None,
+                            #  int, str, device]` but got `Union[device, Tensor,
+                            #  Module]`.
+                            device=metric_.has_valid_update.device,
                         )
                         if weights is not None and task.name in weights:
                             has_valid_weights = torch.gt(
@@ -287,9 +302,12 @@ class TowerQPSMetric(RecMetric):
                                 0,
                             )
                         if has_valid_weights[0]:
+                            # pyre-fixme[29]: `Union[(self: TensorBase, other:
+                            #  Tensor) -> Tensor, Tensor, Module]` is not a function.
                             metric_.has_valid_update.logical_or_(has_valid_weights)
                         else:
                             continue
+                    # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
                     metric_.update(
                         predictions=None,
                         labels=task_labels,

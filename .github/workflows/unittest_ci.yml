@@ -8,6 +8,17 @@ on:
     branches:
       - nightly
       - main
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
+  pull_request:
+    paths-ignore:
+      - "docs/*"
+      - "third_party/*"
+      - .gitignore
+      - "*.md"
   workflow_dispatch:
 
 jobs:
@@ -15,65 +26,53 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: 3.9
-            python-tag: "py39"
+        cuda-tag: ["cu118", "cu126", "cu128"]
+        os:
+          - linux.g5.12xlarge.nvidia.gpu
+        python:
+          - version: "3.9"
+            tag: "py39"
+          - version: "3.10"
+            tag: "py310"
+          - version: "3.11"
+            tag: "py311"
+          - version: "3.12"
+            tag: "py312"
+          - version: "3.13"
+            tag: "py313"
+        is_pr:
+          - ${{ github.event_name == 'pull_request' }}
+        exclude:
+          - is_pr: true
             cuda-tag: "cu118"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: 3.9
-            python-tag: "py39"
-            cuda-tag: "cu121"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: 3.9
-            python-tag: "py39"
-            cuda-tag: "cu124"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.10'
-            python-tag: "py310"
-            cuda-tag: "cu118"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.10'
-            python-tag: "py310"
-            cuda-tag: "cu121"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.10'
-            python-tag: "py310"
-            cuda-tag: "cu124"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.11'
-            python-tag: "py311"
-            cuda-tag: "cu118"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.11'
-            python-tag: "py311"
-            cuda-tag: "cu121"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.11'
-            python-tag: "py311"
-            cuda-tag: "cu124"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.12'
-            python-tag: "py312"
-            cuda-tag: "cu118"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.12'
-            python-tag: "py312"
-            cuda-tag: "cu121"
-          - os: linux.g5.12xlarge.nvidia.gpu
-            python-version: '3.12'
-            python-tag: "py312"
-            cuda-tag: "cu124"
+          - is_pr: true
+            cuda-tag: "cu126"
+          - is_pr: true
+            cuda-tag: "cu128"
+            python:
+              version: "3.9"
+          - is_pr: true
+            cuda-tag: "cu128"
+            python:
+              version: "3.10"
+          - is_pr: true
+            cuda-tag: "cu128"
+            python:
+              version: "3.11"
+          - is_pr: true
+            cuda-tag: "cu128"
+            python:
+              version: "3.12"
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     permissions:
       id-token: write
       contents: read
     with:
       runner: ${{ matrix.os }}
-      timeout: 30
+      timeout: 60
       script: |
         ldd --version
-        conda create -y --name build_binary python=${{ matrix.python-version }}
+        conda create -y --name build_binary python=${{ matrix.python.version }}
         conda info
         python --version
         conda run -n build_binary python --version
@@ -93,7 +92,7 @@ jobs:
           pip install -r requirements.txt
         conda run -n build_binary \
           python setup.py bdist_wheel \
-          --python-tag=${{ matrix.python-tag }}
+          --python-tag=${{ matrix.python.tag }}
         conda run -n build_binary \
           python -c "import torchrec"
         echo "torch.distributed succeeded"

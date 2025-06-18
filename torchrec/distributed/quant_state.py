@@ -149,6 +149,7 @@ class ShardedQuantEmbeddingModuleState(
         # pyre-fixme[16]: `ShardedQuantEmbeddingModuleState` has no attribute
         #  `_table_name_to_tensors_list_qbias`.
         self._table_name_to_tensors_list_qbias: Dict[str, List[torch.Tensor]] = {}
+        _table_name_to_shard_idx: Dict[str, int] = {}
 
         for tbe, config in tbes.items():
             for (tbe_split_w, tbe_split_qscale, tbe_split_qbias), table in zip(
@@ -164,6 +165,12 @@ class ShardedQuantEmbeddingModuleState(
                 assert table.local_metadata
                 metadata: ShardMetadata = copy.deepcopy(table.local_metadata)
                 metadata.shard_sizes = [tbe_split_w.size(0), tbe_split_w.size(1)]
+
+                if table.name not in _table_name_to_shard_idx:
+                    _table_name_to_shard_idx[table.name] = 0
+
+                column_idx = _table_name_to_shard_idx[table.name]
+                _table_name_to_shard_idx[table.name] = column_idx + 1
 
                 # TODO(ivankobzarev): "meta" sharding support: cleanup when copy to "meta" moves all tensors to "meta"
                 # pyre-ignore
@@ -199,12 +206,6 @@ class ShardedQuantEmbeddingModuleState(
                 ]:
                     assert table.local_metadata
                     metadata: ShardMetadata = copy.deepcopy(table.local_metadata)
-                    shard_sizes = metadata.shard_sizes
-                    shard_offsets = metadata.shard_offsets
-
-                    shard_sizes_cols = shard_sizes[1]
-                    shard_offsets_cols = shard_offsets[1]
-
                     parameter_sharding: ParameterSharding = (
                         table_name_to_parameter_sharding[table.name]
                     )
@@ -221,7 +222,6 @@ class ShardedQuantEmbeddingModuleState(
                                 torch.empty([])
                             ] * num_shards
 
-                        column_idx = int(shard_offsets_cols / shard_sizes_cols)
                         # pyre-fixme[29]: `Union[(self: TensorBase, indices: Union[No...
                         table_name_to_tensors_list[table.name][
                             column_idx
@@ -230,6 +230,7 @@ class ShardedQuantEmbeddingModuleState(
                         qmetadata = ShardMetadata(
                             shard_offsets=metadata.shard_offsets,
                             shard_sizes=[
+                                # pyre-fixme[16]: `Optional` has no attribute `shape`.
                                 tbe_split_qparam.shape[0],
                                 tbe_split_qparam.shape[1],
                             ],
@@ -237,6 +238,7 @@ class ShardedQuantEmbeddingModuleState(
                             placement=table.local_metadata.placement,
                         )
                         # TODO(ivankobzarev): "meta" sharding support: cleanup when copy to "meta" moves all tensors to "meta"
+                        # pyre-fixme[16]: `Optional` has no attribute `device`.
                         if qmetadata.placement.device != tbe_split_qparam.device:
                             qmetadata.placement = _remote_device(
                                 tbe_split_qparam.device
@@ -246,6 +248,8 @@ class ShardedQuantEmbeddingModuleState(
                             #  List[Shard]]` but got `Union[Tensor, Module]`.
                             table_name_to_local_shards,
                             table.name,
+                            # pyre-fixme[6]: For 1st argument expected `Tensor` but
+                            #  got `Optional[Tensor]`.
                             Shard(tensor=tbe_split_qparam, metadata=qmetadata),
                         )
                     # end of weight_qscale & weight_qbias section
@@ -415,6 +419,16 @@ def get_bucket_offsets_per_virtual_table(
     }
 
 
+def get_param_id_from_type(is_sqebc: bool, is_sqmcec: bool, is_sfpebc: bool) -> str:
+    if is_sqebc:
+        return "embedding_bags"
+    elif is_sqmcec:
+        return "_embedding_module.embeddings"
+    elif is_sfpebc:
+        return "_embedding_bag_collection.embedding_bags"
+    return "embeddings"
+
+
 def sharded_tbes_weights_spec(
     sharded_model: torch.nn.Module,
     virtual_table_name_to_bucket_lengths: Optional[Dict[str, list[int]]] = None,
@@ -450,11 +464,14 @@ def sharded_tbes_weights_spec(
         is_sqebc: bool = "ShardedQuantEmbeddingBagCollection" in type_name
         is_sqec: bool = "ShardedQuantEmbeddingCollection" in type_name
         is_sqmcec: bool = "ShardedQuantManagedCollisionEmbeddingCollection" in type_name
+        is_sfpebc: bool = (
+            "ShardedQuantFeatureProcessedEmbeddingBagCollection" in type_name
+        )
 
-        if is_sqebc or is_sqec or is_sqmcec:
+        if is_sqebc or is_sqec or is_sqmcec or is_sfpebc:
             assert (
-                is_sqec + is_sqebc + is_sqmcec == 1
-            ), "Cannot have any two of ShardedQuantEmbeddingBagCollection, ShardedQuantEmbeddingCollection and ShardedQuantManagedCollisionEmbeddingCollection are true"
+                is_sqec + is_sqebc + is_sqmcec + is_sfpebc == 1
+            ), "Cannot have any two of ShardedQuantEmbeddingBagCollection, ShardedQuantEmbeddingCollection, ShardedQuantManagedCollisionEmbeddingCollection and ShardedQuantFeatureProcessedEmbeddingBagCollection are true"
             tbes_configs: Dict[
                 IntNBitTableBatchedEmbeddingBagsCodegen, GroupedEmbeddingConfig
             ] = module.tbes_configs()
@@ -546,8 +563,7 @@ def sharded_tbes_weights_spec(
                         row_offsets,
                         table_metadata.shard_offsets[1],
                     ]
-                    s: str = "embedding_bags" if is_sqebc else "embeddings"
-                    s = ("_embedding_module." if is_sqmcec else "") + s
+                    s: str = get_param_id_from_type(is_sqebc, is_sqmcec, is_sfpebc)
                     unsharded_fqn_weight_prefix: str = f"{module_fqn}.{s}.{table_name}"
                     unsharded_fqn_weight: str = unsharded_fqn_weight_prefix + ".weight"
 

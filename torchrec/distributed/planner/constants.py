@@ -30,6 +30,7 @@ HBM_MEM_BW: float = 897 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 # with other devices such as the FE NIC.
 HBM_TO_DDR_MEM_BW: float = 32 * 1024 * 1024 * 1024 / 1000  # bytes/ms
 UVM_CACHING_RATIO: float = 0.2
+KV_CACHING_RATIO: float = 0.2
 BATCH_SIZE: int = 512
 
 BATCHED_COPY_PERF_FACTOR: float = 2.455  # empirical studies

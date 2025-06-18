@@ -138,6 +138,8 @@ def _test_sharding_and_remapping(  # noqa C901
 
         apply_optimizer_in_backward(
             RowWiseAdagrad,
+            # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but got
+            #  `Iterable[Union[Module, Tensor]]`.
             [
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_0"].weight,
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_1"].weight,
@@ -275,6 +277,8 @@ def _test_in_place_embd_weight_update(  # noqa C901
         )
         apply_optimizer_in_backward(
             RowWiseAdagrad,
+            # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but got
+            #  `Iterable[Union[Module, Tensor]]`.
             [
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_0"].weight,
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_1"].weight,
@@ -372,6 +376,8 @@ def _test_sharding_and_resharding(  # noqa C901
 
         apply_optimizer_in_backward(
             RowWiseAdagrad,
+            # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but got
+            #  `Iterable[Union[Module, Tensor]]`.
             [
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_0"].weight,
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_1"].weight,
@@ -464,6 +470,8 @@ def _test_sharding_and_resharding(  # noqa C901
 
             apply_optimizer_in_backward(
                 RowWiseAdagrad,
+                # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but
+                #  got `Iterable[Union[Module, Tensor]]`.
                 [
                     sparse_arch._mc_ec._embedding_collection.embeddings[
                         "table_0"
@@ -548,6 +556,8 @@ def _test_sharding_dedup(  # noqa C901
         )
         apply_optimizer_in_backward(
             RowWiseAdagrad,
+            # pyre-fixme[6]: For 2nd argument expected `Iterable[Parameter]` but got
+            #  `Iterable[Union[Module, Tensor]]`.
             [
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_0"].weight,
                 sparse_arch._mc_ec._embedding_collection.embeddings["table_1"].weight,
@@ -1114,7 +1124,7 @@ class ShardedMCEmbeddingCollectionParallelTest(MultiProcessTestBase):
                     )
                 ),
                 backend=backend,
-                input_hash_size=(2**62) - 1 + 10,
+                input_hash_size=(2**52) - 1 + 10,
             ),
         except AssertionError as e:
             self.assertTrue("0 != 1" in str(e))

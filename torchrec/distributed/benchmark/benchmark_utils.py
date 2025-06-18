@@ -14,6 +14,7 @@ import argparse
 import contextlib
 import copy
 import gc
+import inspect
 import json
 import logging
 import os
@@ -26,6 +27,8 @@ from typing import (
     Callable,
     ContextManager,
     Dict,
+    get_args,
+    get_origin,
     List,
     Optional,
     Set,
@@ -467,47 +470,60 @@ def set_embedding_config(
 
 
 # pyre-ignore [24]
-def cmd_conf(*configs: Any) -> Callable:
-    support_classes: List[Any] = [int, str, bool, float, Enum]  # pyre-ignore[33]
+def cmd_conf(func: Callable) -> Callable:
 
-    # pyre-ignore [24]
-    def wrapper(func: Callable) -> Callable:
-        for config in configs:
-            assert is_dataclass(config), f"{config} should be a dataclass"
+    # pyre-ignore [3]
+    def wrapper() -> Any:
+        sig = inspect.signature(func)
+        parser = argparse.ArgumentParser(func.__doc__)
 
-        # pyre-ignore
-        def rtf(**kwargs):
-            loglevel = logging._nameToLevel[kwargs["loglevel"].upper()]
-            logger.setLevel(logging.INFO)
-            input_configs = []
-            for config in configs:
-                params = {}
-                for field in fields(config):
-                    params[field.name] = kwargs.get(field.name, field.default)
-                conf = config(**params)
-                logger.info(conf)
-                input_configs.append(conf)
-            logger.setLevel(loglevel)
-            return func(*input_configs)
+        seen_args = set()  # track all --<name> we've added
 
-        names: Set[str] = set()
-        for config in configs:
-            for field in fields(config):
-                if not isinstance(field.default, tuple(support_classes)):
-                    continue
-                if field.name not in names:
-                    names.add(field.name)
+        for _name, param in sig.parameters.items():
+            cls = param.annotation
+            if not is_dataclass(cls):
+                continue
+
+            for f in fields(cls):
+                arg_name = f.name
+                if arg_name in seen_args:
+                    parser.error(f"Duplicate argument {arg_name}")
+                seen_args.add(arg_name)
+
+                ftype = f.type
+                origin = get_origin(ftype)
+
+                # Unwrapping Optional[X] to X
+                if origin is Union and type(None) in get_args(ftype):
+                    non_none = [t for t in get_args(ftype) if t is not type(None)]
+                    if len(non_none) == 1:
+                        ftype = non_none[0]
+                        origin = get_origin(ftype)
+
+                arg_kwargs = {
+                    "default": f.default,
+                    "help": f"({cls.__name__}) {arg_name}",
+                }
+
+                if origin in (list, List):
+                    elem_type = get_args(ftype)[0]
+                    arg_kwargs.update(nargs="*", type=elem_type)
                 else:
-                    logger.warning(f"WARNING: duplicate argument {field.name}")
-                    continue
-                rtf = click.option(
-                    f"--{field.name}", type=field.type, default=field.default
-                )(rtf)
-        return click.option(
-            "--loglevel",
-            type=click.Choice(list(logging._nameToLevel.keys()), case_sensitive=False),
-            default=logging._levelToName[logger.level],
-        )(rtf)
+                    arg_kwargs.update(type=ftype)
+
+                parser.add_argument(f"--{arg_name}", **arg_kwargs)
+
+        args = parser.parse_args()
+
+        # Build the dataclasses
+        kwargs = {}
+        for name, param in sig.parameters.items():
+            cls = param.annotation
+            if is_dataclass(cls):
+                data = {f.name: getattr(args, f.name) for f in fields(cls)}
+                kwargs[name] = cls(**data)  # pyre-ignore [29]
+
+        return func(**kwargs)
 
     return wrapper
 

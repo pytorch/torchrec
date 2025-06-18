@@ -30,6 +30,7 @@ from torch import distributed as dist, nn
 from torch.autograd.profiler import record_function
 from torch.distributed._shard.sharding_spec import EnumerableShardingSpec
 from torch.distributed._tensor import DTensor
+from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_lookup import PartiallyMaterializedTensor
@@ -315,6 +316,7 @@ class EmbeddingCollectionContext(Multistreamable):
         for ctx in self.sharding_contexts:
             ctx.record_stream(stream)
         for f in self.input_features:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             f.record_stream(stream)
         for r in self.reverse_indices:
             r.record_stream(stream)
@@ -505,6 +507,7 @@ class ShardedEmbeddingCollection(
             )
         self._need_indices: bool = module.need_indices()
         self._inverse_indices_permute_per_sharding: Optional[List[torch.Tensor]] = None
+        self._skip_missing_weight_key: List[str] = []
 
         for index, (sharding, lookup) in enumerate(
             zip(
@@ -704,9 +707,8 @@ class ShardedEmbeddingCollection(
 
                 # for loading state_dict into virtual table, we skip the weights assignment
                 # if needed, for now this should be handled separately outside of load_state_dict call
-                state_dict[weight_key] = self._model_parallel_name_to_local_shards[
-                    table_name
-                ][0].tensor
+                self._skip_missing_weight_key.append(weight_key)
+                del state_dict[weight_key]
                 continue
 
             key = f"{prefix}embeddings.{table_name}.weight"
@@ -892,6 +894,10 @@ class ShardedEmbeddingCollection(
                     _model_parallel_name_to_compute_kernel[table_name]
                     != EmbeddingComputeKernel.DENSE.value
                 ):
+                    # pyre-fixme[16]: `Module` has no attribute
+                    #  `_in_backward_optimizers`.
+                    # pyre-fixme[16]: `Tensor` has no attribute
+                    #  `_in_backward_optimizers`.
                     self.embeddings[table_name].weight._in_backward_optimizers = [
                         EmptyFusedOptimizer()
                     ]
@@ -1082,11 +1088,22 @@ class ShardedEmbeddingCollection(
                         virtual_table_sharded_t_map[table_name][1],
                     )
 
+        def _post_load_state_dict_hook(
+            module: "ShardedEmbeddingCollection",
+            incompatible_keys: _IncompatibleKeys,
+        ) -> None:
+            if incompatible_keys.missing_keys:
+                # has to remove the key inplace
+                for skip_key in module._skip_missing_weight_key:
+                    if skip_key in incompatible_keys.missing_keys:
+                        incompatible_keys.missing_keys.remove(skip_key)
+
         self.register_state_dict_pre_hook(self._pre_state_dict_hook)
         self._register_state_dict_hook(post_state_dict_hook)
         self._register_load_state_dict_pre_hook(
             self._pre_load_state_dict_hook, with_module=True
         )
+        self.register_load_state_dict_post_hook(_post_load_state_dict_hook)
 
         self.reset_parameters()
 
@@ -1110,6 +1127,8 @@ class ShardedEmbeddingCollection(
             if sharding_type == ShardingType.DATA_PARALLEL.value:
                 pg = self._env.process_group
                 with torch.no_grad():
+                    # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+                    #  `TypeUnion[Module, Tensor]`.
                     dist.broadcast(param.data, src=0, group=pg)
 
     def _generate_permute_indices_per_feature(
@@ -1495,6 +1514,8 @@ class ShardedEmbeddingCollection(
                 EmbeddingEvent.LOOKUP, self._module_fqn, sharding_type
             ):
                 embs = lookup(features)
+                if self.post_lookup_tracker_fn is not None:
+                    self.post_lookup_tracker_fn(features, embs)
 
             with maybe_annotate_embedding_event(
                 EmbeddingEvent.OUTPUT_DIST, self._module_fqn, sharding_type
@@ -1502,6 +1523,8 @@ class ShardedEmbeddingCollection(
                 awaitables_per_sharding.append(
                     odist(embs.view(-1, embedding_dim), sharding_ctx)
                 )
+                if self.post_odist_tracker_fn is not None:
+                    self.post_odist_tracker_fn()
 
             features_before_all2all_per_sharding.append(
                 # pyre-fixme[6]: For 1st argument expected `KeyedJaggedTensor` but
@@ -1525,6 +1548,15 @@ class ShardedEmbeddingCollection(
             if sharding_type == ShardingType.COLUMN_WISE.value
             else self._embedding_dim
         )
+
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        for lookup in self._lookups:
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+            if hasattr(lookup, "create_rocksdb_hard_link_snapshot") and callable(
+                lookup.create_rocksdb_hard_link_snapshot()
+            ):
+                lookup.create_rocksdb_hard_link_snapshot()
 
     @property
     def fused_optimizer(self) -> KeyedOptimizer:

@@ -124,7 +124,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 torch.nn.utils.clip_grad_norm_(
                     replicate_params,
                     self._max_gradient,
-                    norm_type=self._norm_type,
+                    norm_type=float(self._norm_type),
                 )
             else:
                 self.clip_grad_norm_()

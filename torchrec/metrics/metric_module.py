@@ -377,6 +377,8 @@ class RecMetricModule(nn.Module):
         for task, metric_computation in zip(tasks, metric_computations):
             inputs = []
             state_aggregated[task.name] = {}
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `items`.
             for attr, reduction_fn in metric_computation._reductions.items():
                 inputs.append((attr, getattr(metric_computation, attr), reduction_fn))
 
@@ -395,7 +397,7 @@ class RecMetricModule(nn.Module):
         return state_aggregated
 
     def get_pre_compute_states(
-        self, pg: Union[dist.ProcessGroup, DeviceMesh]
+        self, pg: Optional[Union[dist.ProcessGroup, DeviceMesh]] = None
     ) -> Dict[str, Dict[str, Dict[str, Union[torch.Tensor, List[torch.Tensor]]]]]:
         """
         This function returns the states per rank for each metric to be saved. The states are are aggregated by the state defined reduction_function.
@@ -411,23 +413,26 @@ class RecMetricModule(nn.Module):
         applied to them. Typical state dict exposes just the metric states that live on the rank it's called from.
 
         Args:
-            pg (Union[dist.ProcessGroup, DeviceMesh]): the process group to use for all gather.
-            reduce_metrics (bool): whether to reduce the metrics or not. Default is True.
+            pg (Optional[Union[dist.ProcessGroup, DeviceMesh]]): the process group to use for all gather, defaults to WORLD process group.
 
         Returns:
             Dict[str, Dict[str, Dict[str, torch.Tensor]]]: the states for each metric to be saved
         """
-        if isinstance(pg, DeviceMesh):
-            process_group: dist.ProcessGroup = pg.get_group(mesh_dim="shard")
-        else:
-            process_group: dist.ProcessGroup = pg
+        pg = pg if pg is not None else dist.group.WORLD
+        process_group: dist.ProcessGroup = (  # pyre-ignore[9]
+            pg.get_group(mesh_dim="shard") if isinstance(pg, DeviceMesh) else pg
+        )
+
         aggregated_states = {}
         world_size = dist.get_world_size(
             process_group
         )  # Under 2D parallel context, this should be sharding world size
 
         for metric in self.rec_metrics.rec_metrics:
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `value`.
             aggregated_states[metric._namespace.value] = self._get_metric_states(
+                # pyre-fixme[6]: For 1st argument expected `RecMetric` but got `Module`.
                 metric,
                 world_size,
                 process_group,
@@ -459,9 +464,18 @@ class RecMetricModule(nn.Module):
             None
         """
         for metric in self.rec_metrics.rec_metrics:
+            # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
+            #  `value`.
             states = source[metric._namespace.value]
             for task, metric_computation in zip(
-                metric._tasks, metric._metrics_computations
+                # pyre-fixme[6]: For 1st argument expected `Iterable[_T1]` but got
+                #  `Union[Module, Tensor]`.
+                # pyre-fixme[6]: For 2nd argument expected `Iterable[_T2]` but got
+                #  `Union[Module, Tensor]`.
+                metric._tasks,
+                # pyre-fixme[6]: For 2nd argument expected `Iterable[_T2]` but got
+                #  `Union[Module, Tensor]`.
+                metric._metrics_computations,
             ):
                 state = states[task.name]
                 for attr, tensor in state.items():

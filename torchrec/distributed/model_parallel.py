@@ -29,12 +29,15 @@ from torch.distributed.tensor import DeviceMesh
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
+from torchrec.distributed.model_tracker.model_delta_tracker import ModelDeltaTracker
+from torchrec.distributed.model_tracker.types import DeltaRows, ModelTrackerConfig
 
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
 from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     EnumerableShardingSpec,
     ModuleSharder,
+    ParameterSharding,
     ShardedModule,
     ShardingEnv,
     ShardingEnv2D,
@@ -207,6 +210,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         init_parameters (bool): initialize parameters for modules still on meta device.
         data_parallel_wrapper (Optional[DataParallelWrapper]): custom wrapper for data
             parallel modules.
+        model_tracker_config (Optional[DeltaTrackerConfig]): config for model tracker.
 
     Example::
 
@@ -233,6 +237,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         init_data_parallel: bool = True,
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
+        model_tracker_config: Optional[ModelTrackerConfig] = None,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
@@ -285,6 +290,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         if init_data_parallel:
             self.init_data_parallel()
 
+        self.model_delta_tracker: Optional[ModelDeltaTracker] = (
+            self._init_delta_tracker(model_tracker_config, self._dmp_wrapped_module)
+            if model_tracker_config is not None
+            else None
+        )
+
     @property
     def module(self) -> nn.Module:
         """
@@ -306,6 +317,16 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
     # pyre-ignore [2, 3]
     def forward(self, *args, **kwargs) -> Any:
+        if self.model_delta_tracker is not None:
+            # The step() call advances the internal batch counter so that subsequent ID tracking and delta
+            # retrieval operations can be properly organized by batch boundaries.
+
+            # Context: ModelDeltaTracker tracks unique embedding IDs (and optionally embeddings / states)
+            # useful for calculating topk rows for checkpointing and for updating fresh embedding weights
+            # between predictors and trainers in online training scenarios.
+            self.model_delta_tracker.step()
+
+        # Model forward for DMP wrapped model
         return self._dmp_wrapped_module(*args, **kwargs)
 
     def init_data_parallel(self) -> None:
@@ -342,6 +363,19 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
     def _init_dmp(self, module: nn.Module) -> nn.Module:
         return self._shard_modules_impl(module)
+
+    def _init_delta_tracker(
+        self, model_tracker_config: ModelTrackerConfig, module: nn.Module
+    ) -> ModelDeltaTracker:
+        # Init delta tracker if config is provided
+        return ModelDeltaTracker(
+            model=module,
+            consumers=model_tracker_config.consumers,
+            delete_on_read=model_tracker_config.delete_on_read,
+            auto_compact=model_tracker_config.auto_compact,
+            mode=model_tracker_config.tracking_mode,
+            fqns_to_skip=model_tracker_config.fqns_to_skip,
+        )
 
     def _init_optim(self, module: nn.Module) -> CombinedOptimizer:
         # pyre-ignore [6]
@@ -419,6 +453,25 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                 module.reset_parameters()
 
         module.apply(init_parameters)
+
+    def get_model_tracker(self) -> ModelDeltaTracker:
+        """
+        Returns the model tracker if it exists.
+        """
+
+        assert (
+            self.model_delta_tracker is not None
+        ), "Model tracker is not initialized. Add ModelTrackerConfig at DistributedModelParallel init."
+        return self.model_delta_tracker
+
+    def get_delta(self, consumer: Optional[str] = None) -> Dict[str, DeltaRows]:
+        """
+        Returns the delta rows for the given consumer.
+        """
+        assert (
+            self.model_delta_tracker is not None
+        ), "Model tracker is not initialized. Add ModelTrackerConfig at DistributedModelParallel init."
+        return self.model_delta_tracker.get_delta(consumer)
 
     def sparse_grad_parameter_names(
         self, destination: Optional[List[str]] = None, prefix: str = ""
@@ -612,6 +665,87 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             if hasattr(m, "reset_parameters"):
                 m.reset_parameters()
 
+    def reshard(
+        self,
+        sharded_module_fqn: str,
+        changed_shard_to_params: Dict[str, ParameterSharding],
+    ) -> None:
+        """
+        Reshards an already-sharded module in the DMP given a set of ParameterShardings to change placements.
+
+        This method allows you to dynamically change the sharding strategy for a specific module
+        without recreating the entire DMP. It's particularly useful for:
+        1. Adapting to changing requirements during training
+        2. Implementing progressive sharding strategies
+        3. Rebalancing load across devices
+        4. A/B Testing different sharding plans
+
+        Args:
+            path_to_sharded_module (str): The path to the sharded module in the DMP.
+                For example, "sparse.ebc".
+            changed_shard_to_params (Dict[str, ParameterSharding]): A dictionary mapping
+                parameter names to their new ParameterSharding configurations. Includes
+                only the shards that needs to be moved.
+
+        Example:
+            ```
+            # Original sharding plan might have table sharded across 2 GPUs
+            original_plan = {
+                "table_0': ParameterSharding(
+                    sharding_type="table_wise",
+                    ranks=[0, 1, 2, 3],
+                    sharding_spec=EnumerableShardingSpec(...)
+                )
+            }
+
+            # New sharding plan to shard across 4 GPUs
+            new_plan = {
+                "weight": ParameterSharding(
+                    sharding_type="table_wise",
+                    ranks=[0, 1, 2, 3],
+                    sharding_spec=EnumerableShardingSpec(...)
+                )
+            }
+
+            # Helper function for only selecting the delta between original and new plan
+            changed_sharding_params = output_sharding_plan_delta(new_plan)
+
+            # Reshard the module and redistribute the tensors
+            model.reshard("embedding_module", changed_sharding_params)
+            ```
+
+        Notes:
+            - The sharder for the module must implement a `reshard` method
+            - Resharding involves redistributing tensor data across devices, which can be expensive
+            - After resharding, the optimizer state is maintained for the module
+            - The sharding plan is updated to reflect the new configuration
+        """
+        steps = sharded_module_fqn.split(".")
+        sharded_module = self.module
+        for s in steps:
+            sharded_module = getattr(sharded_module, s)
+
+        assert isinstance(sharded_module, ShardedModule)
+        assert changed_shard_to_params is not None
+        sharder_key = sharded_module.unsharded_module_type
+        sharder = self._sharder_map[sharder_key]
+        assert hasattr(
+            sharder, "reshard"
+        ), "reshard is not implemented for this sharder"
+        sharded_module = sharder.reshard(  # pyre-ignore
+            sharded_module,
+            changed_shard_to_params,
+            self._env,
+            self.device,
+        )
+
+        # Need to use .module to maintain FQN consistency
+        self._optim: CombinedOptimizer = self._init_optim(
+            self._dmp_wrapped_module.module  # pyre-ignore
+        )
+        self._plan.plan[sharded_module_fqn] = sharded_module.module_sharding_plan
+        return sharded_module
+
 
 class DMPCollection(DistributedModelParallel):
     """
@@ -694,7 +828,9 @@ class DMPCollection(DistributedModelParallel):
         use_inter_host_allreduce: bool = False,
         custom_all_reduce: Optional[Callable[[List[torch.Tensor]], None]] = None,
     ) -> None:
-        assert device.type == "cuda", "DMPCollection only supports CUDA"
+        assert (
+            device.type == "cuda" or device.type == "mtia"
+        ), "DMPCollection only supports CUDA or MTIA"
         self._device = device
         self._pg: dist.ProcessGroup = global_pg
         self._plan: ShardingPlan = plan
@@ -931,7 +1067,7 @@ class DMPCollection(DistributedModelParallel):
                             else:
                                 shard_rank = shard.placement._rank * step + group_start
                             shard.placement = _remote_device(
-                                f"rank:{shard_rank}/cuda:{shard_rank % get_local_size()}"
+                                f"rank:{shard_rank}/{self._device.type}:{shard_rank % get_local_size()}"
                             )
         return
 
@@ -957,3 +1093,25 @@ class DMPCollection(DistributedModelParallel):
 
         _find_sharded_modules(self._dmp_wrapped_module)
         return sharded_modules
+
+    @property
+    def sharding_pg(self) -> dist.ProcessGroup:
+        """
+        Returns the process group used for this ranks sharding.
+        """
+        return self._sharding_pg
+
+    @property
+    def replica_pg(self) -> dist.ProcessGroup:
+        """
+        Returns the process group used for this ranks replication.
+        """
+        return self._replica_pg
+
+    @property
+    def device_mesh(self) -> DeviceMesh:
+        """
+        Returns the device mesh used for 2D parallelism.
+        Contains two dimensions: "replicate" and "shard".
+        """
+        return self._device_mesh

@@ -8,6 +8,7 @@
 # pyre-strict
 
 import abc
+import hashlib
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum
@@ -248,6 +249,10 @@ class BasicCommsBandwidths(GeneralizedCommsBandwidth):
 
 
 class Topology:
+    """
+    Representation of a network of devices in a cluster.
+    """
+
     def __init__(
         self,
         world_size: int,
@@ -284,7 +289,7 @@ class Topology:
         self._world_size = world_size
 
         hbm_per_device = [0] * world_size
-        if self._compute_device == "cuda":
+        if self._compute_device == "cuda" or self._compute_device == "mtia":
             hbm_per_device = [hbm_cap if hbm_cap else HBM_CAP] * world_size
         ddr_cap_per_rank = [ddr_cap if ddr_cap else DDR_CAP] * world_size
 
@@ -395,6 +400,40 @@ class Topology:
         topology_repr += f"local_world_size={self._local_world_size} \n"
         topology_repr += str(self._comms_bandwidths) + "\n"
         return topology_repr
+
+    def _hash(self) -> str:
+        """
+        Compute a consistent hash value for this Topology instance.
+
+        Returns:
+            str: A hash value for this Topology instance.
+        """
+
+        # Compute hbms and ddrs from the decives
+        hbms = [device.storage.hbm for device in self._devices]
+        ddrs = [device.storage.ddr for device in self._devices]
+
+        # Combine all attributes into a hashable tuple
+        hashable_list = [
+            self._world_size,
+            self._compute_device,
+            hbms,
+            ddrs,
+            self._local_world_size,
+            self._hbm_mem_bw,
+            self._ddr_mem_bw,
+            self._hbm_to_ddr_mem_bw,
+            self._comms_bandwidths.intra_host_bw,
+            self._comms_bandwidths.inter_host_bw,
+            self._bwd_compute_multiplier,
+            self._weighted_feature_bwd_compute_multiplier,
+            self._uneven_sharding_perf_multiplier,
+        ]
+
+        serialized_list = str(hashable_list).encode("utf-8")
+        hash_object = hashlib.sha256(serialized_list)
+        hash_digest = hash_object.hexdigest()
+        return hash_digest
 
 
 # ---- INPUT / OUTPUT ----- #
@@ -703,6 +742,27 @@ class ParameterConstraints:
     device_group: Optional[str] = None
     key_value_params: Optional[KeyValueParams] = None
 
+    def __hash__(self) -> int:
+        return hash(
+            (
+                tuple(self.sharding_types) if self.sharding_types else None,
+                tuple(self.compute_kernels) if self.compute_kernels else None,
+                self.min_partition,
+                tuple(self.pooling_factors),
+                tuple(self.num_poolings) if self.num_poolings else None,
+                tuple(self.batch_sizes) if self.batch_sizes else None,
+                self.is_weighted,
+                self.cache_params,
+                self.enforce_hbm,
+                self.stochastic_rounding,
+                self.bounds_check_mode,
+                tuple(self.feature_names) if self.feature_names else None,
+                self.output_dtype,
+                self.device_group,
+                self.key_value_params,
+            )
+        )
+
 
 class PlannerErrorType(Enum):
     """
@@ -891,6 +951,7 @@ class Stats(abc.ABC):
         best_plan: List[ShardingOption],
         constraints: Optional[Dict[str, ParameterConstraints]] = None,
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        enumerator: Optional[Enumerator] = None,
         debug: bool = False,
     ) -> None:
         """

@@ -15,6 +15,7 @@ from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
+from torchrec import EmbeddingCollection
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embedding_tower_sharding import (
     EmbeddingTowerCollectionSharder,
@@ -839,8 +840,10 @@ class ModelInput(Pipelineable):
     def record_stream(self, stream: torch.Stream) -> None:
         self.float_features.record_stream(stream)
         if isinstance(self.idlist_features, KeyedJaggedTensor):
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             self.idlist_features.record_stream(stream)
         if isinstance(self.idscore_features, KeyedJaggedTensor):
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             self.idscore_features.record_stream(stream)
         self.label.record_stream(stream)
 
@@ -1207,6 +1210,47 @@ def _post_sparsenn_forward(
         )
 
 
+class TestECSparseArch(nn.Module):
+    """
+    Basic nn.Module for testing
+
+    Args:
+        tables
+        device
+
+    Call Args:
+        features
+
+    Returns:
+        KeyedTensor
+    """
+
+    def __init__(
+        self,
+        tables: List[EmbeddingConfig],
+        # weighted_tables: List[EmbeddingBagConfig],
+        device: Optional[torch.device] = None,
+        # max_feature_lengths: Optional[Dict[str, int]] = None,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+        self.ec: EmbeddingCollection = EmbeddingCollection(
+            tables=tables,
+            device=device,
+        )
+
+    def forward(
+        self,
+        features: KeyedJaggedTensor,
+        weighted_features: Optional[KeyedJaggedTensor] = None,
+        batch_size: Optional[int] = None,
+    ) -> KeyedTensor:
+        ec = self.ec(features)
+        result = _post_sparsenn_forward(ec, None, None, batch_size)
+        return result
+
+
 class TestSparseArch(nn.Module):
     """
     Basic nn.Module for testing
@@ -1349,7 +1393,7 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
 
     def __init__(
         self,
-        tables: List[EmbeddingBagConfig],
+        tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
         num_float_features: int = 10,
         weighted_tables: Optional[List[EmbeddingBagConfig]] = None,
         embedding_groups: Optional[Dict[str, List[str]]] = None,
@@ -1373,14 +1417,19 @@ class TestSparseNN(TestSparseNNBase, CopyableMixin):
         self.dense = TestDenseArch(num_float_features, dense_device)
         if zch:
             self.sparse: nn.Module = TestSparseArchZCH(
-                tables,
+                tables,  # pyre-ignore
                 weighted_tables,
                 torch.device("meta"),
                 return_remapped=True,
             )
+        elif isinstance(tables[0], EmbeddingConfig):
+            self.sparse = TestECSparseArch(
+                tables,  # pyre-ignore [6]
+                sparse_device,
+            )
         else:
             self.sparse = TestSparseArch(
-                tables,
+                tables,  # pyre-ignore
                 weighted_tables,
                 sparse_device,
                 max_feature_lengths,

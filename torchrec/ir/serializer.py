@@ -22,7 +22,7 @@ from torchrec.ir.schema import (
 )
 
 from torchrec.ir.types import SerializerInterface
-from torchrec.ir.utils import logging
+from torchrec.ir.utils import logging, qualname
 from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig, PoolingType
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import (
@@ -174,7 +174,7 @@ class JsonSerializer(SerializerInterface):
 
     @classmethod
     def encapsulate_module(cls, module: nn.Module) -> List[str]:
-        typename = type(module).__name__
+        typename = qualname(module)
         serializer = cls.module_to_serializer_cls.get(typename)
         if serializer is None:
             raise ValueError(
@@ -184,8 +184,8 @@ class JsonSerializer(SerializerInterface):
         assert serializer._module_cls is not None
         if not isinstance(module, serializer._module_cls):
             raise ValueError(
-                f"Expected module to be of type {serializer._module_cls.__name__}, "
-                f"got {type(module)}"
+                f"Expected module to be of type {qualname(serializer._module_cls)}, "
+                f"got {qualname(module)}"
             )
         metadata_dict = serializer.serialize_to_dict(module)
         raw_dict = {"typename": typename, "metadata_dict": metadata_dict}
@@ -218,7 +218,7 @@ class JsonSerializer(SerializerInterface):
             )
         if not isinstance(module, serializer._module_cls):
             raise ValueError(
-                f"Expected module to be of type {serializer._module_cls.__name__}, got {type(module)}"
+                f"Expected module to be of type {qualname(serializer._module_cls)}, got {qualname(module)}"
             )
         return module
 
@@ -275,7 +275,9 @@ class EBCJsonSerializer(JsonSerializer):
         )
 
 
-JsonSerializer.module_to_serializer_cls["EmbeddingBagCollection"] = EBCJsonSerializer
+JsonSerializer.module_to_serializer_cls[qualname(EmbeddingBagCollection)] = (
+    EBCJsonSerializer
+)
 
 
 class PWMJsonSerializer(JsonSerializer):
@@ -299,7 +301,9 @@ class PWMJsonSerializer(JsonSerializer):
         return PositionWeightedModule(metadata.max_feature_length, device)
 
 
-JsonSerializer.module_to_serializer_cls["PositionWeightedModule"] = PWMJsonSerializer
+JsonSerializer.module_to_serializer_cls[qualname(PositionWeightedModule)] = (
+    PWMJsonSerializer
+)
 
 
 class PWMCJsonSerializer(JsonSerializer):
@@ -331,7 +335,7 @@ class PWMCJsonSerializer(JsonSerializer):
         return PositionWeightedModuleCollection(max_feature_lengths, device)
 
 
-JsonSerializer.module_to_serializer_cls["PositionWeightedModuleCollection"] = (
+JsonSerializer.module_to_serializer_cls[qualname(PositionWeightedModuleCollection)] = (
     PWMCJsonSerializer
 )
 
@@ -385,9 +389,9 @@ class FPEBCJsonSerializer(JsonSerializer):
         )
 
 
-JsonSerializer.module_to_serializer_cls["FeatureProcessedEmbeddingBagCollection"] = (
-    FPEBCJsonSerializer
-)
+JsonSerializer.module_to_serializer_cls[
+    qualname(FeatureProcessedEmbeddingBagCollection)
+] = FPEBCJsonSerializer
 
 
 class KTRegroupAsDictJsonSerializer(JsonSerializer):
@@ -411,6 +415,11 @@ class KTRegroupAsDictJsonSerializer(JsonSerializer):
             # pyre-fixme[6]: For 2nd argument expected `List[List[str]]` but got
             #  `Union[Module, Tensor]`.
             groups=module._groups,
+            emb_dtype=(
+                module._emb_dtype.value  # pyre-ignore[16]
+                if module._emb_dtype is not None
+                else None
+            ),
         )
         return metadata.__dict__
 
@@ -425,9 +434,12 @@ class KTRegroupAsDictJsonSerializer(JsonSerializer):
         return KTRegroupAsDict(
             keys=metadata.keys,
             groups=metadata.groups,
+            emb_dtype=(
+                DataType(metadata.emb_dtype) if metadata.emb_dtype is not None else None
+            ),
         )
 
 
-JsonSerializer.module_to_serializer_cls["KTRegroupAsDict"] = (
+JsonSerializer.module_to_serializer_cls[qualname(KTRegroupAsDict)] = (
     KTRegroupAsDictJsonSerializer
 )

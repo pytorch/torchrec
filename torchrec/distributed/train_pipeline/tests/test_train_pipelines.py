@@ -48,8 +48,24 @@ from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
 )
 from torchrec.distributed.train_pipeline.pipeline_context import TrainPipelineContext
+from torchrec.distributed.train_pipeline.pipeline_stage import (
+    PipelineStage,
+    SparseDataDistUtil,
+    StageOut,
+)
+from torchrec.distributed.train_pipeline.postproc import PipelinedPostproc
+from torchrec.distributed.train_pipeline.runtime_forwards import (
+    EmbeddingPipelinedForward,
+    PipelinedForward,
+)
 from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
     TrainPipelineSparseDistTestBase,
+)
+from torchrec.distributed.train_pipeline.tracing import (
+    GetAttrArgInfoStep,
+    GetItemArgInfoStep,
+    NoopArgInfoStep,
+    PostprocArgInfoStep,
 )
 from torchrec.distributed.train_pipeline.train_pipelines import (
     EvalPipelineSparseDist,
@@ -61,20 +77,8 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     TrainPipelineSparseDist,
     TrainPipelineSparseDistCompAutograd,
 )
-from torchrec.distributed.train_pipeline.utils import (
-    DataLoadingThread,
-    EmbeddingPipelinedForward,
-    get_h2d_func,
-    GetAttrArgInfoStep,
-    GetItemArgInfoStep,
-    NoopArgInfoStep,
-    PipelinedForward,
-    PipelinedPostproc,
-    PipelineStage,
-    PostprocArgInfoStep,
-    SparseDataDistUtil,
-    StageOut,
-)
+from torchrec.distributed.train_pipeline.types import CallArgs
+from torchrec.distributed.train_pipeline.utils import DataLoadingThread, get_h2d_func
 from torchrec.distributed.types import (
     ModuleSharder,
     ShardingEnv,
@@ -1282,25 +1286,20 @@ class TrainPipelinePostprocTest(TrainPipelineSparseDistTestBase):
         # postproc args
         self.assertEqual(len(pipeline._pipelined_postprocs), 2)
         # postprocs can be added in any order, so we can't assert on exact steps structures
-        self.assertEqual(len(pipeline._pipelined_postprocs[0]._args.args), 1)
-        self.assertEqual(len(pipeline._pipelined_postprocs[0]._args.kwargs), 0)
-        self.assertEqual(len(pipeline._pipelined_postprocs[0]._args.args[0].steps), 2)
-        self.assertEqual(
-            pipeline._pipelined_postprocs[0]._args.args[0].steps[0], NoopArgInfoStep()
-        )
-        self.assertIsInstance(
-            pipeline._pipelined_postprocs[0]._args.args[0].steps[1], GetAttrArgInfoStep
-        )
+        # TODO: find way not to inspect private parts
+        postproc1_args: CallArgs = pipeline._pipelined_postprocs[0]._args
+        self.assertEqual(len(postproc1_args.args), 1)
+        self.assertEqual(len(postproc1_args.kwargs), 0)
+        self.assertEqual(len(postproc1_args.args[0].steps), 2)
+        self.assertEqual(postproc1_args.args[0].steps[0], NoopArgInfoStep())
+        self.assertIsInstance(postproc1_args.args[0].steps[1], GetAttrArgInfoStep)
 
-        self.assertEqual(len(pipeline._pipelined_postprocs[1]._args.args), 1)
-        self.assertEqual(len(pipeline._pipelined_postprocs[1]._args.kwargs), 0)
-        self.assertEqual(len(pipeline._pipelined_postprocs[1]._args.args[0].steps), 2)
-        self.assertEqual(
-            pipeline._pipelined_postprocs[1]._args.args[0].steps[0], NoopArgInfoStep()
-        )
-        self.assertIsInstance(
-            pipeline._pipelined_postprocs[1]._args.args[0].steps[1], GetAttrArgInfoStep
-        )
+        postproc2_args: CallArgs = pipeline._pipelined_postprocs[1]._args
+        self.assertEqual(len(postproc2_args.args), 1)
+        self.assertEqual(len(postproc2_args.kwargs), 0)
+        self.assertEqual(len(postproc2_args.args[0].steps), 2)
+        self.assertEqual(postproc2_args.args[0].steps[0], NoopArgInfoStep())
+        self.assertIsInstance(postproc2_args.args[0].steps[1], GetAttrArgInfoStep)
 
         get_arg_infos = {
             # pyre-fixme[16]: assertions above ensure that steps[1] is a GetAttrArgInfoStep

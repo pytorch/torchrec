@@ -22,6 +22,7 @@ from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
 from torchrec.distributed.test_utils.test_model import TestSparseNN, TestSparseNNBase
 from torchrec.distributed.test_utils.test_sharding import (
     create_test_sharder,
+    dynamic_sharding_test,
     SharderType,
     sharding_single_rank_test,
 )
@@ -40,6 +41,10 @@ class ModelParallelTestShared(MultiProcessTestBase):
         self.num_weighted_features = 2
         self.num_shared_features = 2
 
+        self.table_names = [
+            "table_" + str(i)
+            for i in range(self.num_features + self.num_shared_features)
+        ]
         self.tables = []
         self.mean_tables = []
         self.weighted_tables = []
@@ -63,7 +68,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i),
+                name=self.table_names[i],
                 feature_names=["feature_" + str(i)],
                 data_type=data_type,
             )
@@ -73,7 +78,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i + self.num_features),
+                name=self.table_names[i + self.num_features],
                 feature_names=["feature_" + str(i)],
                 data_type=data_type,
             )
@@ -85,7 +90,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i),
+                name=self.table_names[i],
                 feature_names=["feature_" + str(i)],
                 pooling=PoolingType.MEAN,
                 data_type=data_type,
@@ -97,7 +102,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             EmbeddingBagConfig(
                 num_embeddings=(i + 1) * 10,
                 embedding_dim=(i + 2) * 8,
-                name="table_" + str(i + self.num_features),
+                name=self.table_names[i + self.num_features],
                 feature_names=["feature_" + str(i)],
                 pooling=PoolingType.MEAN,
                 data_type=data_type,
@@ -158,8 +163,109 @@ class ModelParallelTestShared(MultiProcessTestBase):
         lengths_dtype: torch.dtype = torch.int64,
     ) -> None:
         self._build_tables_and_groups(data_type=data_type)
+        # directly run the test with single process
+        if world_size == 1:
+            sharding_single_rank_test(
+                rank=0,
+                world_size=world_size,
+                local_size=local_size,
+                world_size_2D=world_size_2D,
+                node_group_size=node_group_size,
+                model_class=model_class,  # pyre-ignore[6]
+                tables=self.tables if pooling == PoolingType.SUM else self.mean_tables,
+                weighted_tables=self.weighted_tables if has_weighted_tables else None,
+                embedding_groups=self.embedding_groups,
+                sharders=sharders,
+                backend=backend,
+                optim=EmbOptimType.EXACT_SGD,
+                constraints=constraints,
+                qcomms_config=qcomms_config,
+                variable_batch_size=variable_batch_size,
+                apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+                variable_batch_per_feature=variable_batch_per_feature,
+                global_constant_batch=global_constant_batch,
+                use_inter_host_allreduce=use_inter_host_allreduce,
+                allow_zero_batch_size=allow_zero_batch_size,
+                custom_all_reduce=custom_all_reduce,
+                use_offsets=use_offsets,
+                indices_dtype=indices_dtype,
+                offsets_dtype=offsets_dtype,
+                lengths_dtype=lengths_dtype,
+            )
+        else:
+            self._run_multi_process_test(
+                callable=sharding_single_rank_test,
+                world_size=world_size,
+                local_size=local_size,
+                world_size_2D=world_size_2D,
+                node_group_size=node_group_size,
+                model_class=model_class,
+                tables=self.tables if pooling == PoolingType.SUM else self.mean_tables,
+                weighted_tables=self.weighted_tables if has_weighted_tables else None,
+                embedding_groups=self.embedding_groups,
+                sharders=sharders,
+                backend=backend,
+                optim=EmbOptimType.EXACT_SGD,
+                constraints=constraints,
+                qcomms_config=qcomms_config,
+                variable_batch_size=variable_batch_size,
+                apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+                variable_batch_per_feature=variable_batch_per_feature,
+                global_constant_batch=global_constant_batch,
+                use_inter_host_allreduce=use_inter_host_allreduce,
+                allow_zero_batch_size=allow_zero_batch_size,
+                custom_all_reduce=custom_all_reduce,
+                use_offsets=use_offsets,
+                indices_dtype=indices_dtype,
+                offsets_dtype=offsets_dtype,
+                lengths_dtype=lengths_dtype,
+            )
+
+    def _test_dynamic_sharding(
+        self,
+        sharders: List[ModuleSharder[nn.Module]],
+        backend: str = "gloo",
+        world_size: int = 2,
+        local_size: Optional[int] = None,
+        world_size_2D: Optional[int] = None,
+        node_group_size: Optional[int] = None,
+        model_class: Type[TestSparseNNBase] = TestSparseNN,
+        qcomms_config: Optional[QCommsConfig] = None,
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ] = None,
+        variable_batch_size: bool = False,
+        variable_batch_per_feature: bool = False,
+        has_weighted_tables: bool = True,
+        global_constant_batch: bool = False,
+        pooling: PoolingType = PoolingType.SUM,
+        data_type: DataType = DataType.FP32,
+        use_inter_host_allreduce: bool = False,
+        allow_zero_batch_size: bool = False,
+        custom_all_reduce: bool = False,
+        use_offsets: bool = False,
+        indices_dtype: torch.dtype = torch.int64,
+        offsets_dtype: torch.dtype = torch.int64,
+        lengths_dtype: torch.dtype = torch.int64,
+        sharding_type: ShardingType = None,  # pyre-ignore
+        random_seed: int = 0,
+    ) -> None:
+        """
+        Tests the reshard API with dynamic_sharding_test, which creates 2 identical models
+        one of which is resharded, and then compares the predictions of the 2 models.
+        """
+        self._build_tables_and_groups(data_type=data_type)
+        constraints = {}
+        if sharding_type is not None:
+            for table in self.tables:
+                name = table.name
+                # Default sharding type constraints
+                constraints[name] = ParameterConstraints(
+                    sharding_types=[sharding_type.value],
+                )
+
         self._run_multi_process_test(
-            callable=sharding_single_rank_test,
+            callable=dynamic_sharding_test,
             world_size=world_size,
             local_size=local_size,
             world_size_2D=world_size_2D,
@@ -184,6 +290,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             indices_dtype=indices_dtype,
             offsets_dtype=offsets_dtype,
             lengths_dtype=lengths_dtype,
+            random_seed=random_seed,
         )
 
 
@@ -385,8 +492,8 @@ class ModelParallelBase(ModelParallelTestShared):
             backend=self.backend,
             qcomms_config=qcomms_config,
             constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
+                table_name: ParameterConstraints(min_partition=4)
+                for table_name in self.table_names
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
@@ -466,8 +573,8 @@ class ModelParallelBase(ModelParallelTestShared):
             backend=self.backend,
             qcomms_config=qcomms_config,
             constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
+                table_name: ParameterConstraints(min_partition=4)
+                for table_name in self.table_names
             },
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
@@ -681,8 +788,8 @@ class ModelParallelBase(ModelParallelTestShared):
             ],
             backend=self.backend,
             constraints={
-                table.name: ParameterConstraints(min_partition=4)
-                for table in self.tables
+                table_name: ParameterConstraints(min_partition=4)
+                for table_name in self.table_names
             },
             variable_batch_per_feature=True,
             has_weighted_tables=False,
@@ -700,24 +807,25 @@ class ModelParallelBase(ModelParallelTestShared):
         sharding_type=st.just(ShardingType.COLUMN_WISE.value),
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    @settings(verbosity=Verbosity.verbose, max_examples=2, deadline=None)
     def test_sharding_multiple_kernels(
         self, sharding_type: str, data_type: DataType
     ) -> None:
         if self.backend == "gloo":
             self.skipTest("ProcessGroupGloo does not support reduce_scatter")
+        fused_params = {"prefetch_pipeline": True}
         constraints = {
-            table.name: ParameterConstraints(
+            table_name: ParameterConstraints(
                 min_partition=4,
                 compute_kernels=(
                     [EmbeddingComputeKernel.FUSED.value]
                     if i % 2 == 0
                     else [EmbeddingComputeKernel.FUSED_UVM_CACHING.value]
                 ),
+                sharding_types=[sharding_type],
             )
-            for i, table in enumerate(self.tables)
+            for i, table_name in enumerate(self.table_names)
         }
-        fused_params = {"prefetch_pipeline": True}
         self._test_sharding(
             # pyre-ignore[6]
             sharders=[EmbeddingBagCollectionSharder(fused_params=fused_params)],

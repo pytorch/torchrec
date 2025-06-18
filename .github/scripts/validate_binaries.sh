@@ -10,22 +10,19 @@ export PYTORCH_CUDA_PKG=""
 export CONDA_ENV="build_binary"
 
 if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
-    echo "Conda doesn't support 3.13t yet, you can just try \`conda create -n test python=3.13t\`"
-    exit 0
+    # use conda-forge to install python3.13t
+    conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
+    conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
+else
+    conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
 fi
 
-conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
-
-conda run -n build_binary python --version
+conda run -n "${CONDA_ENV}" python --version
 
 # Install pytorch, torchrec and fbgemm as per
 # installation instructions on following page
 # https://github.com/pytorch/torchrec#installations
 
-if [[ ${MATRIX_GPU_ARCH_TYPE} = 'rocm' ]]; then
-    echo "We don't support rocm"
-    exit 0
-fi
 
 # figure out CUDA VERSION
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
@@ -87,7 +84,7 @@ conda run -n "${CONDA_ENV}" pip install fbgemm-gpu --index-url "$PYTORCH_URL"
 conda run -n "${CONDA_ENV}" pip install torchmetrics==1.0.3
 
 # install tensordict from pypi
-conda run -n "${CONDA_ENV}" pip install tensordict==0.7.1
+conda run -n "${CONDA_ENV}" pip install tensordict==0.8.1
 
 # install torchrec
 conda run -n "${CONDA_ENV}" pip install torchrec --index-url "$PYTORCH_URL"
@@ -129,11 +126,19 @@ else
     fi
 fi
 
-conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
+if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
+    # use conda-forge to install python3.13t
+    conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
+    conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
+else
+    conda create -y -n "${CONDA_ENV}" python="${MATRIX_PYTHON_VERSION}"
+fi
+
 
 conda run -n "${CONDA_ENV}" python --version
 
-if [[ ${MATRIX_GPU_ARCH_VERSION} != '12.4' ]]; then
+# we only have one cuda version for pypi build
+if [[ ${MATRIX_GPU_ARCH_VERSION} != '12.6' ]]; then
     exit 0
 fi
 

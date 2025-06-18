@@ -9,10 +9,12 @@
 
 import abc
 import copy
+import logging as logger
 from dataclasses import dataclass
 from enum import Enum, unique
 from typing import (
     Any,
+    Callable,
     Dict,
     Generic,
     Iterable,
@@ -135,6 +137,8 @@ class KJTList(Multistreamable):
         return iter(self.features)
 
     @torch.jit._drop
+    # pyre-fixme[14]: `record_stream` overrides method defined in `Multistreamable`
+    #  inconsistently.
     def record_stream(self, stream: torch.cuda.streams.Stream) -> None:
         for feature in self.features:
             feature.record_stream(stream)
@@ -160,6 +164,7 @@ class InputDistOutputs(Multistreamable):
 
     def record_stream(self, stream: torch.Stream) -> None:
         for feature in self.features:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             feature.record_stream(stream)
         if self.unbucketize_permute_tensor is not None:
             self.unbucketize_permute_tensor.record_stream(stream)
@@ -189,6 +194,7 @@ class ListOfKJTList(Multistreamable):
     @torch.jit._drop
     def record_stream(self, stream: torch.Stream) -> None:
         for feature in self.features_list:
+            # pyre-fixme[6]: For 1st argument expected `Stream` but got `Stream`.
             feature.record_stream(stream)
 
     @torch.jit._drop
@@ -366,6 +372,10 @@ class ShardedEmbeddingModule(
         self._input_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
         self._output_dists: List[nn.Module] = []
+        self.post_lookup_tracker_fn: Optional[
+            Callable[[KeyedJaggedTensor, torch.Tensor], None]
+        ] = None
+        self.post_odist_tracker_fn: Optional[Callable[..., None]] = None
 
     def prefetch(
         self,
@@ -413,6 +423,41 @@ class ShardedEmbeddingModule(
             lookup.train(mode)
 
         return self
+
+    def register_post_lookup_tracker_fn(
+        self,
+        record_fn: Callable[[KeyedJaggedTensor, torch.Tensor], None],
+    ) -> None:
+        """
+        Register a function to be called after lookup is done. This is used for
+        tracking the lookup results and optimizer states.
+
+        Args:
+            record_fn (Callable[[KeyedJaggedTensor, torch.Tensor], None]): A custom record function to be called after lookup is done.
+
+        """
+        if self.post_lookup_tracker_fn is not None:
+            logger.warning(
+                "[ModelDeltaTracker] Custom record function already defined, overriding with new callable"
+            )
+        self.post_lookup_tracker_fn = record_fn
+
+    def register_post_odist_tracker_fn(
+        self,
+        record_fn: Callable[..., None],
+    ) -> None:
+        """
+        Register a function to be called after registering odist awaitable.
+
+        Args:
+            record_fn (Callable[Callable[..., None]):
+
+        """
+        if self.post_odist_tracker_fn is not None:
+            logger.warning(
+                "[ModelDeltaTracker] Compaction function already defined, overriding with new callable"
+            )
+        self.post_odist_tracker_fn = record_fn
 
     @property
     def unsharded_module_type(self) -> Type[nn.Module]:
@@ -515,8 +560,7 @@ class BaseEmbeddingSharder(ModuleSharder[M]):
             storage_map = {
                 "cuda": ParameterStorage.HBM,
                 "cpu": ParameterStorage.DDR,
-                # TODO: Update it later. Setting for MTIA is same as CPU's for now.
-                "mtia": ParameterStorage.DDR,
+                "mtia": ParameterStorage.HBM,
             }
             return {
                 storage_map[compute_device_type].value: get_tensor_size_bytes(tensor)

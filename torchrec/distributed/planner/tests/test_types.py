@@ -14,12 +14,18 @@ from unittest.mock import MagicMock
 import torch
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 
-from torchrec.distributed.planner.types import Shard, ShardingOption
+from torchrec.distributed.planner.types import (
+    ParameterConstraints,
+    Shard,
+    ShardingOption,
+    Topology,
+)
 from torchrec.distributed.types import (
     BoundsCheckMode,
     CacheAlgorithm,
     CacheParams,
     DataType,
+    KeyValueParams,
     ShardingType,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
@@ -207,3 +213,138 @@ class TestShardingOption(unittest.TestCase):
             shards=[Shard(size=shard_size, offset=offset) for offset in shard_offsets],
         )
         self.assertEqual(sharding_option.is_pooled, False)
+
+
+class TestTopologyHash(unittest.TestCase):
+    def test_hash_equality(self) -> None:
+        # Create two identical Topology instances
+        topology1 = Topology(
+            world_size=2,
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        topology2 = Topology(
+            world_size=2,
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        # Verify that the hash values are equal
+        self.assertEqual(
+            topology1._hash(),
+            topology2._hash(),
+            "Hashes should be equal for identical Topology instances",
+        )
+
+    def test_hash_inequality(self) -> None:
+        # Create two different Topology instances
+        topology1 = Topology(
+            world_size=2,
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        topology2 = Topology(
+            world_size=4,  # Different world_size
+            compute_device="cuda",
+            hbm_cap=1024 * 1024 * 2,
+            local_world_size=2,
+        )
+
+        # Verify that the hash values are different
+        self.assertNotEqual(
+            topology1._hash(),
+            topology2._hash(),
+            "Hashes should be different for different Topology instances",
+        )
+
+
+class TestParameterConstraintsHash(unittest.TestCase):
+
+    def test_hash_equality(self) -> None:
+        # Create two identical instances
+        pc1 = ParameterConstraints(
+            sharding_types=["type1", "type2"],
+            compute_kernels=["kernel1"],
+            min_partition=4,
+            pooling_factors=[1.0, 2.0],
+            num_poolings=[1.0],
+            batch_sizes=[32],
+            is_weighted=True,
+            cache_params=CacheParams(),
+            enforce_hbm=True,
+            stochastic_rounding=False,
+            bounds_check_mode=BoundsCheckMode(1),
+            feature_names=["feature1", "feature2"],
+            output_dtype=DataType.FP32,
+            device_group="cuda",
+            key_value_params=KeyValueParams(),
+        )
+
+        pc2 = ParameterConstraints(
+            sharding_types=["type1", "type2"],
+            compute_kernels=["kernel1"],
+            min_partition=4,
+            pooling_factors=[1.0, 2.0],
+            num_poolings=[1.0],
+            batch_sizes=[32],
+            is_weighted=True,
+            cache_params=CacheParams(),
+            enforce_hbm=True,
+            stochastic_rounding=False,
+            bounds_check_mode=BoundsCheckMode(1),
+            feature_names=["feature1", "feature2"],
+            output_dtype=DataType.FP32,
+            device_group="cuda",
+            key_value_params=KeyValueParams(),
+        )
+
+        self.assertEqual(
+            hash(pc1), hash(pc2), "Hashes should be equal for identical instances"
+        )
+
+    def test_hash_inequality(self) -> None:
+        # Create two different instances
+        pc1 = ParameterConstraints(
+            sharding_types=["type1"],
+            compute_kernels=["kernel1"],
+            min_partition=4,
+            pooling_factors=[1.0],
+            num_poolings=[1.0],
+            batch_sizes=[32],
+            is_weighted=True,
+            cache_params=CacheParams(),
+            enforce_hbm=True,
+            stochastic_rounding=False,
+            bounds_check_mode=BoundsCheckMode(1),
+            feature_names=["feature1"],
+            output_dtype=DataType.FP32,
+            device_group="cuda",
+            key_value_params=KeyValueParams(),
+        )
+
+        pc2 = ParameterConstraints(
+            sharding_types=["type2"],
+            compute_kernels=["kernel2"],
+            min_partition=8,
+            pooling_factors=[2.0],
+            num_poolings=[2.0],
+            batch_sizes=[64],
+            is_weighted=False,
+            cache_params=CacheParams(),
+            enforce_hbm=False,
+            stochastic_rounding=True,
+            bounds_check_mode=BoundsCheckMode(1),
+            feature_names=["feature2"],
+            output_dtype=DataType.FP16,
+            device_group="cpu",
+            key_value_params=KeyValueParams(),
+        )
+
+        self.assertNotEqual(
+            hash(pc1), hash(pc2), "Hashes should be different for different instances"
+        )

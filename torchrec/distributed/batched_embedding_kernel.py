@@ -303,7 +303,7 @@ class ZeroCollisionKeyValueEmbeddingFusedOptimizer(FusedOptimizer):
                 sharded_t._local_shards[0].tensor
                 for sharded_t in self._sharded_embedding_weight_ids
             ]
-            if self._sharded_embedding_weight_ids is not None
+            if self._sharded_embedding_weight_ids
             else None
         )
 
@@ -840,6 +840,8 @@ def _gen_named_parameters_by_table_ssd_pmt(
     for table_config, pmt in zip(config.embedding_tables, pmts):
         table_name = table_config.name
         emb_table = pmt
+        # pyre-fixme[6]: For 1st argument expected `Tensor` but got
+        #  `Union[PartiallyMaterializedTensor, Tensor]`.
         weight: nn.Parameter = nn.Parameter(emb_table)
         # pyre-ignore
         weight._in_backward_optimizers = [EmptyFusedOptimizer()]
@@ -1223,12 +1225,23 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
 
+    # Todo: [Raahul46]: Add a intermediate parent class between embedding and kv to support these functions
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        """
+        Create a RocksDB checkpoint. This is needed before we call state_dict() for publish.
+        """
+        self.emb_module.create_rocksdb_hard_link_snapshot()
+
     # pyre-ignore [15]
     def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
         List[PartiallyMaterializedTensor],
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
+        # pyre-fixme[7]: Expected `Tuple[List[PartiallyMaterializedTensor],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]` but got
+        #  `Tuple[Union[List[PartiallyMaterializedTensor], List[Tensor]],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]`.
         return self.emb_module.split_embedding_weights(no_snapshot)
 
 
@@ -1429,27 +1442,38 @@ class ZeroCollisionKeyValueEmbedding(
 
         pmt_list, weight_ids_list, bucket_cnt_list = self.split_embedding_weights(
             no_snapshot=False,
-            should_flush=True,
         )
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
-            emb_table.local_metadata.placement._device = torch.device("cpu")
+            none_throws(
+                none_throws(
+                    emb_table.local_metadata,
+                    f"local_metadata is None for emb_table: {emb_table.name}",
+                ).placement,
+                f"placement is None for local_metadata of emb table: {emb_table.name}",
+            )._device = torch.device("cpu")
 
         pmt_sharded_t_list = create_virtual_sharded_tensors(
             emb_table_config_copy,
             pmt_list,
             self._pg,
             prefix,
+            self._table_name_to_weight_count_per_rank,
         )
         weight_id_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy, weight_ids_list, self._pg, prefix  # pyre-ignore
+            emb_table_config_copy,
+            weight_ids_list,  # pyre-ignore [6]
+            self._pg,
+            prefix,
+            self._table_name_to_weight_count_per_rank,
         )
         bucket_cnt_sharded_t_list = create_virtual_sharded_tensors(
             emb_table_config_copy,
-            # pyre-ignore [6]
-            bucket_cnt_list,
+            bucket_cnt_list,  # pyre-ignore [6]
             self._pg,
             prefix,
+            self._table_name_to_weight_count_per_rank,
+            use_param_size_as_rows=True,
         )
         # pyre-ignore
         assert len(pmt_list) == len(weight_ids_list) == len(bucket_cnt_list)
@@ -1508,9 +1532,15 @@ class ZeroCollisionKeyValueEmbedding(
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
 
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        """
+        Create a RocksDB checkpoint. This is needed before we call state_dict() for publish.
+        """
+        self.emb_module.create_rocksdb_hard_link_snapshot()
+
     # pyre-ignore [15]
     def split_embedding_weights(
-        self, no_snapshot: bool = True, should_flush: bool = True
+        self, no_snapshot: bool = True, should_flush: bool = False
     ) -> Tuple[
         Union[List[PartiallyMaterializedTensor], List[torch.Tensor]],
         Optional[List[torch.Tensor]],
@@ -2021,12 +2051,22 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         self.emb_module.lxu_cache_weights.zero_()
         self.emb_module.lxu_cache_state.fill_(-1)
 
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        """
+        Create a RocksDB checkpoint. This is needed before we call state_dict() for publish.
+        """
+        self.emb_module.create_rocksdb_hard_link_snapshot()
+
     # pyre-ignore [15]
     def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
         List[PartiallyMaterializedTensor],
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
+        # pyre-fixme[7]: Expected `Tuple[List[PartiallyMaterializedTensor],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]` but got
+        #  `Tuple[Union[List[PartiallyMaterializedTensor], List[Tensor]],
+        #  Optional[List[Tensor]], Optional[List[Tensor]]]`.
         return self.emb_module.split_embedding_weights(no_snapshot)
 
 

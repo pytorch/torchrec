@@ -429,6 +429,7 @@ class ManagedCollisionCollection(nn.Module):
             table,
             managed_collision_module,
         ) in self._managed_collision_modules.items():
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             evictions[table] = managed_collision_module.evict()
         return evictions
 
@@ -438,6 +439,7 @@ class ManagedCollisionCollection(nn.Module):
             table,
             managed_collision_module,
         ) in self._managed_collision_modules.items():
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             open_slots[table] = managed_collision_module.open_slots()
         return open_slots
 

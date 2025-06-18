@@ -9,6 +9,7 @@
 
 import logging
 import math
+from math import ceil
 from typing import cast, Dict, List, Optional, Tuple, Type
 
 import torch
@@ -22,6 +23,7 @@ from torchrec.distributed.planner.constants import (
     FULL_BLOCK_EMB_DIM,
     HALF_BLOCK_PENALTY,
     kernel_bw_lookup,
+    KV_CACHING_RATIO,
     QUARTER_BLOCK_PENALTY,
     UVM_CACHING_RATIO,
     WEIGHTED_KERNEL_MULTIPLIER,
@@ -41,6 +43,7 @@ from torchrec.distributed.planner.utils import prod, sharder_name
 from torchrec.distributed.types import (
     CacheStatistics,
     CommOp,
+    KeyValueParams,
     ModuleSharder,
     PipelineType,
     ShardingType,
@@ -998,21 +1001,32 @@ class EmbeddingStorageEstimator(ShardEstimator):
                     if hasattr(sharder, "fused_params") and sharder.fused_params
                     else None
                 )
-
-            num_poolings = (
-                cast(List[float], self._constraints[sharding_option.name].num_poolings)
+            constraints: Optional[ParameterConstraints] = (
+                self._constraints.get(sharding_option.name, None)
                 if self._constraints
-                and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].num_poolings
+                else None
+            )
+            num_poolings = (
+                constraints.num_poolings
+                if constraints and constraints.num_poolings
                 else [1.0] * sharding_option.num_inputs
             )
             assert len(num_poolings) == sharding_option.num_inputs
             batch_sizes = (
-                cast(List[int], self._constraints[sharding_option.name].batch_sizes)
-                if self._constraints
-                and self._constraints.get(sharding_option.name)
-                and self._constraints[sharding_option.name].batch_sizes
+                constraints.batch_sizes
+                if constraints and constraints.batch_sizes
                 else [sharding_option.batch_size] * sharding_option.num_inputs
+            )
+
+            key_value_params: Optional[KeyValueParams] = (
+                constraints.key_value_params
+                if constraints and constraints.key_value_params
+                else None
+            )
+            kv_cache_load_factor: float = (
+                sharder.fused_params.get("cache_load_factor", KV_CACHING_RATIO)
+                if sharder.fused_params
+                else KV_CACHING_RATIO
             )
 
             # hardcoded as 8 bytes
@@ -1057,6 +1071,8 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 count_ephemeral_storage_cost=self._run_embedding_at_peak_memory,
                 is_inference=self._is_inference,
                 multipass_prefetch_max_pass=mpp_conf.num_passes if mpp_conf else None,
+                key_value_params=key_value_params,
+                kv_cache_load_factor=kv_cache_load_factor,
             )
             for shard, storage in zip(sharding_option.shards, shard_storages):
                 shard.storage = storage
@@ -1125,6 +1141,8 @@ def calculate_shard_storages(
     count_ephemeral_storage_cost: bool = False,
     is_inference: bool = False,
     multipass_prefetch_max_pass: Optional[int] = None,
+    key_value_params: Optional[KeyValueParams] = None,
+    kv_cache_load_factor: float = KV_CACHING_RATIO,
 ) -> List[Storage]:
     """
     Calculates estimated storage sizes for each sharded tensor, comprised of input,
@@ -1151,6 +1169,7 @@ def calculate_shard_storages(
         output_data_type_size (int): number of bytes of output data type.
         pipeline_type: PipelineType: pipeline type if for training.
         is_inference: bool, whether the model is for inference.
+        key_value_params (Optional[KeyValueParams]): fused params for SSD/DRAM KV cache.
 
     Returns:
         List[Storage]: storage object for each device in topology.
@@ -1181,16 +1200,8 @@ def calculate_shard_storages(
         EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
         EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
     }:
-        # TODO(wangj): for ssd/dram kv, most likely we use absolute L1 cache size instead of caching ratio, as denominator is huge
         hbm_storage = round(ddr_storage * caching_ratio)
         table_cached = True
-    if compute_kernel in {
-        EmbeddingComputeKernel.KEY_VALUE.value,
-        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
-        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
-    }:
-        # TODO(wangj): update this to the L2 cache usage and add SSD usage
-        ddr_storage = 0
 
     optimizer_class = getattr(tensor, "_optimizer_classes", [None])[0]
 
@@ -1212,6 +1223,33 @@ def calculate_shard_storages(
         is_inference=is_inference,
     )
 
+    if compute_kernel in {
+        EmbeddingComputeKernel.KEY_VALUE.value,
+        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
+    }:
+        key_value_params = key_value_params or KeyValueParams(
+            max_l1_cache_size=0, l2_cache_size=0
+        )
+
+        hbm_specific_sizes = [
+            min(
+                (key_value_params.max_l1_cache_size or 0) * 1024 * 1024,
+                ceil(
+                    tensor.shape[0]  # num_embeddings
+                    * kv_cache_load_factor
+                    * tensor.element_size()  # size of one column
+                    * tensor.shape[1],  # number of columns in embedding
+                ),
+            )
+            for _ in hbm_specific_sizes
+        ]
+        ddr_specific_sizes = [
+            # TODO: revisit the logic for SSD virtual table
+            0
+            for _ in ddr_specific_sizes
+        ]
+
     hbm_sizes: List[int] = [
         (
             hbm_specific_size
@@ -1224,7 +1262,7 @@ def calculate_shard_storages(
                 count_ephemeral_storage_cost=count_ephemeral_storage_cost,
                 is_inference=is_inference,
             )
-            if compute_device == "cuda"
+            if compute_device in {"cuda", "mtia"}
             else 0
         )
         for input_size, output_size, hbm_specific_size in zip(
@@ -1236,7 +1274,7 @@ def calculate_shard_storages(
     ddr_sizes: List[int] = [
         (
             input_size + output_size + ddr_specific_size
-            if compute_device in {"cpu", "mtia"} and not is_inference
+            if compute_device == "cpu" and not is_inference
             else ddr_specific_size
         )
         for input_size, output_size, ddr_specific_size in zip(

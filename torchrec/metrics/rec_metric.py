@@ -484,6 +484,7 @@ class RecMetric(nn.Module, abc.ABC):
         This would mean in the states of each RecMetricComputation object, the n_tasks dimension is 1.
         """
         for task, metric_computation in zip(self._tasks, self._metrics_computations):
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             metric_computation.pre_compute()
             for metric_report in getattr(
                 metric_computation, compute_scope + "compute"
@@ -495,6 +496,7 @@ class RecMetric(nn.Module, abc.ABC):
                 valid_metric_value = (
                     metric_report.value
                     if not self._should_validate_update
+                    # pyre-fixme[29]: `Union[(TensorBase, Union[None, _NestedSequence...
                     or metric_computation.has_valid_update[0] > 0
                     else torch.zeros_like(metric_report.value)
                 )
@@ -716,6 +718,8 @@ class RecMetric(nn.Module, abc.ABC):
                         # If has_valid_update[0] is False, we just ignore this update.
                         has_valid_weights = self._check_nonempty_weights(task_weights)
                         if has_valid_weights[0]:
+                            # pyre-fixme[29]: `Union[(self: TensorBase, other:
+                            #  Tensor) -> Tensor, Module, Tensor]` is not a function.
                             metric_.has_valid_update.logical_or_(has_valid_weights)
                         else:
                             continue
@@ -729,6 +733,7 @@ class RecMetric(nn.Module, abc.ABC):
                             )
                             for k, v in kwargs["required_inputs"].items()
                         }
+                    # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                     metric_.update(
                         predictions=task_predictions,
                         labels=task_labels,
@@ -786,15 +791,18 @@ class RecMetric(nn.Module, abc.ABC):
 
     def sync(self) -> None:
         for computation in self._metrics_computations:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             computation.sync()
 
     def unsync(self) -> None:
         for computation in self._metrics_computations:
             if computation._is_synced:
+                # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
                 computation.unsync()
 
     def reset(self) -> None:
         for computation in self._metrics_computations:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             computation.reset()
 
     def get_memory_usage(self) -> Dict[torch.Tensor, int]:
@@ -901,6 +909,7 @@ class RecMetricList(nn.Module):
         **kwargs: Dict[str, Any],
     ) -> None:
         for metric in self.rec_metrics:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             metric.update(
                 predictions=predictions, labels=labels, weights=weights, **kwargs
             )
@@ -908,23 +917,28 @@ class RecMetricList(nn.Module):
     def compute(self) -> Dict[str, torch.Tensor]:
         ret = {}
         for metric in self.rec_metrics:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             ret.update(metric.compute())
         return ret
 
     def local_compute(self) -> Dict[str, torch.Tensor]:
         ret = {}
         for metric in self.rec_metrics:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             ret.update(metric.local_compute())
         return ret
 
     def sync(self) -> None:
         for metric in self.rec_metrics:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             metric.sync()
 
     def unsync(self) -> None:
         for metric in self.rec_metrics:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             metric.unsync()
 
     def reset(self) -> None:
         for metric in self.rec_metrics:
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             metric.reset()
