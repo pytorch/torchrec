@@ -2976,11 +2976,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 )
 
             if stagger > 1:
-                local_world_size = num_workers // stagger
-                indices = [
-                    list(range(i, num_workers, local_world_size))
-                    for i in range(local_world_size)
-                ]
+                indices = torch.arange(num_workers).view(stagger, -1).T.reshape(-1)
                 stride_per_key_per_rank = stride_per_key_per_rank[:, indices]
 
             kjt = KeyedJaggedTensor(
