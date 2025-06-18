@@ -35,6 +35,7 @@ from torch.distributed._tensor import DTensor
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.nn.parallel import DistributedDataParallel
 from torchrec.distributed.comm import get_local_size
+from torchrec.distributed.embedding_lookup import PartiallyMaterializedTensor
 from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingContext,
@@ -292,6 +293,8 @@ def create_sharding_infos_by_sharding_device_group(
                         getattr(config, "num_embeddings_post_pruning", None)
                         # TODO: Need to check if attribute exists for BC
                     ),
+                    total_num_buckets=config.total_num_buckets,
+                    use_virtual_table=config.use_virtual_table,
                 ),
                 param_sharding=parameter_sharding,
                 param=param,
@@ -558,6 +561,7 @@ class ShardedEmbeddingBagCollection(
                     tbe_module.fused_optimizer.params = params
                     optims.append(("", tbe_module.fused_optimizer))
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
+        self._skip_missing_weight_key: List[str] = []
 
         for i, (sharding, lookup) in enumerate(
             zip(self._embedding_shardings, self._lookups)
@@ -687,6 +691,8 @@ class ShardedEmbeddingBagCollection(
                         getattr(config, "num_embeddings_post_pruning", None)
                         # TODO: Need to check if attribute exists for BC
                     ),
+                    total_num_buckets=config.total_num_buckets,
+                    use_virtual_table=config.use_virtual_table,
                 ),
                 param_sharding=parameter_sharding,
                 param=param,
@@ -788,6 +794,27 @@ class ShardedEmbeddingBagCollection(
         to transform from ShardedTensors/DTensors into tensors
         """
         for table_name in self._model_parallel_name_to_local_shards.keys():
+            if self._table_name_to_config[table_name].use_virtual_table:
+                # weight_id and bucket are generated at the runtime of state_dict instead of registered class
+                # so we need to erase them before passing into load_state_dict
+                weight_key = f"{prefix}embedding_bags.{table_name}.weight"
+                weight_id_key = f"{prefix}embedding_bags.{table_name}.weight_id"
+                bucket_key = f"{prefix}embedding_bags.{table_name}.bucket"
+                if weight_id_key in state_dict:
+                    del state_dict[weight_id_key]
+                if bucket_key in state_dict:
+                    del state_dict[bucket_key]
+                assert weight_key in state_dict
+                assert (
+                    len(self._model_parallel_name_to_local_shards[table_name]) == 1
+                ), "currently only support 1 shard per rank"
+
+                # for loading state_dict into virtual table, we skip the weights assignment
+                # if needed, for now this should be handled separately outside of load_state_dict call
+                self._skip_missing_weight_key.append(weight_key)
+                del state_dict[weight_key]
+                continue
+
             key = f"{prefix}embedding_bags.{table_name}.weight"
             # gather model shards from both DTensor and ShardedTensor maps
             model_shards_sharded_tensor = self._model_parallel_name_to_local_shards[
@@ -947,6 +974,8 @@ class ShardedEmbeddingBagCollection(
                         shards_wrapper["global_stride"] = v.stride()
                         shards_wrapper["placements"] = v.placements
                     elif isinstance(v, ShardedTensor):
+                        # for virtual table, we only populate the shardedTensor for Embedding Table during
+                        # initial state_dict calls, skip weight id and bucket tensor
                         self._model_parallel_name_to_local_shards[table_name].extend(
                             v.local_shards()
                         )
@@ -956,6 +985,10 @@ class ShardedEmbeddingBagCollection(
                 # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
                 #  `named_parameters_by_table`.
             ) in lookup.named_parameters_by_table():
+                # for virtual table, currently we don't expose id tensor and bucket tensor
+                # because they are not updated in real time, and they are created on the fly
+                # whenever state_dict is called
+                # reference: ƒbgs _gen_named_parameters_by_table_ssd_pmt
                 self.embedding_bags[table_name].register_parameter("weight", tbe_slice)
 
         for table_name in self._model_parallel_name_to_local_shards.keys():
@@ -1061,7 +1094,9 @@ class ShardedEmbeddingBagCollection(
                 sharded_t,
             ) in module._model_parallel_name_to_sharded_tensor.items():
                 if _model_parallel_name_to_compute_kernel[table_name] in {
-                    EmbeddingComputeKernel.KEY_VALUE.value
+                    EmbeddingComputeKernel.KEY_VALUE.value,
+                    EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+                    EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
                 }:
                     ret[table_name] = sharded_t
             return ret
@@ -1093,24 +1128,88 @@ class ShardedEmbeddingBagCollection(
                 return
 
             sharded_kvtensors_copy = copy.deepcopy(sharded_kvtensors)
+            virtual_table_sharded_t_map: Optional[
+                Dict[str, Tuple[ShardedTensor, ShardedTensor]]
+            ] = None
             for lookup, sharding in zip(module._lookups, module._embedding_shardings):
                 if not isinstance(sharding, DpPooledEmbeddingSharding):
                     for (
-                        key,
-                        v,
-                        _,
-                        _,
+                        table_name,
+                        weights_t,
+                        weight_ids_sharded_t,
+                        id_cnt_per_bucket_sharded_t,
                     ) in (
                         lookup.get_named_split_embedding_weights_snapshot()  # pyre-ignore
                     ):
-                        assert key in sharded_kvtensors_copy
-                        sharded_kvtensors_copy[key].local_shards()[0].tensor = v
+                        assert table_name in sharded_kvtensors_copy
+                        if self._table_name_to_config[table_name].use_virtual_table:
+                            assert isinstance(weights_t, ShardedTensor)
+                            if virtual_table_sharded_t_map is None:
+                                virtual_table_sharded_t_map = {}
+                            assert (
+                                weight_ids_sharded_t is not None
+                                and id_cnt_per_bucket_sharded_t is not None
+                            )
+                            # The logic here assumes there is only one shard per table on any particular rank
+                            # if there are cases each rank has >1 shards, we need to update here accordingly
+                            sharded_kvtensors_copy[table_name] = weights_t
+                            virtual_table_sharded_t_map[table_name] = (
+                                weight_ids_sharded_t,
+                                id_cnt_per_bucket_sharded_t,
+                            )
+                        else:
+                            assert isinstance(weights_t, PartiallyMaterializedTensor)
+                            assert (
+                                weight_ids_sharded_t is None
+                                and id_cnt_per_bucket_sharded_t is None
+                            )
+                            # The logic here assumes there is only one shard per table on any particular rank
+                            # if there are cases each rank has >1 shards, we need to update here accordingly
+                            # pyre-ignore
+                            sharded_kvtensors_copy[table_name].local_shards()[
+                                0
+                            ].tensor = weights_t
+
+            def update_destination(
+                table_name: str,
+                tensor_name: str,
+                destination: Dict[str, torch.Tensor],
+                value: torch.Tensor,
+            ) -> None:
+                destination_key = f"{prefix}embedding_bags.{table_name}.{tensor_name}"
+                destination[destination_key] = value
+
             for (
                 table_name,
                 sharded_kvtensor,
             ) in sharded_kvtensors_copy.items():
-                destination_key = f"{prefix}embedding_bags.{table_name}.weight"
-                destination[destination_key] = sharded_kvtensor
+                update_destination(table_name, "weight", destination, sharded_kvtensor)
+                if (
+                    virtual_table_sharded_t_map
+                    and table_name in virtual_table_sharded_t_map
+                ):
+                    update_destination(
+                        table_name,
+                        "weight_id",
+                        destination,
+                        virtual_table_sharded_t_map[table_name][0],
+                    )
+                    update_destination(
+                        table_name,
+                        "bucket",
+                        destination,
+                        virtual_table_sharded_t_map[table_name][1],
+                    )
+
+        def _post_load_state_dict_hook(
+            module: "ShardedEmbeddingBagCollection",
+            incompatible_keys: _IncompatibleKeys,
+        ) -> None:
+            if incompatible_keys.missing_keys:
+                # has to remove the key inplace
+                for skip_key in module._skip_missing_weight_key:
+                    if skip_key in incompatible_keys.missing_keys:
+                        incompatible_keys.missing_keys.remove(skip_key)
 
         if not skip_registering:
             self.register_state_dict_pre_hook(self._pre_state_dict_hook)
@@ -1118,6 +1217,8 @@ class ShardedEmbeddingBagCollection(
             self._register_load_state_dict_pre_hook(
                 self._pre_load_state_dict_hook, with_module=True
             )
+            self.register_load_state_dict_post_hook(_post_load_state_dict_hook)
+
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -1128,6 +1229,8 @@ class ShardedEmbeddingBagCollection(
         for table_config in self._embedding_bag_configs:
             if self.module_sharding_plan[table_config.name].compute_kernel in {
                 EmbeddingComputeKernel.KEY_VALUE.value,
+                EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+                EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
             }:
                 continue
             assert table_config.init_fn is not None

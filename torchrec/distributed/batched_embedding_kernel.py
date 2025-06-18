@@ -65,6 +65,7 @@ from torchrec.distributed.embedding_types import (
     compute_kernel_to_embedding_location,
     DTensorMetadata,
     GroupedEmbeddingConfig,
+    ShardedEmbeddingTable,
 )
 from torchrec.distributed.shards_wrapper import LocalShardsWrapper
 from torchrec.distributed.types import (
@@ -214,6 +215,42 @@ def _populate_zero_collision_tbe_params(
         bucket_sizes=bucket_sizes,
         enable_optimizer_offloading=False,
     )
+
+
+def _get_sharded_local_buckets_for_zero_collision(
+    embedding_tables: List[ShardedEmbeddingTable],
+    pg: Optional[dist.ProcessGroup] = None,
+) -> List[Tuple[int, int, int]]:
+    """
+    utils to get bucket offset start, bucket offset end, bucket size based on embedding sharding spec
+    """
+    sharded_local_buckets: List[Tuple[int, int, int]] = []
+    world_size = dist.get_world_size(pg)
+    local_rank = dist.get_rank(pg)
+
+    for table in embedding_tables:
+        total_num_buckets = none_throws(table.total_num_buckets)
+        assert (
+            total_num_buckets % world_size == 0
+        ), f"total_num_buckets={total_num_buckets} must be divisible by world_size={world_size}"
+        assert (
+            table.total_num_buckets
+            and table.num_embeddings % table.total_num_buckets == 0
+        ), f"Table size '{table.num_embeddings}' must be divisible by num_buckets '{table.total_num_buckets}'"
+        bucket_offset_start = total_num_buckets // world_size * local_rank
+        bucket_offset_end = min(
+            total_num_buckets, total_num_buckets // world_size * (local_rank + 1)
+        )
+        bucket_size = (
+            table.num_embeddings + total_num_buckets - 1
+        ) // total_num_buckets
+        sharded_local_buckets.append(
+            (bucket_offset_start, bucket_offset_end, bucket_size)
+        )
+        logger.info(
+            f"bucket_offset: {bucket_offset_start}:{bucket_offset_end}, bucket_size: {bucket_size} for table {table.name}"
+        )
+    return sharded_local_buckets
 
 
 class KeyValueEmbeddingFusedOptimizer(FusedOptimizer):
@@ -1076,6 +1113,11 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         assert (
             len({table.embedding_dim for table in config.embedding_tables}) == 1
         ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+        for table in config.embedding_tables:
+            assert table.local_cols % 4 == 0, (
+                f"table {table.name} has local_cols={table.local_cols} "
+                "not divisible by 4. "
+            )
 
         ssd_tbe_params = _populate_ssd_tbe_params(config)
         compute_kernel = config.embedding_tables[0].compute_kernel
@@ -1263,9 +1305,18 @@ class ZeroCollisionKeyValueEmbedding(
         assert (
             len({table.embedding_dim for table in config.embedding_tables}) == 1
         ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+        for table in config.embedding_tables:
+            assert table.local_cols % 4 == 0, (
+                f"table {table.name} has local_cols={table.local_cols} "
+                "not divisible by 4. "
+            )
 
         ssd_tbe_params = _populate_ssd_tbe_params(config)
-        self._bucket_spec: List[Tuple[int, int, int]] = self.get_sharded_local_buckets()
+        self._bucket_spec: List[Tuple[int, int, int]] = (
+            _get_sharded_local_buckets_for_zero_collision(
+                self._config.embedding_tables, self._pg
+            )
+        )
         _populate_zero_collision_tbe_params(ssd_tbe_params, self._bucket_spec)
         compute_kernel = config.embedding_tables[0].compute_kernel
         embedding_location = compute_kernel_to_embedding_location(compute_kernel)
@@ -1333,38 +1384,6 @@ class ZeroCollisionKeyValueEmbedding(
         SSD Embedding fuses backward with backward.
         """
         return self._optim
-
-    def get_sharded_local_buckets(self) -> List[Tuple[int, int, int]]:
-        """
-        utils to get bucket offset start, bucket offset end, bucket size based on embedding sharding spec
-        """
-        sharded_local_buckets: List[Tuple[int, int, int]] = []
-        world_size = dist.get_world_size(self._pg)
-        local_rank = dist.get_rank(self._pg)
-
-        for table in self._config.embedding_tables:
-            total_num_buckets = none_throws(table.total_num_buckets)
-            assert (
-                total_num_buckets % world_size == 0
-            ), f"total_num_buckets={total_num_buckets} must be divisible by world_size={world_size}"
-            assert (
-                table.total_num_buckets
-                and table.num_embeddings % table.total_num_buckets == 0
-            ), f"Table size '{table.num_embeddings}' must be divisible by num_buckets '{table.total_num_buckets}'"
-            bucket_offset_start = total_num_buckets // world_size * local_rank
-            bucket_offset_end = min(
-                total_num_buckets, total_num_buckets // world_size * (local_rank + 1)
-            )
-            bucket_size = (
-                table.num_embeddings + total_num_buckets - 1
-            ) // total_num_buckets
-            sharded_local_buckets.append(
-                (bucket_offset_start, bucket_offset_end, bucket_size)
-            )
-            logger.info(
-                f"bucket_offset: {bucket_offset_start}:{bucket_offset_end}, bucket_size: {bucket_size} for table {table.name}"
-            )
-        return sharded_local_buckets
 
     def state_dict(
         self,
@@ -1553,10 +1572,7 @@ class ZeroCollisionKeyValueEmbedding(
         self._split_weights_res = None
         self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
 
-        return self.emb_module(
-            indices=features.values().long(),
-            offsets=features.offsets().long(),
-        )
+        return super().forward(features)
 
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule):
@@ -1901,6 +1917,11 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         assert (
             len({table.embedding_dim for table in config.embedding_tables}) == 1
         ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+        for table in config.embedding_tables:
+            assert table.local_cols % 4 == 0, (
+                f"table {table.name} has local_cols={table.local_cols} "
+                "not divisible by 4. "
+            )
 
         ssd_tbe_params = _populate_ssd_tbe_params(config)
         compute_kernel = config.embedding_tables[0].compute_kernel
@@ -2068,6 +2089,296 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         #  `Tuple[Union[List[PartiallyMaterializedTensor], List[Tensor]],
         #  Optional[List[Tensor]], Optional[List[Tensor]]]`.
         return self.emb_module.split_embedding_weights(no_snapshot)
+
+
+class ZeroCollisionKeyValueEmbeddingBag(
+    BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizerModule
+):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        pg: Optional[dist.ProcessGroup] = None,
+        device: Optional[torch.device] = None,
+        sharding_type: Optional[ShardingType] = None,
+        backend_type: BackendType = BackendType.SSD,
+    ) -> None:
+        super().__init__(config, pg, device, sharding_type)
+
+        assert (
+            len(config.embedding_tables) > 0
+        ), "Expected to see at least one table in SSD TBE, but found 0."
+        assert (
+            len({table.embedding_dim for table in config.embedding_tables}) == 1
+        ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+
+        for table in config.embedding_tables:
+            assert table.local_cols % 4 == 0, (
+                f"table {table.name} has local_cols={table.local_cols} "
+                "not divisible by 4. "
+            )
+
+        ssd_tbe_params = _populate_ssd_tbe_params(config)
+        self._bucket_spec: List[Tuple[int, int, int]] = (
+            _get_sharded_local_buckets_for_zero_collision(
+                self._config.embedding_tables, self._pg
+            )
+        )
+        _populate_zero_collision_tbe_params(ssd_tbe_params, self._bucket_spec)
+        compute_kernel = config.embedding_tables[0].compute_kernel
+        embedding_location = compute_kernel_to_embedding_location(compute_kernel)
+
+        # every split_embeding_weights call is expensive, since it iterates over all the elements in the backend kv db
+        # use split weights result cache so that multiple calls in the same train iteration will only trigger once
+        self._split_weights_res: Optional[
+            Tuple[
+                List[ShardedTensor],
+                List[ShardedTensor],
+                List[ShardedTensor],
+            ]
+        ] = None
+
+        self._emb_module: SSDTableBatchedEmbeddingBags = SSDTableBatchedEmbeddingBags(
+            embedding_specs=list(zip(self._num_embeddings, self._local_cols)),
+            feature_table_map=self._feature_table_map,
+            ssd_cache_location=embedding_location,
+            pooling_mode=self._pooling,
+            backend_type=backend_type,
+            **ssd_tbe_params,
+        ).to(device)
+
+        logger.info(
+            f"tbe_unique_id:{self._emb_module.tbe_unique_id} => table name to count dict:{self.table_name_to_count}"
+        )
+        self._table_name_to_weight_count_per_rank: Dict[str, List[int]] = {}
+        self._init_sharded_split_embedding_weights()  # this will populate self._split_weights_res
+        self._optim: ZeroCollisionKeyValueEmbeddingFusedOptimizer = (
+            ZeroCollisionKeyValueEmbeddingFusedOptimizer(
+                config,
+                self._emb_module,
+                # pyre-ignore[16]
+                sharded_embedding_weights_by_table=self._split_weights_res[0],
+                table_name_to_weight_count_per_rank=self._table_name_to_weight_count_per_rank,
+                sharded_embedding_weight_ids=self._split_weights_res[1],
+                pg=pg,
+            )
+        )
+        self._param_per_table: Dict[str, nn.Parameter] = dict(
+            _gen_named_parameters_by_table_ssd_pmt(
+                emb_module=self._emb_module,
+                table_name_to_count=self.table_name_to_count.copy(),
+                config=self._config,
+                pg=pg,
+            )
+        )
+        self.init_parameters()
+
+    def init_parameters(self) -> None:
+        """
+        An advantage of KV TBE is that we don't need to init weights. Hence skipping.
+        """
+        pass
+
+    @property
+    def emb_module(
+        self,
+    ) -> SSDTableBatchedEmbeddingBags:
+        return self._emb_module
+
+    @property
+    def fused_optimizer(self) -> FusedOptimizer:
+        """
+        SSD Embedding fuses backward with backward.
+        """
+        return self._optim
+
+    def state_dict(
+        self,
+        destination: Optional[Dict[str, Any]] = None,
+        prefix: str = "",
+        keep_vars: bool = False,
+        no_snapshot: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Args:
+            no_snapshot (bool): the tensors in the returned dict are
+                PartiallyMaterializedTensors. this argument controls wether the
+                PartiallyMaterializedTensor owns a RocksDB snapshot handle. True means the
+                PartiallyMaterializedTensor doesn't have a RocksDB snapshot handle.  False means the
+                PartiallyMaterializedTensor has a RocksDB snapshot handle
+        """
+        # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
+        # ShardedEmbeddingBagCollection._pre_state_dict_hook()
+
+        emb_tables, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            emb_table.local_metadata.placement._device = torch.device("cpu")
+        ret = get_state_dict(
+            emb_table_config_copy,
+            emb_tables,
+            self._pg,
+            destination,
+            prefix,
+        )
+        return ret
+
+    def named_parameters(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, nn.Parameter]]:
+        """
+        Only allowed ways to get state_dict.
+        """
+        for name, tensor in self.named_split_embedding_weights(
+            prefix, recurse, remove_duplicate
+        ):
+            # hack before we support optimizer on sharded parameter level
+            # can delete after PEA deprecation
+            # pyre-ignore [6]
+            param = nn.Parameter(tensor)
+            # pyre-ignore
+            param._in_backward_optimizers = [EmptyFusedOptimizer()]
+            yield name, param
+
+    # pyre-ignore [15]
+    def named_split_embedding_weights(
+        self, prefix: str = "", recurse: bool = True, remove_duplicate: bool = True
+    ) -> Iterator[Tuple[str, Union[PartiallyMaterializedTensor, torch.Tensor]]]:
+        assert (
+            remove_duplicate
+        ), "remove_duplicate=False not supported in BaseBatchedEmbedding.named_split_embedding_weights"
+        for config, tensor in zip(
+            self._config.embedding_tables,
+            self.split_embedding_weights()[0],
+        ):
+            key = append_prefix(prefix, f"{config.name}.weight")
+            yield key, tensor
+
+    # initialize sharded _split_weights_res if it's None
+    # this method is used to generate sharded embedding weights once for all following state_dict
+    # calls in checkpointing and publishing.
+    # When training is resumed, the cached value will be reset to None and the value needs to be
+    # rebuilt for next checkpointing and publishing, as the weight id, weight embedding will be updated
+    # during training in backend k/v store.
+    def _init_sharded_split_embedding_weights(
+        self, prefix: str = "", force_regenerate: bool = False
+    ) -> None:
+        if not force_regenerate and self._split_weights_res is not None:
+            return
+
+        pmt_list, weight_ids_list, bucket_cnt_list = self.split_embedding_weights(
+            no_snapshot=False,
+        )
+        emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
+        for emb_table in emb_table_config_copy:
+            none_throws(
+                none_throws(
+                    emb_table.local_metadata,
+                    f"local_metadata is None for emb_table: {emb_table.name}",
+                ).placement,
+                f"placement is None for local_metadata of emb table: {emb_table.name}",
+            )._device = torch.device("cpu")
+
+        pmt_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy,
+            pmt_list,
+            self._pg,
+            prefix,
+            self._table_name_to_weight_count_per_rank,
+        )
+        weight_id_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy,
+            weight_ids_list,  # pyre-ignore [6]
+            self._pg,
+            prefix,
+            self._table_name_to_weight_count_per_rank,
+        )
+        bucket_cnt_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy,
+            bucket_cnt_list,  # pyre-ignore [6]
+            self._pg,
+            prefix,
+            self._table_name_to_weight_count_per_rank,
+            use_param_size_as_rows=True,
+        )
+        # pyre-ignore
+        assert len(pmt_list) == len(weight_ids_list) == len(bucket_cnt_list)
+        assert (
+            len(pmt_sharded_t_list)
+            == len(weight_id_sharded_t_list)
+            == len(bucket_cnt_sharded_t_list)
+        )
+        self._split_weights_res = (
+            pmt_sharded_t_list,
+            weight_id_sharded_t_list,
+            bucket_cnt_sharded_t_list,
+        )
+
+    def get_named_split_embedding_weights_snapshot(self, prefix: str = "") -> Iterator[
+        Tuple[
+            str,
+            Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
+            Optional[ShardedTensor],
+        ]
+    ]:
+        """
+        Return an iterator over embedding tables, for each table yielding
+        table name,
+        PMT for embedding table with a valid RocksDB snapshot to support tensor IO
+        optional ShardedTensor for weight_id
+        optional ShardedTensor for bucket_cnt
+        """
+        self._init_sharded_split_embedding_weights()
+        # pyre-ignore[16]
+        self._optim.set_sharded_embedding_weight_ids(self._split_weights_res[1])
+
+        pmt_sharded_t_list = self._split_weights_res[0]
+        weight_id_sharded_t_list = self._split_weights_res[1]
+        bucket_cnt_sharded_t_list = self._split_weights_res[2]
+        for table_idx, pmt_sharded_t in enumerate(pmt_sharded_t_list):
+            table_config = self._config.embedding_tables[table_idx]
+            key = append_prefix(prefix, f"{table_config.name}")
+
+            yield key, pmt_sharded_t, weight_id_sharded_t_list[
+                table_idx
+            ], bucket_cnt_sharded_t_list[table_idx]
+
+    def flush(self) -> None:
+        """
+        Flush the embeddings in cache back to SSD. Should be pretty expensive.
+        """
+        self.emb_module.flush()
+
+    def purge(self) -> None:
+        """
+        Reset the cache space. This is needed when we load state dict.
+        """
+        # TODO: move the following to SSD TBE.
+        self.emb_module.lxu_cache_weights.zero_()
+        self.emb_module.lxu_cache_state.fill_(-1)
+
+    def create_rocksdb_hard_link_snapshot(self) -> None:
+        """
+        Create a RocksDB checkpoint. This is needed before we call state_dict() for publish.
+        """
+        self.emb_module.create_rocksdb_hard_link_snapshot()
+
+    # pyre-ignore [15]
+    def split_embedding_weights(
+        self, no_snapshot: bool = True, should_flush: bool = False
+    ) -> Tuple[
+        Union[List[PartiallyMaterializedTensor], List[torch.Tensor]],
+        Optional[List[torch.Tensor]],
+        Optional[List[torch.Tensor]],
+    ]:
+        return self.emb_module.split_embedding_weights(no_snapshot, should_flush)
+
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        # reset split weights during training
+        self._split_weights_res = None
+        self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
+
+        return super().forward(features)
 
 
 class BatchedFusedEmbeddingBag(
