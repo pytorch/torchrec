@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 
@@ -66,7 +66,7 @@ class EmbdUpdateMode(Enum):
 
 
 @dataclass
-class DeltaTrackerConfig:
+class ModelTrackerConfig:
     r"""
     Configuration for ``ModelDeltaTracker``.
 
@@ -77,6 +77,8 @@ class DeltaTrackerConfig:
 
     """
 
-    tracking_mode: TrackingMode
+    tracking_mode: TrackingMode = TrackingMode.ID_ONLY
     consumers: Optional[List[str]] = None
     delete_on_read: bool = True
+    auto_compact: bool = False
+    fqns_to_skip: List[str] = field(default_factory=list)
