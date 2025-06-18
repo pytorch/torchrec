@@ -19,7 +19,7 @@ from torch import nn
 from torchrec import KeyedJaggedTensor
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
-from torchrec.distributed.embedding_types import ModuleSharder, ShardingType
+from torchrec.distributed.embedding_types import ModuleSharder, ShardingType, T
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_tracker.tests.utils import (
     EmbeddingTableProps,
@@ -78,10 +78,9 @@ class ModelInput:
 class ModelDeltaTrackerInputTestParams:
     # input parameters
     embedding_config_type: Union[Type[EmbeddingConfig], Type[EmbeddingBagConfig]]
+    model_tracker_config: ModelTrackerConfig
     embedding_tables: List[EmbeddingTableProps]
-    fqns_to_skip: List[str] = field(default_factory=list)
     model_inputs: List[ModelInput] = field(default_factory=list)
-    model_tracker_config: Optional[ModelTrackerConfig] = None
 
 
 @dataclass
@@ -100,6 +99,13 @@ class TrackerNotInitOutputTestParams:
 class EmbeddingModeOutputTestParams:
     # assert string
     assert_str: Optional[str]
+
+
+@dataclass
+class MultipleGetOutputTestParams:
+    # Expected output for each iteration
+
+    expected_outputs: List[Dict[str, Dict[int, torch.Tensor]]]
 
 
 def model_input_generator(
@@ -218,6 +224,7 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
+                    model_tracker_config=ModelTrackerConfig(),
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={
@@ -252,6 +259,7 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
+                    model_tracker_config=ModelTrackerConfig(),
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={
@@ -284,6 +292,7 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
+                    model_tracker_config=ModelTrackerConfig(),
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={
@@ -318,7 +327,9 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
-                    fqns_to_skip=["sparse_table_1"],
+                    model_tracker_config=ModelTrackerConfig(
+                        fqns_to_skip=["sparse_table_1"]
+                    ),
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={
@@ -352,7 +363,9 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
-                    fqns_to_skip=["embedding_bags"],
+                    model_tracker_config=ModelTrackerConfig(
+                        fqns_to_skip=["embedding_bags"]
+                    ),
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={},
@@ -382,7 +395,7 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
-                    fqns_to_skip=["ec"],
+                    model_tracker_config=ModelTrackerConfig(fqns_to_skip=["ec"]),
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={},
@@ -423,7 +436,7 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
-                    fqns_to_skip=[],
+                    model_tracker_config=ModelTrackerConfig(),
                 ),
                 TrackerNotInitOutputTestParams(
                     dmp_tracker_atter="get_model_tracker",
@@ -444,7 +457,7 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                             sharding=ShardingType.ROW_WISE,
                         ),
                     ],
-                    fqns_to_skip=[],
+                    model_tracker_config=ModelTrackerConfig(),
                 ),
                 TrackerNotInitOutputTestParams(
                     dmp_tracker_atter="get_delta",
@@ -835,6 +848,212 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
             output_params=output_params,
         )
 
+    @parameterized.expand(
+        [
+            (
+                "multi_get_with_EC",
+                ModelDeltaTrackerInputTestParams(
+                    embedding_config_type=EmbeddingConfig,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                    ],
+                    model_tracker_config=ModelTrackerConfig(
+                        tracking_mode=TrackingMode.EMBEDDING,
+                        delete_on_read=True,
+                    ),
+                    model_inputs=[
+                        # First input: f1, f2 have values 0-7, f3, f4 have values 8-15
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
+                        ),
+                        # Second input: f1, f2 have values 8-15, f3, f4 have values 0-7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
+                        ),
+                        # Third input: f1, f2 have values 0-3, f3, f4 have values 4-7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+                            offsets=torch.tensor([0, 0, 0, 4, 4, 4, 8]),
+                        ),
+                    ],
+                ),
+                MultipleGetOutputTestParams(
+                    expected_outputs=[
+                        # Expected output after first input
+                        {
+                            # For rank 0: First table has IDs 0-7, second table is empty
+                            # For rank 1: First table is empty, second table has IDs 8-15
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after second input
+                        {
+                            # For rank 0: First table has IDs 0-15, second table is empty
+                            # For rank 1: First table is empty, second table has IDs 0-15
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                        },
+                        # Expected output after third input (no new IDs)
+                        {
+                            # Same as second input
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(5)),
+                                1: torch.tensor([]),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor(range(4, 8)),
+                                1: torch.tensor([]),
+                            },
+                        },
+                    ]
+                ),
+            ),
+            (
+                "multi_get_with_EBC",
+                ModelDeltaTrackerInputTestParams(
+                    embedding_config_type=EmbeddingBagConfig,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                                pooling=PoolingType.SUM,
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                                pooling=PoolingType.SUM,
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                    ],
+                    model_tracker_config=ModelTrackerConfig(
+                        tracking_mode=TrackingMode.ID_ONLY,
+                        delete_on_read=True,
+                    ),
+                    model_inputs=[
+                        # First input: f1, f2 have values 0-7, f3, f4 have values 8-15
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
+                        ),
+                        # Second input: f1, f2 have values 8-15, f3, f4 have values 0-7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
+                        ),
+                        # Third input: f1, f2 have values 0-3, f3, f4 have values 4-7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+                            offsets=torch.tensor([0, 0, 0, 4, 4, 4, 8]),
+                        ),
+                    ],
+                ),
+                MultipleGetOutputTestParams(
+                    expected_outputs=[
+                        # Expected output after first input
+                        {
+                            # For rank 0: First table has IDs 0-7, second table is empty
+                            # For rank 1: First table is empty, second table has IDs 8-15
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after second input
+                        {
+                            # For rank 0: First table has IDs 0-15, second table is empty
+                            # For rank 1: First table is empty, second table has IDs 0-15
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                        },
+                        # Expected output after third input (no new IDs)
+                        {
+                            # Same as second input
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(5)),
+                                1: torch.tensor([]),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor(range(4, 8)),
+                                1: torch.tensor([]),
+                            },
+                        },
+                    ]
+                ),
+            ),
+        ]
+    )
+    @skip_if_asan
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(torch.cuda.device_count() < 2, "test requires 2+ GPUs")
+    def test_multiple_get(
+        self,
+        _test_name: str,
+        test_params: ModelDeltaTrackerInputTestParams,
+        output_params: MultipleGetOutputTestParams,
+    ) -> None:
+        self._run_multi_process_test(
+            callable=_test_multiple_get,
+            world_size=self.world_size,
+            test_params=test_params,
+            output_params=output_params,
+        )
+
 
 def _test_fqn_to_feature_names(
     rank: int,
@@ -854,11 +1073,7 @@ def _test_fqn_to_feature_names(
             ctx=ctx,
             embedding_config_type=input_params.embedding_config_type,
             tables=input_params.embedding_tables,
-            config=ModelTrackerConfig(
-                tracking_mode=TrackingMode.ID_ONLY,
-                delete_on_read=True,
-                fqns_to_skip=input_params.fqns_to_skip,
-            ),
+            config=input_params.model_tracker_config,
         )
 
         dt = dt_model.get_model_tracker()
@@ -982,7 +1197,6 @@ def _test_embedding_mode(
         # Initialize variables to None
         dt_model = None
         baseline_model = None
-
         if output_params.assert_str is not None:
             with unittest.TestCase().assertRaisesRegex(
                 AssertionError,
@@ -1093,5 +1307,81 @@ def _test_embedding_mode(
                     unittest.TestCase().assertTrue(
                         none_throws(delta_rows[table_fqn].embeddings).allclose(
                             orig_emb[expected_ids]
+                        )
+                    )
+
+
+def _test_multiple_get(
+    rank: int,
+    world_size: int,
+    test_params: ModelDeltaTrackerInputTestParams,
+    output_params: MultipleGetOutputTestParams,
+) -> None:
+    """
+    Test that verifies the behavior of getting delta_rows multiple times with different inputs.
+    This test processes multiple inputs and verifies that the delta tracker correctly
+    accumulates delta_rows across multiple calls.
+    """
+    with MultiProcessContext(
+        rank=rank,
+        world_size=world_size,
+        backend="nccl" if torch.cuda.is_available() else "gloo",
+    ) as ctx:
+        dt_model, baseline_model = get_models(
+            rank=rank,
+            world_size=world_size,
+            ctx=ctx,
+            embedding_config_type=test_params.embedding_config_type,
+            tables=test_params.embedding_tables,
+            config=test_params.model_tracker_config,
+        )
+        features_list = model_input_generator(test_params.model_inputs, rank)
+        dt = dt_model.get_model_tracker()
+        table_fqns = dt.fqn_to_feature_names().keys()
+        table_fqns_list = list(table_fqns)
+        expected_emb1 = torch.tensor([])
+        expected_emb2 = torch.tensor([])
+        # Process each input and verify the unique IDs after each one
+        for i, (features, expected_output) in enumerate(
+            zip(features_list, output_params.expected_outputs)
+        ):
+            if test_params.embedding_config_type == EmbeddingConfig:
+                # Embedding mode is only supported for EmbeddingCollection
+                expected_emb1 = (
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+                    dt_model._dmp_wrapped_module.module.ec.embeddings.sparse_table_1.weight.detach().clone()
+                )
+                expected_emb2 = (
+                    # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ec`.
+                    dt_model._dmp_wrapped_module.module.ec.embeddings.sparse_table_2.weight.detach().clone()
+                )
+
+            # Process the input
+            tracked_out = dt_model(features)
+            baseline_out = baseline_model(features)
+            unittest.TestCase().assertTrue(tracked_out.allclose(baseline_out))
+            tracked_out.sum().backward()
+            baseline_out.sum().backward()
+            delta_rows = dt.get_delta()
+
+            # Verify that the current batch index is correct
+            unittest.TestCase().assertTrue(dt.curr_batch_idx, i + 1)
+
+            for table_fqn, expected_emb in zip(
+                table_fqns_list, [expected_emb1, expected_emb2]
+            ):
+                expected_ids = torch.tensor(
+                    expected_output[table_fqn][rank].detach().clone(),
+                    dtype=torch.long,
+                    device=torch.device(f"cuda:{rank}"),
+                )
+                # Verify that the delta rows match the expected output
+                unittest.TestCase().assertTrue(
+                    delta_rows[table_fqn].ids.allclose(expected_ids)
+                )
+                if test_params.embedding_config_type == EmbeddingConfig:
+                    unittest.TestCase().assertTrue(
+                        none_throws(delta_rows[table_fqn].embeddings).allclose(
+                            expected_emb[expected_ids]
                         )
                     )
