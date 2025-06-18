@@ -18,10 +18,50 @@ def main():
 
     full_matrix_string = os.environ["MAT"]
     full_matrix = json.loads(full_matrix_string)
+    """
+    Matrix contents can be found in a github "Build Linux Wheels"
+    log output. A typical example is
+    {
+        "include": [
+            {
+            "python_version": "3.9",
+            "gpu_arch_type": "cpu",
+            "gpu_arch_version": "",
+            "desired_cuda": "cpu",
+            "container_image": "pytorch/manylinux2_28-builder:cpu",
+            "package_type": "manywheel",
+            "build_name": "manywheel-py3_9-cpu",
+            "validation_runner": "linux.2xlarge",
+            "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu",
+            "channel": "nightly",
+            "upload_to_base_bucket": "no",
+            "stable_version": "2.7.1",
+            "use_split_build": false
+            },
+            {
+            "python_version": "3.9",
+            "gpu_arch_type": "cuda",
+            "gpu_arch_version": "12.6",
+            "desired_cuda": "cu126",
+            "container_image": "pytorch/manylinux2_28-builder:cuda12.6",
+            "package_type": "manywheel",
+            "build_name": "manywheel-py3_9-cuda12_6",
+            "validation_runner": "linux.g5.4xlarge.nvidia.gpu",
+            "installation": "pip3 install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu126",
+            "channel": "nightly",
+            "upload_to_base_bucket": "no",
+            "stable_version": "2.7.1",
+            "use_split_build": false
+            }
+        ]
+    }
+    """
 
     new_matrix_entries = []
 
     for entry in full_matrix["include"]:
+        if entry["desired_cuda"] == "cu129":
+            continue
         new_matrix_entries.append(entry)
 
     new_matrix = {"include": new_matrix_entries}

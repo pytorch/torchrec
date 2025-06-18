@@ -85,15 +85,15 @@ class ModelDeltaTracker:
         self.curr_batch_idx: int = 0
         self.curr_compact_index: int = 0
 
-        self.store: DeltaStore = DeltaStore(UPDATE_MODE_MAP[self._mode])
-
         # from module FQN to ShardedEmbeddingCollection/ShardedEmbeddingBagCollection
         self.tracked_modules: Dict[str, nn.Module] = {}
         self.feature_to_fqn: Dict[str, str] = {}
         # Generate the mapping from FQN to feature names.
         self.fqn_to_feature_names()
-        # Validate the mode is supported for the given module
-        self._validate_mode()
+        # Validate is the mode is supported for the given module and initialize tracker functions
+        self._validate_and_init_tracker_fns()
+
+        self.store: DeltaStore = DeltaStore(UPDATE_MODE_MAP[self._mode])
 
         # Mapping feature name to corresponding FQNs. This is used for retrieving
         # the FQN associated with a given feature name in record_lookup().
@@ -104,6 +104,40 @@ class ModelDeltaTracker:
                     continue
                 self.feature_to_fqn[feature_name] = fqn
         logger.info(f"feature_to_fqn: {self.feature_to_fqn}")
+
+    def step(self) -> None:
+        # Move batch index forward for all consumers.
+        self.curr_batch_idx += 1
+
+    def trigger_compaction(self) -> None:
+        if self.curr_compact_index >= self.curr_batch_idx:
+            # only trigger compaction once per iteration
+            return
+
+        # TODO: May need to revisit the compaction logic with multiple consmers.
+        # At present we take the max per_consumer_batch_idx to ensure we only compact
+        # newely received lookups
+
+        # The trigger_compaction() function is expected to overlap with comms to hide
+        # compaction compute overhead. Currently, we overlap compaction with odist
+        # because ID tracking occurs during local embedding lookup, which takes place
+        # before odist. This way, auto_compact always merges all past IDs tensors since
+        # the last get_delta call into a single IDs tensor per FQN.
+        #
+        # For delete_on_read=True, get_delta() should delete up to per_consumer_batch_idx
+        # (exclusive). So the compaction should start from per_consumer_batch_idx.
+        #
+        # For delete_on_read=False, get_delta() won't delete tensors, but it does advance
+        # per_consumer_batch_idx accordingly, where all ids prior to per_consumer_batch_idx (exclusive)
+        # should have been compacted into one tensor regardless of auto_compact=True/False.
+        # Therefore, all future compactions should start from per_consumer_batch_idx.
+        start_idx = max(self.per_consumer_batch_idx.values())
+        end_idx = self.curr_batch_idx
+        if start_idx < end_idx:
+            self.compact(start_idx=start_idx, end_idx=end_idx)
+
+            # Update the current compact index to the end index to avoid duplicate compaction.
+            self.curr_compact_index = end_idx
 
     def record_lookup(self, kjt: KeyedJaggedTensor, states: torch.Tensor) -> None:
         """
@@ -333,13 +367,25 @@ class ModelDeltaTracker:
         self.store.compact(start_idx, end_idx)
 
     def _clean_fqn_fn(self, fqn: str) -> str:
-        # strip DMP internal module FQN prefix to match state dict FQN
-        return fqn.replace("_dmp_wrapped_module.module.", "")
+        # strip FQN prefixes added by DMP and other TorchRec operations to match state dict FQN
+        # handles both "_dmp_wrapped_module.module." and "module." prefixes
+        prefixes_to_strip = ["_dmp_wrapped_module.module.", "module."]
+        for prefix in prefixes_to_strip:
+            if fqn.startswith(prefix):
+                return fqn[len(prefix) :]
+        return fqn
 
-    def _validate_mode(self) -> None:
+    def _validate_and_init_tracker_fns(self) -> None:
         "To validate the mode is supported for the given module"
         for module in self.tracked_modules.values():
             assert not (
                 isinstance(module, ShardedEmbeddingBagCollection)
                 and self._mode == TrackingMode.EMBEDDING
             ), "EBC's lookup returns pooled embeddings and currently, we do not support tracking raw embeddings."
+            # register post lookup function
+            # pyre-ignore[29]
+            module.register_post_lookup_tracker_fn(self.record_lookup)
+            # register auto compaction function at odist
+            if self._auto_compact:
+                # pyre-ignore[29]
+                module.register_post_odist_tracker_fn(self.trigger_compaction)
