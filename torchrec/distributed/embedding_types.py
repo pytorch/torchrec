@@ -301,6 +301,12 @@ class GroupedEmbeddingConfig:
                 embedding_shard_metadata.append(table.local_metadata)
         return embedding_shard_metadata
 
+    def is_using_virtual_table(self) -> bool:
+        return self.compute_kernel in [
+            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE,
+            EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE,
+        ]
+
 
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")

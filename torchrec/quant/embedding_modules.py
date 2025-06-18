@@ -30,6 +30,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
     IntNBitTableBatchedEmbeddingBagsCodegen,
     PoolingMode,
 )
+from fbgemm_gpu.tbe.cache.kv_embedding_ops_inference import KVEmbeddingInference
 from torch import Tensor
 from torchrec.distributed.utils import none_throws
 from torchrec.modules.embedding_configs import (
@@ -357,7 +358,7 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
         self._is_weighted = is_weighted
         self._embedding_bag_configs: List[EmbeddingBagConfig] = tables
         self._key_to_tables: Dict[
-            Tuple[PoolingType, DataType, bool], List[EmbeddingBagConfig]
+            Tuple[PoolingType, bool], List[EmbeddingBagConfig]
         ] = defaultdict(list)
         self._feature_names: List[str] = []
         self._feature_splits: List[int] = []
@@ -383,15 +384,13 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                 key = (table.pooling, table.use_virtual_table)
             else:
                 key = (table.pooling, False)
-            # pyre-ignore
             self._key_to_tables[key].append(table)
 
         location = (
             EmbeddingLocation.HOST if device.type == "cpu" else EmbeddingLocation.DEVICE
         )
 
-        for key, emb_configs in self._key_to_tables.items():
-            pooling = key[0]
+        for (pooling, use_virtual_table), emb_configs in self._key_to_tables.items():
             embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
@@ -420,7 +419,12 @@ class EmbeddingBagCollection(EmbeddingBagCollectionInterface, ModuleNoCopyMixin)
                     )
                 feature_table_map.extend([idx] * table.num_features())
 
-            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
+            embedding_clazz = (
+                KVEmbeddingInference
+                if use_virtual_table
+                else IntNBitTableBatchedEmbeddingBagsCodegen
+            )
+            emb_module = embedding_clazz(
                 embedding_specs=embedding_specs,
                 pooling_mode=pooling_type_to_pooling_mode(pooling),
                 weight_lists=weight_lists,
@@ -790,8 +794,7 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                 key = (table.data_type, False)
             self._key_to_tables[key].append(table)
         self._feature_splits: List[int] = []
-        for key, emb_configs in self._key_to_tables.items():
-            data_type = key[0]
+        for (data_type, use_virtual_table), emb_configs in self._key_to_tables.items():
             embedding_specs = []
             weight_lists: Optional[
                 List[Tuple[torch.Tensor, Optional[torch.Tensor]]]
@@ -816,10 +819,13 @@ class EmbeddingCollection(EmbeddingCollectionInterface, ModuleNoCopyMixin):
                         table_name_to_quantized_weights[table.name]
                     )
                 feature_table_map.extend([idx] * table.num_features())
-                # move to here to make sure feature_names order is consistent with the embedding groups
                 self._feature_names.extend(table.feature_names)
-
-            emb_module = IntNBitTableBatchedEmbeddingBagsCodegen(
+            embedding_clazz = (
+                KVEmbeddingInference
+                if use_virtual_table
+                else IntNBitTableBatchedEmbeddingBagsCodegen
+            )
+            emb_module = embedding_clazz(
                 embedding_specs=embedding_specs,
                 pooling_mode=PoolingMode.NONE,
                 weight_lists=weight_lists,
