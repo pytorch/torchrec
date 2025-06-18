@@ -1,7 +1,9 @@
 black
+click
 cmake
 fbgemm-gpu
 hypothesis==6.70.1
+importlib-metadata
 iopath
 numpy
 pandas
@@ -13,6 +15,7 @@ torchx
 tqdm
 usort
 parameterized
+PyYAML
 
 # for tests
 # https://github.com/pytorch/pytorch/blob/b96b1e8cff029bb0a73283e6e7f6cc240313f1dc/requirements.txt#L3
