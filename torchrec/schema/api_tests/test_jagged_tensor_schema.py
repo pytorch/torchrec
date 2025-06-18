@@ -9,7 +9,7 @@
 
 import inspect
 import unittest
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torchrec.schema.utils import is_signature_compatible
@@ -112,9 +112,7 @@ class StableKeyedJaggedTensor:
         lengths: Optional[torch.Tensor] = None,
         offsets: Optional[torch.Tensor] = None,
         stride: Optional[int] = None,
-        stride_per_key_per_rank: Optional[
-            Union[List[List[int]], torch.IntTensor]
-        ] = None,
+        stride_per_key_per_rank: Optional[List[List[int]]] = None,
         # Below exposed to ensure torch.script-able
         stride_per_key: Optional[List[int]] = None,
         length_per_key: Optional[List[int]] = None,

@@ -54,7 +54,7 @@ def kjt_for_pt2_tracing(
             values=values,
             lengths=lengths,
             weights=kjt.weights_or_none(),
-            stride_per_key_per_rank=torch.IntTensor([[stride]] * n, device="cpu"),
+            stride_per_key_per_rank=[[stride]] * n,
             inverse_indices=(kjt.keys(), inverse_indices_tensor),
         )
 
@@ -85,7 +85,7 @@ def kjt_for_pt2_tracing(
         lengths=lengths,
         weights=weights,
         stride=stride if not is_vb else None,
-        stride_per_key_per_rank=kjt._stride_per_key_per_rank if is_vb else None,
+        stride_per_key_per_rank=kjt.stride_per_key_per_rank() if is_vb else None,
         inverse_indices=inverse_indices,
     )
 
