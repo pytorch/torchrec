@@ -19,7 +19,7 @@ from torch import nn
 from torchrec import KeyedJaggedTensor
 from torchrec.distributed import DistributedModelParallel
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
-from torchrec.distributed.embedding_types import ModuleSharder, ShardingType, T
+from torchrec.distributed.embedding_types import ModuleSharder, ShardingType
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.model_tracker.tests.utils import (
     EmbeddingTableProps,
@@ -81,6 +81,7 @@ class ModelDeltaTrackerInputTestParams:
     model_tracker_config: ModelTrackerConfig
     embedding_tables: List[EmbeddingTableProps]
     model_inputs: List[ModelInput] = field(default_factory=list)
+    consumers: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -102,10 +103,10 @@ class EmbeddingModeOutputTestParams:
 
 
 @dataclass
-class MultipleGetOutputTestParams:
+class MultipleOutputTestParams:
     # Expected output for each iteration
-
     expected_outputs: List[Dict[str, Dict[int, torch.Tensor]]]
+    consumer_access: List[str] = field(default_factory=list)
 
 
 def model_input_generator(
@@ -879,19 +880,19 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                         delete_on_read=True,
                     ),
                     model_inputs=[
-                        # First input: f1, f2 have values 0-7, f3, f4 have values 8-15
+                        # First input: f1 has values 0,2,4,6 and f2 has values 8,10,12,14
                         ModelInput(
                             keys=["f1", "f2"],
                             values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
                             offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
                         ),
-                        # Second input: f1, f2 have values 8-15, f3, f4 have values 0-7
+                        # Second input: f1 has values 8,10,12,14 and f2 has values 0,2,4,6
                         ModelInput(
                             keys=["f1", "f2"],
                             values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
                             offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
                         ),
-                        # Third input: f1, f2 have values 0-3, f3, f4 have values 4-7
+                        # Third input: f1 has values 0,1,2,3 and f2 has values 4,5,6,7
                         ModelInput(
                             keys=["f1", "f2"],
                             values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
@@ -899,12 +900,12 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                         ),
                     ],
                 ),
-                MultipleGetOutputTestParams(
+                MultipleOutputTestParams(
                     expected_outputs=[
-                        # Expected output after first input
+                        # Expected output after first input: f1=[0,2,4,6] f2=[8,10,12,14]
                         {
-                            # For rank 0: First table has IDs 0-7, second table is empty
-                            # For rank 1: First table is empty, second table has IDs 8-15
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,2,4,6], sparse_table_2 is empty
+                            # Rank 1: sparse_table_1 is empty, sparse_table_2 gets f2 IDs [8,10,12,14]
                             "ec.embeddings.sparse_table_1": {
                                 0: torch.tensor(range(8)),
                                 1: torch.tensor([]),
@@ -914,10 +915,10 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                                 1: torch.tensor(range(8)),
                             },
                         },
-                        # Expected output after second input
+                        # Expected output after second input: f1=[8,10,12,14] f2=[0,2,4,6]
                         {
-                            # For rank 0: First table has IDs 0-15, second table is empty
-                            # For rank 1: First table is empty, second table has IDs 0-15
+                            # Rank 0: sparse_table_2 gets f2 IDs [0,2,4,6], sparse_table_1 is empty
+                            # Rank 1: sparse_table_1 gets f1 IDs [8,10,12,14], sparse_table_2 is empty
                             "ec.embeddings.sparse_table_1": {
                                 0: torch.tensor([]),
                                 1: torch.tensor(range(8)),
@@ -927,9 +928,9 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                                 1: torch.tensor([]),
                             },
                         },
-                        # Expected output after third input (no new IDs)
+                        # Expected output after third input: f1=[0,1,2,3] f2=[4,5,6,7]
                         {
-                            # Same as second input
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,1,2,3], sparse_table_2 gets f2 IDs [4,5,6,7]
                             "ec.embeddings.sparse_table_1": {
                                 0: torch.tensor(range(5)),
                                 1: torch.tensor([]),
@@ -973,19 +974,19 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                         delete_on_read=True,
                     ),
                     model_inputs=[
-                        # First input: f1, f2 have values 0-7, f3, f4 have values 8-15
+                        # First input: f1 has values 0,2,4,6 and f2 has values 8,10,12,14
                         ModelInput(
                             keys=["f1", "f2"],
                             values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
                             offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
                         ),
-                        # Second input: f1, f2 have values 8-15, f3, f4 have values 0-7
+                        # Second input: f1 has values 8,10,12,14 and f2 has values 0,2,4,6
                         ModelInput(
                             keys=["f1", "f2"],
                             values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
                             offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
                         ),
-                        # Third input: f1, f2 have values 0-3, f3, f4 have values 4-7
+                        # Third input: f1 has values 0,1,2,3 and f2 has values 4,5,6,7
                         ModelInput(
                             keys=["f1", "f2"],
                             values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
@@ -993,12 +994,12 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                         ),
                     ],
                 ),
-                MultipleGetOutputTestParams(
+                MultipleOutputTestParams(
                     expected_outputs=[
-                        # Expected output after first input
+                        # Expected output after first input: f1=[0,2,4,6] f2=[8,10,12,14]
                         {
-                            # For rank 0: First table has IDs 0-7, second table is empty
-                            # For rank 1: First table is empty, second table has IDs 8-15
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,2,4,6], sparse_table_2 is empty
+                            # Rank 1: sparse_table_1 is empty, sparse_table_2 gets f2 IDs [8,10,12,14]
                             "ebc.embedding_bags.sparse_table_1": {
                                 0: torch.tensor(range(8)),
                                 1: torch.tensor([]),
@@ -1008,10 +1009,10 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                                 1: torch.tensor(range(8)),
                             },
                         },
-                        # Expected output after second input
+                        # Expected output after second input: f1=[8,10,12,14] f2=[0,2,4,6]
                         {
-                            # For rank 0: First table has IDs 0-15, second table is empty
-                            # For rank 1: First table is empty, second table has IDs 0-15
+                            # Rank 0: sparse_table_2 gets f2 IDs [0,2,4,6], sparse_table_1 is empty
+                            # Rank 1: sparse_table_1 gets f1 IDs [8,10,12,14], sparse_table_2 is empty
                             "ebc.embedding_bags.sparse_table_1": {
                                 0: torch.tensor([]),
                                 1: torch.tensor(range(8)),
@@ -1021,9 +1022,9 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                                 1: torch.tensor([]),
                             },
                         },
-                        # Expected output after third input (no new IDs)
+                        # Expected output after third input: f1=[0,1,2,3] f2=[4,5,6,7]
                         {
-                            # Same as second input
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,1,2,3], sparse_table_2 gets f2 IDs [4,5,6,7]
                             "ebc.embedding_bags.sparse_table_1": {
                                 0: torch.tensor(range(5)),
                                 1: torch.tensor([]),
@@ -1045,10 +1046,418 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
         self,
         _test_name: str,
         test_params: ModelDeltaTrackerInputTestParams,
-        output_params: MultipleGetOutputTestParams,
+        output_params: MultipleOutputTestParams,
     ) -> None:
         self._run_multi_process_test(
             callable=_test_multiple_get,
+            world_size=self.world_size,
+            test_params=test_params,
+            output_params=output_params,
+        )
+
+    @parameterized.expand(
+        [
+            (
+                "EC_and_delete_on_read_true",
+                ModelDeltaTrackerInputTestParams(
+                    embedding_config_type=EmbeddingConfig,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                    ],
+                    model_tracker_config=ModelTrackerConfig(
+                        tracking_mode=TrackingMode.ID_ONLY,
+                        delete_on_read=True,
+                        consumers=["A", "B"],
+                    ),
+                    model_inputs=[
+                        # First input: f1 has values 0,2,4,6 and f2 has values 8,10,12,14
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
+                        ),
+                        # Second input: f1 has values 8,10,12,14 and f2 has values 0,2,4,6
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
+                        ),
+                        # Third input: f1 has values 0,1,2,3 and f2 has values 4,5,6,7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+                            offsets=torch.tensor([0, 0, 0, 4, 4, 4, 8]),
+                        ),
+                    ],
+                ),
+                MultipleOutputTestParams(
+                    consumer_access=["A", "B", "A"],
+                    expected_outputs=[
+                        # Expected output after first input: f1=[0,2,4,6] f2=[8,10,12,14] - Consumer A access
+                        {
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,2,4,6], sparse_table_2 is empty
+                            # Rank 1: sparse_table_1 is empty, sparse_table_2 gets f2 IDs [8,10,12,14]
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after second input: f1=[8,10,12,14] f2=[0,2,4,6] - Consumer B access
+                        {
+                            # Consumer B gets all accumulated data since last access (both inputs)
+                            # Rank 0: Both tables have accumulated IDs from both inputs
+                            # Rank 1: Both tables have accumulated IDs from both inputs
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after third input: f1=[0,1,2,3] f2=[4,5,6,7] - Consumer A access
+                        {
+                            # Consumer A gets delta since last access (inputs 2 and 3)
+                            # Rank 0: sparse_table_1 gets new f1 IDs [0,1,2,3], sparse_table_2 gets accumulated IDs
+                            # Rank 1: sparse_table_1 gets accumulated IDs, sparse_table_2 gets new f2 ID [0]
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(5)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([0]),
+                            },
+                        },
+                    ],
+                ),
+            ),
+            (
+                "EC_and_delete_on_read_false",
+                ModelDeltaTrackerInputTestParams(
+                    embedding_config_type=EmbeddingConfig,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                    ],
+                    model_tracker_config=ModelTrackerConfig(
+                        tracking_mode=TrackingMode.ID_ONLY,
+                        delete_on_read=False,
+                        consumers=["A", "B"],
+                    ),
+                    model_inputs=[
+                        # First input: f1 has values 0,2,4,6 and f2 has values 8,10,12,14
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
+                        ),
+                        # Second input: f1 has values 8,10,12,14 and f2 has values 0,2,4,6
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
+                        ),
+                        # Third input: f1 has values 0,1,2,3 and f2 has values 4,5,6,7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+                            offsets=torch.tensor([0, 0, 0, 4, 4, 4, 8]),
+                        ),
+                    ],
+                ),
+                MultipleOutputTestParams(
+                    consumer_access=["A", "B", "A"],
+                    expected_outputs=[
+                        # Expected output after first input: f1=[0,2,4,6] f2=[8,10,12,14] - Consumer A access
+                        {
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,2,4,6], sparse_table_2 is empty
+                            # Rank 1: sparse_table_1 is empty, sparse_table_2 gets f2 IDs [8,10,12,14]
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after second input: f1=[8,10,12,14] f2=[0,2,4,6] - Consumer B access
+                        {
+                            # Consumer B gets all accumulated data since last access (both inputs)
+                            # Rank 0: Both tables have accumulated IDs from both inputs
+                            # Rank 1: Both tables have accumulated IDs from both inputs
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after third input: f1=[0,1,2,3] f2=[4,5,6,7] - Consumer A access
+                        {
+                            # Consumer A gets delta since last access (inputs 2 and 3)
+                            # Rank 0: sparse_table_1 gets new f1 IDs [0,1,2,3], sparse_table_2 gets accumulated IDs
+                            # Rank 1: sparse_table_1 gets accumulated IDs, sparse_table_2 gets new f2 ID [0]
+                            "ec.embeddings.sparse_table_1": {
+                                0: torch.tensor(range(5)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ec.embeddings.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([0]),
+                            },
+                        },
+                    ],
+                ),
+            ),
+            (
+                "EBC_and_delete_on_read_true",
+                ModelDeltaTrackerInputTestParams(
+                    embedding_config_type=EmbeddingBagConfig,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                    ],
+                    model_tracker_config=ModelTrackerConfig(
+                        tracking_mode=TrackingMode.ID_ONLY,
+                        delete_on_read=True,
+                        consumers=["A", "B"],
+                    ),
+                    model_inputs=[
+                        # First input: f1 has values 0,2,4,6 and f2 has values 8,10,12,14
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
+                        ),
+                        # Second input: f1 has values 8,10,12,14 and f2 has values 0,2,4,6
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
+                        ),
+                        # Third input: f1 has values 0,1,2,3 and f2 has values 4,5,6,7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+                            offsets=torch.tensor([0, 0, 0, 4, 4, 4, 8]),
+                        ),
+                    ],
+                ),
+                MultipleOutputTestParams(
+                    consumer_access=["A", "B", "A"],
+                    expected_outputs=[
+                        # Expected output after first input: f1=[0,2,4,6] f2=[8,10,12,14] - Consumer A access
+                        {
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,2,4,6], sparse_table_2 is empty
+                            # Rank 1: sparse_table_1 is empty, sparse_table_2 gets f2 IDs [8,10,12,14]
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after second input: f1=[8,10,12,14] f2=[0,2,4,6] - Consumer B access
+                        {
+                            # Consumer B gets all accumulated data since last access (both inputs)
+                            # Rank 0: Both tables have accumulated IDs from both inputs
+                            # Rank 1: Both tables have accumulated IDs from both inputs
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after third input: f1=[0,1,2,3] f2=[4,5,6,7] - Consumer A access
+                        {
+                            # Consumer A gets delta since last access (inputs 2 and 3)
+                            # Rank 0: sparse_table_1 gets new f1 IDs [0,1,2,3], sparse_table_2 gets accumulated IDs
+                            # Rank 1: sparse_table_1 gets accumulated IDs, sparse_table_2 gets new f2 ID [0]
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(5)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([0]),
+                            },
+                        },
+                    ],
+                ),
+            ),
+            (
+                "EBC_and_delete_on_read_false",
+                ModelDeltaTrackerInputTestParams(
+                    embedding_config_type=EmbeddingBagConfig,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                            ),
+                            sharding=ShardingType.ROW_WISE,
+                        ),
+                    ],
+                    model_tracker_config=ModelTrackerConfig(
+                        tracking_mode=TrackingMode.ID_ONLY,
+                        delete_on_read=False,
+                        consumers=["A", "B"],
+                    ),
+                    model_inputs=[
+                        # First input: f1 has values 0,2,4,6 and f2 has values 8,10,12,14
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 2, 4, 6, 8, 10, 12, 14]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 7, 8]),
+                        ),
+                        # Second input: f1 has values 8,10,12,14 and f2 has values 0,2,4,6
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([8, 10, 12, 14, 0, 2, 4, 6]),
+                            offsets=torch.tensor([0, 2, 2, 4, 6, 6, 8]),
+                        ),
+                        # Third input: f1 has values 0,1,2,3 and f2 has values 4,5,6,7
+                        ModelInput(
+                            keys=["f1", "f2"],
+                            values=torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]),
+                            offsets=torch.tensor([0, 0, 0, 4, 4, 4, 8]),
+                        ),
+                    ],
+                ),
+                MultipleOutputTestParams(
+                    consumer_access=["A", "B", "A"],
+                    expected_outputs=[
+                        # Expected output after first input: f1=[0,2,4,6] f2=[8,10,12,14] - Consumer A access
+                        {
+                            # Rank 0: sparse_table_1 gets f1 IDs [0,2,4,6], sparse_table_2 is empty
+                            # Rank 1: sparse_table_1 is empty, sparse_table_2 gets f2 IDs [8,10,12,14]
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([]),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor([]),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after second input: f1=[8,10,12,14] f2=[0,2,4,6] - Consumer B access
+                        {
+                            # Consumer B gets all accumulated data since last access (both inputs)
+                            # Rank 0: Both tables have accumulated IDs from both inputs
+                            # Rank 1: Both tables have accumulated IDs from both inputs
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor(range(8)),
+                            },
+                        },
+                        # Expected output after third input: f1=[0,1,2,3] f2=[4,5,6,7] - Consumer A access
+                        {
+                            # Consumer A gets delta since last access (inputs 2 and 3)
+                            # Rank 0: sparse_table_1 gets new f1 IDs [0,1,2,3], sparse_table_2 gets accumulated IDs
+                            # Rank 1: sparse_table_1 gets accumulated IDs, sparse_table_2 gets new f2 ID [0]
+                            "ebc.embedding_bags.sparse_table_1": {
+                                0: torch.tensor(range(5)),
+                                1: torch.tensor(range(8)),
+                            },
+                            "ebc.embedding_bags.sparse_table_2": {
+                                0: torch.tensor(range(8)),
+                                1: torch.tensor([0]),
+                            },
+                        },
+                    ],
+                ),
+            ),
+        ]
+    )
+    @skip_if_asan
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(torch.cuda.device_count() < 2, "test requires 2+ GPUs")
+    def test_multiple_consumers(
+        self,
+        _test_name: str,
+        test_params: ModelDeltaTrackerInputTestParams,
+        output_params: MultipleOutputTestParams,
+    ) -> None:
+        self._run_multi_process_test(
+            callable=_test_multiple_consumer,
             world_size=self.world_size,
             test_params=test_params,
             output_params=output_params,
@@ -1315,7 +1724,7 @@ def _test_multiple_get(
     rank: int,
     world_size: int,
     test_params: ModelDeltaTrackerInputTestParams,
-    output_params: MultipleGetOutputTestParams,
+    output_params: MultipleOutputTestParams,
 ) -> None:
     """
     Test that verifies the behavior of getting delta_rows multiple times with different inputs.
@@ -1385,3 +1794,68 @@ def _test_multiple_get(
                             expected_emb[expected_ids]
                         )
                     )
+
+
+def _test_multiple_consumer(
+    rank: int,
+    world_size: int,
+    test_params: ModelDeltaTrackerInputTestParams,
+    output_params: MultipleOutputTestParams,
+) -> None:
+    """
+    Test accessing delta rows with multiple consumers.
+
+    This test verifies that multiple consumers can independently track and retrieve
+    delta embedding using delta tracker. Each consumer maintains its own batch index
+    and retrieval state, allowing them to get different delta data based on when they
+    last accessed the tracker.
+
+    """
+    with MultiProcessContext(
+        rank=rank,
+        world_size=world_size,
+        backend="nccl" if torch.cuda.is_available() else "gloo",
+    ) as ctx:
+        dt_model, baseline_model = get_models(
+            rank=rank,
+            world_size=world_size,
+            ctx=ctx,
+            embedding_config_type=test_params.embedding_config_type,
+            tables=test_params.embedding_tables,
+            config=test_params.model_tracker_config,
+        )
+        features_list = model_input_generator(test_params.model_inputs, rank)
+        dt = dt_model.get_model_tracker()
+        table_fqns = dt.fqn_to_feature_names().keys()
+        table_fqns_list = list(table_fqns)
+
+        for i, (features, expected_output, consumer) in enumerate(
+            zip(
+                features_list,
+                output_params.expected_outputs,
+                output_params.consumer_access,
+            )
+        ):
+            # Process the input
+            tracked_out = dt_model(features)
+            baseline_out = baseline_model(features)
+            unittest.TestCase().assertTrue(tracked_out.allclose(baseline_out))
+            tracked_out.sum().backward()
+            baseline_out.sum().backward()
+            delta_rows = dt.get_delta_ids(consumer=consumer)
+
+            # Verify that the current batch index is correct
+            unittest.TestCase().assertTrue(dt.curr_batch_idx, i + 1)
+
+            for table_fqn in table_fqns_list:
+                expected_ids = torch.tensor(
+                    expected_output[table_fqn][rank].detach().clone(),
+                    dtype=torch.long,
+                    device=torch.device(f"cuda:{rank}"),
+                )
+                returned = delta_rows[table_fqn]
+                unittest.TestCase().assertTrue(
+                    returned.shape == expected_ids.shape
+                    and returned.allclose(expected_ids),
+                    f"{i=}, {table_fqn=}, mismatch {returned=} vs {expected_ids=}",
+                )
