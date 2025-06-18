@@ -8,7 +8,7 @@
 # pyre-strict
 import unittest
 from dataclasses import dataclass, field
-from typing import cast, Dict, List, Optional, Tuple, Type, Union
+from typing import cast, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 import torch
 import torchrec
@@ -45,37 +45,22 @@ from torchrec.test_utils import skip_if_asan
 NUM_EMBEDDINGS: int = 16
 EMBEDDING_DIM: int = 256
 
-HAS_2_GPU: bool = torch.cuda.device_count() >= 2
-HAS_1_GPU: bool = torch.cuda.device_count() >= 1
-
 
 def generate_test_models(
     embedding_config_type: Union[Type[EmbeddingConfig], Type[EmbeddingBagConfig]],
-    tables: Dict[str, EmbeddingTableProps],
+    tables: Iterable[EmbeddingTableProps],
 ) -> nn.Module:
     return (
         TestECModel(
             tables=[
-                EmbeddingConfig(
-                    name=table_name,
-                    embedding_dim=table.embedding_dim,
-                    num_embeddings=table.num_embeddings,
-                    feature_names=table.feature_names,
-                )
-                for table_name, table in tables.items()
+                cast(EmbeddingConfig, table.embedding_table_config) for table in tables
             ]
         )
         if embedding_config_type == EmbeddingConfig
         else TestEBCModel(
             tables=[
-                EmbeddingBagConfig(
-                    name=table_name,
-                    embedding_dim=table.embedding_dim,
-                    num_embeddings=table.num_embeddings,
-                    feature_names=table.feature_names,
-                    pooling=table.pooling,
-                )
-                for table_name, table in tables.items()
+                cast(EmbeddingBagConfig, table.embedding_table_config)
+                for table in tables
             ]
         )
     )
@@ -93,7 +78,7 @@ class ModelInput:
 class ModelDeltaTrackerInputTestParams:
     # input parameters
     embedding_config_type: Union[Type[EmbeddingConfig], Type[EmbeddingBagConfig]]
-    embedding_tables: Dict[str, EmbeddingTableProps]
+    embedding_tables: List[EmbeddingTableProps]
     fqns_to_skip: List[str] = field(default_factory=list)
     model_inputs: List[ModelInput] = field(default_factory=list)
     model_tracker_config: Optional[ModelTrackerConfig] = None
@@ -134,13 +119,13 @@ def get_models(
     world_size: int,
     ctx: MultiProcessContext,
     embedding_config_type: Union[Type[EmbeddingConfig], Type[EmbeddingBagConfig]],
-    embedding_tables: Dict[str, EmbeddingTableProps],
+    tables: Iterable[EmbeddingTableProps],
     optimizer_type: OptimType = OptimType.ADAM,
     config: Optional[ModelTrackerConfig] = None,
 ) -> Tuple[DistributedModelParallel, DistributedModelParallel]:
     # Create the model
     torch.manual_seed(0)
-    test_model = generate_test_models(embedding_config_type, embedding_tables)
+    test_model = generate_test_models(embedding_config_type, tables)
 
     # Set up device
     if torch.cuda.is_available():
@@ -152,7 +137,7 @@ def get_models(
     # Create planner and sharders
     planner = EmbeddingShardingPlanner(
         topology=Topology(world_size, "cuda"),
-        constraints=generate_planner_constraints(embedding_tables),
+        constraints=generate_planner_constraints(tables),
     )
     sharders = [
         cast(
@@ -188,7 +173,7 @@ def get_models(
     )
 
     torch.manual_seed(0)
-    baseline_module = generate_test_models(embedding_config_type, embedding_tables)
+    baseline_module = generate_test_models(embedding_config_type, tables)
     baseline_dmp = DistributedModelParallel(
         module=baseline_module,
         device=device,
@@ -213,22 +198,26 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "EC_model_test",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.NONE,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f4", "f5", "f6"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f4", "f5", "f6"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={
@@ -241,22 +230,28 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "EBC_model_test",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingBagConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.SUM,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f4", "f5", "f6"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f4", "f5", "f6"],
-                            pooling=PoolingType.SUM,
                         ),
-                    },
+                    ],
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={
@@ -269,22 +264,26 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "EC_model_test_with_duplicate_feature_names",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.NONE,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f3", "f4", "f5"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f3", "f4", "f5"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                 ),
                 FqnToFeatureNamesOutputTestParams(
                     expected_fqn_to_feature_names={
@@ -297,22 +296,28 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "fqns_to_skip_table_name",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingBagConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.SUM,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f4", "f5", "f6"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f4", "f5", "f6"],
-                            pooling=PoolingType.SUM,
                         ),
-                    },
+                    ],
                     fqns_to_skip=["sparse_table_1"],
                 ),
                 FqnToFeatureNamesOutputTestParams(
@@ -325,22 +330,28 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "fqns_to_skip_mid_fqn",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingBagConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.SUM,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f4", "f5", "f6"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f4", "f5", "f6"],
-                            pooling=PoolingType.SUM,
                         ),
-                    },
+                    ],
                     fqns_to_skip=["embedding_bags"],
                 ),
                 FqnToFeatureNamesOutputTestParams(
@@ -351,22 +362,26 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "fqns_to_skip_parent_fqn",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.NONE,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f3", "f4", "f5"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f3", "f4", "f5"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                     fqns_to_skip=["ec"],
                 ),
                 FqnToFeatureNamesOutputTestParams(
@@ -376,7 +391,8 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
         ]
     )
     @skip_if_asan
-    @unittest.skipUnless(HAS_1_GPU, reason="Test requires at least 1 GPU")
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(torch.cuda.device_count() < 1, "test requires 1+ GPUs")
     def test_fqn_to_feature_names(
         self,
         _test_name: str,
@@ -396,15 +412,17 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "get_model_tracker",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "table_fqn_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="table_fqn_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                     fqns_to_skip=[],
                 ),
                 TrackerNotInitOutputTestParams(
@@ -415,15 +433,17 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "get_delta",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "table_fqn_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="table_fqn_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2", "f3"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2", "f3"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                     fqns_to_skip=[],
                 ),
                 TrackerNotInitOutputTestParams(
@@ -433,7 +453,8 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
         ]
     )
     @skip_if_asan
-    @unittest.skipUnless(HAS_1_GPU, reason="Test requires at least 1 GPU")
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(torch.cuda.device_count() < 1, "test requires 1+ GPUs")
     def test_tracker_not_initialized(
         self,
         _test_name: str,
@@ -453,22 +474,26 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "test_dup_with_EC_and_default_consumer",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1"],
-                            pooling=PoolingType.NONE,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f2"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                     model_tracker_config=ModelTrackerConfig(
                         tracking_mode=TrackingMode.ID_ONLY,
                         delete_on_read=True,
@@ -496,22 +521,28 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "test_dup_with_EBC_and_default_consumer",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingBagConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1"],
-                            pooling=PoolingType.SUM,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f2"],
-                            pooling=PoolingType.SUM,
                         ),
-                    },
+                    ],
                     model_tracker_config=ModelTrackerConfig(
                         tracking_mode=TrackingMode.ID_ONLY,
                         delete_on_read=True,
@@ -539,22 +570,26 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "test_multi_feature_per_table_EC",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2"],
-                            pooling=PoolingType.NONE,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f3", "f4"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f3", "f4"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                     model_tracker_config=ModelTrackerConfig(
                         tracking_mode=TrackingMode.ID_ONLY,
                         delete_on_read=True,
@@ -576,22 +611,28 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "test_multi_feature_per_table_EBC",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingBagConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2"],
-                            pooling=PoolingType.SUM,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f3", "f4"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f3", "f4"],
-                            pooling=PoolingType.SUM,
                         ),
-                    },
+                    ],
                     model_tracker_config=ModelTrackerConfig(
                         tracking_mode=TrackingMode.ID_ONLY,
                         delete_on_read=True,
@@ -612,7 +653,11 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
         ]
     )
     @skip_if_asan
-    @unittest.skipUnless(HAS_2_GPU, reason="Distributed test requires at least 2 GPUs")
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2,
+        "Distributed test requires at least 2 GPUs",
+    )
     def test_tracker_id_mode(
         self,
         _test_name: str,
@@ -630,22 +675,26 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "test_dup_with_EC_and_default_consumer",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1"],
-                            pooling=PoolingType.NONE,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f2"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                     model_tracker_config=ModelTrackerConfig(
                         tracking_mode=TrackingMode.EMBEDDING,
                         delete_on_read=True,
@@ -674,22 +723,26 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "test_multi_feature_per_table_EC",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1", "f2"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1", "f2"],
-                            pooling=PoolingType.NONE,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f3", "f4"],
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f3", "f4"],
-                            pooling=PoolingType.NONE,
                         ),
-                    },
+                    ],
                     model_tracker_config=ModelTrackerConfig(
                         tracking_mode=TrackingMode.EMBEDDING,
                         delete_on_read=True,
@@ -713,22 +766,28 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
                 "assert_on_validation",
                 ModelDeltaTrackerInputTestParams(
                     embedding_config_type=EmbeddingBagConfig,
-                    embedding_tables={
-                        "sparse_table_1": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                    embedding_tables=[
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_1",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f1"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f1"],
-                            pooling=PoolingType.SUM,
                         ),
-                        "sparse_table_2": EmbeddingTableProps(
-                            num_embeddings=NUM_EMBEDDINGS,
-                            embedding_dim=EMBEDDING_DIM,
+                        EmbeddingTableProps(
+                            embedding_table_config=EmbeddingBagConfig(
+                                name="sparse_table_2",
+                                num_embeddings=NUM_EMBEDDINGS,
+                                embedding_dim=EMBEDDING_DIM,
+                                feature_names=["f2"],
+                                pooling=PoolingType.SUM,
+                            ),
                             sharding=ShardingType.ROW_WISE,
-                            feature_names=["f2"],
-                            pooling=PoolingType.SUM,
                         ),
-                    },
+                    ],
                     model_tracker_config=ModelTrackerConfig(
                         tracking_mode=TrackingMode.EMBEDDING,
                         delete_on_read=True,
@@ -758,7 +817,11 @@ class ModelDeltaTrackerTest(MultiProcessTestBase):
         ]
     )
     @skip_if_asan
-    @unittest.skipUnless(HAS_2_GPU, reason="Distributed test requires at least 2 GPUs")
+    # pyre-fixme[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() < 2,
+        "Distributed test requires at least 2 GPUs",
+    )
     def test_tracker_embedding_mode(
         self,
         _test_name: str,
@@ -790,7 +853,7 @@ def _test_fqn_to_feature_names(
             world_size=world_size,
             ctx=ctx,
             embedding_config_type=input_params.embedding_config_type,
-            embedding_tables=input_params.embedding_tables,
+            tables=input_params.embedding_tables,
             config=ModelTrackerConfig(
                 tracking_mode=TrackingMode.ID_ONLY,
                 delete_on_read=True,
@@ -821,7 +884,7 @@ def _test_tracker_init(
             world_size=world_size,
             ctx=ctx,
             embedding_config_type=input_params.embedding_config_type,
-            embedding_tables=input_params.embedding_tables,
+            tables=input_params.embedding_tables,
             config=None,
         )
         with unittest.TestCase().assertRaisesRegex(
@@ -847,7 +910,7 @@ def _test_id_mode(
             world_size=world_size,
             ctx=ctx,
             embedding_config_type=test_params.embedding_config_type,
-            embedding_tables=test_params.embedding_tables,
+            tables=test_params.embedding_tables,
             config=test_params.model_tracker_config,
         )
         features_list = model_input_generator(test_params.model_inputs, rank)
@@ -931,7 +994,7 @@ def _test_embedding_mode(
                     world_size=world_size,
                     ctx=ctx,
                     embedding_config_type=test_params.embedding_config_type,
-                    embedding_tables=test_params.embedding_tables,
+                    tables=test_params.embedding_tables,
                     config=test_params.model_tracker_config,
                 )
         else:
@@ -940,7 +1003,7 @@ def _test_embedding_mode(
                 world_size=world_size,
                 ctx=ctx,
                 embedding_config_type=test_params.embedding_config_type,
-                embedding_tables=test_params.embedding_tables,
+                tables=test_params.embedding_tables,
                 config=test_params.model_tracker_config,
             )
 
