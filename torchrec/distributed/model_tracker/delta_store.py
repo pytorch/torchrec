@@ -21,29 +21,27 @@ from torchrec.distributed.utils import none_throws
 
 def _compute_unique_rows(
     ids: List[torch.Tensor],
-    embeddings: Optional[List[torch.Tensor]],
+    states: Optional[List[torch.Tensor]],
     mode: EmbdUpdateMode,
 ) -> DeltaRows:
     r"""
     To calculate unique ids and embeddings
     """
     if mode == EmbdUpdateMode.NONE:
-        assert (
-            embeddings is None
-        ), f"{mode=} == EmbdUpdateMode.NONE but received embeddings"
+        assert states is None, f"{mode=} == EmbdUpdateMode.NONE but received embeddings"
         unique_ids = torch.cat(ids).unique(return_inverse=False)
-        return DeltaRows(ids=unique_ids, embeddings=None)
+        return DeltaRows(ids=unique_ids, states=None)
     else:
         assert (
-            embeddings is not None
+            states is not None
         ), f"{mode=} != EmbdUpdateMode.NONE but received no embeddings"
 
         cat_ids = torch.cat(ids)
-        cat_embeddings = torch.cat(embeddings)
+        cat_states = torch.cat(states)
 
         if mode == EmbdUpdateMode.LAST:
             cat_ids = cat_ids.flip(dims=[0])
-            cat_embeddings = cat_embeddings.flip(dims=[0])
+            cat_states = cat_states.flip(dims=[0])
 
         # Get unique ids and inverse mapping (each element's index in unique_ids).
         unique_ids, inverse = cat_ids.unique(sorted=False, return_inverse=True)
@@ -65,8 +63,8 @@ def _compute_unique_rows(
         )
 
         # Use first occurrence indices to select corresponding embedding row.
-        unique_embedings = cat_embeddings[first_occurrence]
-        return DeltaRows(ids=unique_ids, embeddings=unique_embedings)
+        unique_states = cat_states[first_occurrence]
+        return DeltaRows(ids=unique_ids, states=unique_states)
 
 
 class DeltaStore:
@@ -90,11 +88,11 @@ class DeltaStore:
         batch_idx: int,
         table_fqn: str,
         ids: torch.Tensor,
-        embeddings: Optional[torch.Tensor],
+        states: Optional[torch.Tensor],
     ) -> None:
         table_fqn_lookup = self.per_fqn_lookups.get(table_fqn, [])
         table_fqn_lookup.append(
-            IndexedLookup(batch_idx=batch_idx, ids=ids, embeddings=embeddings)
+            IndexedLookup(batch_idx=batch_idx, ids=ids, states=states)
         )
         self.per_fqn_lookups[table_fqn] = table_fqn_lookup
 
@@ -132,13 +130,13 @@ class DeltaStore:
                 new_per_fqn_lookups[table_fqn] = lookups
                 continue
             ids = [lookup.ids for lookup in lookups_to_compact]
-            embeddings = (
-                [none_throws(lookup.embeddings) for lookup in lookups_to_compact]
+            states = (
+                [none_throws(lookup.states) for lookup in lookups_to_compact]
                 if self.embdUpdateMode != EmbdUpdateMode.NONE
                 else None
             )
             delta_rows = _compute_unique_rows(
-                ids=ids, embeddings=embeddings, mode=self.embdUpdateMode
+                ids=ids, states=states, mode=self.embdUpdateMode
             )
             new_per_fqn_lookups[table_fqn] = (
                 lookups[:index_l]
@@ -146,7 +144,7 @@ class DeltaStore:
                     IndexedLookup(
                         batch_idx=start_idx,
                         ids=delta_rows.ids,
-                        embeddings=delta_rows.embeddings,
+                        states=delta_rows.states,
                     )
                 ]
                 + lookups[index_r:]
@@ -163,9 +161,9 @@ class DeltaStore:
             compact_ids = [
                 lookup.ids for lookup in lookups if lookup.batch_idx >= from_idx
             ]
-            compact_embeddings = (
+            compact_states = (
                 [
-                    none_throws(lookup.embeddings)
+                    none_throws(lookup.states)
                     for lookup in lookups
                     if lookup.batch_idx >= from_idx
                 ]
@@ -174,6 +172,6 @@ class DeltaStore:
             )
 
             delta_per_table_fqn[table_fqn] = _compute_unique_rows(
-                ids=compact_ids, embeddings=compact_embeddings, mode=self.embdUpdateMode
+                ids=compact_ids, states=compact_states, mode=self.embdUpdateMode
             )
         return delta_per_table_fqn

@@ -55,12 +55,12 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1]),
-                                embeddings=torch.tensor([1]),
+                                states=torch.tensor([1]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([2]),
-                                embeddings=torch.tensor([2]),
+                                states=torch.tensor([2]),
                             ),
                         ]
                     },
@@ -76,22 +76,22 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1]),
-                                embeddings=torch.tensor([1]),
+                                states=torch.tensor([1]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([2]),
-                                embeddings=torch.tensor([2]),
+                                states=torch.tensor([2]),
                             ),
                             IndexedLookup(
                                 batch_idx=3,
                                 ids=torch.tensor([3]),
-                                embeddings=torch.tensor([3]),
+                                states=torch.tensor([3]),
                             ),
                             IndexedLookup(
                                 batch_idx=4,
                                 ids=torch.tensor([4]),
-                                embeddings=torch.tensor([4]),
+                                states=torch.tensor([4]),
                             ),
                         ]
                     },
@@ -101,12 +101,12 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=3,
                                 ids=torch.tensor([3]),
-                                embeddings=torch.tensor([3]),
+                                states=torch.tensor([3]),
                             ),
                             IndexedLookup(
                                 batch_idx=4,
                                 ids=torch.tensor([4]),
-                                embeddings=torch.tensor([4]),
+                                states=torch.tensor([4]),
                             ),
                         ]
                     },
@@ -120,17 +120,17 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=8,
                                 ids=torch.tensor([8]),
-                                embeddings=torch.tensor([8]),
+                                states=torch.tensor([8]),
                             ),
                             IndexedLookup(
                                 batch_idx=10,
                                 ids=torch.tensor([10]),
-                                embeddings=torch.tensor([10]),
+                                states=torch.tensor([10]),
                             ),
                             IndexedLookup(
                                 batch_idx=13,
                                 ids=torch.tensor([13]),
-                                embeddings=torch.tensor([13]),
+                                states=torch.tensor([13]),
                             ),
                         ]
                     },
@@ -140,7 +140,7 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=13,
                                 ids=torch.tensor([13]),
-                                embeddings=torch.tensor([13]),
+                                states=torch.tensor([13]),
                             ),
                         ]
                     },
@@ -154,19 +154,19 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=9,
                                 ids=torch.tensor([9]),
-                                embeddings=torch.tensor([9]),
+                                states=torch.tensor([9]),
                             ),
                         ],
                         "table_fqn_2": [
                             IndexedLookup(
                                 batch_idx=9,
                                 ids=torch.tensor([9]),
-                                embeddings=torch.tensor([9]),
+                                states=torch.tensor([9]),
                             ),
                             IndexedLookup(
                                 batch_idx=10,
                                 ids=torch.tensor([10]),
-                                embeddings=torch.tensor([10]),
+                                states=torch.tensor([10]),
                             ),
                         ],
                     },
@@ -177,7 +177,7 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=10,
                                 ids=torch.tensor([10]),
-                                embeddings=torch.tensor([10]),
+                                states=torch.tensor([10]),
                             ),
                         ],
                     },
@@ -195,7 +195,7 @@ class DeltaStoreTest(unittest.TestCase):
                     batch_idx=lookup.batch_idx,
                     table_fqn=table_fqn,
                     ids=lookup.ids,
-                    embeddings=lookup.embeddings,
+                    states=lookup.states,
                 )
         # Before deletion, check that the lookups are as expected
         self.assertEqual(
@@ -233,7 +233,7 @@ class DeltaStoreTest(unittest.TestCase):
                     embdUpdateMode=EmbdUpdateMode.NONE,
                     expected_output=DeltaRows(
                         ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-                        embeddings=None,
+                        states=None,
                     ),
                     expect_assert=False,
                 ),
@@ -249,7 +249,7 @@ class DeltaStoreTest(unittest.TestCase):
                     embdUpdateMode=EmbdUpdateMode.NONE,
                     expected_output=DeltaRows(
                         ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-                        embeddings=None,
+                        states=None,
                     ),
                     expect_assert=False,
                 ),
@@ -269,7 +269,7 @@ class DeltaStoreTest(unittest.TestCase):
                     embdUpdateMode=EmbdUpdateMode.NONE,
                     expected_output=DeltaRows(
                         ids=torch.tensor([]),
-                        embeddings=None,
+                        states=None,
                     ),
                     expect_assert=True,
                 ),
@@ -286,7 +286,7 @@ class DeltaStoreTest(unittest.TestCase):
                     embdUpdateMode=EmbdUpdateMode.FIRST,
                     expected_output=DeltaRows(
                         ids=torch.tensor([]),
-                        embeddings=None,
+                        states=None,
                     ),
                     expect_assert=True,
                 ),
@@ -305,9 +305,7 @@ class DeltaStoreTest(unittest.TestCase):
                     embdUpdateMode=EmbdUpdateMode.FIRST,
                     expected_output=DeltaRows(
                         ids=torch.tensor([1, 2, 3, 4, 5, 6]),
-                        embeddings=torch.tensor(
-                            [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
-                        ),
+                        states=torch.tensor([[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]),
                     ),
                     expect_assert=False,
                 ),
@@ -327,7 +325,7 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_output=DeltaRows(
                         ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
                         # First occurrence of each ID is kept
-                        embeddings=torch.tensor(
+                        states=torch.tensor(
                             [
                                 [10.0],
                                 [20.0],
@@ -357,7 +355,7 @@ class DeltaStoreTest(unittest.TestCase):
                     embdUpdateMode=EmbdUpdateMode.LAST,
                     expected_output=DeltaRows(
                         ids=torch.tensor([]),
-                        embeddings=None,
+                        states=None,
                     ),
                     expect_assert=True,
                 ),
@@ -376,9 +374,7 @@ class DeltaStoreTest(unittest.TestCase):
                     embdUpdateMode=EmbdUpdateMode.LAST,
                     expected_output=DeltaRows(
                         ids=torch.tensor([1, 2, 3, 4, 5, 6]),
-                        embeddings=torch.tensor(
-                            [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
-                        ),
+                        states=torch.tensor([[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]),
                     ),
                     expect_assert=False,
                 ),
@@ -398,7 +394,7 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_output=DeltaRows(
                         ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
                         # Last occurrence of each ID is kept
-                        embeddings=torch.tensor(
+                        states=torch.tensor(
                             [
                                 [10.0],
                                 [25.0],
@@ -436,14 +432,10 @@ class DeltaStoreTest(unittest.TestCase):
             self.assertTrue(torch.equal(result.ids, test_params.expected_output.ids))
             self.assertTrue(
                 torch.equal(
+                    (result.states if result.states is not None else torch.empty(0)),
                     (
-                        result.embeddings
-                        if result.embeddings is not None
-                        else torch.empty(0)
-                    ),
-                    (
-                        test_params.expected_output.embeddings
-                        if test_params.expected_output.embeddings is not None
+                        test_params.expected_output.states
+                        if test_params.expected_output.states is not None
                         else torch.empty(0)
                     ),
                 )
@@ -482,7 +474,7 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=3,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=None,
+                                states=None,
                             ),
                         ]
                     },
@@ -491,7 +483,7 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_delta={
                         "table_fqn_1": DeltaRows(
                             ids=torch.tensor([1, 2, 3]),
-                            embeddings=None,
+                            states=None,
                         ),
                     },
                 ),
@@ -505,17 +497,17 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=None,
+                                states=None,
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([4, 5, 6]),
-                                embeddings=None,
+                                states=None,
                             ),
                             IndexedLookup(
                                 batch_idx=3,
                                 ids=torch.tensor([7, 8, 9]),
-                                embeddings=None,
+                                states=None,
                             ),
                         ]
                     },
@@ -524,7 +516,7 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_delta={
                         "table_fqn_1": DeltaRows(
                             ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9]),
-                            embeddings=None,
+                            states=None,
                         ),
                     },
                 ),
@@ -538,22 +530,22 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=None,
+                                states=None,
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([3, 4, 5]),
-                                embeddings=None,
+                                states=None,
                             ),
                             IndexedLookup(
                                 batch_idx=3,
                                 ids=torch.tensor([5, 6, 7]),
-                                embeddings=None,
+                                states=None,
                             ),
                             IndexedLookup(
                                 batch_idx=4,
                                 ids=torch.tensor([7, 8, 9]),
-                                embeddings=None,
+                                states=None,
                             ),
                         ]
                     },
@@ -562,7 +554,7 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_delta={
                         "table_fqn_1": DeltaRows(
                             ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9]),
-                            embeddings=None,
+                            states=None,
                         ),
                     },
                 ),
@@ -577,22 +569,22 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=torch.tensor([[10.0], [20.0], [30.0]]),
+                                states=torch.tensor([[10.0], [20.0], [30.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([3, 4, 5]),
-                                embeddings=torch.tensor([[35.0], [40.0], [50.0]]),
+                                states=torch.tensor([[35.0], [40.0], [50.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=3,
                                 ids=torch.tensor([5, 6, 7]),
-                                embeddings=torch.tensor([[55.0], [60.0], [70.0]]),
+                                states=torch.tensor([[55.0], [60.0], [70.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=4,
                                 ids=torch.tensor([7, 8, 9]),
-                                embeddings=torch.tensor([[75.0], [80.0], [90.0]]),
+                                states=torch.tensor([[75.0], [80.0], [90.0]]),
                             ),
                         ]
                     },
@@ -601,7 +593,7 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_delta={
                         "table_fqn_1": DeltaRows(
                             ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9]),
-                            embeddings=torch.tensor(
+                            states=torch.tensor(
                                 [
                                     [10.0],
                                     [20.0],
@@ -627,24 +619,24 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=torch.tensor([[10.0], [20.0], [30.0]]),
+                                states=torch.tensor([[10.0], [20.0], [30.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([3, 4, 5]),
-                                embeddings=torch.tensor([[35.0], [40.0], [50.0]]),
+                                states=torch.tensor([[35.0], [40.0], [50.0]]),
                             ),
                         ],
                         "table_fqn_2": [
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([10, 20, 30]),
-                                embeddings=torch.tensor([[100.0], [200.0], [300.0]]),
+                                states=torch.tensor([[100.0], [200.0], [300.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([30, 40, 50]),
-                                embeddings=torch.tensor([[350.0], [400.0], [500.0]]),
+                                states=torch.tensor([[350.0], [400.0], [500.0]]),
                             ),
                         ],
                     },
@@ -653,13 +645,13 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_delta={
                         "table_fqn_1": DeltaRows(
                             ids=torch.tensor([1, 2, 3, 4, 5]),
-                            embeddings=torch.tensor(
+                            states=torch.tensor(
                                 [[10.0], [20.0], [30.0], [40.0], [50.0]]
                             ),
                         ),
                         "table_fqn_2": DeltaRows(
                             ids=torch.tensor([10, 20, 30, 40, 50]),
-                            embeddings=torch.tensor(
+                            states=torch.tensor(
                                 [[100.0], [200.0], [300.0], [400.0], [500.0]]
                             ),
                         ),
@@ -676,22 +668,22 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=torch.tensor([[10.0], [20.0], [30.0]]),
+                                states=torch.tensor([[10.0], [20.0], [30.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([3, 4, 5]),
-                                embeddings=torch.tensor([[35.0], [40.0], [50.0]]),
+                                states=torch.tensor([[35.0], [40.0], [50.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=3,
                                 ids=torch.tensor([5, 6, 7]),
-                                embeddings=torch.tensor([[55.0], [60.0], [70.0]]),
+                                states=torch.tensor([[55.0], [60.0], [70.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=4,
                                 ids=torch.tensor([7, 8, 9]),
-                                embeddings=torch.tensor([[75.0], [80.0], [90.0]]),
+                                states=torch.tensor([[75.0], [80.0], [90.0]]),
                             ),
                         ]
                     },
@@ -700,7 +692,7 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_delta={
                         "table_fqn_1": DeltaRows(
                             ids=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9]),
-                            embeddings=torch.tensor(
+                            states=torch.tensor(
                                 [
                                     [10.0],
                                     [20.0],
@@ -726,24 +718,24 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=torch.tensor([[10.0], [20.0], [30.0]]),
+                                states=torch.tensor([[10.0], [20.0], [30.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([3, 4, 5]),
-                                embeddings=torch.tensor([[35.0], [40.0], [50.0]]),
+                                states=torch.tensor([[35.0], [40.0], [50.0]]),
                             ),
                         ],
                         "table_fqn_2": [
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([10, 20, 30]),
-                                embeddings=torch.tensor([[100.0], [200.0], [300.0]]),
+                                states=torch.tensor([[100.0], [200.0], [300.0]]),
                             ),
                             IndexedLookup(
                                 batch_idx=2,
                                 ids=torch.tensor([30, 40, 50]),
-                                embeddings=torch.tensor([[350.0], [400.0], [500.0]]),
+                                states=torch.tensor([[350.0], [400.0], [500.0]]),
                             ),
                         ],
                     },
@@ -752,13 +744,13 @@ class DeltaStoreTest(unittest.TestCase):
                     expected_delta={
                         "table_fqn_1": DeltaRows(
                             ids=torch.tensor([1, 2, 3, 4, 5]),
-                            embeddings=torch.tensor(
+                            states=torch.tensor(
                                 [[10.0], [20.0], [35.0], [40.0], [50.0]]
                             ),
                         ),
                         "table_fqn_2": DeltaRows(
                             ids=torch.tensor([10, 20, 30, 40, 50]),
-                            embeddings=torch.tensor(
+                            states=torch.tensor(
                                 [[100.0], [200.0], [350.0], [400.0], [500.0]]
                             ),
                         ),
@@ -775,7 +767,7 @@ class DeltaStoreTest(unittest.TestCase):
                             IndexedLookup(
                                 batch_idx=1,
                                 ids=torch.tensor([1, 2, 3]),
-                                embeddings=None,
+                                states=None,
                             ),
                         ]
                     },
@@ -801,7 +793,7 @@ class DeltaStoreTest(unittest.TestCase):
                     batch_idx=lookup.batch_idx,
                     table_fqn=table_fqn,
                     ids=lookup.ids,
-                    embeddings=lookup.embeddings,
+                    states=lookup.states,
                 )
         if test_params.expect_assert:
             # If we expect an assertion error, check that it's raised
@@ -821,14 +813,12 @@ class DeltaStoreTest(unittest.TestCase):
             for table_fqn, delta_rows in test_params.expected_delta.items():
                 # Comparing ids
                 self.assertTrue(delta_result[table_fqn].ids.allclose(delta_rows.ids))
-                # Comparing embeddings
+                # Comparing embeddings/states
                 if (
-                    delta_rows.embeddings is not None
-                    and delta_result[table_fqn].embeddings is not None
+                    delta_rows.states is not None
+                    and delta_result[table_fqn].states is not None
                 ):
                     self.assertTrue(
                         # pyre-ignore
-                        delta_result[table_fqn].embeddings.allclose(
-                            delta_rows.embeddings
-                        )
+                        delta_result[table_fqn].states.allclose(delta_rows.states)
                     )
