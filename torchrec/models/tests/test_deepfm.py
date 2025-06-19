@@ -11,8 +11,14 @@ import unittest
 
 import torch
 from torch.testing import FileCheck  # @manual
+from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.fx import symbolic_trace, Tracer
-from torchrec.models.deepfm import DenseArch, FMInteractionArch, SimpleDeepFMNN
+from torchrec.models.deepfm import (
+    DenseArch,
+    FMInteractionArch,
+    SimpleDeepFMNN,
+    SimpleDeepFMNNWrapper,
+)
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
@@ -207,6 +213,119 @@ class SimpleDeepFMNNTest(unittest.TestCase):
         scripted_gm = torch.jit.script(gm)
 
         logits = scripted_gm(features, sparse_features)
+        self.assertEqual(logits.size(), (B, 1))
+
+
+class SimpleDeepFMNNWrapperTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        B = 2
+        D = 8
+        num_dense_features = 100
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+
+        deepfm_wrapper = SimpleDeepFMNNWrapper(
+            num_dense_features=num_dense_features,
+            embedding_bag_collection=ebc,
+            hidden_layer_size=20,
+            deep_fm_dimension=5,
+        )
+
+        # Create ModelInput with both dense and sparse features
+        dense_features = torch.rand((B, num_dense_features))
+        sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f3", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 3]),
+            offsets=torch.tensor([0, 2, 4, 6, 8, 10, 11]),
+        )
+
+        model_input = ModelInput(
+            float_features=dense_features,
+            idlist_features=sparse_features,
+            idscore_features=None,
+            label=torch.rand((B,)),
+        )
+
+        logits = deepfm_wrapper(model_input)
+        self.assertEqual(logits.size(), (B, 1))
+
+    def test_no_sparse_features(self) -> None:
+        B = 2
+        D = 8
+        num_dense_features = 100
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1"]
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config])
+
+        deepfm_wrapper = SimpleDeepFMNNWrapper(
+            num_dense_features=num_dense_features,
+            embedding_bag_collection=ebc,
+            hidden_layer_size=20,
+            deep_fm_dimension=5,
+        )
+
+        # Create ModelInput with empty sparse features that match expected feature names
+        dense_features = torch.rand((B, num_dense_features))
+        empty_sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1"],
+            values=torch.tensor([], dtype=torch.long),
+            offsets=torch.tensor([0] * (B + 1), dtype=torch.long),
+        )
+
+        model_input = ModelInput(
+            float_features=dense_features,
+            idlist_features=empty_sparse_features,
+            idscore_features=None,
+            label=torch.rand((B,)),
+        )
+
+        logits = deepfm_wrapper(model_input)
+        self.assertEqual(logits.size(), (B, 1))
+
+    def test_empty_sparse_features(self) -> None:
+        B = 2
+        D = 8
+        num_dense_features = 100
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1"]
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config])
+
+        deepfm_wrapper = SimpleDeepFMNNWrapper(
+            num_dense_features=num_dense_features,
+            embedding_bag_collection=ebc,
+            hidden_layer_size=20,
+            deep_fm_dimension=5,
+        )
+
+        # Create ModelInput with empty sparse features that match expected feature names
+        dense_features = torch.rand((B, num_dense_features))
+        empty_sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1"],
+            values=torch.tensor([], dtype=torch.long),
+            offsets=torch.tensor([0] * (B + 1), dtype=torch.long),
+        )
+
+        model_input = ModelInput(
+            float_features=dense_features,
+            idlist_features=empty_sparse_features,
+            idscore_features=None,
+            label=torch.rand((B,)),
+        )
+
+        logits = deepfm_wrapper(model_input)
         self.assertEqual(logits.size(), (B, 1))
 
 

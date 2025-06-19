@@ -13,6 +13,7 @@ import torch
 from torch import nn
 from torch.testing import FileCheck  # @manual
 from torchrec.datasets.utils import Batch
+from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.fx import symbolic_trace
 from torchrec.ir.serializer import JsonSerializer
 from torchrec.ir.utils import decapsulate_ir_modules, encapsulate_ir_modules
@@ -23,6 +24,7 @@ from torchrec.models.dlrm import (
     DLRM_DCN,
     DLRM_Projection,
     DLRMTrain,
+    DLRMWrapper,
     InteractionArch,
     InteractionDCNArch,
     InteractionProjectionArch,
@@ -1283,3 +1285,116 @@ class DLRMExampleTest(unittest.TestCase):
         deserialized_logits = deserialized_model(features, sparse_features)
 
         self.assertEqual(deserialized_logits.size(), (B, 1))
+
+
+class DLRMWrapperTest(unittest.TestCase):
+    def test_basic(self) -> None:
+        B = 2
+        D = 8
+        dense_in_features = 100
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1", "f3"]
+        )
+        eb2_config = EmbeddingBagConfig(
+            name="t2",
+            embedding_dim=D,
+            num_embeddings=100,
+            feature_names=["f2"],
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config, eb2_config])
+
+        dlrm_wrapper = DLRMWrapper(
+            embedding_bag_collection=ebc,
+            dense_in_features=dense_in_features,
+            dense_arch_layer_sizes=[20, D],
+            over_arch_layer_sizes=[5, 1],
+        )
+
+        # Create ModelInput with both dense and sparse features
+        dense_features = torch.rand((B, dense_in_features))
+        sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f3", "f2"],
+            values=torch.tensor([1, 2, 4, 5, 4, 3, 2, 9, 1, 2, 3]),
+            offsets=torch.tensor([0, 2, 4, 6, 8, 10, 11]),
+        )
+
+        model_input = ModelInput(
+            float_features=dense_features,
+            idlist_features=sparse_features,
+            idscore_features=None,
+            label=torch.rand((B,)),
+        )
+
+        logits = dlrm_wrapper(model_input)
+        self.assertEqual(logits.size(), (B, 1))
+
+    def test_no_sparse_features(self) -> None:
+        B = 2
+        D = 8
+        dense_in_features = 100
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1"]
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config])
+
+        dlrm_wrapper = DLRMWrapper(
+            embedding_bag_collection=ebc,
+            dense_in_features=dense_in_features,
+            dense_arch_layer_sizes=[20, D],
+            over_arch_layer_sizes=[5, 1],
+        )
+
+        # Create ModelInput with empty sparse features that match expected feature names
+        dense_features = torch.rand((B, dense_in_features))
+        empty_sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1"],
+            values=torch.tensor([], dtype=torch.long),
+            offsets=torch.tensor([0] * (B + 1), dtype=torch.long),
+        )
+
+        model_input = ModelInput(
+            float_features=dense_features,
+            idlist_features=empty_sparse_features,
+            idscore_features=None,
+            label=torch.rand((B,)),
+        )
+
+        logits = dlrm_wrapper(model_input)
+        self.assertEqual(logits.size(), (B, 1))
+
+    def test_empty_sparse_features(self) -> None:
+        B = 2
+        D = 8
+        dense_in_features = 100
+        eb1_config = EmbeddingBagConfig(
+            name="t1", embedding_dim=D, num_embeddings=100, feature_names=["f1"]
+        )
+
+        ebc = EmbeddingBagCollection(tables=[eb1_config])
+
+        dlrm_wrapper = DLRMWrapper(
+            embedding_bag_collection=ebc,
+            dense_in_features=dense_in_features,
+            dense_arch_layer_sizes=[20, D],
+            over_arch_layer_sizes=[5, 1],
+        )
+
+        # Create ModelInput with empty sparse features that match expected feature names
+        dense_features = torch.rand((B, dense_in_features))
+        empty_sparse_features = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1"],
+            values=torch.tensor([], dtype=torch.long),
+            offsets=torch.tensor([0] * (B + 1), dtype=torch.long),
+        )
+
+        model_input = ModelInput(
+            float_features=dense_features,
+            idlist_features=empty_sparse_features,
+            idscore_features=None,
+            label=torch.rand((B,)),
+        )
+
+        logits = dlrm_wrapper(model_input)
+        self.assertEqual(logits.size(), (B, 1))

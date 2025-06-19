@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 from torch import nn
 from torchrec.datasets.utils import Batch
+from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.modules.crossnet import LowRankCrossNet
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.mlp import MLP
@@ -899,3 +900,21 @@ class DLRMTrain(nn.Module):
         loss = self.loss_fn(logits, batch.labels.float())
 
         return loss, (loss.detach(), logits.detach(), batch.labels.detach())
+
+
+class DLRMWrapper(DLRM):
+    # pyre-ignore[14]
+    def forward(self, model_input: ModelInput) -> torch.Tensor:
+        """
+        Forward pass for the DLRMWrapper.
+
+        Args:
+            model_input (ModelInput): Contains dense and sparse features.
+
+        Returns:
+            torch.Tensor: Output tensor from the DLRM model.
+        """
+        return super().forward(
+            dense_features=model_input.float_features,
+            sparse_features=model_input.idlist_features,  # pyre-ignore[6]
+        )
