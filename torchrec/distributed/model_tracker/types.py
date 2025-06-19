@@ -17,23 +17,23 @@ import torch
 @dataclass
 class IndexedLookup:
     r"""
-    Data class for storing per batch lookedup ids and embeddings.
+    Data class for storing per batch lookedup ids and embeddings or optimizer states.
     """
 
     batch_idx: int
     ids: torch.Tensor
-    embeddings: Optional[torch.Tensor]
+    states: Optional[torch.Tensor]
 
 
 @dataclass
 class DeltaRows:
     r"""
-    Data class as an interface for returning and storing compacted ids and embeddings.
+    Data class as an interface for returning and storing compacted ids and embeddings or optimizer states.
     compact(List[IndexedLookup]) -> DeltaRows
     """
 
     ids: torch.Tensor
-    embeddings: Optional[torch.Tensor]
+    states: Optional[torch.Tensor]
 
 
 class TrackingMode(Enum):

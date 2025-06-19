@@ -1669,7 +1669,7 @@ def _test_embedding_mode(
                         delta_rows[table_fqns_list[0]].ids.allclose(expected_ids)
                     )
                     unittest.TestCase().assertTrue(
-                        none_throws(delta_rows[table_fqns_list[0]].embeddings).allclose(
+                        none_throws(delta_rows[table_fqns_list[0]].states).allclose(
                             orig_emb1[expected_ids]
                         )
                     )
@@ -1678,9 +1678,9 @@ def _test_embedding_mode(
                         0, delta_rows[table_fqns_list[1]].ids.numel()
                     )
                     unittest.TestCase().assertTrue(
-                        delta_rows[table_fqns_list[1]].embeddings is not None
+                        delta_rows[table_fqns_list[1]].states is not None
                         # pyre-ignore[16]:
-                        and delta_rows[table_fqns_list[1]].embeddings.numel() == 0,
+                        and delta_rows[table_fqns_list[1]].states.numel() == 0,
                     )
                 elif rank == 1:
                     # Rank 1: Second table has IDs and embeddings, first table is empty
@@ -1691,7 +1691,7 @@ def _test_embedding_mode(
                         delta_rows[table_fqns_list[1]].ids.allclose(expected_ids)
                     )
                     unittest.TestCase().assertTrue(
-                        none_throws(delta_rows[table_fqns_list[1]].embeddings).allclose(
+                        none_throws(delta_rows[table_fqns_list[1]].states).allclose(
                             orig_emb2[expected_ids]
                         )
                     )
@@ -1700,8 +1700,8 @@ def _test_embedding_mode(
                         0, delta_rows[table_fqns_list[0]].ids.numel()
                     )
                     unittest.TestCase().assertTrue(
-                        delta_rows[table_fqns_list[0]].embeddings is not None
-                        and delta_rows[table_fqns_list[0]].embeddings.numel() == 0,
+                        delta_rows[table_fqns_list[0]].states is not None
+                        and delta_rows[table_fqns_list[0]].states.numel() == 0,
                     )
 
             else:
@@ -1714,7 +1714,7 @@ def _test_embedding_mode(
                         delta_rows[table_fqn].ids.allclose(expected_ids)
                     )
                     unittest.TestCase().assertTrue(
-                        none_throws(delta_rows[table_fqn].embeddings).allclose(
+                        none_throws(delta_rows[table_fqn].states).allclose(
                             orig_emb[expected_ids]
                         )
                     )
@@ -1790,7 +1790,7 @@ def _test_multiple_get(
                 )
                 if test_params.embedding_config_type == EmbeddingConfig:
                     unittest.TestCase().assertTrue(
-                        none_throws(delta_rows[table_fqn].embeddings).allclose(
+                        none_throws(delta_rows[table_fqn].states).allclose(
                             expected_emb[expected_ids]
                         )
                     )
