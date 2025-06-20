@@ -38,36 +38,62 @@ class McEmbeddingCollectionAdapter(nn.Module):
 
     def __init__(
         self,
-        embedding_collection: EmbeddingCollection,
+        tables: List[EmbeddingConfig],
         input_hash_size: int,
         device: torch.device,
-        eviction_interval: int = 2,
+        world_size: int,
+        eviction_interval: int = 1,
         allow_in_place_embed_weight_update: bool = False,
+        use_mpzch: bool = False,
+        mpzch_num_buckets: Optional[int] = None,
     ) -> None:
         """
         INIT_DOC_STRING
         """
         super().__init__()
+        # create ec from table configs
+        ec = EmbeddingCollection(tables=tables, device=torch.device("meta"))
         # build dictionary for {table_name: table_config}
         mc_modules = {}
-        for table_name, table_config in embedding_collection.embedding_configs():
-            mc_modules[table_name] = MCHManagedCollisionModule(
-                zch_size=table_config.num_embeddings,
-                device=device,
-                input_hash_size=input_hash_size,
-                eviction_interval=eviction_interval,
-                eviction_policy=DistanceLFU_EvictionPolicy(),
+        for table_config in ec.embedding_configs():
+            table_name = table_config.name
+            if use_mpzch:
+                # if use MPZCH, create a HashZchManagedCollisionModule
+                mc_modules[table_name] = HashZchManagedCollisionModule(  # MPZCH
+                    is_inference=False,
+                    zch_size=(table_config.num_embeddings),
+                    input_hash_size=input_hash_size,
+                    device=device,
+                    total_num_buckets=(
+                        mpzch_num_buckets if mpzch_num_buckets else world_size
+                    ),  # total_num_buckets if not passed, use world_size, WORLD_SIZE should be a factor of total_num_buckets
+                    eviction_policy_name=HashZchEvictionPolicyName.SINGLE_TTL_EVICTION,  # defaultly using single ttl eviction policy
+                    eviction_config=HashZchEvictionConfig(
+                        features=table_config.feature_names,
+                        single_ttl=eviction_interval,
+                    ),
+                )
+            else:  # if not use MPZCH, create a MCHManagedCollisionModule using the sort ZCH algorithm
+                mc_modules[table_name] = MCHManagedCollisionModule(  # sort ZCH
+                    zch_size=table_config.num_embeddings,
+                    device=device,
+                    input_hash_size=input_hash_size,
+                    eviction_interval=eviction_interval,
+                    eviction_policy=DistanceLFU_EvictionPolicy(),
+                )  # NOTE: the benchmark for sort ZCH is not implemented yet
+        # create the mcebc module with the mc modules and the original ebc
+        self.mc_embedding_collection = (
+            ManagedCollisionEmbeddingCollection(  # ZCH or not
+                embedding_collection=ec,
+                managed_collision_collection=ManagedCollisionCollection(
+                    managed_collision_modules=mc_modules,
+                    embedding_configs=ec.embedding_configs(),
+                ),
+                allow_in_place_embed_weight_update=allow_in_place_embed_weight_update,
+                return_remapped_features=False,  # not return remapped features
             )
-        self.mc_embedding_collection = ManagedCollisionEmbeddingCollection(
-            embedding_collection=embedding_collection,
-            managed_collision_collection=ManagedCollisionCollection(
-                managed_collision_modules=mc_modules,
-                embedding_configs=embedding_collection.embedding_configs(),
-            ),
-            allow_in_place_embed_weight_update=allow_in_place_embed_weight_update,
-            return_remapped_features=True,  # not return remapped features
         )
-        self.remapped_ids = None  # to store remapped ids
+        self.remapped_ids: Optional[Dict[str, List]] = None  # to store remapped ids
 
     def forward(self, input: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
         """
@@ -78,7 +104,24 @@ class McEmbeddingCollectionAdapter(nn.Module):
         """
         mc_ec_out, remapped_ids = self.mc_embedding_collection(input)
         self.remapped_ids = remapped_ids
-        return mc_ec_out[0]
+        return mc_ec_out
+
+    def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
+        # only return the parameters of the original EmbeddingBagCollection, not _managed_collision_collection modules
+        return self.mc_embedding_collection._embedding_module.parameters(
+            recurse=recurse
+        )
+
+    def embedding_bag_configs(self) -> List[EmbeddingConfig]:
+        """
+        Returns:
+            Dict[str, EmbeddingConfig]: dictionary of {'feature_name': EmbeddingConfig}
+        """
+        # pyre-ignore[16]: `ManagedCollisionEmbeddingCollection` has no attribute `_embedding_module`
+        return self.mc_embedding_collection._embedding_module.embedding_configs()
+
+    def get_per_table_remapped_id(self) -> Dict[str, JaggedTensor]:
+        return self.per_table_remapped_id
 
 
 class McEmbeddingBagCollectionAdapter(nn.Module):
