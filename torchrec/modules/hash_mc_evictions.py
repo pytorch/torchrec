@@ -73,7 +73,10 @@ class HashZchSingleTtlScorer(HashZchEvictionScorer):
         return torch.full_like(
             feature.values(),
             # pyre-ignore [58]
-            self._config.single_ttl + int(time.time() / 3600),
+            self._config.single_ttl
+            + int(
+                time.time() / 3600
+            ),  # add the current time to the single_ttl, this is the time whem each value is expired and becomes evictable
             dtype=torch.int32,
             device=device,
         )
