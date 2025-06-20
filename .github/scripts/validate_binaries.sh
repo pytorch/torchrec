@@ -125,6 +125,7 @@ else
 fi
 
 if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
+    exit 0  # fbgemm-gpu can't support python=3.13t in PYPI
     # use conda-forge to install python3.13t
     conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
     conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
