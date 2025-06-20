@@ -183,7 +183,7 @@ class ModelDeltaTracker:
                 batch_idx=self.curr_batch_idx,
                 table_fqn=table_fqn,
                 ids=torch.cat(ids_list),
-                embeddings=None,
+                states=None,
             )
 
     def record_embeddings(
@@ -223,7 +223,7 @@ class ModelDeltaTracker:
                 batch_idx=self.curr_batch_idx,
                 table_fqn=table_fqn,
                 ids=torch.cat(ids_list),
-                embeddings=torch.cat(per_table_emb[table_fqn]),
+                states=torch.cat(per_table_emb[table_fqn]),
             )
 
     def get_delta_ids(self, consumer: Optional[str] = None) -> Dict[str, torch.Tensor]:

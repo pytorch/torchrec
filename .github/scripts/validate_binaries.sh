@@ -73,21 +73,19 @@ conda env config vars set -n ${CONDA_ENV}  \
 #     export PYTORCH_CUDA_PKG="pytorch-cuda=${MATRIX_GPU_ARCH_VERSION}"
 # fi
 
-conda run -n "${CONDA_ENV}" pip install importlib-metadata
-
 conda run -n "${CONDA_ENV}" pip install torch --index-url "$PYTORCH_URL"
 
 # install fbgemm
 conda run -n "${CONDA_ENV}" pip install fbgemm-gpu --index-url "$PYTORCH_URL"
-
-# install requirements from pypi
-conda run -n "${CONDA_ENV}" pip install torchmetrics==1.0.3
 
 # install tensordict from pypi
 conda run -n "${CONDA_ENV}" pip install tensordict==0.8.1
 
 # install torchrec
 conda run -n "${CONDA_ENV}" pip install torchrec --index-url "$PYTORCH_URL"
+
+# install other requirements
+conda run -n "${CONDA_ENV}" pip install -r requirements.txt
 
 # Run small import test
 conda run -n "${CONDA_ENV}" python -c "import torch; import fbgemm_gpu; import torchrec"
