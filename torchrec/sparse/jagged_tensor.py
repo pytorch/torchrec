@@ -1668,7 +1668,18 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     slices may be of different lengths. Keyed on first dimension and jagged on the last
     dimension.
 
+
+    
     Implementation is torch.jit.script-able.
+
+    Typical Use Case:
+        - Keys: ["clicked_ads", "viewed_products"]
+        - Values: concatenated indices of embeddings from both keys
+        - Lengths: [4, 2] → means "clicked_ads" has 4 items, "viewed_products" has 2
+
+        This structure is especially useful in recommendation models where input features
+        have variable-length sequences like user actions or sessions.
+
 
     Args:
         keys (List[str]): keys to the jagged Tensor.
