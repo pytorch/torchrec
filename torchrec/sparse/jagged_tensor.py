@@ -2688,7 +2688,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             Dict[str, JaggedTensor]: dictionary of JaggedTensor for each key.
         """
         if not torch.jit.is_scripting() and is_non_strict_exporting():
-            logger.warn(
+            logger.warning(
                 "Trying to non-strict torch.export KJT to_dict, which is extremely slow and not recommended!"
             )
         _jt_dict = _maybe_compute_kjt_to_jt_dict(
