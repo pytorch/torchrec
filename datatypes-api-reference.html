@@ -844,9 +844,8 @@ same shape as values.</p></li>
 <li><p><strong>offsets</strong> (<em>Optional</em><em>[</em><em>torch.Tensor</em><em>]</em>) – jagged slices, represented as cumulative
 offsets.</p></li>
 <li><p><strong>stride</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – number of examples per batch.</p></li>
-<li><p><strong>stride_per_key_per_rank</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em><em>]</em>) – batch size
-(number of examples) per key per rank, with the outer list representing the
-keys and the inner list representing the values.
+<li><p><strong>stride_per_key_per_rank</strong> (<em>Optional</em><em>[</em><em>Union</em><em>[</em><em>torch.IntTensor</em><em>, </em><em>List</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em><em>]</em><em>]</em>) – batch size (number of examples) per key per rank, with the outer list
+representing the keys and the inner list representing the values.
 Each value in the inner list represents the number of examples in the batch
 from the rank of its index in a distributed context.</p></li>
 <li><p><strong>length_per_key</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – start length for each key.</p></li>
