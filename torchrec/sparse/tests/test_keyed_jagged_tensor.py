@@ -67,13 +67,14 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             offsets=offsets,
         )
 
-    kjt_dict = kjt.to_dict()
-    kjt_round_trip = KeyedJaggedTensor.from_dict(kjt_dict)
+        kjt_dict = kjt.to_dict()
+        kjt_round_trip = KeyedJaggedTensor.from_dict(kjt_dict)
 
-    self.assertTrue(torch.equal(kjt.values(), kjt_round_trip.values()))
-    self.assertTrue(torch.equal(kjt.weights(), kjt_round_trip.weights()))
-    self.assertEqual(kjt.keys(), kjt_round_trip.keys())
-    self.assertTrue(torch.equal(kjt.offsets(), kjt_round_trip.offsets()))
+        self.assertTrue(torch.equal(kjt.values(), kjt_round_trip.values()))
+        self.assertTrue(torch.equal(kjt.weights(), kjt_round_trip.weights()))
+        self.assertEqual(kjt.keys(), kjt_round_trip.keys())
+        self.assertTrue(torch.equal(kjt.offsets(), kjt_round_trip.offsets()))
+
 
 
 

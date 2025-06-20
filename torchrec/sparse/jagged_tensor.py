@@ -1668,19 +1668,17 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
     slices may be of different lengths. Keyed on first dimension and jagged on the last
     dimension.
 
-
-    
     Implementation is torch.jit.script-able.
+            Typical Use Case:
+        - Keys: ["feature_0", "feature_1"]
+        - Values: concatenated indices of embeddings from both features
+        - Lengths: [4, 2] → means "feature_0" has 4 items, "feature_1" has 2
 
-    Typical Use Case:
-        - Keys: ["clicked_ads", "viewed_products"]
-        - Values: concatenated indices of embeddings from both keys
-        - Lengths: [4, 2] → means "clicked_ads" has 4 items, "viewed_products" has 2
-
-        This structure is especially useful in recommendation models where input features
-        have variable-length sequences like user actions or sessions.
-
-
+        This example illustrates the jagged tensor layout concept. In TorchRec, such
+        features often represent variable-length sequences across different batches,
+        and each feature can have a different batch or stride size. This structure is
+        especially useful in recommendation models where input features like user actions
+        or sessions vary in length.
     Args:
         keys (List[str]): keys to the jagged Tensor.
         values (torch.Tensor): values tensor in dense representation.
