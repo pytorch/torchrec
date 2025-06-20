@@ -53,6 +53,29 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         self.assertTrue(
             torch.equal(j1.values(), torch.Tensor([4.0, 5.0, 6.0, 7.0, 8.0]))
         )
+        
+    def test_kjt_to_dict_round_trip(self):
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0])
+        weights = torch.Tensor([0.1, 0.2, 0.3, 0.4])
+        keys = ["key1", "key2"]
+        offsets = torch.IntTensor([0, 2, 4])
+
+        kjt = KeyedJaggedTensor(
+            values=values,
+            weights=weights,
+            keys=keys,
+            offsets=offsets,
+        )
+
+    kjt_dict = kjt.to_dict()
+    kjt_round_trip = KeyedJaggedTensor.from_dict(kjt_dict)
+
+    self.assertTrue(torch.equal(kjt.values(), kjt_round_trip.values()))
+    self.assertTrue(torch.equal(kjt.weights(), kjt_round_trip.weights()))
+    self.assertEqual(kjt.keys(), kjt_round_trip.keys())
+    self.assertTrue(torch.equal(kjt.offsets(), kjt_round_trip.offsets()))
+
+
 
     def test_key_lookup_vb(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
@@ -83,7 +106,12 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         self.assertTrue(
             torch.equal(j1.values(), torch.Tensor([3.0, 4.0, 5.0, 6.0, 7.0, 8.0]))
         )
+    
+        self.assertTrue(torch.equal(j1.lengths(), torch.IntTensor([1, 3])))
 
+
+
+    
     def test_to_dict(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
