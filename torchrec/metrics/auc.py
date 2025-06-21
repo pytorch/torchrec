@@ -99,10 +99,10 @@ def compute_auc(
         weights (List[torch.Tensor]): tensor of size (n_tasks, n_examples).
     """
     preds_t, labels_t, weights_t = _concat_if_needed(predictions, labels, weights)
-    aucs = []
-    for predictions_i, labels_i, weights_i in zip(preds_t, labels_t, weights_t):
-        auc = _compute_auc_helper(predictions_i, labels_i, weights_i, apply_bin)
-        aucs.append(auc.view(1))
+    aucs = [
+        _compute_auc_helper(predictions_i, labels_i, weights_i, apply_bin).view(1)
+        for predictions_i, labels_i, weights_i in zip(preds_t, labels_t, weights_t)
+    ]
     return torch.cat(aucs)
 
 
