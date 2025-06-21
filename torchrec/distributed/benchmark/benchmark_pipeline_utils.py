@@ -8,7 +8,8 @@
 # pyre-strict
 
 import copy
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, fields
 from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
 
 import torch
@@ -24,8 +25,9 @@ from torchrec.distributed.planner.types import ParameterConstraints
 from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.distributed.test_utils.test_model import (
     TestEBCSharder,
-    TestOverArchLarge,
     TestSparseNN,
+    TestTowerCollectionSparseNN,
+    TestTowerSparseNN,
 )
 from torchrec.distributed.train_pipeline import (
     TrainPipelineBase,
@@ -41,16 +43,56 @@ from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
 @dataclass
-class ModelConfig:
-    batch_size: int = 8192
-    num_float_features: int = 10
-    feature_pooling_avg: int = 10
-    use_offsets: bool = False
-    dev_str: str = ""
-    long_kjt_indices: bool = True
-    long_kjt_offsets: bool = True
-    long_kjt_lengths: bool = True
-    pin_memory: bool = True
+class BaseModelConfig(ABC):
+    """
+    Abstract base class for model configurations.
+
+    This class defines the common parameters shared across all model types
+    and requires each concrete implementation to provide its own generate_model method.
+    """
+
+    # Common parameters for all model types
+    batch_size: int
+    num_float_features: int
+    feature_pooling_avg: int
+    use_offsets: bool
+    dev_str: str
+    long_kjt_indices: bool
+    long_kjt_offsets: bool
+    long_kjt_lengths: bool
+    pin_memory: bool
+
+    @abstractmethod
+    def generate_model(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        dense_device: torch.device,
+    ) -> nn.Module:
+        """
+        Generate a model instance based on the configuration.
+
+        Args:
+            tables: List of unweighted embedding tables
+            weighted_tables: List of weighted embedding tables
+            dense_device: Device to place dense layers on
+
+        Returns:
+            A neural network module instance
+        """
+        pass
+
+
+@dataclass
+class TestSparseNNConfig(BaseModelConfig):
+    """Configuration for TestSparseNN model."""
+
+    embedding_groups: Optional[Dict[str, List[str]]]
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]]
+    max_feature_lengths: Optional[Dict[str, int]]
+    over_arch_clazz: Type[nn.Module]
+    postproc_module: Optional[nn.Module]
+    zch: bool
 
     def generate_model(
         self,
@@ -60,11 +102,121 @@ class ModelConfig:
     ) -> nn.Module:
         return TestSparseNN(
             tables=tables,
+            num_float_features=self.num_float_features,
             weighted_tables=weighted_tables,
             dense_device=dense_device,
             sparse_device=torch.device("meta"),
-            over_arch_clazz=TestOverArchLarge,
+            max_feature_lengths=self.max_feature_lengths,
+            feature_processor_modules=self.feature_processor_modules,
+            over_arch_clazz=self.over_arch_clazz,
+            postproc_module=self.postproc_module,
+            embedding_groups=self.embedding_groups,
+            zch=self.zch,
         )
+
+
+@dataclass
+class TestTowerSparseNNConfig(BaseModelConfig):
+    """Configuration for TestTowerSparseNN model."""
+
+    embedding_groups: Optional[Dict[str, List[str]]] = None
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None
+
+    def generate_model(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        dense_device: torch.device,
+    ) -> nn.Module:
+        return TestTowerSparseNN(
+            num_float_features=self.num_float_features,
+            tables=tables,
+            weighted_tables=weighted_tables,
+            dense_device=dense_device,
+            sparse_device=torch.device("meta"),
+            embedding_groups=self.embedding_groups,
+            feature_processor_modules=self.feature_processor_modules,
+        )
+
+
+@dataclass
+class TestTowerCollectionSparseNNConfig(BaseModelConfig):
+    """Configuration for TestTowerCollectionSparseNN model."""
+
+    embedding_groups: Optional[Dict[str, List[str]]] = None
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None
+
+    def generate_model(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        dense_device: torch.device,
+    ) -> nn.Module:
+        return TestTowerCollectionSparseNN(
+            tables=tables,
+            weighted_tables=weighted_tables,
+            dense_device=dense_device,
+            sparse_device=torch.device("meta"),
+            num_float_features=self.num_float_features,
+            embedding_groups=self.embedding_groups,
+            feature_processor_modules=self.feature_processor_modules,
+        )
+
+
+@dataclass
+class DeepFMConfig(BaseModelConfig):
+    """Configuration for DeepFM model."""
+
+    hidden_layer_size: int
+    deep_fm_dimension: int
+
+    def generate_model(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        dense_device: torch.device,
+    ) -> nn.Module:
+        # TODO: Implement DeepFM model generation
+        raise NotImplementedError("DeepFM model generation not yet implemented")
+
+
+@dataclass
+class DLRMConfig(BaseModelConfig):
+    """Configuration for DLRM model."""
+
+    dense_arch_layer_sizes: List[int]
+    over_arch_layer_sizes: List[int]
+
+    def generate_model(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        dense_device: torch.device,
+    ) -> nn.Module:
+        # TODO: Implement DLRM model generation
+        raise NotImplementedError("DLRM model generation not yet implemented")
+
+
+# pyre-ignore[2]: Missing parameter annotation
+def create_model_config(model_name: str, **kwargs) -> BaseModelConfig:
+
+    model_configs = {
+        "test_sparse_nn": TestSparseNNConfig,
+        "test_tower_sparse_nn": TestTowerSparseNNConfig,
+        "test_tower_collection_sparse_nn": TestTowerCollectionSparseNNConfig,
+        "deepfm": DeepFMConfig,
+        "dlrm": DLRMConfig,
+    }
+
+    if model_name not in model_configs:
+        raise ValueError(f"Unknown model name: {model_name}")
+
+    # Filter kwargs to only include valid parameters for the specific model config class
+    model_class = model_configs[model_name]
+    valid_field_names = {field.name for field in fields(model_class)}
+    filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_field_names}
+
+    return model_class(**filtered_kwargs)
 
 
 def generate_tables(
@@ -319,7 +471,7 @@ def generate_sharded_model_and_optimizer(
 def generate_data(
     tables: List[EmbeddingBagConfig],
     weighted_tables: List[EmbeddingBagConfig],
-    model_config: ModelConfig,
+    model_config: BaseModelConfig,
     num_batches: int,
 ) -> List[ModelInput]:
     """

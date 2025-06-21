@@ -731,7 +731,7 @@ class TestEnumerators(unittest.TestCase):
         )
 
         sharder = ManagedCollisionEmbeddingBagCollectionSharder()
-        with self.assertWarns(Warning):
+        with self.assertLogs(level="WARNING"):
             allowed_sharding_types = enumerator._filter_sharding_types(
                 "table_0", sharder.sharding_types("cuda")
             )
@@ -811,7 +811,7 @@ class TestEnumerators(unittest.TestCase):
 
         sharder = ManagedCollisionEmbeddingBagCollectionSharder()
         sharding_type = ShardingType.ROW_WISE.value
-        with self.assertWarns(Warning):
+        with self.assertLogs(level="WARNING"):
             allowed_compute_kernels = enumerator._filter_compute_kernels(
                 "table_0", sharder.compute_kernels(sharding_type, "cuda"), sharding_type
             )

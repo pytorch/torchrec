@@ -1679,9 +1679,9 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         offsets (Optional[torch.Tensor]): jagged slices, represented as cumulative
             offsets.
         stride (Optional[int]): number of examples per batch.
-        stride_per_key_per_rank (Optional[List[List[int]]]): batch size
-            (number of examples) per key per rank, with the outer list representing the
-            keys and the inner list representing the values.
+        stride_per_key_per_rank (Optional[Union[torch.IntTensor, List[List[int]]]]):
+            batch size (number of examples) per key per rank, with the outer list
+            representing the keys and the inner list representing the values.
             Each value in the inner list represents the number of examples in the batch
             from the rank of its index in a distributed context.
         length_per_key (Optional[List[int]]): start length for each key.
@@ -1761,6 +1761,12 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             # in pt2.compile the stride_per_key_per_rank has to be torch.Tensor or None
             # does not take List[List[int]]
             assert not isinstance(stride_per_key_per_rank, list)
+
+        if isinstance(stride_per_key_per_rank, torch.IntTensor):
+            assert (
+                stride_per_key_per_rank.dim() == 2
+            ), f"Expect 2D tensor with shape [len(keys), len(ranks)] for stride_per_key_per_rank, but got tensor with shape: {stride_per_key_per_rank.shape}"
+
         self._stride_per_key_per_rank: Optional[torch.IntTensor] = (
             torch.IntTensor(stride_per_key_per_rank, device="cpu")
             if isinstance(stride_per_key_per_rank, list)
@@ -2688,7 +2694,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             Dict[str, JaggedTensor]: dictionary of JaggedTensor for each key.
         """
         if not torch.jit.is_scripting() and is_non_strict_exporting():
-            logger.warn(
+            logger.warning(
                 "Trying to non-strict torch.export KJT to_dict, which is extremely slow and not recommended!"
             )
         _jt_dict = _maybe_compute_kjt_to_jt_dict(

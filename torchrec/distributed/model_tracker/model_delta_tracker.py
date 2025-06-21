@@ -100,7 +100,9 @@ class ModelDeltaTracker:
         for fqn, feature_names in self._fqn_to_feature_map.items():
             for feature_name in feature_names:
                 if feature_name in self.feature_to_fqn:
-                    logger.warn(f"Duplicate feature name: {feature_name} in fqn {fqn}")
+                    logger.warning(
+                        f"Duplicate feature name: {feature_name} in fqn {fqn}"
+                    )
                     continue
                 self.feature_to_fqn[feature_name] = fqn
         logger.info(f"feature_to_fqn: {self.feature_to_fqn}")
