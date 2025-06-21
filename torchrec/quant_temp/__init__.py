@@ -33,4 +33,4 @@ Example:
     >>> )
 """
 
-from torchrec.quant.embedding_modules import EmbeddingBagCollection  # noqa
+#from torchrec.quant.embedding_modules import EmbeddingBagCollection  # noqa
