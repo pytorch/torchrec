@@ -11,6 +11,7 @@ from typing import List
 
 import torch
 from torch import nn
+from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.modules.deepfm import DeepFM, FactorizationMachine
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
@@ -350,3 +351,21 @@ class SimpleDeepFMNN(nn.Module):
         )
         logits = self.over_arch(concatenated_dense)
         return logits
+
+
+class SimpleDeepFMNNWrapper(SimpleDeepFMNN):
+    # pyre-ignore[14]
+    def forward(self, model_input: ModelInput) -> torch.Tensor:
+        """
+        Forward pass for the SimpleDeepFMNNWrapper.
+
+        Args:
+            model_input (ModelInput): Contains dense and sparse features.
+
+        Returns:
+            torch.Tensor: Output tensor from the SimpleDeepFMNN model.
+        """
+        return super().forward(
+            dense_features=model_input.float_features,
+            sparse_features=model_input.idlist_features,  # pyre-ignore[6]
+        )
