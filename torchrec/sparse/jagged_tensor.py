@@ -1761,6 +1761,12 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             # in pt2.compile the stride_per_key_per_rank has to be torch.Tensor or None
             # does not take List[List[int]]
             assert not isinstance(stride_per_key_per_rank, list)
+
+        if isinstance(stride_per_key_per_rank, torch.IntTensor):
+            assert (
+                stride_per_key_per_rank.dim() == 2
+            ), f"Expect 2D tensor with shape [len(keys), len(ranks)] for stride_per_key_per_rank, but got tensor with shape: {stride_per_key_per_rank.shape}"
+
         self._stride_per_key_per_rank: Optional[torch.IntTensor] = (
             torch.IntTensor(stride_per_key_per_rank, device="cpu")
             if isinstance(stride_per_key_per_rank, list)
