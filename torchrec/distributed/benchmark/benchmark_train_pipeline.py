@@ -9,19 +9,25 @@
 
 #!/usr/bin/env python3
 
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Type, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch import nn
 from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
+    BaseModelConfig,
+    create_model_config,
+    DeepFMConfig,
+    DLRMConfig,
     generate_data,
     generate_pipeline,
     generate_planner,
     generate_sharded_model_and_optimizer,
     generate_tables,
-    ModelConfig,
+    TestSparseNNConfig,
+    TestTowerCollectionSparseNNConfig,
+    TestTowerSparseNNConfig,
 )
 from torchrec.distributed.benchmark.benchmark_utils import benchmark_func, cmd_conf
 from torchrec.distributed.comm import get_local_size
@@ -33,6 +39,7 @@ from torchrec.distributed.test_utils.multi_process import (
     run_multi_process_func,
 )
 from torchrec.distributed.test_utils.test_input import ModelInput
+from torchrec.distributed.test_utils.test_model import TestOverArchLarge
 from torchrec.distributed.train_pipeline import TrainPipeline
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -124,18 +131,83 @@ class PipelineConfig:
     emb_lookup_stream: str = "data_dist"
 
 
+@dataclass
+class ModelSelectionConfig:
+    model_name: str = "test_sparse_nn"
+
+    # Common config for all model types
+    batch_size: int = 8192
+    num_float_features: int = 10
+    feature_pooling_avg: int = 10
+    use_offsets: bool = False
+    dev_str: str = ""
+    long_kjt_indices: bool = True
+    long_kjt_offsets: bool = True
+    long_kjt_lengths: bool = True
+    pin_memory: bool = True
+
+    # TestSparseNN specific config
+    embedding_groups: Optional[Dict[str, List[str]]] = None
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None
+    max_feature_lengths: Optional[Dict[str, int]] = None
+    over_arch_clazz: Type[nn.Module] = TestOverArchLarge
+    postproc_module: Optional[nn.Module] = None
+    zch: bool = False
+
+    # DeepFM specific config
+    hidden_layer_size: int = 20
+    deep_fm_dimension: int = 5
+
+    # DLRM specific config
+    dense_arch_layer_sizes: List[int] = field(default_factory=lambda: [20, 10])
+    over_arch_layer_sizes: List[int] = field(default_factory=lambda: [5, 3])
+
+
 @cmd_conf
 def main(
     run_option: RunOptions,
     table_config: EmbeddingTablesConfig,
-    model_config: ModelConfig,
+    model_selection: ModelSelectionConfig,
     pipeline_config: PipelineConfig,
+    model_config: Optional[
+        Union[
+            TestSparseNNConfig,
+            TestTowerCollectionSparseNNConfig,
+            TestTowerSparseNNConfig,
+            DeepFMConfig,
+            DLRMConfig,
+        ]
+    ] = None,
 ) -> None:
     tables, weighted_tables = generate_tables(
         num_unweighted_features=table_config.num_unweighted_features,
         num_weighted_features=table_config.num_weighted_features,
         embedding_feature_dim=table_config.embedding_feature_dim,
     )
+
+    if model_config is None:
+        model_config = create_model_config(
+            model_name=model_selection.model_name,
+            batch_size=model_selection.batch_size,
+            num_float_features=model_selection.num_float_features,
+            feature_pooling_avg=model_selection.feature_pooling_avg,
+            use_offsets=model_selection.use_offsets,
+            dev_str=model_selection.dev_str,
+            long_kjt_indices=model_selection.long_kjt_indices,
+            long_kjt_offsets=model_selection.long_kjt_offsets,
+            long_kjt_lengths=model_selection.long_kjt_lengths,
+            pin_memory=model_selection.pin_memory,
+            embedding_groups=model_selection.embedding_groups,
+            feature_processor_modules=model_selection.feature_processor_modules,
+            max_feature_lengths=model_selection.max_feature_lengths,
+            over_arch_clazz=model_selection.over_arch_clazz,
+            postproc_module=model_selection.postproc_module,
+            zch=model_selection.zch,
+            hidden_layer_size=model_selection.hidden_layer_size,
+            deep_fm_dimension=model_selection.deep_fm_dimension,
+            dense_arch_layer_sizes=model_selection.dense_arch_layer_sizes,
+            over_arch_layer_sizes=model_selection.over_arch_layer_sizes,
+        )
 
     # launch trainers
     run_multi_process_func(
@@ -155,7 +227,7 @@ def runner(
     tables: List[EmbeddingBagConfig],
     weighted_tables: List[EmbeddingBagConfig],
     run_option: RunOptions,
-    model_config: ModelConfig,
+    model_config: BaseModelConfig,
     pipeline_config: PipelineConfig,
 ) -> None:
     # Ensure GPUs are available and we have enough of them
