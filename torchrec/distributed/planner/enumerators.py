@@ -279,7 +279,7 @@ class EmbeddingEnumerator(Enumerator):
             set(constrained_sharding_types) & set(allowed_sharding_types)
         )
         if not filtered_sharding_types:
-            logger.warn(
+            logger.warning(
                 "No available sharding types after applying user provided "
                 f"constraints for {name}. Constrained sharding types: "
                 f"{constrained_sharding_types}, allowed sharding types: "
@@ -326,7 +326,7 @@ class EmbeddingEnumerator(Enumerator):
                 filtered_compute_kernels.remove(EmbeddingComputeKernel.DENSE.value)
 
         if not filtered_compute_kernels:
-            logger.warn(
+            logger.warning(
                 "No available compute kernels after applying user provided "
                 f"constraints for {name}. Constrained compute kernels: "
                 f"{constrained_compute_kernels}, allowed compute kernels: "
