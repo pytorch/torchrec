@@ -7,6 +7,15 @@
 
 # pyre-strict
 
+"""
+Utilities for benchmarking training pipelines with different model configurations.
+
+Adding New Model Support:
+    1. Create config class inheriting from BaseModelConfig with generate_model() method
+    2. Add the model to model_configs dict in create_model_config()
+    3. Add model-specific params to ModelSelectionConfig and create_model_config's arguments in benchmark_train_pipeline.py
+"""
+
 import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
