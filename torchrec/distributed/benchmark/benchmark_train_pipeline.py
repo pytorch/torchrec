@@ -7,7 +7,18 @@
 
 # pyre-strict
 
-#!/usr/bin/env python3
+"""
+Example usage:
+
+Buck2 (internal):
+    buck2 run @fbcode//mode/opt fbcode//torchrec/distributed/benchmark:benchmark_train_pipeline -- --world_size=2 --pipeline=sparse --batch_size=10
+
+OSS (external):
+    python -m torchrec.distributed.benchmark.benchmark_train_pipeline --world_size=4 --pipeline=sparse --batch_size=10
+
+Adding New Model Support:
+    See benchmark_pipeline_utils.py for step-by-step instructions.
+"""
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Type, Union
