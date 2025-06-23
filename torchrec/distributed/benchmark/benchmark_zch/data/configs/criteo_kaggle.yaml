@@ -1,0 +1,3 @@
+dataset_path: "/home/lizhouyu/oss_github/dlrm/torchrec_dlrm/criteo_1tb/criteo_kaggle_processed"
+batch_size: 4096
+seed: 0

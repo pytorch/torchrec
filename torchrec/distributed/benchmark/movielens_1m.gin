@@ -1,0 +1,37 @@
+batch_size = 16
+dataset = "movielens-1m"
+
+# model parameters
+make_model.dataset = %dataset
+
+# dense model optimizer
+dense_optimizer_factory_and_class.learning_rate = 0.001
+dense_optimizer_factory_and_class.optimizer_name = "Adam"
+dense_optimizer_factory_and_class.momentum = 0
+dense_optimizer_factory_and_class.weight_decay = 0
+dense_optimizer_factory_and_class.eps = 1e-8
+dense_optimizer_factory_and_class.betas = (0.95, 0.999)
+
+# sparse model optimizer
+sparse_optimizer_factory_and_class.learning_rate = 0.001
+sparse_optimizer_factory_and_class.optimizer_name = "RowWiseAdagrad"
+sparse_optimizer_factory_and_class.momentum = 0
+sparse_optimizer_factory_and_class.weight_decay = 0
+sparse_optimizer_factory_and_class.eps = 1e-8
+sparse_optimizer_factory_and_class.betas = (0.95, 0.999)
+
+# dataloader configs
+make_train_test_dataloaders.batch_size = %batch_size
+make_train_test_dataloaders.dataset_type = %dataset
+make_train_test_dataloaders.train_split_percentage = 0.75
+make_train_test_dataloaders.new_path_prefix = "/home/lizhouyu/oss_github/generative-recommenders/tmp"
+make_train_test_dataloaders.num_workers = 2
+make_train_test_dataloaders.prefetch_factor = 4
+
+# train loop variables
+train_loop.num_epochs = 5
+train_loop.output_trace = True
+train_loop.metric_log_frequency = 10
+
+# logger variables
+MetricsLogger.tensorboard_log_path = "/home/lizhouyu/tmp/tensorboard_log_path.log"
