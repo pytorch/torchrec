@@ -136,10 +136,13 @@ class PipelineConfig:
         emb_lookup_stream (str): The stream to use for embedding lookups.
             Only used by certain pipeline types (e.g., "fused").
             Default is "data_dist".
+        apply_jit (bool): Whether to apply JIT (Just-In-Time) compilation to the model.
+            Default is False.
     """
 
     pipeline: str = "base"
     emb_lookup_stream: str = "data_dist"
+    apply_jit: bool = False
 
 
 @dataclass
@@ -148,6 +151,7 @@ class ModelSelectionConfig:
 
     # Common config for all model types
     batch_size: int = 8192
+    batch_sizes: Optional[List[int]] = None
     num_float_features: int = 10
     feature_pooling_avg: int = 10
     use_offsets: bool = False
@@ -200,6 +204,7 @@ def main(
         model_config = create_model_config(
             model_name=model_selection.model_name,
             batch_size=model_selection.batch_size,
+            batch_sizes=model_selection.batch_sizes,
             num_float_features=model_selection.num_float_features,
             feature_pooling_avg=model_selection.feature_pooling_avg,
             use_offsets=model_selection.use_offsets,
@@ -266,6 +271,15 @@ def runner(
             compute_device=ctx.device.type,
         )
 
+        batch_sizes = model_config.batch_sizes
+
+        if batch_sizes is None:
+            batch_sizes = [model_config.batch_size] * run_option.num_batches
+        else:
+            assert (
+                len(batch_sizes) == run_option.num_batches
+            ), "The length of batch_sizes must match the number of batches."
+
         # Create a planner for sharding based on the specified type
         planner = generate_planner(
             planner_type=run_option.planner_type,
@@ -274,8 +288,7 @@ def runner(
             weighted_tables=weighted_tables,
             sharding_type=run_option.sharding_type,
             compute_kernel=run_option.compute_kernel,
-            num_batches=run_option.num_batches,
-            batch_size=model_config.batch_size,
+            batch_sizes=batch_sizes,
             pooling_factors=run_option.pooling_factors,
             num_poolings=run_option.num_poolings,
         )
@@ -283,7 +296,7 @@ def runner(
             tables=tables,
             weighted_tables=weighted_tables,
             model_config=model_config,
-            num_batches=run_option.num_batches,
+            batch_sizes=batch_sizes,
         )
 
         sharded_model, optimizer = generate_sharded_model_and_optimizer(
@@ -299,14 +312,6 @@ def runner(
             },
             planner=planner,
         )
-        pipeline = generate_pipeline(
-            pipeline_type=pipeline_config.pipeline,
-            emb_lookup_stream=pipeline_config.emb_lookup_stream,
-            model=sharded_model,
-            opt=optimizer,
-            device=ctx.device,
-        )
-        pipeline.progress(iter(bench_inputs))
 
         def _func_to_benchmark(
             bench_inputs: List[ModelInput],
@@ -320,20 +325,47 @@ def runner(
                 except StopIteration:
                     break
 
-        result = benchmark_func(
-            name=type(pipeline).__name__,
-            bench_inputs=bench_inputs,  # pyre-ignore
-            prof_inputs=bench_inputs,  # pyre-ignore
-            num_benchmarks=5,
-            num_profiles=2,
-            profile_dir=run_option.profile,
-            world_size=run_option.world_size,
-            func_to_benchmark=_func_to_benchmark,
-            benchmark_func_kwargs={"model": sharded_model, "pipeline": pipeline},
-            rank=rank,
+        # Run comparison if apply_jit is True, otherwise run single benchmark
+        jit_configs = (
+            [(True, "WithJIT"), (False, "WithoutJIT")]
+            if pipeline_config.apply_jit
+            else [(False, "")]
         )
+        results = []
+
+        for apply_jit, jit_suffix in jit_configs:
+            pipeline = generate_pipeline(
+                pipeline_type=pipeline_config.pipeline,
+                emb_lookup_stream=pipeline_config.emb_lookup_stream,
+                model=sharded_model,
+                opt=optimizer,
+                device=ctx.device,
+                apply_jit=apply_jit,
+            )
+            pipeline.progress(iter(bench_inputs))
+
+            name = (
+                f"{type(pipeline).__name__}{jit_suffix}"
+                if jit_suffix
+                else type(pipeline).__name__
+            )
+            result = benchmark_func(
+                name=name,
+                bench_inputs=bench_inputs,  # pyre-ignore
+                prof_inputs=bench_inputs,  # pyre-ignore
+                num_benchmarks=5,
+                num_profiles=2,
+                profile_dir=run_option.profile,
+                world_size=run_option.world_size,
+                func_to_benchmark=_func_to_benchmark,
+                benchmark_func_kwargs={"model": sharded_model, "pipeline": pipeline},
+                rank=rank,
+            )
+            results.append(result)
+
         if rank == 0:
-            print(result)
+            for result in results:
+                print(result)
 
 
 if __name__ == "__main__":

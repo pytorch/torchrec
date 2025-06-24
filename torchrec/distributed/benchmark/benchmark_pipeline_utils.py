@@ -62,6 +62,7 @@ class BaseModelConfig(ABC):
 
     # Common parameters for all model types
     batch_size: int
+    batch_sizes: Optional[List[int]]
     num_float_features: int
     feature_pooling_avg: int
     use_offsets: bool
@@ -283,6 +284,7 @@ def generate_pipeline(
     model: nn.Module,
     opt: torch.optim.Optimizer,
     device: torch.device,
+    apply_jit: bool = False,
 ) -> Union[TrainPipelineBase, TrainPipelineSparseDist]:
     """
     Generate a training pipeline instance based on the configuration.
@@ -303,6 +305,8 @@ def generate_pipeline(
         model (nn.Module): The model to be trained.
         opt (torch.optim.Optimizer): The optimizer to use for training.
         device (torch.device): The device to run the training on.
+        apply_jit (bool): Whether to apply JIT (Just-In-Time) compilation to the model.
+            Default is False.
 
     Returns:
         Union[TrainPipelineBase, TrainPipelineSparseDist]: An instance of the
@@ -324,7 +328,11 @@ def generate_pipeline(
 
     if pipeline_type == "semi":
         return TrainPipelineSemiSync(
-            model=model, optimizer=opt, device=device, start_batch=0
+            model=model,
+            optimizer=opt,
+            device=device,
+            start_batch=0,
+            apply_jit=apply_jit,
         )
     elif pipeline_type == "fused":
         return TrainPipelineFusedSparseDist(
@@ -332,12 +340,16 @@ def generate_pipeline(
             optimizer=opt,
             device=device,
             emb_lookup_stream=emb_lookup_stream,
+            apply_jit=apply_jit,
         )
-    elif pipeline_type in _pipeline_cls:
-        Pipeline = _pipeline_cls[pipeline_type]
-        return Pipeline(model=model, optimizer=opt, device=device)
+    elif pipeline_type == "base":
+        assert apply_jit is False, "JIT is not supported for base pipeline"
+
+        return TrainPipelineBase(model=model, optimizer=opt, device=device)
     else:
-        raise RuntimeError(f"unknown pipeline option {pipeline_type}")
+        Pipeline = _pipeline_cls[pipeline_type]
+        # pyre-ignore[28]
+        return Pipeline(model=model, optimizer=opt, device=device, apply_jit=apply_jit)
 
 
 def generate_planner(
@@ -347,8 +359,7 @@ def generate_planner(
     weighted_tables: Optional[List[EmbeddingBagConfig]],
     sharding_type: ShardingType,
     compute_kernel: EmbeddingComputeKernel,
-    num_batches: int,
-    batch_size: int,
+    batch_sizes: List[int],
     pooling_factors: Optional[List[float]],
     num_poolings: Optional[List[float]],
 ) -> Union[EmbeddingShardingPlanner, HeteroEmbeddingShardingPlanner]:
@@ -362,8 +373,7 @@ def generate_planner(
         weighted_tables: List of weighted embedding tables
         sharding_type: Strategy for sharding embedding tables
         compute_kernel: Compute kernel to use for embedding tables
-        num_batches: Number of batches to process
-        batch_size: Size of each batch
+        batch_sizes: Sizes of each batch
         pooling_factors: Pooling factors for each feature of the table
         num_poolings: Number of poolings for each feature of the table
 
@@ -375,14 +385,13 @@ def generate_planner(
     """
     # Create parameter constraints for tables
     constraints = {}
+    num_batches = len(batch_sizes)
 
     if pooling_factors is None:
         pooling_factors = [POOLING_FACTOR] * num_batches
 
     if num_poolings is None:
         num_poolings = [NUM_POOLINGS] * num_batches
-
-    batch_sizes = [batch_size] * num_batches
 
     assert (
         len(pooling_factors) == num_batches and len(num_poolings) == num_batches
@@ -481,7 +490,7 @@ def generate_data(
     tables: List[EmbeddingBagConfig],
     weighted_tables: List[EmbeddingBagConfig],
     model_config: BaseModelConfig,
-    num_batches: int,
+    batch_sizes: List[int],
 ) -> List[ModelInput]:
     """
     Generate model input data for benchmarking.
@@ -499,7 +508,7 @@ def generate_data(
 
     return [
         ModelInput.generate(
-            batch_size=model_config.batch_size,
+            batch_size=batch_size,
             tables=tables,
             weighted_tables=weighted_tables,
             num_float_features=model_config.num_float_features,
@@ -517,5 +526,5 @@ def generate_data(
             ),
             pin_memory=model_config.pin_memory,
         )
-        for _ in range(num_batches)
+        for batch_size in batch_sizes
     ]
