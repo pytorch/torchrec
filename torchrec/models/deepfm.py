@@ -7,10 +7,11 @@
 
 # pyre-strict
 
-from typing import List
+from typing import List, Tuple, Union
 
 import torch
 from torch import nn
+from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.modules.deepfm import DeepFM, FactorizationMachine
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
@@ -350,3 +351,34 @@ class SimpleDeepFMNN(nn.Module):
         )
         logits = self.over_arch(concatenated_dense)
         return logits
+
+
+class SimpleDeepFMNNWrapper(SimpleDeepFMNN):
+    # pyre-ignore[14, 15]
+    def forward(
+        self, model_input: ModelInput
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Forward pass for the SimpleDeepFMNNWrapper.
+
+        Args:
+            model_input (ModelInput): Contains dense and sparse features.
+
+        Returns:
+            Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+            If training, returns (loss, prediction). Otherwise, returns prediction.
+        """
+        pred = super().forward(
+            dense_features=model_input.float_features,
+            sparse_features=model_input.idlist_features,  # pyre-ignore[6]
+        )
+
+        if self.training:
+            # Calculate loss and return both loss and prediction
+            loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                pred.squeeze(), model_input.label
+            )
+            return (loss, pred)
+        else:
+            # Return just the prediction
+            return pred
