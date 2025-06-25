@@ -146,6 +146,9 @@ class FeatureProcessedEmbeddingBagCollection(nn.Module):
             assert isinstance(self._feature_processors, FeatureProcessorsCollection)
             return self._feature_processors, self._embedding_bag_collection
 
+    def is_weighted(self) -> bool:
+        return self._embedding_bag_collection.is_weighted()
+
     def forward(
         self,
         features: KeyedJaggedTensor,
