@@ -1102,7 +1102,12 @@ def _maybe_compute_stride_kjt(
         elif (
             stride_per_key_per_rank is not None and stride_per_key_per_rank.numel() > 0
         ):
-            stride = int(stride_per_key_per_rank.sum(dim=1).max().item())
+            s = stride_per_key_per_rank.sum(dim=1).max().item()
+            if not torch.jit.is_scripting() and is_non_strict_exporting():
+                stride = torch.sym_int(s)
+            else:
+                stride = int(s)
+
         elif offsets is not None and offsets.numel() > 0:
             stride = (offsets.numel() - 1) // len(keys)
         elif lengths is not None:

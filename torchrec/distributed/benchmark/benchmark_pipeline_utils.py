@@ -128,8 +128,8 @@ class TestSparseNNConfig(BaseModelConfig):
 class TestTowerSparseNNConfig(BaseModelConfig):
     """Configuration for TestTowerSparseNN model."""
 
-    embedding_groups: Optional[Dict[str, List[str]]] = None
-    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None
+    embedding_groups: Optional[Dict[str, List[str]]]
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]]
 
     def generate_model(
         self,
@@ -152,8 +152,8 @@ class TestTowerSparseNNConfig(BaseModelConfig):
 class TestTowerCollectionSparseNNConfig(BaseModelConfig):
     """Configuration for TestTowerCollectionSparseNN model."""
 
-    embedding_groups: Optional[Dict[str, List[str]]] = None
-    feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None
+    embedding_groups: Optional[Dict[str, List[str]]]
+    feature_processor_modules: Optional[Dict[str, torch.nn.Module]]
 
     def generate_model(
         self,
