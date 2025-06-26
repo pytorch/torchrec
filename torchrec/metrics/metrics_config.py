@@ -197,25 +197,32 @@ DefaultTaskInfo = RecTaskInfo(
 )
 
 
-DefaultMetricsConfig = MetricsConfig(
-    rec_tasks=[DefaultTaskInfo],
-    rec_metrics={
-        RecMetricEnum.NE: RecMetricDef(
-            rec_tasks=[DefaultTaskInfo], window_size=_DEFAULT_WINDOW_SIZE
-        ),
-    },
-    throughput_metric=ThroughputDef(),
-    state_metrics=[],
-)
+def _create_default_metrics_config() -> MetricsConfig:
+    return MetricsConfig(
+        rec_tasks=[DefaultTaskInfo],
+        rec_metrics={
+            RecMetricEnum.NE: RecMetricDef(
+                rec_tasks=[DefaultTaskInfo], window_size=_DEFAULT_WINDOW_SIZE
+            ),
+        },
+        throughput_metric=ThroughputDef(),
+        state_metrics=[],
+    )
 
-# Explicitly specifying the empty fields to avoid any mistakes cased by simply
-# relying on the Python default values, e.g., MetricConfig().
-EmptyMetricsConfig = MetricsConfig(
-    rec_tasks=[],
-    rec_metrics={},
-    throughput_metric=None,
-    state_metrics=[],
-)
+
+def _create_empty_metrics_config() -> MetricsConfig:
+    # Explicitly specifying the empty fields to avoid any mistakes cased by simply
+    # relying on the Python default values, e.g., MetricConfig().
+    return MetricsConfig(
+        rec_tasks=[],
+        rec_metrics={},
+        throughput_metric=None,
+        state_metrics=[],
+    )
+
+
+DefaultMetricsConfig: MetricsConfig = _create_default_metrics_config()
+EmptyMetricsConfig: MetricsConfig = _create_empty_metrics_config()
 
 
 @dataclass
