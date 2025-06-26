@@ -17,18 +17,21 @@ def validate_keyed_jagged_tensor(
     """
     Validates the inputs that construct a KeyedJaggedTensor.
 
-    This function ensures that:
-    - At least one of lengths or offsets is provided
-    - If both are provided, they are consistent with each other
-    - The dimensions of these tensors align with the values tensor
-
     Any invalid input will result in a ValueError being thrown.
     """
-    # TODO: Add validation checks on keys, values, weights
     _validate_lengths_and_offsets(kjt)
+    _validate_keys(kjt)
+    _validate_weights(kjt)
 
 
 def _validate_lengths_and_offsets(kjt: KeyedJaggedTensor) -> None:
+    """
+    Validates the lengths and offsets of a KJT.
+
+    - At least one of lengths or offsets is provided
+    - If both are provided, they are consistent with each other
+    - The dimensions of these tensors align with the values tensor
+    """
     lengths = kjt.lengths_or_none()
     offsets = kjt.offsets_or_none()
     if lengths is None and offsets is None:
@@ -75,4 +78,46 @@ def _validate_offsets(offsets: torch.Tensor, values: torch.Tensor) -> None:
     if offsets[-1] != values.numel():
         raise ValueError(
             f"The last element of offsets must equal to the number of values, but got {offsets[-1]} and {values.numel()}"
+        )
+
+
+def _validate_keys(kjt: KeyedJaggedTensor) -> None:
+    """
+    Validates KJT keys, assuming the lengths/offsets input are valid.
+
+    - keys must be unique
+    - For non-VBE cases, the size of lengths is divisible by the number of keys
+    """
+    keys = kjt.keys()
+
+    if len(set(keys)) != len(keys):
+        raise ValueError("keys must be unique")
+
+    lengths = kjt.lengths_or_none()
+    offsets = kjt.offsets_or_none()
+    if lengths is not None:
+        lengths_size = lengths.numel()
+    else:
+        assert offsets is not None
+        lengths_size = offsets.numel() - 1
+
+    if len(keys) == 0 and lengths_size > 0:
+        raise ValueError("keys is empty but lengths or offsets is not")
+    elif len(keys) > 0:
+        # TODO: Validate KJT for VBE cases
+        if not kjt.variable_stride_per_key():
+            if lengths_size % len(keys) != 0:
+                raise ValueError(
+                    f"lengths size must be divisible by keys size, but got {lengths_size} and {len(keys)}"
+                )
+
+
+def _validate_weights(kjt: KeyedJaggedTensor) -> None:
+    """
+    Validates if the KJT weights has the same size as values.
+    """
+    weights = kjt.weights_or_none()
+    if weights is not None and weights.numel() != kjt.values().numel():
+        raise ValueError(
+            f"weights size must equal to values size, but got {weights.numel()} and {kjt.values().numel()}"
         )

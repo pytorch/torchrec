@@ -122,7 +122,56 @@ class TestJaggedTensorValidator(unittest.TestCase):
         ),
     ]
 
-    @parameterized.expand(INVALID_LENGTHS_OFFSETS_CASES)
+    INVALID_KEYS_CASES = [
+        param(
+            expected_error_msg="keys must be unique",
+            keys=["f1", "f1"],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+        ),
+        param(
+            expected_error_msg="keys is empty but lengths or offsets is not",
+            keys=[],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+        ),
+        param(
+            expected_error_msg="lengths size must be divisible by keys size",
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+        ),
+    ]
+
+    INVALID_WEIGHTS_CASES = [
+        param(
+            expected_error_msg="weights size must equal to values size",
+            keys=["f1", "f2"],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+            weights=torch.tensor([0.1, 0.2, 0.3, 0.4]),
+        ),
+        param(
+            expected_error_msg="weights size must equal to values size",
+            keys=["f1", "f2"],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+            weights=torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
+        ),
+    ]
+
+    @parameterized.expand(
+        [
+            *INVALID_LENGTHS_OFFSETS_CASES,
+            *INVALID_KEYS_CASES,
+            *INVALID_WEIGHTS_CASES,
+        ]
+    )
     def test_invalid_keyed_jagged_tensor(
         self,
         expected_error_msg: str,
@@ -130,12 +179,14 @@ class TestJaggedTensorValidator(unittest.TestCase):
         values: torch.Tensor,
         lengths: Optional[torch.Tensor],
         offsets: Optional[torch.Tensor],
+        weights: Optional[torch.Tensor] = None,
     ) -> None:
         kjt = KeyedJaggedTensor(
             keys=keys,
             values=values,
             lengths=lengths,
             offsets=offsets,
+            weights=weights,
         )
 
         with self.assertRaises(ValueError) as err:
@@ -179,5 +230,10 @@ class TestJaggedTensorValidator(unittest.TestCase):
         kjt = KeyedJaggedTensor.from_offsets_sync(
             keys=keys, values=values, weights=weights, offsets=offsets
         )
+
+        validate_keyed_jagged_tensor(kjt)
+
+    def test_valid_empty_kjt(self) -> None:
+        kjt = KeyedJaggedTensor.empty()
 
         validate_keyed_jagged_tensor(kjt)
