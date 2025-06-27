@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 
 import torch
 from torchrec.metrics.mae import compute_mae, MAEMetric
@@ -25,7 +25,10 @@ from torchrec.metrics.test_utils import (
 class TestMAEMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         error_sum = torch.sum(weights * torch.abs(labels - predictions))
