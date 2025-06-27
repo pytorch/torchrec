@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 
 import torch
 from torchrec.metrics.calibration import CalibrationMetric
@@ -25,7 +25,10 @@ from torchrec.metrics.test_utils import (
 class TestCalibrationMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         calibration_num = torch.sum(predictions * weights)
         calibration_denom = torch.sum(labels * weights)
