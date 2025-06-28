@@ -83,6 +83,14 @@ class RunOptions:
         pooling_factors (Optional[List[float]]): Pooling factors for each feature of the table.
             This is the average number of values each sample has for the feature.
         num_poolings (Optional[List[float]]): Number of poolings for each feature of the table.
+        dense_optimizer (str): Optimizer to use for dense parameters.
+            Default is "SGD".
+        dense_lr (float): Learning rate for dense parameters.
+            Default is 0.1.
+        sparse_optimizer (str): Optimizer to use for sparse parameters.
+            Default is "EXACT_ADAGRAD".
+        sparse_lr (float): Learning rate for sparse parameters.
+            Default is 0.1.
     """
 
     world_size: int = 2
@@ -94,6 +102,14 @@ class RunOptions:
     planner_type: str = "embedding"
     pooling_factors: Optional[List[float]] = None
     num_poolings: Optional[List[float]] = None
+    dense_optimizer: str = "SGD"
+    dense_lr: float = 0.1
+    dense_momentum: Optional[float] = None
+    dense_weight_decay: Optional[float] = None
+    sparse_optimizer: str = "EXACT_ADAGRAD"
+    sparse_lr: float = 0.1
+    sparse_momentum: Optional[float] = None
+    sparse_weight_decay: Optional[float] = None
 
 
 @dataclass
@@ -286,6 +302,19 @@ def runner(
             num_batches=run_option.num_batches,
         )
 
+        # Prepare fused_params for sparse optimizer
+        fused_params = {
+            "optimizer": getattr(EmbOptimType, run_option.sparse_optimizer.upper()),
+            "learning_rate": run_option.sparse_lr,
+        }
+
+        # Add momentum and weight_decay to fused_params if provided
+        if run_option.sparse_momentum is not None:
+            fused_params["momentum"] = run_option.sparse_momentum
+
+        if run_option.sparse_weight_decay is not None:
+            fused_params["weight_decay"] = run_option.sparse_weight_decay
+
         sharded_model, optimizer = generate_sharded_model_and_optimizer(
             model=unsharded_model,
             sharding_type=run_option.sharding_type.value,
@@ -293,10 +322,11 @@ def runner(
             # pyre-ignore
             pg=ctx.pg,
             device=ctx.device,
-            fused_params={
-                "optimizer": EmbOptimType.EXACT_ADAGRAD,
-                "learning_rate": 0.1,
-            },
+            fused_params=fused_params,
+            dense_optimizer=run_option.dense_optimizer,
+            dense_lr=run_option.dense_lr,
+            dense_momentum=run_option.dense_momentum,
+            dense_weight_decay=run_option.dense_weight_decay,
             planner=planner,
         )
         pipeline = generate_pipeline(
