@@ -9,7 +9,7 @@
 
 import unittest
 
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from torchrec.metrics.gauc import compute_gauc_3d, compute_window_auc, GAUCMetric
@@ -24,6 +24,7 @@ class TestGAUCMetric(TestMetric):
         labels: torch.Tensor,
         predictions: torch.Tensor,
         weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         gauc_res = compute_gauc_3d(predictions, labels, weights)
         return {

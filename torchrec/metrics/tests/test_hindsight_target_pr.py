@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 
 import torch
 from torchrec.metrics.hindsight_target_pr import (
@@ -32,7 +32,10 @@ THRESHOLD_GRANULARITY = 1000
 class TestHindsightTargetPRMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         tp_sum = torch.zeros(THRESHOLD_GRANULARITY, dtype=torch.double)
@@ -59,7 +62,10 @@ class TestHindsightTargetPRMetric(TestMetric):
 class TestHindsightTargetPrecisionMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         tp_sum = torch.zeros(THRESHOLD_GRANULARITY, dtype=torch.double)
@@ -89,7 +95,10 @@ class TestHindsightTargetPrecisionMetric(TestMetric):
 class TestHindsightTargetRecallMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         tp_sum = torch.zeros(THRESHOLD_GRANULARITY, dtype=torch.double)

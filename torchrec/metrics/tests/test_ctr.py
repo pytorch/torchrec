@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 
 import torch
 from torchrec.metrics.ctr import CTRMetric
@@ -25,7 +25,10 @@ from torchrec.metrics.test_utils import (
 class TestCTRMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         ctr_num = torch.sum(labels * weights)
         ctr_denom = torch.sum(weights)

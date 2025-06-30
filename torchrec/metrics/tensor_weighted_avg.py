@@ -25,6 +25,13 @@ def get_mean(value_sum: torch.Tensor, num_samples: torch.Tensor) -> torch.Tensor
 
 
 class TensorWeightedAvgMetricComputation(RecMetricComputation):
+    """
+    This class implements the RecMetricComputation for tensor weighted average.
+
+    It is a sibling to WeightedAvgMetricComputation, but it computes the weighted average of a tensor
+    passed in as a required input instead of the predictions tensor.
+    """
+
     def __init__(
         self,
         *args: Any,
@@ -115,15 +122,6 @@ class TensorWeightedAvgMetricComputation(RecMetricComputation):
 class TensorWeightedAvgMetric(RecMetric):
     _namespace: MetricNamespace = MetricNamespace.WEIGHTED_AVG
     _computation_class: Type[RecMetricComputation] = TensorWeightedAvgMetricComputation
-
-    def __init__(
-        self,
-        # pyre-ignore Missing parameter annotation [2]
-        *args,
-        **kwargs: Dict[str, Any],
-    ) -> None:
-
-        super().__init__(*args, **kwargs)
 
     def _get_task_kwargs(
         self, task_config: Union[RecTaskInfo, List[RecTaskInfo]]
