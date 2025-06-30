@@ -8,8 +8,7 @@
 # pyre-strict
 
 import unittest
-
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 
 import torch
 
@@ -31,7 +30,10 @@ class TestNEMetric(TestMetric):
 
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         cross_entropy = compute_cross_entropy(
             labels, predictions, weights, TestNEMetric.eta
