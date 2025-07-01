@@ -36,46 +36,57 @@ jobs:
           - is_pr: true
             python:
               version: "3.12"
-    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
-    permissions:
-      id-token: write
-      contents: read
-    with:
-      runner: ${{ matrix.os }}
-      timeout: 15
-      script: |
-        ldd --version
-        conda create -y --name build_binary python=${{ matrix.python.version }}
-        conda info
-        python --version
-        conda run -n build_binary python --version
-        conda run -n build_binary \
-          pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
-        conda run -n build_binary \
-          python -c "import torch"
-        echo "torch succeeded"
-        conda run -n build_binary \
-          python -c "import torch.distributed"
-        conda run -n build_binary \
-          python -c "import fbgemm_gpu"
-        echo "fbgemm_gpu succeeded"
-        conda run -n build_binary \
-          pip install torchrec --index-url https://download.pytorch.org/whl/nightly/cpu
-        conda run -n build_binary \
-          python -c "import torchrec"
-        echo "torch.distributed succeeded"
-        conda run -n build_binary \
-          python -c "import numpy"
-        echo "numpy succeeded"
-        conda install -n build_binary -y pytest
-        # Read the list of tests to skip from a file, ignoring empty lines and comments
-        skip_expression=$(awk '!/^($|#)/ {printf " and not %s", $0}' ./.github/scripts/tests_to_skip.txt)
-        # Check if skip_expression is effectively empty
-        if [ -z "$skip_expression" ]; then
-          skip_expression=""
-        else
-          skip_expression=${skip_expression:5}  # Remove the leading " and "
-        fi
-        conda run -n build_binary \
-          python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
-          --ignore-glob=**/test_utils/ -k "$skip_expression"
+    steps:
+    - name: Checkout torchrec repo
+      uses: actions/checkout@v3
+      with:
+        repository: pytorch/torchrec@main
+        path: torchrec
+    - name: Execute Torchrec CPU Unit Tests
+      uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+      permissions:
+        id-token: write
+        contents: read
+      with:
+        runner: ${{ matrix.os }}
+        timeout: 15
+        script: |
+          cd torchrec/torchrec
+          ldd --version
+          conda create -y --name build_binary python=${{ matrix.python.version }}
+          conda info
+          python --version
+          conda run -n build_binary python --version
+          conda run -n build_binary \
+            pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
+          conda run -n build_binary \
+            python -c "import torch"
+          echo "torch succeeded"
+          conda run -n build_binary \
+            python -c "import torch.distributed"
+          conda run -n build_binary \
+            python -c "import fbgemm_gpu"
+          echo "fbgemm_gpu succeeded"
+          conda run -n build_binary \
+            pip install -r requirements.txt
+          conda run -n build_binary \
+            python setup.py bdist_wheel \
+            --python-tag=${{ matrix.python.tag }}
+          conda run -n build_binary \
+            python -c "import torchrec"
+          echo "torch.distributed succeeded"
+          conda run -n build_binary \
+            python -c "import numpy"
+          echo "numpy succeeded"
+          conda install -n build_binary -y pytest
+          # Read the list of tests to skip from a file, ignoring empty lines and comments
+          skip_expression=$(awk '!/^($|#)/ {printf " and not %s", $0}' ./.github/scripts/tests_to_skip.txt)
+          # Check if skip_expression is effectively empty
+          if [ -z "$skip_expression" ]; then
+            skip_expression=""
+          else
+            skip_expression=${skip_expression:5}  # Remove the leading " and "
+          fi
+          conda run -n build_binary \
+            python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
+            --ignore-glob=**/test_utils/ -k "$skip_expression"
