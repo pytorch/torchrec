@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Iterable, Type, Union
+from typing import Dict, Iterable, Optional, Type, Union
 
 import torch
 from torch import no_grad
@@ -31,7 +31,10 @@ WORLD_SIZE = 4
 class TestPrecisionMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         true_pos_sum = torch.sum(weights * ((predictions >= 0.5) * labels))

@@ -9,7 +9,7 @@
 
 import unittest
 from functools import partial, update_wrapper
-from typing import Callable, Dict, Type
+from typing import Callable, Dict, Optional, Type
 
 import torch
 from torchrec.metrics.mse import compute_mse, compute_r_squared, compute_rmse, MSEMetric
@@ -26,7 +26,10 @@ from torchrec.metrics.test_utils import (
 class TestMSEMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         error_sum = torch.sum(weights * torch.square(labels - predictions))
@@ -49,7 +52,10 @@ WORLD_SIZE = 4
 class TestRMSEMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         error_sum = torch.sum(weights * torch.square(labels - predictions))
@@ -69,7 +75,10 @@ class TestRMSEMetric(TestMetric):
 class TestRSquaredMetric(TestMetric):
     @staticmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         predictions = predictions.double()
         error_sum = torch.sum(weights * torch.square(labels - predictions))

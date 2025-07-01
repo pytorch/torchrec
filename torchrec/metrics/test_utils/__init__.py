@@ -87,6 +87,7 @@ def gen_test_tasks(
             label_name=f"{task_name}-label",
             prediction_name=f"{task_name}-prediction",
             weight_name=f"{task_name}-weight",
+            tensor_name=f"{task_name}-tensor",
         )
         for task_name in task_names
     ]
@@ -131,7 +132,10 @@ class TestMetric(abc.ABC):
     @staticmethod
     @abc.abstractmethod
     def _get_states(
-        labels: torch.Tensor, predictions: torch.Tensor, weights: torch.Tensor
+        labels: torch.Tensor,
+        predictions: torch.Tensor,
+        weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         pass
 
@@ -161,6 +165,7 @@ class TestMetric(abc.ABC):
                     aggregated_model_out[task_info.label_name],
                     aggregated_model_out[task_info.prediction_name],
                     aggregated_model_out[task_info.weight_name],
+                    aggregated_model_out[task_info.tensor_name or "tensor"],
                 )
                 if self._compute_lifetime_metric:
                     self._aggregate(lifetime_states[task_info.name], states)
@@ -170,6 +175,7 @@ class TestMetric(abc.ABC):
                     model_outs[i][task_info.label_name],
                     model_outs[i][task_info.prediction_name],
                     model_outs[i][task_info.weight_name],
+                    model_outs[i][task_info.tensor_name or "tensor"],
                 )
                 if self._local_compute_lifetime_metric:
                     self._aggregate(local_lifetime_states[task_info.name], local_states)
@@ -252,6 +258,7 @@ def rec_metric_value_test_helper(
                 label_name=task.label_name,
                 prediction_name=task.prediction_name,
                 weight_name=task.weight_name,
+                tensor_name=task.tensor_name or "tensor",
                 batch_size=batch_size,
                 n_classes=n_classes,
                 weight_value=weight_value,
@@ -288,8 +295,11 @@ def rec_metric_value_test_helper(
             **kwargs,
         )
         for i in range(nsteps):
-            labels, predictions, weights, _ = parse_task_model_outputs(
-                tasks, model_outs[i]
+            # Get required_inputs_list from the target metric
+            required_inputs_list = list(target_metric_obj.get_required_inputs())
+
+            labels, predictions, weights, required_inputs = parse_task_model_outputs(
+                tasks, model_outs[i], required_inputs_list
             )
             if target_compute_mode in [
                 RecComputeMode.FUSED_TASKS_COMPUTATION,
@@ -302,7 +312,10 @@ def rec_metric_value_test_helper(
             if timestamps is not None:
                 time_mock.return_value = timestamps[i]
             target_metric_obj.update(
-                predictions=predictions, labels=labels, weights=weights
+                predictions=predictions,
+                labels=labels,
+                weights=weights,
+                required_inputs=required_inputs,
             )
         result_metrics = target_metric_obj.compute()
         result_metrics.update(target_metric_obj.local_compute())
@@ -422,7 +435,7 @@ def sync_test_helper(
         # pyre-ignore[6]: Incompatible parameter type
         kwargs["number_of_classes"] = n_classes
 
-    auc = target_clazz(
+    target_metric_obj = target_clazz(
         world_size=world_size,
         batch_size=batch_size,
         my_rank=rank,
@@ -440,6 +453,7 @@ def sync_test_helper(
             label_name=task.label_name,
             prediction_name=task.prediction_name,
             weight_name=task.weight_name,
+            tensor_name=task.tensor_name or "tensor",
             batch_size=batch_size,
             n_classes=n_classes,
             weight_value=weight_value,
@@ -450,19 +464,32 @@ def sync_test_helper(
     model_outs = []
     model_outs.append({k: v for d in _model_outs for k, v in d.items()})
 
+    # Get required_inputs from the target metric
+    required_inputs_list = list(target_metric_obj.get_required_inputs())
+
     # we send an uneven number of tensors to each rank to test that GPU sync works
     if rank == 0:
         for _ in range(3):
-            labels, predictions, weights, _ = parse_task_model_outputs(
-                tasks, model_outs[0]
+            labels, predictions, weights, required_inputs = parse_task_model_outputs(
+                tasks, model_outs[0], required_inputs_list
             )
-            auc.update(predictions=predictions, labels=labels, weights=weights)
+            target_metric_obj.update(
+                predictions=predictions,
+                labels=labels,
+                weights=weights,
+                required_inputs=required_inputs,
+            )
     elif rank == 1:
         for _ in range(1):
-            labels, predictions, weights, _ = parse_task_model_outputs(
-                tasks, model_outs[0]
+            labels, predictions, weights, required_inputs = parse_task_model_outputs(
+                tasks, model_outs[0], required_inputs_list
             )
-            auc.update(predictions=predictions, labels=labels, weights=weights)
+            target_metric_obj.update(
+                predictions=predictions,
+                labels=labels,
+                weights=weights,
+                required_inputs=required_inputs,
+            )
 
     # check against test metric
     test_metrics: TestRecMetricOutput = ({}, {}, {}, {})
@@ -474,7 +501,7 @@ def sync_test_helper(
         model_outs = model_outs * 2
         test_metrics = test_metric_obj.compute(model_outs, 2, batch_window_size, None)
 
-    res = auc.compute()
+    res = target_metric_obj.compute()
 
     if rank == 0:
         # Serving Calibration uses Calibration naming inconsistently
@@ -490,21 +517,31 @@ def sync_test_helper(
             )
 
     # we also test the case where other rank has more tensors than rank 0
-    auc.reset()
+    target_metric_obj.reset()
     if rank == 0:
         for _ in range(1):
-            labels, predictions, weights, _ = parse_task_model_outputs(
-                tasks, model_outs[0]
+            labels, predictions, weights, required_inputs = parse_task_model_outputs(
+                tasks, model_outs[0], required_inputs_list
             )
-            auc.update(predictions=predictions, labels=labels, weights=weights)
+            target_metric_obj.update(
+                predictions=predictions,
+                labels=labels,
+                weights=weights,
+                required_inputs=required_inputs,
+            )
     elif rank == 1:
         for _ in range(3):
-            labels, predictions, weights, _ = parse_task_model_outputs(
-                tasks, model_outs[0]
+            labels, predictions, weights, required_inputs = parse_task_model_outputs(
+                tasks, model_outs[0], required_inputs_list
             )
-            auc.update(predictions=predictions, labels=labels, weights=weights)
+            target_metric_obj.update(
+                predictions=predictions,
+                labels=labels,
+                weights=weights,
+                required_inputs=required_inputs,
+            )
 
-    res = auc.compute()
+    res = target_metric_obj.compute()
 
     if rank == 0:
         # Serving Calibration uses Calibration naming inconsistently

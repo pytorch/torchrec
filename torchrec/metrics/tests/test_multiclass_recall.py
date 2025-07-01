@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 
 import torch
 from torchrec.metrics.multiclass_recall import (
@@ -37,6 +37,7 @@ class TestMulticlassRecallMetric(TestMetric):
         labels: torch.Tensor,
         predictions: torch.Tensor,
         weights: torch.Tensor,
+        required_inputs_tensor: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         states = get_multiclass_recall_states(
             predictions, labels, weights, TestMulticlassRecallMetric.n_classes
