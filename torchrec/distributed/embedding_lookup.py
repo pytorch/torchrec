@@ -10,7 +10,7 @@
 import logging
 from abc import ABC
 from collections import OrderedDict
-from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -134,8 +134,7 @@ def _load_state_dict(
                     dst_param.detach().copy_(src_param)
                 unexpected_keys.remove(key)
             else:
-                # pyre-fixme[22]: The cast is redundant.
-                missing_keys.append(cast(str, key))
+                missing_keys.append(key)
     return missing_keys, unexpected_keys
 
 
