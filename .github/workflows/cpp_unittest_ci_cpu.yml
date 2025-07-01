@@ -16,7 +16,7 @@ on:
       - "third_party/*"
       - .gitignore
       - "*.md"
-
+  workflow_call:
 jobs:
   build_test:
     strategy:
