@@ -764,7 +764,7 @@ def sharding_single_rank_test_single_process(
 
     global_model_named_params_as_dict = dict(global_model.named_parameters())
     local_model_named_params_as_dict = dict(local_model.named_parameters())
-
+    # Registers a hook to update parameters in the backward pass, when gradients are computed.
     if apply_optimizer_in_backward_config is not None:
         for apply_optim_name, (
             optimizer_type,
