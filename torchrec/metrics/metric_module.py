@@ -12,7 +12,8 @@
 import abc
 import logging
 import time
-from typing import Any, Dict, List, Optional, Type, Union
+from collections import defaultdict
+from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar, Union
 
 import torch
 import torch.distributed as dist
@@ -105,6 +106,8 @@ REC_METRICS_MAPPING: Dict[RecMetricEnumBase, Type[RecMetric]] = {
     RecMetricEnum.HINDSIGHT_TARGET_PR: HindsightTargetPRMetric,
 }
 
+
+T = TypeVar("T")
 
 # Label used for emitting model metrics to the coresponding trainer publishers.
 MODEL_METRIC_LABEL: str = "model"
@@ -370,31 +373,29 @@ class RecMetricModule(nn.Module):
         world_size: int,
         process_group: Union[dist.ProcessGroup, DeviceMesh],
     ) -> Dict[str, Dict[str, Union[torch.Tensor, List[torch.Tensor]]]]:
-        metric_computations = metric._metrics_computations
-        tasks = metric._tasks
-
-        state_aggregated = {}
-        for task, metric_computation in zip(tasks, metric_computations):
-            inputs = []
-            state_aggregated[task.name] = {}
+        result = defaultdict(dict)
+        for task, computation in zip(metric._tasks, metric._metrics_computations):
             # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute
             #  `items`.
-            for attr, reduction_fn in metric_computation._reductions.items():
-                inputs.append((attr, getattr(metric_computation, attr), reduction_fn))
-
-            # TODO: do one all gather call per metric, instead of one per state
-            # this may require more logic as shapes of states are not guranteed to be same
-            # may need padding
-            for state, tensor, reduction_fn in inputs:
-                gather_list = [torch.empty_like(tensor) for _ in range(world_size)]
-                dist.all_gather(gather_list, tensor, group=process_group)
-                state_aggregated[task.name][state] = (
-                    reduction_fn(torch.stack(gather_list))
-                    if reduction_fn is not None
-                    else gather_list
+            for state_name, reduction_fn in computation._reductions.items():
+                tensor_or_list: Union[List[torch.Tensor], torch.Tensor] = getattr(
+                    computation, state_name
                 )
 
-        return state_aggregated
+                if isinstance(tensor_or_list, list):
+                    gathered = _all_gather_tensor_list(
+                        tensor_or_list, world_size, process_group
+                    )
+                else:
+                    gathered = torch.stack(
+                        _all_gather_tensor(tensor_or_list, world_size, process_group)
+                    )
+                reduced = (
+                    reduction_fn(gathered) if reduction_fn is not None else gathered
+                )
+                result[task.name][state_name] = reduced
+
+        return result
 
     def get_pre_compute_states(
         self, pg: Optional[Union[dist.ProcessGroup, DeviceMesh]] = None
@@ -611,3 +612,26 @@ def generate_metric_module(
     )
     metrics.to(device)
     return metrics
+
+
+def _all_gather_tensor(
+    tensor: torch.Tensor,
+    world_size: int,
+    pg: Union[dist.ProcessGroup, DeviceMesh],
+) -> List[torch.Tensor]:
+    """All-gather a single tensor and return the gathered list."""
+    out = [torch.empty_like(tensor) for _ in range(world_size)]  # pragma: no cover
+    dist.all_gather(out, tensor, group=pg)
+    return out
+
+
+def _all_gather_tensor_list(
+    tensors: List[torch.Tensor],
+    world_size: int,
+    pg: Union[dist.ProcessGroup, DeviceMesh],
+) -> List[torch.Tensor]:
+    """All-gather every tensor in a list and flatten the result."""
+    gathered: List[torch.Tensor] = []  # pragma: no cover
+    for t in tensors:
+        gathered.extend(_all_gather_tensor(t, world_size, pg))
+    return gathered
