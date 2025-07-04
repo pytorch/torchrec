@@ -773,6 +773,7 @@ class PlannerErrorType(Enum):
     STRICT_CONSTRAINTS = "strict_constraints"
     PARTITION = "partition"
     OTHER = "other"
+    PLANNER_INPUT_CONTEXT_MISMATCH = "planner_input_context_mismatch"
 
 
 class PlannerError(Exception):
