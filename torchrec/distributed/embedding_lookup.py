@@ -40,6 +40,7 @@ from torchrec.distributed.batched_embedding_kernel import (
     KeyValueEmbedding,
     KeyValueEmbeddingBag,
     ZeroCollisionKeyValueEmbedding,
+    ZeroCollisionKeyValueEmbeddingBag,
 )
 from torchrec.distributed.comm_ops import get_gradient_division
 from torchrec.distributed.composable.table_batched_embedding_slice import (
@@ -511,6 +512,24 @@ class GroupedPooledEmbeddingsLookup(
                 device=device,
                 sharding_type=sharding_type,
             )
+        elif config.compute_kernel == EmbeddingComputeKernel.SSD_VIRTUAL_TABLE:
+            # for ssd kv
+            return ZeroCollisionKeyValueEmbeddingBag(
+                config=config,
+                pg=pg,
+                device=device,
+                sharding_type=sharding_type,
+                backend_type=BackendType.SSD,
+            )
+        elif config.compute_kernel == EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE:
+            # for dram kv
+            return ZeroCollisionKeyValueEmbeddingBag(
+                config=config,
+                pg=pg,
+                device=device,
+                sharding_type=sharding_type,
+                backend_type=BackendType.DRAM,
+            )
         else:
             raise ValueError(f"Compute kernel not supported {config.compute_kernel}")
 
@@ -524,6 +543,8 @@ class GroupedPooledEmbeddingsLookup(
                 if (
                     table.compute_kernel == EmbeddingComputeKernel.FUSED_UVM_CACHING
                     or table.compute_kernel == EmbeddingComputeKernel.KEY_VALUE
+                    or table.compute_kernel == EmbeddingComputeKernel.SSD_VIRTUAL_TABLE
+                    or table.compute_kernel == EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE
                 ):
                     return True
             return False
@@ -719,7 +740,9 @@ class GroupedPooledEmbeddingsLookup(
         RocksDB snapshot to support windowed access.
         """
         for emb_module in self._emb_modules:
-            if isinstance(emb_module, KeyValueEmbeddingBag):
+            if isinstance(emb_module, KeyValueEmbeddingBag) or isinstance(
+                emb_module, ZeroCollisionKeyValueEmbeddingBag
+            ):
                 yield from emb_module.get_named_split_embedding_weights_snapshot()
 
     def flush(self) -> None:
