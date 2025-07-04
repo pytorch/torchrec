@@ -167,8 +167,14 @@ def shards_all_to_all(
                         extend_shard_name(shard_name)
                     ][tmp_momentum_extender(shard_name)].local_shards()
                     assert len(local_optimizer) == 1
+                    local_optimizer_tensor = local_optimizer[0].tensor
+                    if len(local_optimizer_tensor.size()) == 1:  # 1D Optimizer Tensor
+                        # Convert to 2D Tensor, transpose, for AllToAll
+                        local_optimizer_tensor = local_optimizer_tensor.view(
+                            local_optimizer_tensor.size(0), 1
+                        )
                     padded_local_optimizer = pad_tensor_to_max_dims(
-                        local_optimizer[0].tensor, max_dim_0, max_dim_1
+                        local_optimizer_tensor, max_dim_0, max_dim_1
                     )
                     local_table_to_opt_by_dst_rank[dst_rank].append(
                         padded_local_optimizer
@@ -284,9 +290,7 @@ def update_state_dict_post_resharding(
     for shard_name, shard_size in ordered_shard_names_and_lengths:
         end_slice_index = slice_index + max_dim_0
         cur_t = output_tensor[slice_index:end_slice_index]
-        cur_t = pad_tensor_to_max_dims(
-            cur_t, shard_size[0], shard_size[1], remove_padding=True
-        )
+        cur_t = pad_tensor_to_max_dims(cur_t, shard_size[0], shard_size[1])
         shard_name_to_local_output_tensor[shard_name] = cur_t
         slice_index = end_slice_index
 
@@ -335,9 +339,7 @@ def update_optimizer_state_post_resharding(
     for shard_name, shard_size in ordered_shard_names_and_lengths:
         end_slice_index = slice_index + max_dim_0
         cur_t = output_tensor[slice_index:end_slice_index]
-        cur_t = pad_tensor_to_max_dims(
-            cur_t, shard_size[0], shard_size[1], remove_padding=True
-        )
+        cur_t = pad_tensor_to_max_dims(cur_t, shard_size[0], shard_size[1])
         shard_name_to_local_output_tensor[shard_name] = cur_t
         slice_index = end_slice_index
 
@@ -352,9 +354,13 @@ def update_optimizer_state_post_resharding(
             sharded_t = item[momentum_name]
             assert len(sharded_t._local_shards) == 1
             # TODO: support multiple shards in CW sharding
+            local_tensor = shard_name_to_local_output_tensor[shard_name]
+            if len(sharded_t._local_shards[0].tensor.size()) == 1:
+                # Need to transpose 1D optimizer tensor, due to previous conversion
+                local_tensor = local_tensor.T[0]
             sharded_t._local_shards = [
                 Shard(
-                    tensor=shard_name_to_local_output_tensor[shard_name],
+                    tensor=local_tensor,
                     metadata=shard.metadata,
                 )
                 for shard in sharded_t._local_shards
@@ -426,7 +432,6 @@ def pad_tensor_to_max_dims(
     t: torch.Tensor,
     expected_dim_0: int,
     expected_dim_1: int,
-    remove_padding: bool = False,
 ) -> torch.Tensor:
     """
     Pads a tensor on the right and bottom with zeros.
@@ -441,14 +446,10 @@ def pad_tensor_to_max_dims(
     """
     pad_right = expected_dim_1 - t.size(1)
     pad_bottom = expected_dim_0 - t.size(0)
+    pad = (0, pad_right, 0, pad_bottom)
     return F.pad(
         input=t,
-        pad=(
-            0,
-            pad_right,
-            0,
-            pad_bottom,
-        ),  # right and bottom
+        pad=pad,
         mode="constant",
         value=0,
     )
