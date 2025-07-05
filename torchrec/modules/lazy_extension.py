@@ -168,7 +168,7 @@ class LazyModuleExtensionMixin(LazyModuleMixin):
     def _infer_parameters(self: _LazyExtensionProtocol, module, args, kwargs) -> None:
         r"""Infers the size and initializes the parameters according to the provided input batch.
 
-        Given a module that contains parameters that were declared inferrable
+        Given a module that contains parameters that were declared inferable
         using :class:`torch.nn.parameter.ParameterMode.Infer`, runs a forward pass
         in the complete module using the provided input to initialize all the parameters
         as needed.
