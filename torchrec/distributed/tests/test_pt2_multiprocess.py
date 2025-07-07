@@ -749,11 +749,6 @@ class TestPt2Train(MultiProcessTestBase):
         model_type, sharding_type, input_type, tovb, compile_backend, config = (
             given_config_tuple
         )
-        # torch/testing/_internal/common_utils.py calls `disable_global_flags()`
-        # workaround RuntimeError: not allowed to set ... after disable_global_flags
-        setattr(  # noqa: B010
-            torch.backends, "__allow_nonbracketed_mutation_flag", True
-        )
         self._run_multi_process_test(
             callable=_test_compile_rank_fn,
             test_model_type=model_type,
@@ -765,9 +760,6 @@ class TestPt2Train(MultiProcessTestBase):
             convert_to_vb=tovb == _ConvertToVariableBatch.TRUE,
             config=config,
             torch_compile_backend=compile_backend,
-        )
-        setattr(  # noqa: B010
-            torch.backends, "__allow_nonbracketed_mutation_flag", False
         )
 
     # pyre-ignore
