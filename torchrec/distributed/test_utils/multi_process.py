@@ -90,7 +90,15 @@ class MultiProcessContext:
         dist.destroy_process_group(self.pg)
         torch.use_deterministic_algorithms(False)
         if torch.cuda.is_available() and self.disable_cuda_tf_32:
+            # torch/testing/_internal/common_utils.py calls `disable_global_flags()`
+            # workaround RuntimeError: not allowed to set ... after disable_global_flags
+            setattr(  # noqa: B010
+                torch.backends, "__allow_nonbracketed_mutation_flag", True
+            )
             torch.backends.cudnn.allow_tf32 = True
+            setattr(  # noqa: B010
+                torch.backends, "__allow_nonbracketed_mutation_flag", False
+            )
 
 
 class MultiProcessTestBase(unittest.TestCase):
