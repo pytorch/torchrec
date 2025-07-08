@@ -48,6 +48,7 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     TrainPipelineSemiSync,
 )
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
+from torchrec.models.deepfm import SimpleDeepFMNNWrapper
 from torchrec.models.dlrm import DLRMWrapper
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
@@ -188,8 +189,16 @@ class DeepFMConfig(BaseModelConfig):
         weighted_tables: List[EmbeddingBagConfig],
         dense_device: torch.device,
     ) -> nn.Module:
-        # TODO: Implement DeepFM model generation
-        raise NotImplementedError("DeepFM model generation not yet implemented")
+        # DeepFM only uses unweighted tables
+        ebc = EmbeddingBagCollection(tables=tables, device=torch.device("meta"))
+
+        # Create and return SimpleDeepFMNN model
+        return SimpleDeepFMNNWrapper(
+            num_dense_features=self.num_float_features,
+            embedding_bag_collection=ebc,
+            hidden_layer_size=self.hidden_layer_size,
+            deep_fm_dimension=self.deep_fm_dimension,
+        )
 
 
 @dataclass
