@@ -1,0 +1,12 @@
+hstu_num_heads: 4 # 1 for hstu, 2 for hstu-large
+hstu_attn_num_layers: 3 # 2 for hstu, 8 for hstu-large
+hstu_embedding_table_dim: 256
+hstu_transducer_embedding_dim: 512
+hstu_attn_linear_dim: 128
+hstu_attn_qk_dim: 128
+hstu_input_dropout_ratio: 0.2
+hstu_linear_dropout_rate: 0.1
+causal_multitask_weights: 0.2
+num_embeddings: 100000
+embedding_module_attribute_path: "dlrm_hstu._embedding_collection" # the attribute path of embedding module after model
+managed_collision_module_attribute_path: "module.dlrm_hstu._embedding_collection.mc_embedding_collection._managed_collision_collection._managed_collision_modules" # the attribute path of managed collision module after model

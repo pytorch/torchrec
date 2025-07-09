@@ -1,0 +1,109 @@
+dataset_path: "/home/lizhouyu/oss_github/generative-recommenders/generative_recommenders/dlrm_v3/data/KuaiRand-27K/data"
+batch_size: 16
+train_split_percentage: 0.75
+num_workers: 4
+prefetch_factor: 4
+max_num_candidates: 10
+max_seq_len: 200
+contextual_feature_to_max_length:
+  user_id: 1
+  user_active_degree: 1
+  follow_user_num_range: 1
+  fans_user_num_range: 1
+  friend_user_num_range: 1
+  register_days_range: 1
+uih_keys:
+  - user_id
+  - user_active_degree
+  - follow_user_num_range
+  - fans_user_num_range
+  - friend_user_num_range
+  - register_days_range
+  - video_id
+  - action_timestamp
+  - action_weight
+  - watch_time
+candidates_keys:
+  - item_video_id
+  - item_action_weight
+  - item_target_watchtime
+  - item_query_time
+user_embedding_feature_names:
+  - video_id
+  - user_id
+  - user_active_degree
+  - follow_user_num_range
+  - fans_user_num_range
+  - friend_user_num_range
+  - register_days_range
+item_embedding_feature_names:
+  - item_video_id
+uih_post_id_feature_name: video_id
+uih_action_time_feature_name: action_timestamp
+uih_weight_feature_name: action_weight
+candidates_weight_feature_name: item_action_weight
+candidates_watchtime_feature_name: item_target_watchtime
+candidates_querytime_feature_name: item_query_time
+merge_uih_candidate_feature_mapping:
+  -
+    - video_id
+    - item_video_id
+  -
+    - action_timestamp
+    - item_query_time
+  -
+    - action_weight
+    - item_action_weight
+  -
+    - watch_time
+    - item_target_watchtime
+hstu_uih_feature_names:
+  - user_id
+  - user_active_degree
+  - follow_user_num_range
+  - fans_user_num_range
+  - friend_user_num_range
+  - register_days_range
+  - video_id
+  - action_timestamp
+  - action_weight
+  - watch_time
+hstu_candidate_feature_names:
+  - item_video_id
+  - item_action_weight
+  - item_target_watchtime
+  - item_query_time
+multitask_configs:
+  - task_name: is_click
+    task_weight: 1
+    task_type: classification
+  - task_name: is_like
+    task_weight: 2
+    task_type: classification
+  - task_name: is_follow
+    task_weight: 4
+    task_type: classification
+  - task_name: is_comment
+    task_weight: 8
+    task_type: classification
+  - task_name: is_forward
+    task_weight: 16
+    task_type: classification
+  - task_name: is_hate
+    task_weight: 32
+    task_type: classification
+  - task_name: long_view
+    task_weight: 64
+    task_type: classification
+  - task_name: is_profile_enter
+    task_weight: 128
+    task_type: classification
+action_weights:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+  - 128
