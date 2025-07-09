@@ -1169,10 +1169,23 @@ class InferGroupedPooledEmbeddingsLookup(
         self._is_empty_rank: List[bool] = []
         for rank in range(world_size):
             empty_rank = len(grouped_configs_per_rank[rank]) == 0
-            # Propagate shard index to get the correct runtime_device based on shard metadata
-            # in case of heterogenous sharding of a single table across different device types
+            grouped_configs_per_rank_elem = grouped_configs_per_rank[rank]
+            contains_virtual_table = any(
+                config.is_using_virtual_table()
+                for config in grouped_configs_per_rank_elem
+            )
+            # In case of heterogenous sharding of a single table acorss
+            # different device types i.e. when device_type_from_sharding_infos
+            # is a tuple OR if any of the table is virtual table, we can for
+            # now assume that the table is row_wise sharded and the shard_index
+            # can be set to the rank. shard_index is used downstream to get
+            # runtime_device (or row alignment) as well as to get the shard
+            # offsets for virtual table
             shard_index = (
-                rank if isinstance(device_type_from_sharding_infos, tuple) else None
+                rank
+                if isinstance(device_type_from_sharding_infos, tuple)
+                or contains_virtual_table
+                else None
             )
             self._is_empty_rank.append(empty_rank)
             if not empty_rank:
@@ -1235,10 +1248,23 @@ class InferGroupedEmbeddingsLookup(
                 "meta" if device is not None and device.type == "meta" else "cuda"
             )
         for rank in range(world_size):
-            # propagate shard index to get the correct runtime_device based on shard metadata
-            # in case of heterogenous sharding of a single table acorss different device types
+            grouped_configs_per_rank_elem = grouped_configs_per_rank[rank]
+            contains_virtual_table = any(
+                config.is_using_virtual_table()
+                for config in grouped_configs_per_rank_elem
+            )
+            # In case of heterogenous sharding of a single table acorss
+            # different device types i.e. when device_type_from_sharding_infos
+            # is a tuple OR if any of the table is virtual table, we can for
+            # now assume that the table is row_wise sharded and the shard_index
+            # can be set to the rank. shard_index is used downstream to get
+            # runtime_device (or row alignment) as well as to get the shard
+            # offsets for virtual table
             shard_index = (
-                rank if isinstance(device_type_from_sharding_infos, tuple) else None
+                rank
+                if isinstance(device_type_from_sharding_infos, tuple)
+                or contains_virtual_table
+                else None
             )
             device = rank_device(device_type, rank)
             self._embedding_lookups_per_rank.append(

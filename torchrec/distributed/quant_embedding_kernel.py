@@ -120,6 +120,30 @@ def _quantize_weight(
     return quant_weight_list
 
 
+def _get_shard_offsets_for_kv_zch(
+    config: GroupedEmbeddingConfig,
+    shard_index: int,
+) -> List[int]:
+    """
+    Given kv zch tables are rw sharded, getting the row offsets for each shard
+    at level to be used witin kv zch look up kernel
+    """
+    shard_row_offsets = []
+    for table in config.embedding_tables:
+        assert (
+            table.global_metadata is not None
+        ), f"Expected global_metadata to be populated for table {table.name} to get shard offsets for kv zch look up kernel"
+        assert (
+            len(table.global_metadata.shards_metadata) > shard_index
+        ), f"Expected table {table.name} to have more shards than shard index {shard_index}. Found {len(table.global_metadata.shards_metadata)} shards"
+        shard_row_offsets.append(
+            # pyre-ignore: Undefined attribute [16]
+            table.global_metadata.shards_metadata[shard_index].shard_offsets[0]
+        )
+    logger.info(f"Shard row offsets for kv zch look up table: {shard_row_offsets=}")
+    return shard_row_offsets
+
+
 def _get_runtime_device(
     device: Optional[torch.device],
     config: GroupedEmbeddingConfig,
@@ -293,6 +317,16 @@ class QuantBatchedEmbeddingBag(
         else:
             tbe_clazz = IntNBitTableBatchedEmbeddingBagsCodegen
 
+        if is_virtual_table:
+            assert (
+                shard_index is not None and shard_index >= 0
+            ), "valid shard_index must be provided for kv zch batch embedding to compute shard offsets"
+            shard_offsets_for_kv_zch = _get_shard_offsets_for_kv_zch(
+                config, shard_index
+            )
+        else:
+            shard_offsets_for_kv_zch = None
+
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = tbe_clazz(
             embedding_specs=embedding_specs,
             device=device,
@@ -310,6 +344,12 @@ class QuantBatchedEmbeddingBag(
         )
         if device is not None:
             self._emb_module.initialize_weights()
+        if shard_offsets_for_kv_zch is not None:
+            assert (
+                tbe_clazz == KVEmbeddingInference
+            ), "shard_offsets_for_kv_zch should be computed only for kv zch kernel"
+            # pyre-ignore: Call error [29]
+            self._emb_module.init_tbe_config(shard_offsets_for_kv_zch)
 
     def init_parameters(self) -> None:
         pass
@@ -479,6 +519,16 @@ class QuantBatchedEmbedding(
             if is_virtual_table
             else IntNBitTableBatchedEmbeddingBagsCodegen
         )
+        if is_virtual_table:
+            assert (
+                shard_index is not None and shard_index >= 0
+            ), "valid shard_index must be provided for kv zch batch embedding to compute shard offsets"
+            shard_offsets_for_kv_zch = _get_shard_offsets_for_kv_zch(
+                config, shard_index
+            )
+        else:
+            shard_offsets_for_kv_zch = None
+
         self._emb_module: IntNBitTableBatchedEmbeddingBagsCodegen = embedding_clazz(
             embedding_specs=[
                 (
@@ -511,6 +561,12 @@ class QuantBatchedEmbedding(
         )
         if device is not None:
             self._emb_module.initialize_weights()
+        if shard_offsets_for_kv_zch is not None:
+            assert (
+                embedding_clazz == KVEmbeddingInference
+            ), "shard_offsets_for_kv_zch should be computed only for kv zch kernel"
+            # pyre-ignore: Call error [29]
+            self._emb_module.init_tbe_config(shard_offsets_for_kv_zch)
 
     @property
     def emb_module(

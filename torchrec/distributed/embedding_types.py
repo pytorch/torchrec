@@ -301,6 +301,9 @@ class GroupedEmbeddingConfig:
                 embedding_shard_metadata.append(table.local_metadata)
         return embedding_shard_metadata
 
+    def is_using_virtual_table(self) -> bool:
+        return any(table.use_virtual_table for table in self.embedding_tables)
+
 
 F = TypeVar("F", bound=Multistreamable)
 T = TypeVar("T")
