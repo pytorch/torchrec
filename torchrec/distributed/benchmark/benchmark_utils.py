@@ -20,7 +20,7 @@ import logging
 import os
 import time
 import timeit
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, MISSING
 from enum import Enum
 from typing import (
     Any,
@@ -500,8 +500,15 @@ def cmd_conf(func: Callable) -> Callable:
                         ftype = non_none[0]
                         origin = get_origin(ftype)
 
+                # Handle default_factory value
+                default_value = (
+                    f.default_factory()  # pyre-ignore [29]
+                    if f.default_factory is not MISSING
+                    else f.default
+                )
+
                 arg_kwargs = {
-                    "default": f.default,
+                    "default": default_value,
                     "help": f"({cls.__name__}) {arg_name}",
                 }
 
