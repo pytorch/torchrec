@@ -98,15 +98,6 @@ def _maybe_compute_lengths(
     return lengths
 
 
-@torch.fx.wrap
-def _maybe_compute_max_length(lengths: torch.Tensor, max_length: Optional[int]) -> int:
-    if max_length is None:
-        if lengths.numel() == 0:
-            return 0
-        max_length = int(lengths.max().item())
-    return max_length
-
-
 def _maybe_compute_offsets(
     lengths: Optional[torch.Tensor], offsets: Optional[torch.Tensor]
 ) -> torch.Tensor:
@@ -590,7 +581,7 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offsets.
     """
 
-    _fields = ["_values", "_weights", "_lengths", "_offsets", "_max_length"]
+    _fields = ["_values", "_weights", "_lengths", "_offsets"]
 
     def __init__(
         self,
@@ -598,7 +589,6 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights: Optional[torch.Tensor] = None,
         lengths: Optional[torch.Tensor] = None,
         offsets: Optional[torch.Tensor] = None,
-        max_length: Optional[int] = None,
     ) -> None:
 
         self._values: torch.Tensor = values
@@ -610,7 +600,6 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             _assert_tensor_has_no_elements_or_has_integers(lengths, "lengths")
         self._lengths: Optional[torch.Tensor] = lengths
         self._offsets: Optional[torch.Tensor] = offsets
-        self._max_length: Optional[int] = max_length
 
     @staticmethod
     def empty(
@@ -641,7 +630,6 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             offsets=torch.empty(0, dtype=lengths_dtype, device=device),
             lengths=torch.empty(0, dtype=lengths_dtype, device=device),
             weights=weights,
-            max_length=0,
         )
 
     @staticmethod
@@ -924,26 +912,6 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         """
         return self._lengths
 
-    def max_length(self) -> int:
-        """
-        Get the maximum length of the JaggedTensor.
-
-        Returns:
-            int: the maximum length of the JaggedTensor.
-        """
-        _max_length = _maybe_compute_max_length(self.lengths(), self._max_length)
-        self._max_length = _max_length
-        return _max_length
-
-    def max_length_or_none(self) -> Optional[int]:
-        """
-        Get the maximum length of the JaggedTensor. If not computed, return None.
-
-        Returns:
-            Optional[int]: the maximum length of the JaggedTensor.
-        """
-        return self._max_length
-
     def offsets(self) -> torch.Tensor:
         """
         Get JaggedTensor offsets. If not computed, compute it from lengths.
@@ -1005,7 +973,6 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         weights = self._weights
         lengths = self._lengths
         offsets = self._offsets
-        max_length = self._max_length
         return JaggedTensor(
             values=self._values.to(device, non_blocking=non_blocking),
             weights=(
@@ -1023,7 +990,6 @@ class JaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 if offsets is not None
                 else None
             ),
-            max_length=max_length,
         )
 
     @torch.jit.unused
