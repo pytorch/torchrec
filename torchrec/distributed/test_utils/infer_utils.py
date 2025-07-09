@@ -77,6 +77,7 @@ from torchrec.modules.embedding_configs import (
     dtype_to_data_type,
     EmbeddingBagConfig,
     QuantConfig,
+    VirtualTableEvictionPolicy,
 )
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
@@ -642,6 +643,7 @@ def create_test_model(
     constraints: Optional[Dict[str, ParameterConstraints]] = None,
     weight_dtype: torch.dtype = torch.qint8,
     pruning_dict: Optional[Dict[str, int]] = None,
+    virtual_table_eviction_policy: Optional[VirtualTableEvictionPolicy] = None,
 ) -> TestModelInfo:
     topology: Topology = Topology(
         world_size=world_size, compute_device=sparse_device.type
@@ -675,6 +677,8 @@ def create_test_model(
             embedding_dim=emb_dim,
             name="table_" + str(i),
             feature_names=["feature_" + str(i)],
+            use_virtual_table=True if virtual_table_eviction_policy else False,
+            virtual_table_eviction_policy=virtual_table_eviction_policy,
         )
         for i in range(mi.num_features)
     ]
@@ -685,6 +689,8 @@ def create_test_model(
             embedding_dim=emb_dim,
             name="weighted_table_" + str(i),
             feature_names=["weighted_feature_" + str(i)],
+            use_virtual_table=True if virtual_table_eviction_policy else False,
+            virtual_table_eviction_policy=virtual_table_eviction_policy,
         )
         for i in range(mi.num_weighted_features)
     ]

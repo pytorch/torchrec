@@ -7,11 +7,12 @@
 
 # pyre-strict
 
+from abc import ABC
 from dataclasses import dataclass, field
 from enum import Enum, unique
 from functools import partial
 from math import sqrt
-from typing import Callable, Dict, List, NamedTuple, Optional
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import torch
 from fbgemm_gpu.split_embedding_configs import SparseType
@@ -161,6 +162,83 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
 
 
 @dataclass
+class VirtualTableEvictionPolicy:
+    # metadata header length in element size for virtual table in weight tensor value
+    meta_header_len: int = 0
+    initialized: bool = False
+
+    """
+    Eviction policy for virtual table.
+    """
+
+    def init_metaheader_config(self, data_type: DataType) -> None:
+        # the eviction metaheader is set for training data type only. Once initialized, we don't need to reinitialize again
+        if self.initialized:
+            return
+        # 8 bytes for key, 4 bytes timestamp, 4 bytes shared by used and count: 1 bit for used, 31 bits for count
+        # for more details, please refer to: https://github.com/pytorch/FBGEMM/pull/4187
+        self.meta_header_len = 16 // data_type_to_dtype(data_type).itemsize
+        self.initialized = True
+
+    def get_meta_header_len(self) -> int:
+        return self.meta_header_len
+
+
+@dataclass
+class CountBasedEvictionPolicy(VirtualTableEvictionPolicy):
+    """
+    Count based eviction policy for virtual table.
+    """
+
+    eviction_threshold: int = (
+        15  # eviction threshold for count based eviction policy. 0 means no eviction
+    )
+    decay_rate: float = 0.99  # default decay by default
+
+
+@dataclass
+class TimestampBasedEvictionPolicy(VirtualTableEvictionPolicy):
+    """
+    Timestamp based eviction policy for virtual table.
+    """
+
+    eviction_ttl_mins: int = 24 * 60  # 1 day. 0 means no eviction
+
+
+@dataclass
+class CountTimestampMixedEvictionPolicy(VirtualTableEvictionPolicy):
+    """
+    Count timestamp mixed eviction policy for virtual table.
+    """
+
+    eviction_threshold: int = (
+        15  # eviction threshold for count based eviction policy. 0 means no eviction based on count
+    )
+    decay_rate: float = 0.99  # default decay by default
+    eviction_ttl_mins: int = 24 * 60  # 1 day. 0 means no eviction based on timestamp
+
+
+@dataclass
+class FeatureL2NormBasedEvictionPolicy(VirtualTableEvictionPolicy):
+    """
+    Feature L2 norm based eviction policy for virtual table.
+    """
+
+    eviction_threshold: float = (
+        0.0  # eviction threshold for feature l2 norm based eviction policy. 0.0 means no eviction
+    )
+
+
+@dataclass
+class NoEvictionPolicy(VirtualTableEvictionPolicy):
+    """
+    No eviction policy for virtual table.
+    """
+
+    pass
+
+
+@dataclass
 class BaseEmbeddingConfig:
     """
     Base class for embedding configs.
@@ -182,6 +260,7 @@ class BaseEmbeddingConfig:
         use_virtual_table (bool): indicator of whether table uses virtual space(magnitude like 2^50)
             for number embedding memory for virtual table is dynamic and only materialized when
             id is trained this needs to be paired with SSD/DRAM Virtual talbe in EmbeddingComputeKernel
+        virtual_table_eviction_policy (Optional[VirtualTableEvictionPolicy]): eviction policy for virtual table.
     """
 
     num_embeddings: int
@@ -202,6 +281,7 @@ class BaseEmbeddingConfig:
     input_dim: Optional[int] = None
     total_num_buckets: Optional[int] = None
     use_virtual_table: bool = False
+    virtual_table_eviction_policy: Optional[VirtualTableEvictionPolicy] = None
 
     def get_weight_init_max(self) -> float:
         if self.weight_init_max is None:
