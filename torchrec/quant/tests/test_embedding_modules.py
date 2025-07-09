@@ -848,7 +848,6 @@ class EmbeddingCollectionTest(unittest.TestCase):
         # feature name should be consistent with the order of grouped embeddings
         self.assertEqual(qec.m._feature_names, ["f1", "f3", "f2"])  # pyre-ignore[16]
 
-        # pyre-fixme[29]: `Union[Tensor, Module]` is not a function.
         configs = model.m.embedding_configs()
         self.assertEqual(len(configs), 3)
         features = KeyedJaggedTensor(

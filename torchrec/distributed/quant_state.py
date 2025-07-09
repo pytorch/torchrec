@@ -385,6 +385,9 @@ class WeightSpec:
     shard_offsets: List[int]  # shard offsets
     shard_sizes: List[int]  # shard sizes
     sharding_type: Optional[str]  # e.g. ShardingType.ROW_WISE.value=="row_wise"
+    virtual_table_dim_offsets: Optional[List[int]] = (
+        None  # for virtual table, weight dim offsets for quantization. e.g. [8, 264] for 256 dim tables, the first 8 elements are the metaheader
+    )
 
 
 def get_bucket_offsets_per_virtual_table(
@@ -504,6 +507,18 @@ def sharded_tbes_weights_spec(
                 tables = config.embedding_tables
                 for table_idx, table in enumerate(tables):
                     table_name: str = table.name
+                    table_dim_offsets: Optional[List[int]] = (
+                        None
+                        if not table.use_virtual_table
+                        else [0, table.embedding_dim]
+                    )
+                    if table.virtual_table_eviction_policy:
+                        table_dim_offsets = [
+                            table.virtual_table_eviction_policy.get_meta_header_len(),
+                            # pyre-ignore [16]
+                            table.virtual_table_eviction_policy.get_meta_header_len()
+                            + table.embedding_dim,
+                        ]
                     # pyre-ignore
                     table_metadata: ShardMetadata = table.local_metadata
                     local_rows = table.local_rows
@@ -577,6 +592,7 @@ def sharded_tbes_weights_spec(
                         shard_offsets=shard_offsets,
                         shard_sizes=shard_sizes,
                         sharding_type=sharding_type,
+                        virtual_table_dim_offsets=table_dim_offsets,
                     )
 
                     # We also need to populate weight_id tensor for vritual

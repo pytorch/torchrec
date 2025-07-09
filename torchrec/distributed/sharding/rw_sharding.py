@@ -219,6 +219,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         num_embeddings_post_pruning=info.embedding_config.num_embeddings_post_pruning,
                         total_num_buckets=info.embedding_config.total_num_buckets,
                         use_virtual_table=info.embedding_config.use_virtual_table,
+                        virtual_table_eviction_policy=info.embedding_config.virtual_table_eviction_policy,
                     )
                 )
         return tables_per_rank
