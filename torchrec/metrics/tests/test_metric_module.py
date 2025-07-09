@@ -10,15 +10,15 @@
 import copy
 import dataclasses
 import logging
+import multiprocessing
 import os
 import tempfile
 import unittest
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 import torch
 import torch.distributed as dist
-import torch.distributed.launcher as pet
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
@@ -43,9 +43,9 @@ from torchrec.metrics.metrics_config import (
 )
 from torchrec.metrics.model_utils import parse_task_model_outputs
 from torchrec.metrics.rec_metric import RecMetricList, RecTaskInfo
-from torchrec.metrics.test_utils import gen_test_batch, get_launch_config
+from torchrec.metrics.test_utils import gen_test_batch
 from torchrec.metrics.throughput import ThroughputMetric
-from torchrec.test_utils import seed_and_log, skip_if_asan_class
+from torchrec.test_utils import get_free_port, seed_and_log, skip_if_asan_class
 
 METRIC_MODULE_PATH = "torchrec.metrics.metric_module"
 
@@ -100,6 +100,47 @@ class TestMetricModule(RecMetricModule):
 
 
 class MetricModuleTest(unittest.TestCase):
+    @seed_and_log
+    def setUp(self) -> None:
+        os.environ["MASTER_ADDR"] = str("localhost")
+        os.environ["MASTER_PORT"] = str(get_free_port())
+        os.environ["GLOO_DEVICE_TRANSPORT"] = "TCP"
+        os.environ["NCCL_SOCKET_IFNAME"] = "lo"
+        self.WORLD_SIZE = 2
+
+    def tearDown(self) -> None:
+        del os.environ["GLOO_DEVICE_TRANSPORT"]
+        del os.environ["NCCL_SOCKET_IFNAME"]
+        super().tearDown()
+
+    def _run_multi_process_test(
+        self,
+        world_size: int,
+        backend: str,
+        callable: Callable[..., None],
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        processes = []
+        ctx = multiprocessing.get_context("spawn")
+        for rank in range(world_size):
+            p = ctx.Process(
+                target=callable,
+                args=(
+                    rank,
+                    world_size,
+                    backend,
+                    *args,
+                ),
+                kwargs=kwargs,
+            )
+            p.start()
+            processes.append(p)
+
+        for p in processes:
+            p.join()
+            self.assertEqual(0, p.exitcode)
+
     def test_metric_module(self) -> None:
         rec_metric_list_patch = patch(
             METRIC_MODULE_PATH + ".RecMetricList",
@@ -184,11 +225,9 @@ class MetricModuleTest(unittest.TestCase):
         )
 
     @staticmethod
-    def _run_trainer_checkpointing() -> None:
-        world_size = int(os.environ["WORLD_SIZE"])
-        rank = int(os.environ["RANK"])
+    def _run_trainer_checkpointing(rank: int, world_size: int, backend: str) -> None:
         dist.init_process_group(
-            backend="gloo",
+            backend=backend,
             world_size=world_size,
             rank=rank,
         )
@@ -263,18 +302,18 @@ class MetricModuleTest(unittest.TestCase):
         metric_module.reset()
         # End of dummy codes
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            lc = get_launch_config(
-                world_size=2, rdzv_endpoint=os.path.join(tmpdir, "rdzv")
-            )
-            pet.elastic_launch(lc, entrypoint=self._run_trainer_checkpointing)()
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="gloo",
+            callable=self._run_trainer_checkpointing,
+        )
 
     @staticmethod
-    def _run_trainer_initial_states_checkpointing() -> None:
-        world_size = int(os.environ["WORLD_SIZE"])
-        rank = int(os.environ["RANK"])
+    def _run_trainer_initial_states_checkpointing(
+        rank: int, world_size: int, backend: str
+    ) -> None:
         dist.init_process_group(
-            backend="gloo",
+            backend=backend,
             world_size=world_size,
             rank=rank,
         )
@@ -352,13 +391,11 @@ class MetricModuleTest(unittest.TestCase):
         )
 
     def test_initial_states_rank0_checkpointing(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            lc = get_launch_config(
-                world_size=2, rdzv_endpoint=os.path.join(tmpdir, "rdzv")
-            )
-            pet.elastic_launch(
-                lc, entrypoint=self._run_trainer_initial_states_checkpointing
-            )()
+        self._run_multi_process_test(
+            world_size=self.WORLD_SIZE,
+            backend="gloo",
+            callable=self._run_trainer_initial_states_checkpointing,
+        )
 
     def test_should_compute(self) -> None:
         metric_module = generate_metric_module(
@@ -381,6 +418,9 @@ class MetricModuleTest(unittest.TestCase):
     @patch("torchrec.metrics.metric_module.RecMetricList")
     @patch("torchrec.metrics.metric_module.time")
     def _test_adjust_compute_interval(
+        rank: int,
+        world_size: int,
+        backend: str,
         batch_time: float,
         min_interval: float,
         max_interval: float,
@@ -390,10 +430,8 @@ class MetricModuleTest(unittest.TestCase):
         init_by_me = False
         if not dist.is_initialized():
             init_by_me = True
-            world_size = int(os.environ["WORLD_SIZE"])
-            rank = int(os.environ["RANK"])
             dist.init_process_group(
-                backend="gloo",
+                backend=backend,
                 world_size=world_size,
                 rank=rank,
             )
@@ -461,13 +499,14 @@ class MetricModuleTest(unittest.TestCase):
         min_interval: float = 0.0,
         max_interval: float = float("inf"),
     ) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            lc = get_launch_config(
-                world_size=2, rdzv_endpoint=os.path.join(tmpdir, "rdzv")
-            )
-            pet.elastic_launch(lc, entrypoint=self._test_adjust_compute_interval)(
-                batch_time, min_interval, max_interval
-            )
+        self._run_multi_process_test(
+            self.WORLD_SIZE,
+            "gloo",
+            self._test_adjust_compute_interval,
+            batch_time,
+            min_interval,
+            max_interval,
+        )
 
     def test_adjust_compute_interval_not_set(self) -> None:
         self._test_adjust_compute_interval_launcher(
@@ -482,15 +521,15 @@ class MetricModuleTest(unittest.TestCase):
         )
 
         # This is to ensure the test coverage is correct.
-        with tempfile.NamedTemporaryFile(delete=True) as backend:
+        with tempfile.NamedTemporaryFile(delete=True) as backend_file:
             dist.init_process_group(
                 backend="gloo",
-                init_method=f"file://{backend.name}",
+                init_method=f"file://{backend_file.name}",
                 world_size=1,
                 rank=0,
             )
 
-            self._test_adjust_compute_interval(1, 0.0, 30.0)
+            self._test_adjust_compute_interval(0, 1, "gloo", 1, 0.0, 30.0)
         # Needed to destroy the process group as _test_adjust_compute_interval
         # won't since we initialize the process group for it.
         dist.destroy_process_group()
@@ -503,15 +542,15 @@ class MetricModuleTest(unittest.TestCase):
         )
 
         # This is to ensure the test coverage is correct.
-        with tempfile.NamedTemporaryFile(delete=True) as backend:
+        with tempfile.NamedTemporaryFile(delete=True) as backend_file:
             dist.init_process_group(
                 backend="gloo",
-                init_method=f"file://{backend.name}",
+                init_method=f"file://{backend_file.name}",
                 world_size=1,
                 rank=0,
             )
 
-            self._test_adjust_compute_interval(0.1, 15.0, float("inf"))
+            self._test_adjust_compute_interval(0, 1, "gloo", 0.1, 15.0, float("inf"))
         # Needed to destroy the process group as _test_adjust_compute_interval
         # won't since we initialize the process group for it.
         dist.destroy_process_group()
@@ -524,15 +563,15 @@ class MetricModuleTest(unittest.TestCase):
         )
 
         # This is to ensure the test coverage is correct.
-        with tempfile.NamedTemporaryFile(delete=True) as backend:
+        with tempfile.NamedTemporaryFile(delete=True) as backend_file:
             dist.init_process_group(
                 backend="gloo",
-                init_method=f"file://{backend.name}",
+                init_method=f"file://{backend_file.name}",
                 world_size=1,
                 rank=0,
             )
 
-            self._test_adjust_compute_interval(1, 15.0, 30.0)
+            self._test_adjust_compute_interval(0, 1, "gloo", 1, 15.0, 30.0)
         # Needed to destroy the process group as _test_adjust_compute_interval
         # won't since we initialize the process group for it.
         dist.destroy_process_group()
