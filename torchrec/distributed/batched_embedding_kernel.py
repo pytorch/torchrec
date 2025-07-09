@@ -176,6 +176,7 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
                 "by max_l1_cache_size, cap at max_cache_sets instead"
             )
             ssd_tbe_params["cache_sets"] = int(max_cache_sets)
+    ssd_tbe_params["table_names"] = [table.name for table in config.embedding_tables]
 
     # populate res_params, which is used for raw embedding streaming
     # here only populates the params available in fused_params and TBE configs
