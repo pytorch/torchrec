@@ -99,6 +99,24 @@ class NonZchModRemapperModule(object):
             )
         self._input_hash_size = input_hash_size
 
+    def get_batch_kjt_dict(self, batch: Batch) -> Dict[str, KeyedJaggedTensor]:
+        """
+        Get the KJT in each batch
+        Parameters:
+            batch: the batch whose KJT is ought to be fetched
+        Returns:
+            batch_kjt_dict: a dictionary of [batch_attribute_name: KeyedJaggedTensor]
+            where only attributes whose values are KeyedJaggedTensor are fetched.
+        """
+        batch_kjt_dict = {}  # create a dictionary for return
+        batch_attr_dict = vars(batch)  # get batch's attributes and values
+        for batch_attr_name, batch_attr_value in batch_attr_dict.items():
+            if isinstance(
+                batch_attr_value, KeyedJaggedTensor
+            ):  # only fetch attributes whose values are KeyedJaggedTensor
+                batch_kjt_dict[batch_attr_name] = batch_attr_value
+        return batch_kjt_dict
+
     def remap(self, batch: Batch) -> Batch:
         # for all the attributes under batch, like batch.uih_features, batch.candidates_features,
         # get the kjt as a dict, and remap the kjt
@@ -118,7 +136,7 @@ class NonZchModRemapperModule(object):
         #     candidates_features: KeyedJaggedTensor
 
         # for every attribute in batch, remap the kjt
-        for attr_name, feature_kjt_dict in batch.get_dict().items():
+        for attr_name, feature_kjt_dict in self.get_batch_kjt_dict(batch).items():
             # separate feature kjt with {feature_name_1: feature_kjt_1, feature_name_2: feature_kjt_2, ...}
             # to multiple dict with {feature_name_1: jt_1}, {feature_name_2: jt_2}, ...
             attr_feature_jt_dict = {}
