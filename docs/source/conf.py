@@ -30,7 +30,7 @@ print(target_dir)
 # -- Project information -----------------------------------------------------
 
 project = "TorchRec"
-copyright = "2024, Meta"
+copyright = "Meta Platforms, Inc"
 author = "Meta"
 
 try:
