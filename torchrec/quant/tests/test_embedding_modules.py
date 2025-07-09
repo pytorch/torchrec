@@ -7,6 +7,7 @@
 
 # pyre-strict
 
+import logging
 import unittest
 from dataclasses import replace
 from typing import Dict, List, Optional, Type
@@ -43,6 +44,19 @@ from torchrec.sparse.jagged_tensor import (
     KeyedJaggedTensor,
     KeyedTensor,
 )
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+
+def load_required_dram_kv_embedding_libraries() -> bool:
+    try:
+        torch.ops.load_library(
+            "//deeplearning/fbgemm/fbgemm_gpu:dram_kv_embedding_inference"
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to load dram_kv_embedding libraries, skipping test: {e}")
+        return False
 
 
 class EmbeddingBagCollectionTest(unittest.TestCase):
@@ -260,6 +274,11 @@ class EmbeddingBagCollectionTest(unittest.TestCase):
         )
         self._test_ebc([eb1_config, eb2_config], features)
 
+    # pyre-ignore: Invalid decoration [56]
+    @unittest.skipIf(
+        not load_required_dram_kv_embedding_libraries(),
+        "Skip when required libraries are not available",
+    )
     def test_multiple_kernels_per_ebc_table(self) -> None:
         class TestModule(torch.nn.Module):
             def __init__(self, m: torch.nn.Module) -> None:
@@ -780,6 +799,11 @@ class EmbeddingCollectionTest(unittest.TestCase):
                 self.assertEqual(config.name, "t2")
                 self.assertEqual(config.data_type, DataType.INT8)
 
+    # pyre-ignore: Invalid decoration [56]
+    @unittest.skipIf(
+        not load_required_dram_kv_embedding_libraries(),
+        "Skip when required libraries are not available",
+    )
     def test_multiple_kernels_per_ec_table(self) -> None:
         class TestModule(torch.nn.Module):
             def __init__(self, m: torch.nn.Module) -> None:
