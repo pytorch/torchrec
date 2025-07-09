@@ -905,6 +905,83 @@ def benchmark_func(
     )
 
 
+def benchmark_operators(
+    func_to_benchmark: Any,  # pyre-ignore[2]
+    bench_inputs: List[Any],  # pyre-ignore[2]
+    num_benchmarks: int,
+    device_type: str = "cuda",
+    target_operators: Optional[List[str]] = None,
+    is_pipeline: bool = False,
+    rank: int = -1,
+    limit_results: int = 10,
+) -> List[BenchmarkResult]:
+    activities = [torch.profiler.ProfilerActivity.CPU]
+    if device_type == "cuda":
+        activities.append(torch.profiler.ProfilerActivity.CUDA)
+
+    results = []
+    elapsed_times = {}
+    peak_memory_usage = {}
+
+    for _ in range(num_benchmarks):
+        with torch.profiler.profile(
+            activities=activities,
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+            with_flops=True,
+            with_modules=True,
+        ) as prof:
+            if is_pipeline:
+                dataloader = iter(bench_inputs)
+                while True:
+                    try:
+                        func_to_benchmark.progress(dataloader)
+                    except StopIteration:
+                        break
+            else:
+                for bench_input in bench_inputs:
+                    func_to_benchmark(bench_input)
+
+        for evt in prof.key_averages():
+            if evt.key not in elapsed_times:
+                elapsed_times[evt.key] = []
+                peak_memory_usage[evt.key] = 0
+
+            elapsed_times[evt.key].append(evt.self_device_time_total / 1e3)
+            peak_memory_usage[evt.key] = max(
+                peak_memory_usage[evt.key], evt.self_device_memory_usage
+            )
+
+    for op in elapsed_times:
+        if target_operators is not None and op not in target_operators:
+            continue
+
+        mem_stats = [
+            MemoryStats(
+                rank=rank,
+                malloc_retries=-1,  # Not supported in profiler
+                max_mem_allocated_mbs=peak_memory_usage[op] / 1024 / 1024,
+                max_mem_reserved_mbs=-1,  # Not supported in profiler
+            )
+        ]
+
+        results.append(
+            BenchmarkResult(
+                short_name=f"operator_{op}",
+                elapsed_time=torch.tensor(elapsed_times[op], dtype=torch.float),
+                mem_stats=mem_stats,
+                rank=rank,
+            )
+        )
+
+    sorted_results = sorted(
+        results, key=lambda x: x.runtime_percentile(90), reverse=True
+    )
+
+    return sorted_results[:limit_results]
+
+
 def benchmark_type_name(compile_mode: CompileMode, sharding_type: ShardingType) -> str:
     if sharding_type == ShardingType.TABLE_WISE:
         name = "tw-sharded"
