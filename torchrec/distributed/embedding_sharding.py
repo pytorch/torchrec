@@ -564,6 +564,7 @@ def group_tables(
                     table.data_type,
                 ),
                 _prefetch_and_cached(table),
+                table.use_virtual_table if is_inference else None,
             )
             # micromanage the order of we traverse the groups to ensure backwards compatibility
             if grouping_key not in groups:
@@ -579,6 +580,7 @@ def group_tables(
                 compute_kernel_type,
                 _,
                 _,
+                use_virtual_table,
             ) = grouping_key
             grouped_tables = groups[grouping_key]
             # remove non-native fused params

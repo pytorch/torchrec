@@ -13,6 +13,10 @@ from typing import cast, List, Optional, Type
 
 import hypothesis.strategies as st
 import torch
+from fbgemm_gpu.split_table_batched_embeddings_ops_inference import (
+    IntNBitTableBatchedEmbeddingBagsCodegen,
+)
+from fbgemm_gpu.tbe.cache.kv_embedding_ops_inference import KVEmbeddingInference
 from hypothesis import given, settings, Verbosity
 from torch import nn, quantization as quant
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -24,7 +28,7 @@ from torchrec.distributed.test_utils.test_model_parallel_base import (
 )
 from torchrec.distributed.tests.test_sequence_model import TestSequenceSparseNN
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
-from torchrec.modules.embedding_configs import EmbeddingConfig
+from torchrec.modules.embedding_configs import EmbeddingConfig, NoEvictionPolicy
 from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.quant.embedding_modules import (
     EmbeddingCollection as QuantEmbeddingCollection,
@@ -203,3 +207,96 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
         )
         local_batch = local_batch.to(device)
         sharded_quant_model(local_batch.idlist_features)
+
+    # pyre-fixme[56]
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
+    def test_sharded_quant_kv_zch(self) -> None:
+        device = torch.device("cuda:0")
+        num_features = 4
+
+        tables = [
+            EmbeddingConfig(
+                num_embeddings=(i + 1) * 11,
+                embedding_dim=16,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+                use_virtual_table=True if i % 2 == 0 else False,
+                virtual_table_eviction_policy=(
+                    NoEvictionPolicy() if i % 2 == 0 else None
+                ),
+            )
+            for i in range(num_features)
+        ]
+        # wrap in sequential because _quantize only applies to submodules...
+        model = nn.Sequential(EmbeddingCollection(tables=tables, device=device))
+
+        quant_model = _quantize(model, quant_state_dict_split_scale_bias=True)
+
+        sharded_quant_model = _shard_modules(
+            module=quant_model,
+            sharders=[
+                cast(
+                    ModuleSharder[torch.nn.Module],
+                    TestQuantECSharder(
+                        sharding_type=ShardingType.ROW_WISE.value,
+                        kernel_type=EmbeddingComputeKernel.QUANT.value,
+                    ),
+                )
+            ],
+            device=device,
+            env=ShardingEnv.from_local(world_size=2, rank=0),
+        )
+
+        sharded_quant_model.load_state_dict(sharded_quant_model.state_dict())
+
+        local_batch, _ = ModelInput.generate(
+            batch_size=16,
+            world_size=1,
+            num_float_features=10,
+            tables=self.tables,
+            weighted_tables=[],
+            indices_dtype=torch.int32,
+            lengths_dtype=torch.int32,
+        )
+        local_batch = local_batch.to(device)
+        sharded_quant_model(local_batch.idlist_features)
+        self.assertIsInstance(
+            # pyre-ignore [29]
+            sharded_quant_model[0]
+            ._lookups[0]
+            ._embedding_lookups_per_rank[0]
+            ._emb_modules[0]
+            ._emb_module,
+            KVEmbeddingInference,
+        )
+        self.assertIsInstance(
+            # pyre-ignore [29]
+            sharded_quant_model[0]
+            ._lookups[0]
+            ._embedding_lookups_per_rank[0]
+            ._emb_modules[1]
+            ._emb_module,
+            IntNBitTableBatchedEmbeddingBagsCodegen,
+        )
+        self.assertEqual(
+            # pyre-ignore [29]
+            sharded_quant_model[0]
+            ._lookups[0]
+            ._embedding_lookups_per_rank[0]
+            ._emb_modules[0]
+            ._emb_module.table_sharding_offset,
+            [0, 0],
+        )
+        self.assertEqual(
+            # pyre-ignore [29]
+            sharded_quant_model[0]
+            ._lookups[0]
+            ._embedding_lookups_per_rank[1]
+            ._emb_modules[0]
+            ._emb_module.table_sharding_offset,
+            [6, 17],
+        )
