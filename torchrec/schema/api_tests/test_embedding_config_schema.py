@@ -18,6 +18,7 @@ from torchrec.modules.embedding_configs import (
     EmbeddingBagConfig,
     EmbeddingConfig,
     PoolingType,
+    VirtualTableEvictionPolicy,
 )
 
 from torchrec.schema.utils import is_signature_compatible
@@ -41,6 +42,7 @@ class StableEmbeddingBagConfig:
     input_dim: Optional[int] = None
     total_num_buckets: Optional[int] = None
     use_virtual_table: bool = False
+    virtual_table_eviction_policy: Optional[VirtualTableEvictionPolicy] = None
     pooling: PoolingType = PoolingType.SUM
 
 
