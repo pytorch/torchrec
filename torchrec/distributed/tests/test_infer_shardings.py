@@ -69,6 +69,10 @@ from torchrec.distributed.test_utils.infer_utils import (
 from torchrec.distributed.test_utils.test_model import ModelInput
 from torchrec.distributed.types import ShardingEnv, ShardingPlan
 from torchrec.fx import symbolic_trace
+from torchrec.modules.embedding_configs import (
+    dtype_to_data_type,
+    TimestampBasedEvictionPolicy,
+)
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import (
     FeatureProcessorsCollection,
@@ -355,6 +359,90 @@ class InferShardingsTest(unittest.TestCase):
             "embedding_bags",
             ["table_0"],
             ShardingType.ROW_WISE.value,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs available",
+    )
+    # pyre-ignore
+    @given(
+        weight_dtype=st.sampled_from([torch.qint8, torch.quint4x2]),
+        device_type=st.sampled_from(["cuda", "cpu"]),
+    )
+    @settings(max_examples=4, deadline=None)
+    def test_rw_with_virtual_table_eviction(
+        self, weight_dtype: torch.dtype, device_type: str
+    ) -> None:
+        num_embeddings = 256
+        emb_dim = 16
+        world_size = 2
+        batch_size = 4
+        local_device = torch.device(f"{device_type}:0")
+        eviction_policy = TimestampBasedEvictionPolicy()
+        eviction_policy.init_metaheader_config(dtype_to_data_type(torch.float16))
+        mi = create_test_model(
+            num_embeddings,
+            emb_dim,
+            world_size,
+            batch_size,
+            dense_device=local_device,
+            sparse_device=local_device,
+            quant_state_dict_split_scale_bias=True,
+            weight_dtype=weight_dtype,
+            virtual_table_eviction_policy=eviction_policy,
+        )
+
+        non_sharded_model = mi.quant_model
+        num_emb_half = num_embeddings // 2
+        expected_shards = [
+            [
+                ((0, 0, num_emb_half, emb_dim), placement(device_type, 0, world_size)),
+                (
+                    (num_emb_half, 0, num_emb_half, emb_dim),
+                    placement(device_type, 1, world_size),
+                ),
+            ]
+        ]
+        sharded_model = shard_qebc(
+            mi,
+            sharding_type=ShardingType.ROW_WISE,
+            device=local_device,
+            expected_shards=expected_shards,
+        )
+        inputs = [
+            model_input_to_forward_args(inp.to(local_device))
+            for inp in prep_inputs(mi, world_size, batch_size, long_indices=False)
+        ]
+
+        sharded_model.load_state_dict(non_sharded_model.state_dict())
+
+        sharded_output = sharded_model(*inputs[0])
+        non_sharded_output = non_sharded_model(*inputs[0])
+        assert_close(sharded_output, non_sharded_output)
+
+        weights_spec: Dict[str, WeightSpec] = sharded_tbes_weights_spec(sharded_model)
+        assert_weight_spec(
+            weights_spec,
+            expected_shards,
+            "_module.sparse.ebc",
+            "embedding_bags",
+            ["table_0"],
+            ShardingType.ROW_WISE.value,
+        )
+        print(weights_spec)
+        assert (
+            weights_spec[
+                "_module.sparse.ebc.tbes.0.0.table_0.weight"
+            ].virtual_table_dim_offsets
+            is not None
+        )
+        assert (
+            # pyre-ignore [16]
+            weights_spec[
+                "_module.sparse.ebc.tbes.0.0.table_0.weight"
+            ].virtual_table_dim_offsets[0]
+            == 8
         )
 
     @unittest.skipIf(

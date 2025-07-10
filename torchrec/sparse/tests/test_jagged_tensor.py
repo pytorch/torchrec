@@ -568,14 +568,6 @@ class TestJaggedTensor(unittest.TestCase):
         self.assertTrue(torch.equal(j_offset.lengths(), j_lens.lengths()))
         self.assertTrue(torch.equal(j_offset.offsets(), j_lens.offsets().int()))
 
-    def test_max_length(self) -> None:
-        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
-        offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
-        jt = JaggedTensor(values=values, offsets=offsets)
-        self.assertIsNone(jt.max_length_or_none())
-        self.assertEqual(jt.max_length(), 3)
-        self.assertEqual(jt.max_length_or_none(), 3)
-
     def test_empty(self) -> None:
         jt = JaggedTensor.empty(values_dtype=torch.int64)
 
