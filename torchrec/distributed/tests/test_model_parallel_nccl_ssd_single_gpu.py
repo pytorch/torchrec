@@ -609,6 +609,7 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
             },
             constraints=constraints,
             variable_batch_per_feature=True,
+            random_seed=100,
         )
 
     @unittest.skipIf(
