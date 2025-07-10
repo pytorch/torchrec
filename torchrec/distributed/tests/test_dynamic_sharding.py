@@ -21,7 +21,12 @@ from hypothesis import assume, given, settings, Verbosity
 
 from torch import nn, optim
 
-from torchrec import distributed as trec_dist, EmbeddingBagCollection, KeyedJaggedTensor
+from torchrec import (
+    distributed as trec_dist,
+    EmbeddingBagCollection,
+    KeyedJaggedTensor,
+    optim as trec_optim,
+)
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
@@ -533,6 +538,12 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
                 },
                 {
                     "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
+                },
+                {
+                    "embedding_bags": (
+                        trec_optim.RowWiseAdagrad,
+                        {"lr": 0.01},
+                    ),
                 },
             ]
         ),
