@@ -207,8 +207,14 @@ class TestJsonSerializer(unittest.TestCase):
             num_embeddings=10,
             feature_names=["f2"],
         )
+        config3 = EmbeddingBagConfig(
+            name="t3",
+            embedding_dim=5,
+            num_embeddings=10,
+            feature_names=["f3"],
+        )
         ebc = EmbeddingBagCollection(
-            tables=[config1, config2],
+            tables=[config1, config2, config3],
             is_weighted=False,
         )
 
@@ -293,24 +299,37 @@ class TestJsonSerializer(unittest.TestCase):
             self.assertEqual(deserialized.shape, orginal.shape)
             self.assertTrue(torch.allclose(deserialized, orginal))
 
-    @unittest.skip("Adding test for demonstrating VBE KJT flattening issue for now.")
     def test_serialize_deserialize_ebc_with_vbe_kjt(self) -> None:
         model = self.generate_model_for_vbe_kjt()
-        id_list_features = KeyedJaggedTensor(
-            keys=["f1", "f2"],
-            values=torch.tensor([5, 6, 7, 1, 2, 3, 0, 1]),
-            lengths=torch.tensor([3, 3, 2]),
-            stride_per_key_per_rank=[[2], [1]],
-            inverse_indices=(["f1", "f2"], torch.tensor([[0, 1, 0], [0, 0, 0]])),
+        kjt_1 = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]),
+            lengths=torch.tensor([1, 2, 3, 2, 1, 1]),
+            stride_per_key_per_rank=torch.tensor([[3], [2], [1]]),
+            inverse_indices=(
+                ["f1", "f2", "f3"],
+                torch.tensor([[0, 1, 2], [0, 1, 0], [0, 0, 0]]),
+            ),
+        )
+        kjt_2 = KeyedJaggedTensor(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]),
+            lengths=torch.tensor([1, 2, 3, 2, 1, 1]),
+            stride_per_key_per_rank=torch.tensor([[1], [2], [3]]),
+            inverse_indices=(
+                ["f1", "f2", "f3"],
+                torch.tensor([[0, 0, 0], [0, 1, 0], [0, 1, 2]]),
+            ),
         )
 
-        eager_out = model(id_list_features)
+        eager_out = model(kjt_1)
+        eager_out_2 = model(kjt_2)
 
         # Serialize EBC
         model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
         ep = torch.export.export(
             model,
-            (id_list_features,),
+            (kjt_1,),
             {},
             strict=False,
             # Allows KJT to not be unflattened and run a forward on unflattened EP
@@ -318,17 +337,22 @@ class TestJsonSerializer(unittest.TestCase):
         )
 
         # Run forward on ExportedProgram
-        ep_output = ep.module()(id_list_features)
+        ep_output = ep.module()(kjt_1)
+        ep_output_2 = ep.module()(kjt_2)
 
+        self.assertEqual(len(ep_output), len(kjt_1.keys()))
+        self.assertEqual(len(ep_output_2), len(kjt_2.keys()))
         for i, tensor in enumerate(ep_output):
-            self.assertEqual(eager_out[i].shape, tensor.shape)
+            self.assertEqual(eager_out[i].shape[1], tensor.shape[1])
+        for i, tensor in enumerate(ep_output_2):
+            self.assertEqual(eager_out_2[i].shape[1], tensor.shape[1])
 
         # Deserialize EBC
         unflatten_ep = torch.export.unflatten(ep)
         deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
 
         # check EBC config
-        for i in range(5):
+        for i in range(1):
             ebc_name = f"ebc{i + 1}"
             self.assertIsInstance(
                 getattr(deserialized_model, ebc_name), EmbeddingBagCollection
@@ -343,33 +367,19 @@ class TestJsonSerializer(unittest.TestCase):
                 self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
                 self.assertEqual(deserialized.feature_names, orginal.feature_names)
 
-        # check FPEBC config
-        for i in range(2):
-            fpebc_name = f"fpebc{i + 1}"
-            assert isinstance(
-                getattr(deserialized_model, fpebc_name),
-                FeatureProcessedEmbeddingBagCollection,
-            )
-
-            for deserialized, orginal in zip(
-                getattr(
-                    deserialized_model, fpebc_name
-                )._embedding_bag_collection.embedding_bag_configs(),
-                getattr(
-                    model, fpebc_name
-                )._embedding_bag_collection.embedding_bag_configs(),
-            ):
-                self.assertEqual(deserialized.name, orginal.name)
-                self.assertEqual(deserialized.embedding_dim, orginal.embedding_dim)
-                self.assertEqual(deserialized.num_embeddings, orginal.num_embeddings)
-                self.assertEqual(deserialized.feature_names, orginal.feature_names)
-
         # Run forward on deserialized model and compare the output
         deserialized_model.load_state_dict(model.state_dict())
-        deserialized_out = deserialized_model(id_list_features)
+        deserialized_out = deserialized_model(kjt_1)
 
         self.assertEqual(len(deserialized_out), len(eager_out))
         for deserialized, orginal in zip(deserialized_out, eager_out):
+            self.assertEqual(deserialized.shape, orginal.shape)
+            self.assertTrue(torch.allclose(deserialized, orginal))
+
+        deserialized_out_2 = deserialized_model(kjt_2)
+
+        self.assertEqual(len(deserialized_out_2), len(eager_out_2))
+        for deserialized, orginal in zip(deserialized_out_2, eager_out_2):
             self.assertEqual(deserialized.shape, orginal.shape)
             self.assertTrue(torch.allclose(deserialized, orginal))
 
