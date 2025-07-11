@@ -100,11 +100,14 @@ class ModelInput(Pipelineable):
         indices_dtype: torch.dtype = torch.int64,
         offsets_dtype: torch.dtype = torch.int64,
         lengths_dtype: torch.dtype = torch.int64,
+        random_seed: Optional[int] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
         """
         Returns a global (single-rank training) batch
         and a list of local (multi-rank training) batches of world_size.
         """
+        if random_seed is not None:
+            torch.manual_seed(random_seed)
         batch_size_by_rank = [batch_size] * world_size
         if variable_batch_size:
             batch_size_by_rank = [
@@ -751,9 +754,14 @@ class ModelInput(Pipelineable):
         indices_dtype: torch.dtype = torch.int64,
         offsets_dtype: torch.dtype = torch.int64,
         lengths_dtype: torch.dtype = torch.int64,
+        random_seed: Optional[int] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]:
-        torch.manual_seed(100)
-        random.seed(100)
+        if random_seed is not None:
+            torch.manual_seed(random_seed)
+            random.seed(random_seed)
+        else:
+            torch.manual_seed(100)
+            random.seed(100)
         dedup_factor = 2
 
         global_kjt, local_kjts = ModelInput._generate_variable_batch_features(

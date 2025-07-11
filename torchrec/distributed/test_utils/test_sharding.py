@@ -76,6 +76,34 @@ class SharderType(Enum):
     EMBEDDING_COLLECTION = "embedding_collection"
 
 
+def _gather_all_tensors(
+    local_tensor: torch.Tensor,
+    world_size: int,
+    pg: Optional[dist.ProcessGroup] = None,
+) -> List[torch.Tensor]:
+    """
+    Gathers tensors from all processes in a distributed group.
+
+    This function collects tensors from all processes in the specified
+    process group and returns a list of tensors, where each tensor
+    corresponds to the data from one process.
+
+    Args:
+        local_tensor (torch.Tensor): The tensor to be gathered from the local process.
+        world_size (int): The number of processes in the distributed group.
+        pg (Optional[ProcessGroup]): The process group to use for communication.
+                                                If not provided, a default ProcessGroup will be created.
+
+    Returns:
+        List[torch.Tensor]: A list of tensors gathered from all processes.
+    """
+    all_local_tensors: List[torch.Tensor] = []
+    for _ in range(world_size):
+        all_local_tensors.append(torch.empty_like(local_tensor))
+    dist.all_gather(all_local_tensors, local_tensor, pg)
+    return all_local_tensors
+
+
 def create_test_sharder(
     sharder_type: str,
     sharding_type: str,
@@ -135,6 +163,7 @@ class ModelInputCallable(Protocol):
         indices_dtype: torch.dtype = torch.int64,
         offsets_dtype: torch.dtype = torch.int64,
         lengths_dtype: torch.dtype = torch.int64,
+        random_seed: Optional[int] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]: ...
 
 
@@ -152,6 +181,7 @@ class VariableBatchModelInputCallable(Protocol):
         indices_dtype: torch.dtype = torch.int64,
         offsets_dtype: torch.dtype = torch.int64,
         lengths_dtype: torch.dtype = torch.int64,
+        random_seed: Optional[int] = None,
     ) -> Tuple["ModelInput", List["ModelInput"]]: ...
 
 
@@ -180,8 +210,12 @@ def gen_model_and_input(
     global_constant_batch: bool = False,
     num_inputs: int = 1,
     input_type: str = "kjt",  # "kjt" or "td"
+    random_seed: Optional[int] = None,
 ) -> Tuple[nn.Module, List[Tuple[ModelInput, List[ModelInput]]]]:
-    torch.manual_seed(0)
+    if random_seed is not None:
+        torch.manual_seed(random_seed)
+    else:
+        torch.manual_seed(0)
     if dedup_feature_names:
         model = model_class(
             tables=cast(
@@ -224,6 +258,7 @@ def gen_model_and_input(
                     indices_dtype=indices_dtype,
                     offsets_dtype=offsets_dtype,
                     lengths_dtype=lengths_dtype,
+                    random_seed=random_seed,
                 )
             )
     elif generate == ModelInput.generate:
@@ -242,6 +277,7 @@ def gen_model_and_input(
                     indices_dtype=indices_dtype,
                     offsets_dtype=offsets_dtype,
                     lengths_dtype=lengths_dtype,
+                    random_seed=random_seed,
                 )
             )
     else:
@@ -259,6 +295,7 @@ def gen_model_and_input(
                     indices_dtype=indices_dtype,
                     offsets_dtype=offsets_dtype,
                     lengths_dtype=lengths_dtype,
+                    random_seed=random_seed,
                 )
             )
     return (model, inputs)
@@ -558,14 +595,10 @@ def dynamic_sharding_test(
         )
 
         # TODO: support non-sharded forward with zero batch size KJT
-        all_local_pred_m1 = []
-        for _ in range(world_size):
-            all_local_pred_m1.append(torch.empty_like(local_m1_pred))
-        dist.all_gather(all_local_pred_m1, local_m1_pred, group=ctx.pg)
-        all_local_pred_m2 = []
-        for _ in range(world_size):
-            all_local_pred_m2.append(torch.empty_like(local_m2_pred))
-        dist.all_gather(all_local_pred_m2, local_m2_pred, group=ctx.pg)
+
+        all_local_pred_m1 = _gather_all_tensors(local_m1_pred, world_size, ctx.pg)
+
+        all_local_pred_m2 = _gather_all_tensors(local_m2_pred, world_size, ctx.pg)
 
         # Compare predictions of sharded vs unsharded models.
         if qcomms_config is None:
@@ -718,6 +751,7 @@ def sharding_single_rank_test_single_process(
     indices_dtype: torch.dtype = torch.int64,
     offsets_dtype: torch.dtype = torch.int64,
     lengths_dtype: torch.dtype = torch.int64,
+    random_seed: Optional[int] = None,
 ) -> None:
     batch_size = random.randint(0, batch_size) if allow_zero_batch_size else batch_size
     # Generate model & inputs.
@@ -746,7 +780,9 @@ def sharding_single_rank_test_single_process(
         indices_dtype=indices_dtype,
         offsets_dtype=offsets_dtype,
         lengths_dtype=lengths_dtype,
+        random_seed=random_seed,
     )
+
     global_model = global_model.to(device)
     global_input = inputs[0][0].to(device)
     local_input = inputs[0][1][rank].to(device)
@@ -794,6 +830,7 @@ def sharding_single_rank_test_single_process(
         constraints=constraints,
     )
     plan: ShardingPlan = planner.collective_plan(local_model, sharders, pg)
+
     """
     Simulating multiple nodes on a single node. However, metadata information and
     tensor placement must still be consistent. Here we overwrite this to do so.
@@ -895,10 +932,7 @@ def sharding_single_rank_test_single_process(
 
     # TODO: support non-sharded forward with zero batch size KJT
     if not allow_zero_batch_size:
-        all_local_pred = []
-        for _ in range(world_size):
-            all_local_pred.append(torch.empty_like(local_pred))
-        dist.all_gather(all_local_pred, local_pred, group=pg)
+        all_local_pred = _gather_all_tensors(local_pred, world_size, pg)
 
         # Run second training step of the unsharded model.
         assert optim == EmbOptimType.EXACT_SGD
@@ -973,6 +1007,7 @@ def sharding_single_rank_test(
     indices_dtype: torch.dtype = torch.int64,
     offsets_dtype: torch.dtype = torch.int64,
     lengths_dtype: torch.dtype = torch.int64,
+    random_seed: Optional[int] = None,
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
         assert ctx.pg is not None
@@ -1006,6 +1041,7 @@ def sharding_single_rank_test(
             indices_dtype=indices_dtype,
             offsets_dtype=offsets_dtype,
             lengths_dtype=lengths_dtype,
+            random_seed=random_seed,
         )
 
 

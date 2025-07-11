@@ -190,8 +190,8 @@ class ModelSelectionConfig:
     deep_fm_dimension: int = 5
 
     # DLRM specific config
-    dense_arch_layer_sizes: List[int] = field(default_factory=lambda: [20, 10])
-    over_arch_layer_sizes: List[int] = field(default_factory=lambda: [5, 3])
+    dense_arch_layer_sizes: List[int] = field(default_factory=lambda: [20, 128])
+    over_arch_layer_sizes: List[int] = field(default_factory=lambda: [5, 1])
 
 
 @cmd_conf
