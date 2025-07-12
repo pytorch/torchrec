@@ -144,3 +144,7 @@ class ManagedCollisionEmbeddingCollectionSharder(
     @property
     def module_type(self) -> Type[ManagedCollisionEmbeddingCollection]:
         return ManagedCollisionEmbeddingCollection
+
+    @property
+    def sharded_module_type(self) -> Type[ShardedManagedCollisionEmbeddingCollection]:
+        return ShardedManagedCollisionEmbeddingCollection

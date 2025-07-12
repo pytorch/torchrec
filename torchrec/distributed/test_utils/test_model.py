@@ -2462,3 +2462,221 @@ class TestSparseArchZCH(nn.Module):
         )
         result = _post_sparsenn_forward(ebc, None, w_ebc, batch_size)
         return result
+
+
+class TestMixedSequenceOverArch(nn.Module):
+    """Simple overarch that handles both pooled and flattened sequence embeddings"""
+
+    def __init__(
+        self,
+        ebc_tables: List[EmbeddingBagConfig],
+        ec_tables: List[EmbeddingConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        device: Optional[torch.device] = None,
+        max_sequence_length: int = 20,
+    ) -> None:
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+
+        # Calculate dimensions
+        dense_dim = 8
+        ebc_dim = sum(
+            [table.embedding_dim * len(table.feature_names) for table in ebc_tables]
+        )
+        ec_dim = sum(
+            [
+                table.embedding_dim * len(table.feature_names) * max_sequence_length
+                for table in ec_tables
+            ]
+        )
+        weighted_dim = sum(
+            [
+                table.embedding_dim * len(table.feature_names)
+                for table in weighted_tables
+            ]
+        )
+
+        in_features = dense_dim + ebc_dim + ec_dim + weighted_dim
+
+        self.linear = nn.Linear(in_features=in_features, out_features=16, device=device)
+
+    def forward(self, dense: torch.Tensor, sparse: torch.Tensor) -> torch.Tensor:
+        return self.linear(torch.cat([dense, sparse], dim=1))
+
+
+class TestMixedEmbeddingSparseArch(TestSparseNNBase, CopyableMixin):
+    """
+    Test model that handles both EmbeddingBagCollection and EmbeddingCollection tables
+
+    Args:
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: Optional[List[EmbeddingBagConfig]],
+        embedding_groups: Optional[Dict[str, List[str]]],
+        dense_device: Optional[torch.device],
+        sparse_device: Optional[torch.device],
+    """
+
+    def __init__(
+        self,
+        tables: Union[List[EmbeddingBagConfig], List[EmbeddingConfig]],
+        num_float_features: int = 10,
+        weighted_tables: Optional[List[EmbeddingBagConfig]] = None,
+        embedding_groups: Optional[Dict[str, List[str]]] = None,
+        dense_device: Optional[torch.device] = None,
+        sparse_device: Optional[torch.device] = None,
+        feature_processor_modules: Optional[Dict[str, torch.nn.Module]] = None,
+        over_arch_clazz: Type[nn.Module] = TestMixedSequenceOverArch,
+        device: Optional[torch.device] = None,
+    ) -> None:
+        if weighted_tables is None:
+            weighted_tables = []
+        super().__init__(
+            tables=cast(List[BaseEmbeddingConfig], tables),
+            weighted_tables=cast(Optional[List[BaseEmbeddingConfig]], weighted_tables),
+            embedding_groups=embedding_groups,
+            dense_device=dense_device,
+            sparse_device=sparse_device,
+        )
+        if device is None:
+            device = torch.device("cpu")
+
+        ebc_tables: List[EmbeddingBagConfig] = []
+        ec_tables: List[EmbeddingConfig] = []
+
+        for table in tables:
+            if isinstance(table, EmbeddingBagConfig):
+                ebc_tables.append(table)
+            elif isinstance(table, EmbeddingConfig):
+                ec_tables.append(table)
+            else:
+                raise ValueError(f"Unsupported table type: {type(table)}")
+
+        self.ebc: Optional[EmbeddingBagCollection] = None
+        if ebc_tables:
+            self.ebc = EmbeddingBagCollection(
+                tables=ebc_tables,
+                device=device,
+            )
+
+        self.ec: Optional[EmbeddingCollection] = None
+        if ec_tables:
+            self.ec = EmbeddingCollection(
+                tables=ec_tables,
+                device=device,
+            )
+            self.ec_embedding_dim = self.ec.embedding_dim()  # pyre-ignore[4, 16]
+
+        self._ebc_features: List[str] = (
+            [feature for table in ebc_tables for feature in table.feature_names]
+            if ebc_tables
+            else []
+        )
+
+        self._ec_features: List[str] = (
+            [feature for table in ec_tables for feature in table.feature_names]
+            if ec_tables
+            else []
+        )
+
+        embedding_names = (
+            list(embedding_groups.values())[0] if embedding_groups else None
+        )
+        self._embedding_names: List[str] = (
+            embedding_names
+            if embedding_names
+            else [feature for table in tables for feature in table.feature_names]
+        )
+
+        self.dense = TestDenseArch(num_float_features, dense_device)
+        self.over: nn.Module = over_arch_clazz(ebc_tables, ec_tables, [], device)
+        self.register_buffer(
+            "dummy_ones",
+            torch.ones(1, device=dense_device),
+        )
+
+    def dense_forward(
+        self, input: ModelInput, sparse_output: torch.Tensor
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        dense_r = self.dense(input.float_features)
+        over_r = self.over(dense_r, sparse_output)
+        pred = torch.sigmoid(torch.mean(over_r, dim=1)) + self.dummy_ones
+        if self.training:
+            return (
+                torch.nn.functional.binary_cross_entropy_with_logits(pred, input.label),
+                pred,
+            )
+        else:
+            return pred
+
+    def forward(
+        self,
+        input: ModelInput,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        return self.dense_forward(input, self.sparse_forward(input))
+
+    def sparse_forward(
+        self,
+        input: ModelInput,
+    ) -> torch.Tensor:
+        """
+        Forward pass that processes features through both EBC and EC modules
+
+        Args:
+            features: Input features for both EBC and EC
+            weighted_features: Weighted features for EBC
+            batch_size: Optional batch size for padding
+
+        Returns:
+            KeyedTensor with combined embeddings from all modules
+        """
+        features = input.idlist_features
+        batch_size = input.float_features.size(0)
+        ebc_embeddings = torch.empty(0)
+        ec_embeddings = torch.empty(0)
+
+        # Process EmbeddingBagCollection features
+        if self.ebc is not None and self._ebc_features:
+            # Create a new KJT with only the features needed for EBC
+            ebc_jt_dict = {feature: features[feature] for feature in self._ebc_features}
+            ebc_features = KeyedJaggedTensor.from_jt_dict(ebc_jt_dict)
+            ebc_result = self.ebc(ebc_features)  # pyre-ignore[29]
+            ebc_embeddings = ebc_result.values()
+
+        # Process EmbeddingCollection features
+        if self.ec is not None and self._ec_features:
+            # Create a new KJT with only the features needed for EC
+            ec_jt_dict = {feature: features[feature] for feature in self._ec_features}
+            ec_features = KeyedJaggedTensor.from_jt_dict(ec_jt_dict)
+            ec_result = self.ec(ec_features)  # pyre-ignore[29]
+            padded_embeddings = [
+                torch.ops.fbgemm.jagged_2d_to_dense(
+                    values=ec_result[e].values(),
+                    offsets=ec_result[e].offsets(),
+                    max_sequence_length=20,
+                ).view(-1, 20 * self.ec_embedding_dim)
+                for e in self._ec_features
+            ]
+
+            def _post_ec_forward(
+                padded_embeddings: List[torch.Tensor], batch_size: Optional[int] = None
+            ) -> torch.Tensor:
+                if batch_size is None or padded_embeddings[0].size(0) == batch_size:
+                    return torch.cat(
+                        padded_embeddings,
+                        dim=1,
+                    )
+                else:
+                    seq_emb = torch.cat(padded_embeddings, dim=1)
+                    ec_values = torch.zeros(
+                        batch_size,
+                        seq_emb.size(1),
+                        dtype=seq_emb.dtype,
+                        device=seq_emb.device,
+                    )
+                    ec_values[: seq_emb.size(0), :] = seq_emb
+                    return ec_values
+
+            ec_embeddings = _post_ec_forward(padded_embeddings, batch_size)
+
+        return torch.cat([ebc_embeddings, ec_embeddings], dim=1)

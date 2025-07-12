@@ -215,6 +215,12 @@ class FeatureProcessedEmbeddingBagCollectionSharder(
     def module_type(self) -> Type[FeatureProcessedEmbeddingBagCollection]:
         return FeatureProcessedEmbeddingBagCollection
 
+    @property
+    def sharded_module_type(
+        self,
+    ) -> Type[ShardedFeatureProcessedEmbeddingBagCollection]:
+        return ShardedFeatureProcessedEmbeddingBagCollection
+
     def sharding_types(self, compute_device_type: str) -> List[str]:
         if compute_device_type in {"mtia"}:
             return [ShardingType.TABLE_WISE.value, ShardingType.COLUMN_WISE.value]
