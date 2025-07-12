@@ -1617,3 +1617,7 @@ class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):
     @property
     def module_type(self) -> Type[EmbeddingCollection]:
         return EmbeddingCollection
+
+    @property
+    def sharded_module_type(self) -> Type[ShardedEmbeddingCollection]:
+        return ShardedEmbeddingCollection

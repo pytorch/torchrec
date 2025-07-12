@@ -321,6 +321,10 @@ class ITEPEmbeddingBagCollectionSharder(
     def module_type(self) -> Type[ITEPEmbeddingBagCollection]:
         return ITEPEmbeddingBagCollection
 
+    @property
+    def sharded_module_type(self) -> Type[ShardedITEPEmbeddingBagCollection]:
+        return ShardedITEPEmbeddingBagCollection
+
     def sharding_types(self, compute_device_type: str) -> List[str]:
         types = list(SHARDING_TYPE_TO_GROUP.keys())
         return types
