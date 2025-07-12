@@ -40,6 +40,7 @@ from typing import (
 import click
 
 import torch
+import yaml
 from torch import multiprocessing as mp
 from torch.autograd.profiler import record_function
 from torchrec.distributed import DistributedModelParallel
@@ -477,6 +478,13 @@ def cmd_conf(func: Callable) -> Callable:
         sig = inspect.signature(func)
         parser = argparse.ArgumentParser(func.__doc__)
 
+        parser.add_argument(
+            "--yaml_config",
+            type=str,
+            default=None,
+            help="YAML config file for benchmarking",
+        )
+
         # Add loglevel argument with current logger level as default
         parser.add_argument(
             "--loglevel",
@@ -484,6 +492,21 @@ def cmd_conf(func: Callable) -> Callable:
             default=logging._levelToName[logger.level],
             help="Set the logging level (e.g. info, debug, warning, error)",
         )
+
+        pre_args, _ = parser.parse_known_args()
+
+        yaml_defaults: Dict[str, Any] = {}
+        if pre_args.yaml_config:
+            try:
+                with open(pre_args.yaml_config, "r") as f:
+                    yaml_defaults = yaml.safe_load(f) or {}
+                logger.info(
+                    f"Loaded YAML config from {pre_args.yaml_config}: {yaml_defaults}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load YAML config because {e}. Proceeding without it."
+                )
 
         seen_args = set()  # track all --<name> we've added
 
@@ -509,11 +532,17 @@ def cmd_conf(func: Callable) -> Callable:
                         ftype = non_none[0]
                         origin = get_origin(ftype)
 
-                # Handle default_factory value
-                default_value = (
-                    f.default_factory()  # pyre-ignore [29]
-                    if f.default_factory is not MISSING
-                    else f.default
+                # Handle default_factory value and allow YAML config to override it
+                default_value = yaml_defaults.get(
+                    arg_name,  # flat lookup
+                    yaml_defaults.get(cls.__name__, {}).get(  # hierarchy lookup
+                        arg_name,
+                        (
+                            f.default_factory()  # pyre-ignore [29]
+                            if f.default_factory is not MISSING
+                            else f.default
+                        ),
+                    ),
                 )
 
                 arg_kwargs = {
