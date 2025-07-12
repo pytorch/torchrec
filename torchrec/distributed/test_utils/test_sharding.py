@@ -23,7 +23,10 @@ from torch.distributed._tensor import DeviceMesh, DTensor
 from torch.distributed.optim import (
     _apply_optimizer_in_backward as apply_optimizer_in_backward,
 )
-from torchrec.distributed.embedding_types import EmbeddingTableConfig
+from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
+    EmbeddingTableConfig,
+)
 from torchrec.distributed.fbgemm_qcomm_codec import (
     CommType,
     get_qcomm_codecs_registry,
@@ -50,7 +53,11 @@ from torchrec.distributed.test_utils.test_model import (
     TestETSharder,
     TestSparseNNBase,
 )
+from torchrec.distributed.tests.test_sequence_model import (
+    TestEmbeddingCollectionSharder,
+)
 from torchrec.distributed.types import (
+    DMPCollectionConfig,
     EmbeddingModuleShardingPlan,
     ModuleSharder,
     ShardedTensor,
@@ -747,6 +754,7 @@ def sharding_single_rank_test_single_process(
     input_type: str = "kjt",  # "kjt" or "td"
     allow_zero_batch_size: bool = False,
     custom_all_reduce: bool = False,  # 2D parallel
+    submodule_configs: Optional[List[DMPCollectionConfig]] = None,
     use_offsets: bool = False,
     indices_dtype: torch.dtype = torch.int64,
     offsets_dtype: torch.dtype = torch.int64,
@@ -831,6 +839,25 @@ def sharding_single_rank_test_single_process(
     )
     plan: ShardingPlan = planner.collective_plan(local_model, sharders, pg)
 
+    if submodule_configs is not None:
+        # Dynamic 2D parallel, create a new plan for each submodule
+        for config in submodule_configs:
+            planner = EmbeddingShardingPlanner(
+                topology=Topology(
+                    world_size=config.sharding_group_size,
+                    compute_device=device.type,
+                    local_world_size=config.node_group_size,
+                ),
+                constraints=constraints,
+            )
+            sharder = TestEmbeddingCollectionSharder(
+                sharding_type=ShardingType.ROW_WISE.value,
+                kernel_type=EmbeddingComputeKernel.FUSED.value,
+                qcomms_config=qcomms_config,
+            )
+            sharders.append(sharder)  # pyre-ignore[6]
+            config.plan = planner.collective_plan(local_model, [sharder], pg)  # pyre-ignore[6]
+
     """
     Simulating multiple nodes on a single node. However, metadata information and
     tensor placement must still be consistent. Here we overwrite this to do so.
@@ -896,6 +923,7 @@ def sharding_single_rank_test_single_process(
             device=device,
             use_inter_host_allreduce=use_inter_host_allreduce,
             custom_all_reduce=all_reduce_func,
+            submodule_configs=submodule_configs,
         )
     else:
         local_model = DistributedModelParallel(
@@ -1003,6 +1031,7 @@ def sharding_single_rank_test(
     input_type: str = "kjt",  # "kjt" or "td"
     allow_zero_batch_size: bool = False,
     custom_all_reduce: bool = False,  # 2D parallel
+    submodule_configs: Optional[List[DMPCollectionConfig]] = None,  # 2D parallel
     use_offsets: bool = False,
     indices_dtype: torch.dtype = torch.int64,
     offsets_dtype: torch.dtype = torch.int64,
@@ -1037,6 +1066,7 @@ def sharding_single_rank_test(
             input_type=input_type,
             allow_zero_batch_size=allow_zero_batch_size,
             custom_all_reduce=custom_all_reduce,
+            submodule_configs=submodule_configs,
             use_offsets=use_offsets,
             indices_dtype=indices_dtype,
             offsets_dtype=offsets_dtype,

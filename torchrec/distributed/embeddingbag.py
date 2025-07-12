@@ -1853,6 +1853,10 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]
     def module_type(self) -> Type[EmbeddingBagCollection]:
         return EmbeddingBagCollection
 
+    @property
+    def sharded_module_type(self) -> Type[ShardedEmbeddingBagCollection]:
+        return ShardedEmbeddingBagCollection
+
 
 class EmbeddingAwaitable(LazyAwaitable[torch.Tensor]):
     def __init__(
