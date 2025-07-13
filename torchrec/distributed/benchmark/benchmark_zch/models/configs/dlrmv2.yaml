@@ -1,0 +1,39 @@
+dense_arch_layer_sizes:
+  - 512
+  - 256
+  - 64
+over_arch_layer_sizes:
+  - 512
+  - 512
+  - 256
+  - 1
+embedding_dim: 64
+num_embeddings_per_feature:
+  cat_0: 100000
+  cat_1: 100000
+  cat_2: 100000
+  cat_3: 100000
+  cat_4: 100000
+  cat_5: 100000
+  cat_6: 100000
+  cat_7: 100000
+  cat_8: 100000
+  cat_9: 100000
+  cat_10: 100000
+  cat_11: 100000
+  cat_12: 100000
+  cat_13: 100000
+  cat_14: 100000
+  cat_15: 100000
+  cat_16: 100000
+  cat_17: 100000
+  cat_18: 100000
+  cat_19: 100000
+  cat_20: 100000
+  cat_21: 100000
+  cat_22: 100000
+  cat_23: 100000
+  cat_24: 100000
+  cat_25: 100000
+embedding_module_attribute_path: "dlrm.sparse_arch.embedding_bag_collection" # the attribute path after model
+managed_collision_module_attribute_path: "module.dlrm.sparse_arch.embedding_bag_collection.mc_embedding_bag_collection._managed_collision_collection._managed_collision_modules" # the attribute path of managed collision module after model
