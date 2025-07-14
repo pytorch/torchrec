@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+# pyre-strict
 import argparse
 import csv
 import json
@@ -14,8 +22,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from line_profiler import LineProfiler
+
 from torch import distributed as dist
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter  # @manual //caffe2:torch_tensorboard
 from torchrec.metrics.metrics_namespace import MetricPrefix
 from torchrec.metrics.rec_metric import RecMetricComputation
 
@@ -50,10 +61,6 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # import fbvscode
-
-    # fbvscode.set_trace()
-
     # setup environment
     logger.info(f"[rank {rank}] setup environment")
     os.environ["RANK"] = str(rank)
@@ -73,6 +80,9 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
     # get training dataset
     logger.info(f"[rank {rank}] get train dataloader")
     train_dataloader = get_dataloader(args.dataset_name, args, "train")
+    # get test dataset
+    logger.info(f"[rank {rank}] get test dataloader")
+    test_dataloader = get_dataloader(args.dataset_name, args, "val")
 
     # get metric modules
     logger.info(f"[rank {rank}] get metric modules")
@@ -137,6 +147,7 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
 
     # train the model
     logger.info(f"[rank {rank}] train the model")
+    batch_cnt = 0
     for epoch_idx in range(args.epochs):
         model.train()
         starter_list = []
@@ -167,26 +178,30 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
             ## update weights
             optimizer.step()
             ender.record()
-            # do statistics
-            num_queries_per_batch = len(labels)
+            # update the batch counter
+            batch_cnt += 1
+            # append the start and end events to the lists
             starter_list.append(starter)
             ender_list.append(ender)
+            # do training metrics and QPS statistics
+            num_queries_per_batch = len(labels)
             num_queries_per_batch_list.append(num_queries_per_batch)
             loss_per_batch_list.append(loss.cpu().item())
-            if True or len(args.zch_method) > 0:
-                benchmark_probe.record_mcec_state(stage="after_fwd")
-                # update zch statistics
-                benchmark_probe.update()
-                # push the zch stats to the queue
-                msg_content = {
-                    "epoch_idx": epoch_idx,
-                    "batch_idx": batch_idx,
-                    "rank": rank,
-                    "mch_stats": benchmark_probe.get_mch_stats(),
-                }
-                queue.put(
-                    ("mch_stats", msg_content),
-                )
+            # do zch statistics
+            benchmark_probe.record_mcec_state(stage="after_fwd")
+            # update zch statistics
+            benchmark_probe.update()
+            # push the zch stats to the queue
+            msg_content = {
+                "epoch_idx": epoch_idx,
+                "batch_idx": batch_idx,
+                "batch_cnt": batch_cnt,
+                "rank": rank,
+                "mch_stats": benchmark_probe.get_mch_stats(),
+            }
+            queue.put(
+                ("mch_stats", msg_content),
+            )
             if (
                 batch_idx % interval_num_batches_show_qps == 0
                 or batch_idx == len(train_dataloader) - 1
@@ -218,6 +233,11 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
                     if batch_idx >= interval_num_batches_show_qps
                     else 0
                 )  # the start batch index of the interval
+                interval_start_batch_cnt = (
+                    batch_cnt - interval_num_batches_show_qps
+                    if batch_cnt >= interval_num_batches_show_qps
+                    else 0
+                )  # the start batch counter of the interval
                 interval_end_batch_idx = (
                     batch_idx  # the end batch index of the interval
                 )
@@ -227,6 +247,8 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
                     "rank": rank,
                     "interval_start_batch_idx": interval_start_batch_idx,
                     "interval_end_batch_idx": interval_end_batch_idx,
+                    "interval_start_batch_cnt": interval_start_batch_cnt,
+                    "interval_end_batch_cnt": batch_cnt,
                     "per_batch_time_list": per_batch_time_list,
                     "per_batch_num_queries_list": num_queries_per_batch_list,
                 }
@@ -238,6 +260,8 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
                     "rank": rank,
                     "interval_start_batch_idx": interval_start_batch_idx,
                     "interval_end_batch_idx": interval_end_batch_idx,
+                    "interval_start_batch_cnt": interval_start_batch_cnt,
+                    "interval_end_batch_cnt": batch_cnt,
                     "per_batch_loss_list": loss_per_batch_list,
                 }
                 ## put the message into the queue
@@ -259,31 +283,24 @@ def main(rank: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> N
                 ender_list = []
                 num_queries_per_batch_list = []
                 loss_per_batch_list = []
-    # release the training dataloader
-    logger.info(f"[rank {rank}] release the training dataloader")
-    train_dataloader = None
-    del train_dataloader
-    # after training do validation
-    logger.info(f"[rank {rank}] get test dataloader")
-    test_dataloader = get_dataloader(args.dataset_name, args, "val")
-    logger.info(f"[rank {rank}] do validation")
-    metric_values = evaluation(
-        metric_modules,
-        model,
-        test_dataloader,
-        device,
-        nonzch_remapper if len(args.zch_method) == 0 else None,
-    )
-
-    # print the evaluation result
-    print(f"Evaluation result: {metric_values}")
-    # send the evaluation result to the queue
-    msg_content = {
-        "epoch_idx": args.epochs,
-        "rank": rank,
-        "eval_result_dict": metric_values,
-    }
-    queue.put(("eval_result", msg_content))
+        # after training of each epoch, do validation
+        logger.info(f"[rank {rank}] do validation after training of epoch {epoch_idx}")
+        metric_values = evaluation(
+            metric_modules,
+            model,
+            test_dataloader,
+            device,
+            nonzch_remapper if len(args.zch_method) == 0 else None,
+        )
+        # print the evaluation result
+        print(f"Evaluation result: {metric_values}")
+        # send the evaluation result to the queue
+        msg_content = {
+            "epoch_idx": epoch_idx,
+            "rank": rank,
+            "eval_result_dict": metric_values,
+        }
+        queue.put(("eval_result", msg_content))
 
     logger.info(
         f"[rank {rank}] finished, sleep for 15 seconds before sending finish signal and exit"
@@ -317,6 +334,12 @@ def evaluation(
             batch = nonzch_remapper.remap(batch)
         with torch.no_grad():
             loss, (loss_values, pred_logits, labels, weights) = model(batch)
+            if len(pred_logits.shape) <= 1:
+                pred_logits = pred_logits.unsqueeze(0)
+            if len(labels.shape) <= 1:
+                labels = labels.unsqueeze(0)
+            if len(weights.shape) <= 1:
+                weights = weights.unsqueeze(0)
             # update metrics
             for metric_name, metric_module in metric_modules.items():
                 metric_module.update(
@@ -364,6 +387,7 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
             [
                 "epoch_idx",
                 "batch_idx",
+                "batch_cnt",
                 "rank",
                 "loss",
             ]
@@ -378,6 +402,7 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
             [
                 "epoch_idx",
                 "batch_idx",
+                "batch_cnt",
                 "feature_name",
                 "hit_cnt",
                 "total_cnt",
@@ -390,6 +415,9 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
                 "rank_num_empty_slots",
             ]
         )
+    ## create counter for total number of collision and total number of queries
+    total_num_collisions = {}  # feature name: total number of collisions
+    total_num_queries = {}  # feature name: total number of queries
     # create a csv file to save the qps_metrics
     qps_metrics_file_path = os.path.join(
         args.profiling_result_folder, "qps_metrics.csv"
@@ -400,6 +428,7 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
             [
                 "epoch_idx",
                 "batch_idx",
+                "batch_cnt",
                 "rank",
                 "num_queries",
                 "duration",
@@ -413,6 +442,10 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
     with open(eval_metrics_file_path, "w") as f:
         writer = csv.writer(f)
         writer.writerow(["epoch_idx", "rank", "auc", "ne", "mae", "mse"])
+
+    # create a tensorboard folder and summary writer
+    tb_log_folder = os.path.join(args.profiling_result_folder, "tb")
+    tb_writer = SummaryWriter(log_dir=tb_log_folder)
 
     while finished_counter < world_size:
         try:
@@ -444,6 +477,7 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
         elif msg_type == "mch_stats":
             epoch_idx = msg_content["epoch_idx"]
             batch_idx = msg_content["batch_idx"]
+            batch_cnt = msg_content["batch_cnt"]
             rank = msg_content["rank"]
             rank_batch_mch_stats = msg_content["mch_stats"]
             # other wise, aggregate the data into the buffer
@@ -476,6 +510,7 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
                                 "collision_cnt": 0,
                                 "rank_total_cnt": {},  # dictionary of {rank_idx: num_quries_mapped_to_the_rank}
                                 "rank_num_empty_slots": {},  # dictionary of {rank_idx: num_empty_slots}
+                                "rank_num_unique_queries": {},  # dictionary of {rank_idx: num_unique_queries}
                             }
                         # aggregate the data from all the ranks
                         ## aggregate the hit count
@@ -508,21 +543,44 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
                         ] = rank_batch_mch_stats[mch_stats_feature_name][
                             "num_empty_slots"
                         ]
+                        ## for rank num unique queries, get the data from the rank data dict
+                        batch_stats[mch_stats_feature_name]["rank_num_unique_queries"][
+                            mch_stats_rank_idx
+                        ] = rank_batch_mch_stats[mch_stats_feature_name][
+                            "num_unique_queries"
+                        ]
                 # clear the buffer for the batch
                 del mch_buffer[epoch_idx][batch_idx]
-                # save the zch statistics to a file
+                # save the zch statistics to a file and tensorboard
+                tb_prefix = "collision management"
                 with open(zch_metrics_file_path, "a") as f:
                     writer = csv.writer(f)
                     for feature_name, stats in batch_stats.items():
+                        # calculate rate for each rank
                         hit_rate = stats["hit_cnt"] / stats["total_cnt"]
                         insert_rate = stats["insert_cnt"] / stats["total_cnt"]
                         collision_rate = stats["collision_cnt"] / stats["total_cnt"]
                         rank_total_cnt = json.dumps(stats["rank_total_cnt"])
                         rank_num_empty_slots = json.dumps(stats["rank_num_empty_slots"])
+                        # update the total number of collisions and total number of queries
+                        if feature_name not in total_num_collisions:
+                            total_num_collisions[feature_name] = 0
+                        if feature_name not in total_num_queries:
+                            total_num_queries[feature_name] = 0
+                        total_num_collisions[feature_name] += stats["collision_cnt"]
+                        total_num_queries[feature_name] += stats["total_cnt"]
+                        overall_collision_rate = (
+                            total_num_collisions[feature_name]
+                            / total_num_queries[feature_name]
+                            if total_num_queries[feature_name] > 0
+                            else 0
+                        )
+                        # write the zch statitics to csv file
                         writer.writerow(
                             [
                                 epoch_idx,
                                 batch_idx,
+                                batch_cnt,
                                 feature_name,
                                 stats["hit_cnt"],
                                 stats["total_cnt"],
@@ -535,53 +593,178 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
                                 rank_num_empty_slots,
                             ]
                         )
+                        # write the zch statitics to tensorboard
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/hit_cnt",
+                            stats["hit_cnt"],
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/total_cnt",
+                            stats["total_cnt"],
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/insert_cnt",
+                            stats["insert_cnt"],
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/collision_cnt",
+                            stats["collision_cnt"],
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/hit_rate",
+                            hit_rate,
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/insert_rate",
+                            insert_rate,
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/collision_rate",
+                            collision_rate,
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/total_num_collisions",
+                            total_num_collisions[feature_name],
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/total_num_queries",
+                            total_num_queries[feature_name],
+                            batch_cnt,
+                        )
+                        tb_writer.add_scalar(
+                            f"{tb_prefix}/{feature_name}/overall_collision_rate",
+                            overall_collision_rate,
+                            batch_cnt,
+                        )
+                        ## convert rank idx to string for displaying in tensorboard
+                        rank_total_cnt_scalar_dict = dict(
+                            [
+                                (str(rank_idx), rank_total_cnt)
+                                for (rank_idx, rank_total_cnt) in stats[
+                                    "rank_total_cnt"
+                                ].items()
+                            ]
+                        )
+                        tb_writer.add_scalars(
+                            f"{tb_prefix}/{feature_name}/number of queries mapped to rank",
+                            rank_total_cnt_scalar_dict,
+                            batch_cnt,
+                        )
+                        ## convert rank idx to string for displaying in tensorboard
+                        rank_num_empty_slots_scalar_dict = dict(
+                            [
+                                (str(rank_idx), rank_num_empty_slots)
+                                for (rank_idx, rank_num_empty_slots) in stats[
+                                    "rank_num_empty_slots"
+                                ].items()
+                            ]
+                        )
+                        tb_writer.add_scalars(
+                            f"{tb_prefix}/{feature_name}/number of empty slots in rank",
+                            rank_num_empty_slots_scalar_dict,
+                            batch_cnt,
+                        )
+                        ## convert rank idx to string for displaying in tensorboard
+                        rank_num_unique_queries_scalar_dict = dict(
+                            [
+                                (str(rank_idx), rank_num_unique_queries)
+                                for (rank_idx, rank_num_unique_queries) in stats[
+                                    "rank_num_unique_queries"
+                                ].items()
+                            ]
+                        )
+                        tb_writer.add_scalars(
+                            f"{tb_prefix}/{feature_name}/number of unique queries in rank",
+                            rank_num_unique_queries_scalar_dict,
+                            batch_cnt,
+                        )
         elif msg_type == "duration_and_num_queries":
             epoch_idx = msg_content["epoch_idx"]
             rank = msg_content["rank"]
             interval_start_batch_idx = msg_content["interval_start_batch_idx"]
+            interval_start_batch_cnt = msg_content["interval_start_batch_cnt"]
             per_batch_time_list = msg_content["per_batch_time_list"]
             per_batch_num_queries_list = msg_content["per_batch_num_queries_list"]
-            # save the qps statistics to a file
+            # save the qps statistics to a file and tensorboard
+            tb_prefix = "efficiency"
             with open(qps_metrics_file_path, "a") as f:
                 writer = csv.writer(f)
                 for i in range(len(per_batch_time_list)):
+                    qps = (
+                        per_batch_num_queries_list[i] / per_batch_time_list[i]
+                        if per_batch_time_list[i] > 0
+                        else 0
+                    )
                     writer.writerow(
                         [
                             epoch_idx,
                             str(interval_start_batch_idx + i),
+                            str(interval_start_batch_cnt + i),
                             rank,
                             per_batch_num_queries_list[i],
                             per_batch_time_list[i],
-                            (
-                                per_batch_num_queries_list[i] / per_batch_time_list[i]
-                                if per_batch_time_list[i] > 0
-                                else 0
-                            ),
+                            qps,
                         ]
+                    )
+                    # write the qps statistics to tensorboard
+                    tb_writer.add_scalar(
+                        f"{tb_prefix}/qps",
+                        qps,
+                        interval_start_batch_cnt + i,
+                    )
+                    tb_writer.add_scalars(
+                        f"{tb_prefix}/number of queries",
+                        {str(rank): per_batch_num_queries_list[i]},
+                        interval_start_batch_cnt + i,
+                    )
+                    tb_writer.add_scalars(
+                        f"{tb_prefix}/training duration",
+                        {str(rank): per_batch_time_list[i]},
+                        interval_start_batch_cnt + i,
                     )
         elif msg_type == "training_metrics":
             epoch_idx = msg_content["epoch_idx"]
             rank = msg_content["rank"]
             interval_start_batch_idx = msg_content["interval_start_batch_idx"]
+            interval_start_batch_cnt = msg_content["interval_start_batch_cnt"]
             per_batch_loss_list = msg_content["per_batch_loss_list"]
-            # save the training metrics to a file
+            # save the training metrics to a file and tensorboard
+            tb_prefix = "training"
             with open(training_metrics_file_path, "a") as f:
                 writer = csv.writer(f)
                 for i in range(len(per_batch_loss_list)):
+                    # write the training metrics to csv file
                     writer.writerow(
                         [
                             epoch_idx,
                             str(interval_start_batch_idx + i),
+                            str(interval_start_batch_cnt + i),
                             rank,
                             per_batch_loss_list[i],
                         ]
+                    )
+                    # write the training metrics to tensorboard
+                    tb_writer.add_scalars(
+                        f"{tb_prefix}/loss",
+                        {str(rank): per_batch_loss_list[i]},
+                        interval_start_batch_cnt + i,
                     )
         elif msg_type == "eval_result":
             epoch_idx = msg_content["epoch_idx"]
             rank = msg_content["rank"]
             eval_result_dict = msg_content["eval_result_dict"]
-            # save the evaluation result to a file
+            # save the evaluation result to a file and tensorboard
+            tb_prefix = "evaluation"
             with open(eval_metrics_file_path, "a") as f:
+                # write the evaluation result to csv file
                 writer = csv.writer(f)
                 writer.writerow(
                     [
@@ -593,6 +776,30 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
                         eval_result_dict["mse"] if "mse" in eval_result_dict else "",
                     ]
                 )
+                # write the evaluation result to tensorboard
+                # rebuild {task_idx: {metric_name: {rank: metric_value}}} dict
+                tb_eval_result_dict = (
+                    {}
+                )  # {task_idx: {metric_name: {rank: metric_value}}}
+                for metric_name, task_metric_value_list in eval_result_dict.items():
+                    for task_idx, metric_value in enumerate(task_metric_value_list):
+                        if task_idx not in tb_eval_result_dict:
+                            tb_eval_result_dict[task_idx] = {}
+                        if metric_name not in tb_eval_result_dict[task_idx]:
+                            tb_eval_result_dict[task_idx][metric_name] = {}
+                        tb_eval_result_dict[task_idx][metric_name][
+                            str(rank)
+                        ] = metric_value
+                # display the evaluation result in tensorboard for each task
+                for task_idx in tb_eval_result_dict.keys():
+                    for metric_name, metric_value_dict in tb_eval_result_dict[
+                        task_idx
+                    ].items():
+                        tb_writer.add_scalars(
+                            f"{tb_prefix}/task_{task_idx}/{metric_name}",
+                            metric_value_dict,
+                            epoch_idx,
+                        )
         else:
             # raise a warning if the message type is not recognized
             print("Warning: Unknown message type")
@@ -601,6 +808,8 @@ def statistic(args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
 
 if __name__ == "__main__":
     args: argparse.Namespace = parse_args(sys.argv[1:])
+
+    __builtins__.__dict__["profile"] = LineProfiler()
 
     # set environment variables
     os.environ["MASTER_ADDR"] = str("localhost")

@@ -1,23 +1,21 @@
-import argparse
-import copy
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+# pyre-strict
 import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 import numpy as np
 
 import torch
 import torch.nn as nn
-import yaml
 from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingCollection
-from torchrec.modules.mc_modules import (
-    DistanceLFU_EvictionPolicy,
-    ManagedCollisionCollection,
-    MCHManagedCollisionModule,
-)
-
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
 def get_module_from_instance(
@@ -104,6 +102,7 @@ class BenchmarkMCProbe(nn.Module):
         self._mch_stats: Dict[str, Any] = (
             {}
         )  # dictionary of {table_name [str]: {metric_name [str]: metric_value [int]}}
+        self.feature_name_unique_queried_values_set_dict: Dict[str, Set[int]] = {}
 
     # record mcec state to file
     def record_mcec_state(self, stage: str) -> None:
@@ -260,6 +259,7 @@ class BenchmarkMCProbe(nn.Module):
                     "collision_cnt": 0,
                     "rank_total_cnt": 0,
                     "num_empty_slots": 0,
+                    "num_unique_queries": 0,
                 }
             # get the input faeture values
             input_feature_values = np.array(rank_feature_value_before_fwd[feature_name])
@@ -313,4 +313,16 @@ class BenchmarkMCProbe(nn.Module):
                 this_rank_total_count - this_rank_hits_count - this_rank_insert_count
             )
             batch_stats[feature_name]["collision_cnt"] += int(this_rank_collision_count)
+            # get the unique values in the input feature values
+            if feature_name not in self.feature_name_unique_queried_values_set_dict:
+                self.feature_name_unique_queried_values_set_dict[feature_name] = set(
+                    input_feature_values.tolist()
+                )
+            else:
+                self.feature_name_unique_queried_values_set_dict[feature_name].update(
+                    set(input_feature_values.tolist())
+                )
+            batch_stats[feature_name]["num_unique_queries"] = len(
+                self.feature_name_unique_queried_values_set_dict[feature_name]
+            )
         self._mch_stats = batch_stats

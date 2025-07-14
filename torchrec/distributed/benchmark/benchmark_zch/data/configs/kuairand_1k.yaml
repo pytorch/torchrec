@@ -1,4 +1,4 @@
-dataset_path: "/home/lizhouyu/oss_github/generative-recommenders/generative_recommenders/dlrm_v3/data/KuaiRand-1K/data"
+dataset_path: "/home/lizhouyu/datasets/kuairand-1k/data"
 batch_size: 16
 train_split_percentage: 0.75
 num_workers: 4

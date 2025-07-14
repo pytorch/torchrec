@@ -1,3 +1,7 @@
-dataset_path: "/home/lizhouyu/oss_github/dlrm/torchrec_dlrm/criteo_1tb/criteo_kaggle_processed"
+dataset_path: "/home/lizhouyu/datasets/criteo_kaggle_processed"
 batch_size: 4096
 seed: 0
+multitask_configs:
+  - task_name: is_click
+    task_weight: 1
+    task_type: classification

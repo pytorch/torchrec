@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+# pyre-strict
 import argparse
 from typing import List
 
@@ -25,7 +33,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     parser.add_argument(
         "--num_embeddings",  # ratio of feature ids to embedding table size # 3 axis: x-bath_idx; y-collisions; zembedding table sizes
         type=int,
-        default=100_000,
+        default=None,
         help="max_ind_size. The number of embeddings in each embedding table. Defaults"
         " to 100_000 if num_embeddings_per_feature is not supplied.",
     )

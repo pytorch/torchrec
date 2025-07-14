@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+# pyre-strict
+
 import argparse
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,6 +44,9 @@ class DLRMv2(nn.Module):
             dense_device=dense_device,
         )
         self.train_model = DLRMTrain(self.dlrm)
+        self.table_configs: List[EmbeddingBagConfig] = list(
+            embedding_bag_collection.embedding_bag_configs()
+        )
 
     def forward(
         self, batch: Batch
@@ -55,10 +67,10 @@ def make_model_dlrmv2(
 ) -> nn.Module:
     ebc_configs = [
         EmbeddingBagConfig(
-            name=f"t_{feature_name}",
+            name=f"{feature_name}",
             embedding_dim=configs["embedding_dim"],
             num_embeddings=(
-                none_throws(configs["num_embeddings_per_feature"])[feature_idx]
+                none_throws(configs["num_embeddings_per_feature"])[feature_name]
                 if args.num_embeddings is None
                 else args.num_embeddings
             ),
@@ -76,8 +88,9 @@ def make_model_dlrmv2(
                 input_hash_size=args.input_hash_size,
                 device=torch.device("meta"),
                 world_size=get_local_size(),
-                use_mpzch=True,
+                zch_method="mpzch",
                 mpzch_num_buckets=args.num_buckets,
+                mpzch_max_probe=args.max_probe,
             )
         )
     else:

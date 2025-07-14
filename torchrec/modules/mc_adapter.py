@@ -1,4 +1,9 @@
-# (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+#!/usr/bin/env python3
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
 
 # pyre-strict
 import sys
@@ -148,9 +153,11 @@ class McEmbeddingBagCollectionAdapter(nn.Module):
         world_size: int,
         eviction_interval: int = 1,
         allow_in_place_embed_weight_update: bool = False,
-        use_mpzch: bool = False,
-        mpzch_num_buckets: Optional[int] = None,
-        mpzch_max_probe: Optional[int] = None,
+        zch_method: str = "",  # method for managing collisions, one of ["", "mpzch", "sort_zch"]
+        mpzch_num_buckets: Optional[int] = 80,
+        mpzch_max_probe: Optional[
+            int
+        ] = 100,  # max_probe for HashZchManagedCollisionModule
     ) -> None:
         """
         Initialize an EmbeddingBagCollectionAdapter.
@@ -173,30 +180,33 @@ class McEmbeddingBagCollectionAdapter(nn.Module):
         mc_modules = {}
         for table_config in ebc.embedding_bag_configs():
             table_name = table_config.name
-            if use_mpzch:
+            if zch_method == "mpzch":
                 # if use MPZCH, create a HashZchManagedCollisionModule
+                num_buckets = mpzch_num_buckets if mpzch_num_buckets else world_size
+                max_probe = (
+                    min(
+                        mpzch_max_probe,
+                        table_config.num_embeddings // world_size // num_buckets,
+                    )
+                    if mpzch_max_probe
+                    else table_config.num_embeddings // world_size // num_buckets
+                )
                 mc_modules[table_name] = HashZchManagedCollisionModule(  # MPZCH
                     is_inference=False,
                     zch_size=(table_config.num_embeddings),
                     input_hash_size=input_hash_size,
                     device=device,
-                    total_num_buckets=(
-                        mpzch_num_buckets if mpzch_num_buckets else world_size
-                    ),  # total_num_buckets if not passed, use world_size, WORLD_SIZE should be a factor of total_num_buckets
+                    total_num_buckets=num_buckets,  # total_num_buckets if not passed, use world_size, WORLD_SIZE should be a factor of total_num_buckets
+                    max_probe=max_probe,
                     eviction_policy_name=HashZchEvictionPolicyName.SINGLE_TTL_EVICTION,  # defaultly using single ttl eviction policy
                     eviction_config=HashZchEvictionConfig(
                         features=table_config.feature_names,
                         single_ttl=eviction_interval,
                     ),
-                    max_probe=(
-                        mpzch_max_probe
-                        if mpzch_max_probe is not None
-                        and mpzch_max_probe
-                        < (table_config.num_embeddings // world_size)
-                        else table_config.num_embeddings // world_size
-                    ),  # max_probe for HashZchManagedCollisionModule
                 )
-            else:  # if not use MPZCH, create a MCHManagedCollisionModule using the sort ZCH algorithm
+            elif (
+                zch_method == "sort_zch"
+            ):  # if not use MPZCH, create a MCHManagedCollisionModule using the sort ZCH algorithm
                 mc_modules[table_name] = MCHManagedCollisionModule(  # sort ZCH
                     zch_size=table_config.num_embeddings,
                     device=device,
@@ -204,7 +214,10 @@ class McEmbeddingBagCollectionAdapter(nn.Module):
                     eviction_interval=eviction_interval,
                     eviction_policy=DistanceLFU_EvictionPolicy(),
                 )  # NOTE: the benchmark for sort ZCH is not implemented yet
-            # TODO: add the pure hash module here
+            else:  # if not use MPZCH, create a MCHManagedCollisionModule using the sort ZCH
+                raise NotImplementedError(
+                    f"zc method {zch_method} is not supported yet"
+                )
 
         # create the mcebc module with the mc modules and the original ebc
         self.mc_embedding_bag_collection = (
@@ -219,10 +232,6 @@ class McEmbeddingBagCollectionAdapter(nn.Module):
             )
         )
 
-        self.remapped_ids: Optional[Dict[str, torch.Tensor]] = (
-            None  # to store remapped ids
-        )
-
     def forward(self, input_kjt: KeyedJaggedTensor) -> Dict[str, JaggedTensor]:
         """
         Args:
@@ -230,8 +239,7 @@ class McEmbeddingBagCollectionAdapter(nn.Module):
         Returns:
             Dict[str, JaggedTensor]: dictionary of {'feature_name': JaggedTensor}
         """
-        mc_ebc_out, remapped_ids = self.mc_embedding_bag_collection(input_kjt)
-        self.remapped_ids = remapped_ids
+        mc_ebc_out, per_table_remapped_id = self.mc_embedding_bag_collection(input_kjt)
         return mc_ebc_out
 
     def parameters(self, recurse: bool = True) -> Iterator[Parameter]:
@@ -246,6 +254,6 @@ class McEmbeddingBagCollectionAdapter(nn.Module):
             Dict[str, EmbeddingConfig]: dictionary of {'feature_name': EmbeddingConfig}
         """
         return (
-            # pyre-ignore [29] # NOTE: the function "embedding_configs" returns the _embedding_module attribute of the EmbeddingCollection
+            # pyre-ignore[29]: `Union[BoundMethod[typing.Callable(EmbeddingBagCollection.embedding_bag_configs)[[Named(self, EmbeddingBagCollection)], List[EmbeddingBagConfig]], EmbeddingBagCollection], nn.modules.module.Module, torch._tensor.Tensor]` is not a function. # NOTE: the function "embedding_configs" returns the _embedding_module attribute of the EmbeddingCollection
             self.mc_embedding_bag_collection._embedding_module.embedding_bag_configs()
         )
