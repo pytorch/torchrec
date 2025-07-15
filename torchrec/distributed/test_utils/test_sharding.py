@@ -856,7 +856,9 @@ def sharding_single_rank_test_single_process(
                 qcomms_config=qcomms_config,
             )
             sharders.append(sharder)  # pyre-ignore[6]
-            config.plan = planner.collective_plan(local_model, [sharder], pg)  # pyre-ignore[6]
+            config.plan = planner.collective_plan(
+                local_model, [sharder], pg  # pyre-ignore[6]
+            )
 
     """
     Simulating multiple nodes on a single node. However, metadata information and
