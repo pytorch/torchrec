@@ -895,7 +895,8 @@ class DMPCollection(DistributedModelParallel):
             )
 
             if ctx.module:
-                ctx.sharded_module = self._sharder_map[ctx.module].sharded_module_type  # pyre-ignore[16]
+                # pyre-ignore[16]
+                ctx.sharded_module = self._sharder_map[ctx.module].sharded_module_type
 
         consolidated_plan = copy.deepcopy(self._ctxs[0].plan)
         for ctx in self._ctxs[1:]:
@@ -1195,10 +1196,13 @@ class DMPCollection(DistributedModelParallel):
     ) -> None:
         # Post init DMP, save the embedding kernels, with respect to contexts
         for context in contexts[1:]:
-            context.modules_to_sync = self._group_sharded_module(context.sharded_module)  # pyre-ignore[6]
+            context.modules_to_sync = self._group_sharded_module(
+                context.sharded_module  # pyre-ignore[6]
+            )
 
         # Group leftover embedding kernels, with respect to default context
-        modules_to_skip: List[nn.Module] = [c.sharded_module for c in contexts[1:]]  # pyre-ignore[9]
+        # pyre-ignore[9]
+        modules_to_skip: List[nn.Module] = [c.sharded_module for c in contexts[1:]]
         sharded_modules: List[nn.Module] = []
 
         def _find_sharded_modules(
