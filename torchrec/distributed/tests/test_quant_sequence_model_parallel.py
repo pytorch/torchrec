@@ -213,7 +213,6 @@ class QuantSequenceModelParallelTest(InferenceModelParallelTestBase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs available",
     )
-    @settings(verbosity=Verbosity.verbose, max_examples=1, deadline=None)
     def test_sharded_quant_kv_zch(self) -> None:
         device = torch.device("cuda:0")
         num_features = 4
