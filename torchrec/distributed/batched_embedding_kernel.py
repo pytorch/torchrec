@@ -209,6 +209,7 @@ def _populate_zero_collision_tbe_params(
     tbe_params: Dict[str, Any],
     sharded_local_buckets: List[Tuple[int, int, int]],
     config: GroupedEmbeddingConfig,
+    backend_type: BackendType,
 ) -> None:
     """
     Construct Zero Collision TBE params from config and fused params dict.
@@ -220,11 +221,15 @@ def _populate_zero_collision_tbe_params(
     bucket_sizes: List[int] = [size for _, _, size in sharded_local_buckets]
 
     enabled = False
-    for table in config.embedding_tables:
-        if table.virtual_table_eviction_policy is not None and not isinstance(
-            table.virtual_table_eviction_policy, NoEvictionPolicy
-        ):
-            enabled = True
+    meta_header_lens = [0] * len(config.embedding_tables)
+    for i, table in enumerate(config.embedding_tables):
+        # virtual_table_eviction_policy won't be None in reality: https://fburl.com/code/864a0w0f
+        if table.virtual_table_eviction_policy is not None:
+            meta_header_lens[i] = (
+                table.virtual_table_eviction_policy.get_meta_header_len()
+            )
+            if not isinstance(table.virtual_table_eviction_policy, NoEvictionPolicy):
+                enabled = True
     if enabled:
         counter_thresholds = [0] * len(config.embedding_tables)
         ttls_in_mins = [0] * len(config.embedding_tables)
@@ -283,14 +288,16 @@ def _populate_zero_collision_tbe_params(
             ttls_in_mins=ttls_in_mins,
             counter_decay_rates=counter_decay_rates,
             l2_weight_thresholds=l2_weight_thresholds,
+            meta_header_lens=meta_header_lens,
         )
     else:
-        eviction_policy = None
+        eviction_policy = EvictionPolicy(meta_header_lens=meta_header_lens)
 
     tbe_params["kv_zch_params"] = KVZCHParams(
         bucket_offsets=bucket_offsets,
         bucket_sizes=bucket_sizes,
         enable_optimizer_offloading=True,
+        backend_return_whole_row=(backend_type == BackendType.DRAM),
         eviction_policy=eviction_policy,
     )
 
@@ -1395,7 +1402,9 @@ class ZeroCollisionKeyValueEmbedding(
                 self._config.embedding_tables, self._pg
             )
         )
-        _populate_zero_collision_tbe_params(ssd_tbe_params, self._bucket_spec, config)
+        _populate_zero_collision_tbe_params(
+            ssd_tbe_params, self._bucket_spec, config, backend_type
+        )
         compute_kernel = config.embedding_tables[0].compute_kernel
         embedding_location = compute_kernel_to_embedding_location(compute_kernel)
 
@@ -2201,7 +2210,9 @@ class ZeroCollisionKeyValueEmbeddingBag(
                 self._config.embedding_tables, self._pg
             )
         )
-        _populate_zero_collision_tbe_params(ssd_tbe_params, self._bucket_spec, config)
+        _populate_zero_collision_tbe_params(
+            ssd_tbe_params, self._bucket_spec, config, backend_type
+        )
         compute_kernel = config.embedding_tables[0].compute_kernel
         embedding_location = compute_kernel_to_embedding_location(compute_kernel)
 
