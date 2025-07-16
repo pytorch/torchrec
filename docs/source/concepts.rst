@@ -96,9 +96,10 @@ is the data type used in ``forward`` of ``EmbeddingBagCollection`` and
 ``EmbeddingCollection`` as they are used to represent multiple features
 in a table.
 
-A ``KeyedJaggedTensor`` has an implied batch size, which is the number
-of features divided by the length of ``lengths`` tensor. The example
-below has a batch size of 2. Similar to a ``JaggedTensor``, the
+A ``KeyedJaggedTensor`` has an implied batch size, which is the length
+of ``lengths`` tensor divided by the number of keys. The example
+below has a batch size of 2 (4 lengths divided by 2 keys).
+Similar to a ``JaggedTensor``, the
 ``offsets`` and ``lengths`` function in the same manner. You can also
 access the ``lengths``, ``offsets``, and ``values`` of a feature by
 accessing the key from the ``KeyedJaggedTensor``.
