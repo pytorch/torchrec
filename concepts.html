@@ -491,9 +491,10 @@ groups of features, for example, user features and item features. This
 is the data type used in <code class="docutils literal notranslate"><span class="pre">forward</span></code> of <code class="docutils literal notranslate"><span class="pre">EmbeddingBagCollection</span></code> and
 <code class="docutils literal notranslate"><span class="pre">EmbeddingCollection</span></code> as they are used to represent multiple features
 in a table.</p>
-<p>A <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code> has an implied batch size, which is the number
-of features divided by the length of <code class="docutils literal notranslate"><span class="pre">lengths</span></code> tensor. The example
-below has a batch size of 2. Similar to a <code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code>, the
+<p>A <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code> has an implied batch size, which is the length
+of <code class="docutils literal notranslate"><span class="pre">lengths</span></code> tensor divided by the number of keys. The example
+below has a batch size of 2 (4 lengths divided by 2 keys).
+Similar to a <code class="docutils literal notranslate"><span class="pre">JaggedTensor</span></code>, the
 <code class="docutils literal notranslate"><span class="pre">offsets</span></code> and <code class="docutils literal notranslate"><span class="pre">lengths</span></code> function in the same manner. You can also
 access the <code class="docutils literal notranslate"><span class="pre">lengths</span></code>, <code class="docutils literal notranslate"><span class="pre">offsets</span></code>, and <code class="docutils literal notranslate"><span class="pre">values</span></code> of a feature by
 accessing the key from the <code class="docutils literal notranslate"><span class="pre">KeyedJaggedTensor</span></code>.</p>
