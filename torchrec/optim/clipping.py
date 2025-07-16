@@ -202,7 +202,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
 
         global log_grad_norm
         if log_grad_norm:
-            if total_grad_norm is not None and self._norm_type != torch.inf:
+            if total_grad_norm is not None and norm_type != torch.inf:
                 # pyre-ignore[58]
                 grad_norm = total_grad_norm ** (1.0 / norm_type)
             else:
@@ -217,7 +217,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
         if total_grad_norm is None:
             return
 
-        if self._norm_type != torch.inf:
+        if norm_type != torch.inf:
             # pyre-ignore [58]: ** is not supported for operand types torch._tensor.Tensor and float.
             total_grad_norm = total_grad_norm ** (1.0 / norm_type)
         # pyre-ignore [58]: / is not supported for operand types float and Union[float, torch._tensor.Tensor].
