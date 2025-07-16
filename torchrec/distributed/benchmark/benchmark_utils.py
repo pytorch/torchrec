@@ -524,6 +524,9 @@ def cmd_conf(func: Callable) -> Callable:
                 if origin in (list, List):
                     elem_type = get_args(ftype)[0]
                     arg_kwargs.update(nargs="*", type=elem_type)
+                elif ftype is bool:
+                    # Special handling for boolean arguments
+                    arg_kwargs.update(type=lambda x: x.lower() in ["true", "1", "yes"])
                 else:
                     arg_kwargs.update(type=ftype)
 
