@@ -457,6 +457,7 @@ class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
         num_tables=st.sampled_from([2, 3, 4]),
         data_type=st.sampled_from([DataType.FP32, DataType.FP16]),
         world_size=st.sampled_from([3, 4]),
+        embedding_dim=st.sampled_from([16]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_dynamic_sharding_ebc_cw(
@@ -464,16 +465,21 @@ class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
         num_tables: int,
         data_type: DataType,
         world_size: int,
+        embedding_dim: int,
     ) -> None:
         # Tests EBC dynamic sharding implementation for CW
 
         # Force the ranks per table to be consistent
-        ranks_per_tables = [
-            random.randint(1, world_size - 1) for _ in range(num_tables)
-        ]
+        valid_ranks = [i for i in range(1, world_size) if embedding_dim % i == 0]
+        ranks_per_tables = [random.choice(valid_ranks) for _ in range(num_tables)]
+        new_ranks_per_tables = [random.choice(valid_ranks) for _ in range(num_tables)]
+
+        # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
 
         old_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
-        new_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+        new_ranks = generate_rank_placements(
+            world_size, num_tables, new_ranks_per_tables
+        )
 
         # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
         while new_ranks == old_ranks:
@@ -497,6 +503,7 @@ class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
             num_tables,
             world_size,
             data_type,
+            embedding_dim,
         )
 
 
@@ -511,6 +518,12 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
             [
                 # SharderType.EMBEDDING_BAG.value,
                 SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.COLUMN_WISE.value,
             ]
         ),
         kernel_type=st.sampled_from(
@@ -554,9 +567,10 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         random_seed=st.integers(0, 1000),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_sharding_tw(
+    def test_sharding(
         self,
         sharder_type: str,
+        sharding_type: str,
         kernel_type: str,
         qcomms_config: Optional[QCommsConfig],
         apply_optimizer_in_backward_config: Optional[
@@ -575,12 +589,12 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         ):
             self.skipTest("CPU does not support uvm.")
 
-        sharding_type = ShardingType.TABLE_WISE.value
         assume(
             sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
             or not variable_batch_size
         )
 
+        sharding_type_e = ShardingType(sharding_type)
         self._test_dynamic_sharding(
             # pyre-ignore[6]
             sharders=[
@@ -597,7 +611,7 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
             apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
             variable_batch_size=variable_batch_size,
             data_type=data_type,
-            sharding_type=ShardingType.TABLE_WISE,
+            sharding_type=sharding_type_e,
             random_seed=random_seed,
         )
 
