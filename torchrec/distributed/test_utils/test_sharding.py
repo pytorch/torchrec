@@ -364,6 +364,7 @@ def dynamic_sharding_test(
             random.randint(0, batch_size) if allow_zero_batch_size else batch_size
         )
         num_steps = 2
+        embedding_dim = 16
         # Generate model & inputs.
         (global_model, inputs) = gen_model_and_input(
             model_class=model_class,
@@ -381,7 +382,7 @@ def dynamic_sharding_test(
             # weighted_tables=weighted_tables,
             embedding_groups=embedding_groups,
             world_size=world_size,
-            num_float_features=16,
+            num_float_features=embedding_dim,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
             feature_processor_modules=feature_processor_modules,
@@ -408,7 +409,7 @@ def dynamic_sharding_test(
             embedding_groups=embedding_groups,
             dense_device=ctx.device,
             sparse_device=torch.device("meta"),
-            num_float_features=16,
+            num_float_features=embedding_dim,
             feature_processor_modules=feature_processor_modules,
         )
 
@@ -419,7 +420,7 @@ def dynamic_sharding_test(
             embedding_groups=embedding_groups,
             dense_device=ctx.device,
             sparse_device=torch.device("meta"),
-            num_float_features=16,
+            num_float_features=embedding_dim,
             feature_processor_modules=feature_processor_modules,
         )
 
@@ -492,9 +493,23 @@ def dynamic_sharding_test(
         assert ctx.pg is not None
 
         num_tables = len(tables)
+
         ranks_per_tables = [1 for _ in range(num_tables)]
+
+        # CW sharding
+        valid_candidates = [
+            i for i in range(1, world_size + 1) if embedding_dim % i == 0
+        ]
+        ranks_per_tables_for_CW = [
+            random.choice(valid_candidates) for _ in range(num_tables)
+        ]
+
         new_ranks = generate_rank_placements(
             world_size, num_tables, ranks_per_tables, random_seed
+        )
+
+        new_ranks_cw = generate_rank_placements(
+            world_size, num_tables, ranks_per_tables_for_CW, random_seed
         )
 
         new_per_param_sharding = {}
@@ -514,10 +529,15 @@ def dynamic_sharding_test(
             sharding_type_constructor = get_sharding_constructor_from_type(
                 sharding_type
             )
-            # TODO: CW sharding constructor takes in different args
-            new_per_param_sharding[table_name] = sharding_type_constructor(
-                rank=new_ranks[i][0], compute_kernel=kernel_type
-            )
+
+            if sharding_type == ShardingType.TABLE_WISE:
+                new_per_param_sharding[table_name] = sharding_type_constructor(
+                    rank=new_ranks[i][0], compute_kernel=kernel_type
+                )
+            elif sharding_type == ShardingType.COLUMN_WISE:
+                new_per_param_sharding[table_name] = sharding_type_constructor(
+                    ranks=new_ranks_cw[i]
+                )
 
         new_module_sharding_plan = construct_module_sharding_plan(
             local_m2.sparse.ebc,
