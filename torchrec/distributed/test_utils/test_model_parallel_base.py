@@ -19,7 +19,7 @@ from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from fbgemm_gpu.tbe.ssd.utils.partially_materialized_tensor import (
     PartiallyMaterializedTensor,
 )
-from hypothesis import given, settings, strategies as st, Verbosity
+from hypothesis import assume, given, settings, strategies as st, Verbosity
 from torch import distributed as dist
 from torch.distributed._shard.sharded_tensor import ShardedTensor
 from torch.distributed._tensor import DTensor
@@ -624,11 +624,10 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
         kernel_type: str,
         is_training: bool,
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharders = [
             cast(
@@ -683,11 +682,10 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
         sharding_type: str,
         kernel_type: str,
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharders = [
             cast(
@@ -800,11 +798,10 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
     def test_load_state_dict_prefix(
         self, sharder_type: str, sharding_type: str, kernel_type: str, is_training: bool
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharders = [
             cast(
@@ -855,11 +852,10 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
     def test_params_and_buffers(
         self, sharder_type: str, sharding_type: str, kernel_type: str
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharders = [
             create_test_sharder(sharder_type, sharding_type, kernel_type),
@@ -897,11 +893,10 @@ class ModelParallelStateDictBase(ModelParallelSingleRankBase):
     def test_load_state_dict_cw_multiple_shards(
         self, sharder_type: str, sharding_type: str, kernel_type: str, is_training: bool
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharders = [
             cast(
