@@ -40,7 +40,11 @@ from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
     TestTowerCollectionSparseNNConfig,
     TestTowerSparseNNConfig,
 )
-from torchrec.distributed.benchmark.benchmark_utils import benchmark_func, cmd_conf
+from torchrec.distributed.benchmark.benchmark_utils import (
+    benchmark_func,
+    benchmark_operators,
+    cmd_conf,
+)
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import Topology
@@ -110,6 +114,9 @@ class RunOptions:
     sparse_lr: float = 0.1
     sparse_momentum: Optional[float] = None
     sparse_weight_decay: Optional[float] = None
+    benchmark_operators: bool = False
+    target_operators: Optional[List[str]] = None
+    limit_operator_results: int = 10
 
 
 @dataclass
@@ -379,10 +386,11 @@ def runner(
                 if jit_suffix
                 else type(pipeline).__name__
             )
+
             result = benchmark_func(
                 name=name,
-                bench_inputs=bench_inputs,  # pyre-ignore
-                prof_inputs=bench_inputs,  # pyre-ignore
+                bench_inputs=bench_inputs,  # pyre-ignore[6]
+                prof_inputs=bench_inputs,  # pyre-ignore[6]
                 num_benchmarks=5,
                 num_profiles=2,
                 profile_dir=run_option.profile,
@@ -392,6 +400,19 @@ def runner(
                 rank=rank,
             )
             results.append(result)
+
+            if run_option.benchmark_operators:
+                op_results = benchmark_operators(
+                    func_to_benchmark=pipeline,
+                    bench_inputs=bench_inputs,
+                    num_benchmarks=5,
+                    device_type="cuda",
+                    target_operators=run_option.target_operators,
+                    is_pipeline=True,
+                    rank=rank,
+                    limit_results=run_option.limit_operator_results,
+                )
+                results.extend(op_results)
 
         if rank == 0:
             for result in results:
