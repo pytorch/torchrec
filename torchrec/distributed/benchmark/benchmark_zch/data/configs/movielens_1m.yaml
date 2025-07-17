@@ -1,0 +1,83 @@
+dataset_path: "/home/lizhouyu/oss_github/generative-recommenders/tmp/data/ml-1m"
+batch_size: 16
+train_split_percentage: 0.75
+num_workers: 4
+prefetch_factor: 4
+max_num_candidates: 10
+max_seq_len: 200
+contextual_feature_to_max_length:
+  user_id: 1
+  sex: 1
+  age_group: 1
+  occupation: 1
+  zip_code: 1
+uih_keys:
+  - user_id
+  - sex
+  - age_group
+  - occupation
+  - zip_code
+  - movie_id
+  - movie_rating
+  - action_timestamp
+  - dummy_weights
+  - dummy_watch_time
+candidates_keys:
+  - item_movie_id
+  - item_query_time
+  - item_dummy_weights
+  - item_dummy_watchtime
+user_embedding_feature_names:
+  - movie_id
+  - movie_rating
+  - user_id
+  - sex
+  - age_group
+  - occupation
+  - zip_code
+item_embedding_feature_names:
+  - item_movie_id
+uih_post_id_feature_name: movie_id
+uih_action_time_feature_name: action_timestamp
+candidates_weight_feature_name: item_dummy_weights
+candidates_watchtime_feature_name: item_dummy_watchtime
+candidates_querytime_feature_name: item_query_time
+contextual_feature_to_min_uih_length:
+  user_id: 20
+  sex: 20
+  age_group: 20
+  occupation: 20
+  zip_code: 20
+merge_uih_candidate_feature_mapping:
+  -
+    - movie_id
+    - item_movie_id
+  -
+    - action_timestamp
+    - item_query_time
+  -
+    - dummy_weights
+    - item_dummy_weights
+  -
+    - dummy_watch_time
+    - item_dummy_watchtime
+hstu_uih_feature_names:
+  - user_id
+  - sex
+  - age_group
+  - occupation
+  - zip_code
+  - movie_id
+  - movie_rating
+  - action_timestamp
+  - dummy_weights
+  - dummy_watch_time
+hstu_candidate_feature_names:
+  - item_movie_id
+  - item_query_time
+  - item_dummy_weights
+  - item_dummy_watchtime
+multitask_configs:
+  - task_name: rating
+    task_weight: 1
+    task_type: regression
