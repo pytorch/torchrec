@@ -467,11 +467,10 @@ class ModelParallelBase(ModelParallelTestShared):
         data_type: DataType,
         allow_zero_batch_size: bool,
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharding_type = ShardingType.COLUMN_WISE.value
         assume(
@@ -548,11 +547,10 @@ class ModelParallelBase(ModelParallelTestShared):
         variable_batch_size: bool,
         data_type: DataType,
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharding_type = ShardingType.TABLE_COLUMN_WISE.value
         assume(
@@ -629,11 +627,10 @@ class ModelParallelBase(ModelParallelTestShared):
         variable_batch_size: bool,
         data_type: DataType,
     ) -> None:
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         sharding_type = ShardingType.TABLE_WISE.value
         assume(
