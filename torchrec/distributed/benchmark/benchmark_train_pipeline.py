@@ -91,6 +91,9 @@ class RunOptions:
             Default is "EXACT_ADAGRAD".
         sparse_lr (float): Learning rate for sparse parameters.
             Default is 0.1.
+        training_mode (bool): Whether to run the model in training mode.
+            If True, model remains in training mode. If False, model.eval() is called.
+            Default is True.
     """
 
     world_size: int = 2
@@ -110,6 +113,7 @@ class RunOptions:
     sparse_lr: float = 0.1
     sparse_momentum: Optional[float] = None
     sparse_weight_decay: Optional[float] = None
+    training_mode: bool = True
 
 
 @dataclass
@@ -342,6 +346,9 @@ def runner(
             dense_weight_decay=run_option.dense_weight_decay,
             planner=planner,
         )
+
+        if not run_option.training_mode:
+            sharded_model.eval()
 
         def _func_to_benchmark(
             bench_inputs: List[ModelInput],

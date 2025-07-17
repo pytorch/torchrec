@@ -95,6 +95,20 @@ except ImportError:
     has_2d_support = False
 
 
+# Returns (losses, output) from model forward pass. Losses is None if model is in eval() mode
+# pyre-ignore[3]
+def unpack_model_fwd(
+    model_fwd_fn: Callable[[Any], Any], batch: Any, training: bool  # pyre-ignore[2]
+) -> Tuple[torch.Tensor, Any]:
+    result = model_fwd_fn(batch)
+    if training:
+        # result expected to be (losses, output)
+        return result
+    else:
+        # result expected to be output only
+        return None, result  # pyre-ignore[7]
+
+
 class ModelDetachedException(Exception):
     pass
 
@@ -667,7 +681,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # forward
         with record_function("## forward ##"):
-            losses, output = self._model_fwd(self.batches[0])
+            losses, output = unpack_model_fwd(
+                self._model_fwd, self.batches[0], self._model.training
+            )
 
         if self._enqueue_batch_after_forward:
             # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here.
@@ -1030,7 +1046,9 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
 
         # forward
         with record_function("## forward ##"):
-            losses, output = self._model_fwd(self.batches[0])
+            losses, output = unpack_model_fwd(
+                self._model_fwd, self.batches[0], self._model.training
+            )
 
         if len(self.batches) >= 2:
             # invoke data (values, lengths, etc.) all_to_all comms (second part of input_dist)
@@ -1254,7 +1272,10 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             _wait_for_events(
                 batch, context, torch.get_device_module(self._device).current_stream()
             )
-            return self._model_fwd(batch)
+            losses, output = unpack_model_fwd(
+                self._model_fwd, batch, self._model.training
+            )
+            return losses, output
 
     def embedding_backward(self, context: EmbeddingTrainPipelineContext) -> None:
         assert len(context.embedding_features) == len(context.embedding_tensors)
@@ -1466,7 +1487,9 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         self._wait_sparse_data_dist()
         # forward
         with record_function("## forward ##"):
-            losses, output = self._model_fwd(self._batch_i)
+            losses, output = unpack_model_fwd(
+                self._model_fwd, self._batch_i, self._model.training
+            )
 
         self._prefetch(self._batch_ip1)
 
@@ -2024,7 +2047,9 @@ class TrainPipelineSparseDistCompAutograd(TrainPipelineSparseDist[In, Out]):
         # forward
         ctx = self.get_compiled_autograd_ctx()
         with ctx, torchrec_use_sync_collectives(), record_function("## forward ##"):
-            losses, output = self._model_fwd(self.batches[0])
+            losses, output = unpack_model_fwd(
+                self._model_fwd, self.batches[0], self._model.training
+            )
 
         if len(self.batches) >= 2:
             self.wait_sparse_data_dist(self.contexts[1])
