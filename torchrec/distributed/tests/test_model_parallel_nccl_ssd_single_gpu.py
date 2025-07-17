@@ -985,6 +985,7 @@ class ZeroCollisionModelParallelTest(ModelParallelSingleRankBase):
         kernel_type=st.sampled_from(
             [
                 EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+                EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
             ]
         ),
         sharding_type=st.sampled_from(
@@ -1386,6 +1387,10 @@ class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBas
                         # write value into ssd for both emb module for later comparison
                         pmt2 = sharded_t2.local_shards()[0].tensor
                         pmt2.wrapped.set_weights_and_ids(w1, w1_id.view(-1))
+
+                    # Remove the cache to force state dict read from backend again
+                    emb_module1._split_weights_res = None
+                    emb_module2._split_weights_res = None
 
                     # purge after loading. This is needed, since we pass a batch
                     # through dmp when instantiating them.

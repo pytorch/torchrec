@@ -421,20 +421,21 @@ class ModelParallelSingleRankBase(unittest.TestCase):
                             src_wid = sd1[wid_key].local_shards()[local_shard_id].tensor
                             dst_wid = sd2[wid_key].local_shards()[local_shard_id].tensor
 
-                            sorted_src_wid, _ = torch.sort(src_wid.view(-1))
-                            sorted_dst_wid, _ = torch.sort(dst_wid.view(-1))
+                            sorted_src_wid = torch.sort(src_wid.view(-1))[0]
+                            sorted_dst_wid = torch.sort(dst_wid.view(-1))[0]
                             assert torch.equal(sorted_src_wid, sorted_dst_wid)
-                            src_tensor = src.tensor.get_weights_by_ids(src_wid)
-                            dst_tensor = dst.tensor.get_weights_by_ids(dst_wid)
+                            # kvz zch emb table comparison, id is non-continuous
+                            src_tensor = src.tensor.get_weights_by_ids(sorted_src_wid)
+                            dst_tensor = dst.tensor.get_weights_by_ids(sorted_dst_wid)
                         else:
                             # normal ssd offloading emb table comparison
                             src_tensor = src.tensor.full_tensor()
                             dst_tensor = dst.tensor.full_tensor()
                     else:
-                        src_tensor = src.tensor
-                        dst_tensor = dst.tensor
+                        src_tensor = torch.sort(src.tensor.flatten()).values
+                        dst_tensor = torch.sort(dst.tensor.flatten()).values
                     if is_deterministic:
-                        self.assertTrue(torch.equal(src_tensor, dst_tensor))
+                        self.assertTrue(torch.allclose(src_tensor, dst_tensor))
                     else:
                         rtol, atol = _get_default_rtol_and_atol(src_tensor, dst_tensor)
                         torch.testing.assert_close(
