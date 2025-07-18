@@ -227,7 +227,8 @@ def benchmark_kjt(
 
     result = BenchmarkResult(
         short_name=f"{test_name}-{transform_type.name}",
-        elapsed_time=torch.tensor(times),
+        gpu_elapsed_time=torch.tensor(times),
+        cpu_elapsed_time=torch.tensor(times),
         mem_stats=[MemoryStats(0, 0, 0, 0)],
     )
 
