@@ -836,6 +836,11 @@ class ShardedEmbeddingBagCollection(
                 continue
 
             key = f"{prefix}embedding_bags.{table_name}.weight"
+
+            # If key not in state dict, continue
+            if key not in state_dict:
+                continue
+
             # gather model shards from both DTensor and ShardedTensor maps
             model_shards_sharded_tensor = self._model_parallel_name_to_local_shards[
                 table_name
