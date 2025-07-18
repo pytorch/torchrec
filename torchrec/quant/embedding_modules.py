@@ -79,8 +79,8 @@ torch.fx.wrap("len")
 try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
-except OSError:
-    pass
+except (OSError, RuntimeError):
+    from fbgemm_gpu import sparse_ops  # noqa: F401, E402
 
 # OSS
 try:

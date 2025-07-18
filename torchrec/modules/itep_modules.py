@@ -29,7 +29,7 @@ try:
     torch.ops.load_library(
         "//deeplearning/fbgemm/fbgemm_gpu:intraining_embedding_pruning_gpu"
     )
-except OSError:
+except (OSError, RuntimeError):
     pass
 
 logger: logging.Logger = logging.getLogger(__name__)

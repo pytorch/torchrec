@@ -113,8 +113,8 @@ try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops")
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu:sparse_ops_cpu")
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:index_select_ops")
-except OSError:
-    pass
+except (OSError, RuntimeError):
+    from fbgemm_gpu import sparse_ops  # noqa: F401, E402
 
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
