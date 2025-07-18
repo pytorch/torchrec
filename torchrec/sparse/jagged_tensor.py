@@ -44,8 +44,8 @@ try:
     torch.ops.load_library(
         "//deeplearning/fbgemm/fbgemm_gpu:permute_multi_embedding_ops_gpu"
     )
-except OSError:
-    pass
+except (OSError, RuntimeError):
+    from fbgemm_gpu import sparse_ops  # noqa: F401, E402
 
 
 logger: logging.Logger = logging.getLogger()
