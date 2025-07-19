@@ -430,7 +430,7 @@ class ZeroCollisionKeyValueEmbeddingFusedOptimizer(FusedOptimizer):
         )
 
         all_optimizer_states = emb_module.get_optimizer_state(
-            sorted_id_tensor=sorted_id_tensors
+            sorted_id_tensor=sorted_id_tensors,
         )
         opt_param_list = [param["momentum1"] for param in all_optimizer_states]
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)

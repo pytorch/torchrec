@@ -5,6 +5,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
 import logging
 import math
 from typing import Any, Dict, Iterator, List, Optional, Tuple
@@ -185,6 +186,13 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
     IDENTITY_BUFFER: str = "_hash_zch_identities"
     METADATA_BUFFER: str = "_hash_zch_metadata"
 
+    table_name_on_device_remapped_ids_dict: Dict[
+        str, torch.Tensor
+    ]  # used to store the on-device remapped ids
+    table_name_on_device_input_ids_dict: Dict[
+        str, torch.Tensor
+    ]  # used to store the on-device input ids
+
     def __init__(
         self,
         zch_size: int,
@@ -321,6 +329,17 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
         self._eviction_policy_name_copy: Optional[HashZchEvictionPolicyName] = (
             self._eviction_policy_name
         )
+
+        # create two dictionaries to store the input values and remapped ids on the current rank
+        # these values are used for calculating zch metrics like hit rate and collision rate
+        ## on-device remapped ids
+        self.table_name_on_device_remapped_ids_dict: Dict[str, torch.Tensor] = (
+            {}
+        )  # {table_name: on_device_remapped_ids}
+        ## on-device input ids
+        self.table_name_on_device_input_ids_dict: Dict[str, torch.Tensor] = (
+            {}
+        )  # {table_name: input JT values that maps to the current rank}
 
         logger.info(
             f"HashZchManagedCollisionModule: {self._name=}, {self.device=}, "
@@ -465,8 +484,8 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
             remapped_features: Dict[str, JaggedTensor] = {}
             identities_0 = (
                 self._hash_zch_identities.data.clone()
-                if self._tb_logging_frequency > 0
-                else None
+                # if self._tb_logging_frequency > 0
+                # else None
             )
 
             for name, feature in features.items():
@@ -488,6 +507,10 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
                     values=values,
                     output_offset=self._output_global_offset_tensor,
                 )
+
+                # record the input values
+                self.table_name_on_device_input_ids_dict[name] = values.clone()
+
                 num_reserved_slots = self.get_reserved_slots_per_bucket()
                 remapped_ids, evictions = torch.ops.fbgemm.zero_collision_hash(
                     input=values,
@@ -511,6 +534,9 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
                     num_reserved_slots=num_reserved_slots,
                     opt_in_rands=opt_in_rands,
                 )
+
+                # record the on-device remapped ids
+                self.table_name_on_device_remapped_ids_dict[name] = remapped_ids.clone()
 
                 if self._scalar_logger is not None:
                     assert identities_0 is not None
