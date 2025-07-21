@@ -54,11 +54,6 @@ def get_gradient_division() -> bool:
 
 
 def set_use_sync_collectives(val: bool) -> None:
-    if val and torch._running_with_deploy():
-        raise RuntimeError(
-            "TorchRec sync_collectives are not supported in torch.deploy."
-        )
-
     global USE_SYNC_COLLECTIVES
     USE_SYNC_COLLECTIVES = val
 
@@ -2356,202 +2351,213 @@ class ReduceScatterV_Wait(Function):
         return (None, None, myreq.dummy_tensor)
 
 
-if not torch._running_with_deploy():  # noqa C901
-    # Torch Library op def can not be used in Deploy
-    class AllToAllSingle(torch.autograd.Function):
-        @staticmethod
-        # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
-        def forward(
-            # pyre-fixme[2]: Parameter must be annotated.
-            ctx,
-            input: Tensor,
-            output_split_sizes: List[int],
-            input_split_sizes: List[int],
-            group_name: str,
-            group_size: int,
-            gradient_division: bool,
-        ) -> Tensor:
-            ctx.output_split_sizes = input_split_sizes
-            ctx.input_split_sizes = output_split_sizes
-            ctx.group_name = group_name
-            ctx.group_size = group_size
-            ctx.gradient_division = gradient_division
-            return torch.distributed._functional_collectives.all_to_all_single(
-                input, output_split_sizes, input_split_sizes, group_name
-            )
-
-        @staticmethod
-        # pyre-ignore
-        def backward(ctx, grad):
-            grad = torch.distributed._functional_collectives.all_to_all_single(
-                grad,
-                ctx.output_split_sizes,
-                ctx.input_split_sizes,
-                ctx.group_name,
-            )
-            if ctx.gradient_division:
-                grad.div_(ctx.group_size)
-
-            return grad, None, None, None, None, None
-
-    # torchrec::reduce_scatter_tensor
-    @torch.library.custom_op("torchrec::reduce_scatter_tensor", mutates_args=())
-    def reduce_scatter_tensor(
+class AllToAllSingle(torch.autograd.Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
         input: Tensor,
-        reduceOp: str,
-        group_size: int,
+        output_split_sizes: List[int],
+        input_split_sizes: List[int],
         group_name: str,
+        group_size: int,
         gradient_division: bool,
     ) -> Tensor:
-        out = torch.ops._c10d_functional.reduce_scatter_tensor(
-            input,
-            reduceOp,
-            group_size,
-            group_name,
-        )
-        return torch.ops._c10d_functional.wait_tensor(out)
-
-    @torch.library.register_fake("torchrec::reduce_scatter_tensor")
-    def reduce_scatter_tensor_fake(
-        input: Tensor,
-        reduceOp: str,
-        group_size: int,
-        group_name: str,
-        gradient_division: bool,
-    ) -> Tensor:
-        return torch.ops._c10d_functional.reduce_scatter_tensor(
-            input,
-            reduceOp,
-            group_size,
-            group_name,
-        )
-
-    # pyre-ignore
-    def reduce_scatter_tensor_setup_context(ctx, inputs, output) -> None:
-        _, _, group_size, group_name, gradient_division = inputs
-        ctx.group_size = group_size
+        ctx.output_split_sizes = input_split_sizes
+        ctx.input_split_sizes = output_split_sizes
         ctx.group_name = group_name
+        ctx.group_size = group_size
         ctx.gradient_division = gradient_division
+        return torch.distributed._functional_collectives.all_to_all_single(
+            input, output_split_sizes, input_split_sizes, group_name
+        )
 
+    @staticmethod
     # pyre-ignore
-    def reduce_scatter_tensor_backward(ctx, grad):
-        # TODO(ivankobzarev): Support codecs(quantization) on backward
-        out = torch.ops._c10d_functional.all_gather_into_tensor(
+    def backward(ctx, grad):
+        grad = torch.distributed._functional_collectives.all_to_all_single(
             grad,
-            ctx.group_size,
+            ctx.output_split_sizes,
+            ctx.input_split_sizes,
             ctx.group_name,
         )
-        grad = torch.ops._c10d_functional.wait_tensor(out)
         if ctx.gradient_division:
             grad.div_(ctx.group_size)
 
         return grad, None, None, None, None, None
 
-    torch.library.register_autograd(
-        "torchrec::reduce_scatter_tensor",
-        reduce_scatter_tensor_backward,
-        setup_context=reduce_scatter_tensor_setup_context,
+
+# torchrec::reduce_scatter_tensor
+@torch.library.custom_op("torchrec::reduce_scatter_tensor", mutates_args=())
+def reduce_scatter_tensor(
+    input: Tensor,
+    reduceOp: str,
+    group_size: int,
+    group_name: str,
+    gradient_division: bool,
+) -> Tensor:
+    out = torch.ops._c10d_functional.reduce_scatter_tensor(
+        input,
+        reduceOp,
+        group_size,
+        group_name,
+    )
+    return torch.ops._c10d_functional.wait_tensor(out)
+
+
+@torch.library.register_fake("torchrec::reduce_scatter_tensor")
+def reduce_scatter_tensor_fake(
+    input: Tensor,
+    reduceOp: str,
+    group_size: int,
+    group_name: str,
+    gradient_division: bool,
+) -> Tensor:
+    return torch.ops._c10d_functional.reduce_scatter_tensor(
+        input,
+        reduceOp,
+        group_size,
+        group_name,
     )
 
-    # torchrec::all_gather_into_tensor
-    @torch.library.custom_op("torchrec::all_gather_into_tensor", mutates_args=())
-    def all_gather_into_tensor(
-        shard: Tensor,
-        gather_dim: int,
-        group_size: int,
-        group_name: str,
-        gradient_division: bool,
-    ) -> Tensor:
-        out = torch.ops._c10d_functional.all_gather_into_tensor(
-            shard, group_size, group_name
-        )
-        return torch.ops._c10d_functional.wait_tensor(out)
 
-    @torch.library.register_fake("torchrec::all_gather_into_tensor")
-    def all_gather_into_tensor_fake(
-        shard: Tensor,
-        gather_dim: int,
-        group_size: int,
-        group_name: str,
-        gradient_division: bool,
-    ) -> Tensor:
-        return torch.ops._c10d_functional.all_gather_into_tensor(
-            shard, group_size, group_name
-        )
+# pyre-ignore
+def reduce_scatter_tensor_setup_context(ctx, inputs, output) -> None:
+    _, _, group_size, group_name, gradient_division = inputs
+    ctx.group_size = group_size
+    ctx.group_name = group_name
+    ctx.gradient_division = gradient_division
 
-    # pyre-ignore
-    def all_gather_into_tensor_setup_context(ctx, inputs, output) -> None:
-        _, gather_dim, group_size, group_name, gradient_division = inputs
-        ctx.group_size = group_size
-        ctx.group_name = group_name
-        ctx.gradient_division = gradient_division
 
-    # pyre-ignore
-    def all_gather_into_tensor_backward(ctx, grad):
-        # TODO(ivankobzarev): Support codecs(quantization) on backward
-        out = torch.ops._c10d_functional.reduce_scatter_tensor(
-            grad,
-            "sum",
-            ctx.group_size,
-            ctx.group_name,
-        )
-        grad = torch.ops._c10d_functional.wait_tensor(out)
-        if ctx.gradient_division:
-            grad.div_(ctx.group_size)
+# pyre-ignore
+def reduce_scatter_tensor_backward(ctx, grad):
+    # TODO(ivankobzarev): Support codecs(quantization) on backward
+    out = torch.ops._c10d_functional.all_gather_into_tensor(
+        grad,
+        ctx.group_size,
+        ctx.group_name,
+    )
+    grad = torch.ops._c10d_functional.wait_tensor(out)
+    if ctx.gradient_division:
+        grad.div_(ctx.group_size)
 
-        return grad, None, None, None, None
+    return grad, None, None, None, None, None
 
-    torch.library.register_autograd(
-        "torchrec::all_gather_into_tensor",
-        all_gather_into_tensor_backward,
-        setup_context=all_gather_into_tensor_setup_context,
+
+torch.library.register_autograd(
+    "torchrec::reduce_scatter_tensor",
+    reduce_scatter_tensor_backward,
+    setup_context=reduce_scatter_tensor_setup_context,
+)
+
+
+# torchrec::all_gather_into_tensor
+@torch.library.custom_op("torchrec::all_gather_into_tensor", mutates_args=())
+def all_gather_into_tensor(
+    shard: Tensor,
+    gather_dim: int,
+    group_size: int,
+    group_name: str,
+    gradient_division: bool,
+) -> Tensor:
+    out = torch.ops._c10d_functional.all_gather_into_tensor(
+        shard, group_size, group_name
+    )
+    return torch.ops._c10d_functional.wait_tensor(out)
+
+
+@torch.library.register_fake("torchrec::all_gather_into_tensor")
+def all_gather_into_tensor_fake(
+    shard: Tensor,
+    gather_dim: int,
+    group_size: int,
+    group_name: str,
+    gradient_division: bool,
+) -> Tensor:
+    return torch.ops._c10d_functional.all_gather_into_tensor(
+        shard, group_size, group_name
     )
 
-    @torch.library.custom_op("torchrec::_split_1d_cat_2d", mutates_args=())
-    def _split_1d_cat_2d_impl(
-        t: torch.Tensor, dim0: int, dim1s: List[int]
-    ) -> torch.Tensor:
-        torch._check_is_size(dim0)
-        [torch._check_is_size(dim1) for dim1 in dim1s]
-        splits: List[torch.Tensor] = t.split([dim0 * dim1 for dim1 in dim1s])
-        return torch.cat(
-            [s.reshape(dim0, dim1) for s, dim1 in zip(splits, dim1s)],
-            dim=1,
-        )
 
-    @torch.library.register_fake("torchrec::_split_1d_cat_2d")
-    def _split_1d_cat_2d_impl_abstract(
-        t: torch.Tensor, dim0: int, dim1s: List[int]
-    ) -> torch.Tensor:
-        return t.new_empty([dim0, sum(dim1s)])
+# pyre-ignore
+def all_gather_into_tensor_setup_context(ctx, inputs, output) -> None:
+    _, gather_dim, group_size, group_name, gradient_division = inputs
+    ctx.group_size = group_size
+    ctx.group_name = group_name
+    ctx.gradient_division = gradient_division
 
-    @torch.library.custom_op(
-        "torchrec::_split_1d_cat_2d_backward_impl", mutates_args=()
+
+# pyre-ignore
+def all_gather_into_tensor_backward(ctx, grad):
+    # TODO(ivankobzarev): Support codecs(quantization) on backward
+    out = torch.ops._c10d_functional.reduce_scatter_tensor(
+        grad,
+        "sum",
+        ctx.group_size,
+        ctx.group_name,
     )
-    def _split_1d_cat_2d_backward_impl(
-        grad: torch.Tensor, dim1s: List[int]
-    ) -> torch.Tensor:
-        splits = grad.split(dim1s, dim=1)
-        return torch.cat([s.reshape(-1) for s in splits], dim=0)
+    grad = torch.ops._c10d_functional.wait_tensor(out)
+    if ctx.gradient_division:
+        grad.div_(ctx.group_size)
 
-    @torch.library.register_fake("torchrec::_split_1d_cat_2d_backward_impl")
-    def _split_1d_cat_2d_backward_impl_fake(
-        grad: torch.Tensor, dim1s: List[int]
-    ) -> torch.Tensor:
-        return grad.new_empty([grad.numel()])
+    return grad, None, None, None, None
 
-    # pyre-ignore
-    def _split_1d_cat_2d_backward(ctx, grad):
-        ret = torch.ops.torchrec._split_1d_cat_2d_backward_impl(grad, ctx.dim1s)
-        return ret, None, None
 
-    # pyre-ignore
-    def _split_1d_cat_2d_setup_context(ctx, inputs, output):
-        (x, dim0, dim1s) = inputs
-        ctx.dim1s = dim1s
+torch.library.register_autograd(
+    "torchrec::all_gather_into_tensor",
+    all_gather_into_tensor_backward,
+    setup_context=all_gather_into_tensor_setup_context,
+)
 
-    torch.library.register_autograd(
-        "torchrec::_split_1d_cat_2d",
-        _split_1d_cat_2d_backward,
-        setup_context=_split_1d_cat_2d_setup_context,
+
+@torch.library.custom_op("torchrec::_split_1d_cat_2d", mutates_args=())
+def _split_1d_cat_2d_impl(t: torch.Tensor, dim0: int, dim1s: List[int]) -> torch.Tensor:
+    torch._check_is_size(dim0)
+    [torch._check_is_size(dim1) for dim1 in dim1s]
+    splits: List[torch.Tensor] = t.split([dim0 * dim1 for dim1 in dim1s])
+    return torch.cat(
+        [s.reshape(dim0, dim1) for s, dim1 in zip(splits, dim1s)],
+        dim=1,
     )
+
+
+@torch.library.register_fake("torchrec::_split_1d_cat_2d")
+def _split_1d_cat_2d_impl_abstract(
+    t: torch.Tensor, dim0: int, dim1s: List[int]
+) -> torch.Tensor:
+    return t.new_empty([dim0, sum(dim1s)])
+
+
+@torch.library.custom_op("torchrec::_split_1d_cat_2d_backward_impl", mutates_args=())
+def _split_1d_cat_2d_backward_impl(
+    grad: torch.Tensor, dim1s: List[int]
+) -> torch.Tensor:
+    splits = grad.split(dim1s, dim=1)
+    return torch.cat([s.reshape(-1) for s in splits], dim=0)
+
+
+@torch.library.register_fake("torchrec::_split_1d_cat_2d_backward_impl")
+def _split_1d_cat_2d_backward_impl_fake(
+    grad: torch.Tensor, dim1s: List[int]
+) -> torch.Tensor:
+    return grad.new_empty([grad.numel()])
+
+
+# pyre-ignore
+def _split_1d_cat_2d_backward(ctx, grad):
+    ret = torch.ops.torchrec._split_1d_cat_2d_backward_impl(grad, ctx.dim1s)
+    return ret, None, None
+
+
+# pyre-ignore
+def _split_1d_cat_2d_setup_context(ctx, inputs, output):
+    (x, dim0, dim1s) = inputs
+    ctx.dim1s = dim1s
+
+
+torch.library.register_autograd(
+    "torchrec::_split_1d_cat_2d",
+    _split_1d_cat_2d_backward,
+    setup_context=_split_1d_cat_2d_setup_context,
+)
