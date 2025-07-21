@@ -13,13 +13,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import torch
 
-if not torch._running_with_deploy():
-    from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
-else:
-
-    class FSDP2:
-        pass
-
+from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.fx.immutable_collections import (

@@ -54,11 +54,6 @@ def get_gradient_division() -> bool:
 
 
 def set_use_sync_collectives(val: bool) -> None:
-    if val and torch._running_with_deploy():
-        raise RuntimeError(
-            "TorchRec sync_collectives are not supported in torch.deploy."
-        )
-
     global USE_SYNC_COLLECTIVES
     USE_SYNC_COLLECTIVES = val
 
@@ -2356,43 +2351,42 @@ class ReduceScatterV_Wait(Function):
         return (None, None, myreq.dummy_tensor)
 
 
-if not torch._running_with_deploy():  # noqa C901
-    # Torch Library op def can not be used in Deploy
-    class AllToAllSingle(torch.autograd.Function):
-        @staticmethod
-        # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
-        def forward(
-            # pyre-fixme[2]: Parameter must be annotated.
-            ctx,
-            input: Tensor,
-            output_split_sizes: List[int],
-            input_split_sizes: List[int],
-            group_name: str,
-            group_size: int,
-            gradient_division: bool,
-        ) -> Tensor:
-            ctx.output_split_sizes = input_split_sizes
-            ctx.input_split_sizes = output_split_sizes
-            ctx.group_name = group_name
-            ctx.group_size = group_size
-            ctx.gradient_division = gradient_division
-            return torch.distributed._functional_collectives.all_to_all_single(
-                input, output_split_sizes, input_split_sizes, group_name
-            )
+# Torch Library op def
+class AllToAllSingle(torch.autograd.Function):
+    @staticmethod
+    # pyre-fixme[14]: `forward` overrides method defined in `Function` inconsistently.
+    def forward(
+        # pyre-fixme[2]: Parameter must be annotated.
+        ctx,
+        input: Tensor,
+        output_split_sizes: List[int],
+        input_split_sizes: List[int],
+        group_name: str,
+        group_size: int,
+        gradient_division: bool,
+    ) -> Tensor:
+        ctx.output_split_sizes = input_split_sizes
+        ctx.input_split_sizes = output_split_sizes
+        ctx.group_name = group_name
+        ctx.group_size = group_size
+        ctx.gradient_division = gradient_division
+        return torch.distributed._functional_collectives.all_to_all_single(
+            input, output_split_sizes, input_split_sizes, group_name
+        )
 
-        @staticmethod
-        # pyre-ignore
-        def backward(ctx, grad):
-            grad = torch.distributed._functional_collectives.all_to_all_single(
-                grad,
-                ctx.output_split_sizes,
-                ctx.input_split_sizes,
-                ctx.group_name,
-            )
-            if ctx.gradient_division:
-                grad.div_(ctx.group_size)
+    @staticmethod
+    # pyre-ignore
+    def backward(ctx, grad):
+        grad = torch.distributed._functional_collectives.all_to_all_single(
+            grad,
+            ctx.output_split_sizes,
+            ctx.input_split_sizes,
+            ctx.group_name,
+        )
+        if ctx.gradient_division:
+            grad.div_(ctx.group_size)
 
-            return grad, None, None, None, None, None
+        return grad, None, None, None, None, None
 
     # torchrec::reduce_scatter_tensor
     @torch.library.custom_op("torchrec::reduce_scatter_tensor", mutates_args=())
