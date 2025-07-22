@@ -889,6 +889,7 @@ def benchmark(
     enable_logging: bool = True,
     device_type: str = "cuda",
     benchmark_unsharded_module: bool = False,
+    export_stacks: bool = False,
 ) -> BenchmarkResult:
     if enable_logging:
         logger.info(f" BENCHMARK_MODEL[{name}]:\n{model}")
@@ -920,7 +921,7 @@ def benchmark(
         device_type=device_type,
         output_dir=output_dir,
         pre_gpu_load=0,
-        export_stacks=True,
+        export_stacks=export_stacks,
         reset_accumulated_memory_stats=False,
     )
 
@@ -939,6 +940,7 @@ def benchmark_func(
     rank: int,
     device_type: str = "cuda",
     pre_gpu_load: int = 0,
+    export_stacks: bool = False,
 ) -> BenchmarkResult:
     if benchmark_func_kwargs is None:
         benchmark_func_kwargs = {}
@@ -963,7 +965,7 @@ def benchmark_func(
         device_type=device_type,
         output_dir=profile_dir,
         pre_gpu_load=pre_gpu_load,
-        export_stacks=False,
+        export_stacks=export_stacks,
         reset_accumulated_memory_stats=True,
     )
 
