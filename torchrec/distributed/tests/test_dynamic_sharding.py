@@ -583,11 +583,10 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         """
         Tests resharding from DMP module interface, rather than EBC level.
         """
-        if (
-            self.device == torch.device("cpu")
-            and kernel_type != EmbeddingComputeKernel.FUSED.value
-        ):
-            self.skipTest("CPU does not support uvm.")
+        assume(
+            self.device != torch.device("cpu")
+            or kernel_type == EmbeddingComputeKernel.FUSED.value
+        )
 
         assume(
             sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
