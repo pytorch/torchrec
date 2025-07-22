@@ -251,7 +251,7 @@ class TestGradientClippingDTensor(DTensorTestBase):
         return {param: [param.device_mesh.get_group()] for param in params}
 
     @with_comms
-    @parametrize("norm_type", ("inf",))
+    @parametrize("norm_type", ("inf", 1, 2))
     def test_dtensor_clip_all_gradients_norm(
         self, norm_type: Union[float, str]
     ) -> None:
