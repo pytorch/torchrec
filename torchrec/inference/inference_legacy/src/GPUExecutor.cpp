@@ -16,11 +16,8 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <fmt/format.h>
 #include <folly/MPMCQueue.h>
-#include <folly/ScopeGuard.h>
-#include <folly/Synchronized.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/futures/Future.h>
-#include <folly/io/IOBuf.h>
 #include <folly/io/async/Request.h>
 #include <folly/stop_watch.h>
 #include <gflags/gflags.h>
@@ -35,7 +32,6 @@
 #endif
 
 #include "ATen/cuda/CUDAEvent.h"
-#include "torchrec/inference/BatchingQueue.h"
 #include "torchrec/inference/ExceptionHandler.h"
 #include "torchrec/inference/Observer.h"
 #include "torchrec/inference/Types.h"
