@@ -12,7 +12,6 @@ from itertools import chain
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import torch
-
 from torch.distributed._composable.fsdp.fully_shard import FSDPModule as FSDP2
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
