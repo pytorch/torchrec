@@ -20,6 +20,7 @@ Adding New Model Support:
     See benchmark_pipeline_utils.py for step-by-step instructions.
 """
 
+import copy
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Type, Union
 
@@ -349,9 +350,40 @@ def runner(
             pipeline: TrainPipeline,
         ) -> None:
             dataloader = iter(bench_inputs)
+            i = 0
             while True:
                 try:
-                    pipeline.progress(dataloader)
+                    # import fbvscode
+
+                    # fbvscode.set_trace()
+                    if i == 3:
+                        # Extract existing sharding plan
+                        existing_sharding_plan = pipeline._model.module.sparse.ebc.module_sharding_plan  # pyre-ignore
+                        fqn_to_local_shards = "sparse.ebc"
+                        # Modify existing sharding plan - Hard code
+                        sharding_param = copy.deepcopy(
+                            existing_sharding_plan["table_0"]
+                        )
+                        new_device = 1 if sharding_param.ranks[0] == 0 else 0
+                        sharding_param.ranks = [new_device]
+                        sharding_param.sharding_spec.shards[0].placement = (
+                            torch.distributed._remote_device(
+                                f"rank:{new_device}/cuda:{new_device}"
+                            )
+                        )
+
+                        new_sharding_plan = {}
+                        new_sharding_plan["table_0"] = sharding_param
+                        # Reshard
+                        pipeline.progress_with_reshard(  # pyre-ignore
+                            dataloader_iter=dataloader,
+                            reshard_params=new_sharding_plan,
+                            sharded_module_fqn=fqn_to_local_shards,
+                        )
+                        i += 1
+                    else:
+                        pipeline.progress(dataloader)
+                        i += 1
                 except StopIteration:
                     break
 
