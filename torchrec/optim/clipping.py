@@ -59,7 +59,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
         super().__init__(optimizer)
         self._clipping = clipping
         self._max_gradient = max_gradient
-        self._norm_type = float(norm_type)
+        self._norm_type = norm_type
         self._check_meta: bool = True
         self._enable_global_grad_clip = enable_global_grad_clip
         self._step_num = 0
@@ -124,7 +124,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 torch.nn.utils.clip_grad_norm_(
                     replicate_params,
                     self._max_gradient,
-                    norm_type=self._norm_type,
+                    norm_type=float(self._norm_type),
                 )
             else:
                 self.clip_grad_norm_()
@@ -139,6 +139,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
     def clip_grad_norm_(self) -> Optional[Union[float, torch.Tensor]]:
         """Clip the gradient norm of all parameters."""
         max_norm = self._max_gradient
+        norm_type = float(self._norm_type)
         all_grads = []
         total_grad_norm = None
 
@@ -156,7 +157,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
             sharded_grad_norm = _batch_cal_norm(
                 sharded_grads,
                 max_norm,
-                self._norm_type,
+                norm_type,
                 pgs,
             )
             total_grad_norm = (
@@ -164,7 +165,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 if total_grad_norm is None
                 else (
                     torch.maximum(total_grad_norm, sharded_grad_norm)
-                    if self._norm_type == torch.inf
+                    if norm_type == torch.inf
                     else total_grad_norm + sharded_grad_norm
                 )
             )
@@ -183,7 +184,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
             replicated_grad_norm = _batch_cal_norm(
                 replicated_grads,
                 max_norm,
-                self._norm_type,
+                norm_type,
                 None,
             )
             total_grad_norm = (
@@ -191,7 +192,7 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 if total_grad_norm is None
                 else (
                     torch.maximum(total_grad_norm, replicated_grad_norm)
-                    if self._norm_type == torch.inf
+                    if norm_type == torch.inf
                     else total_grad_norm + replicated_grad_norm
                 )
             )
@@ -199,20 +200,11 @@ class GradientClippingOptimizer(OptimizerWrapper):
         else:
             square_replicated_grad_norm = 0
 
-        if total_grad_norm is not None:
-            total_grad_norm = (
-                torch.pow(total_grad_norm, 1.0 / self._norm_type)
-                if self._norm_type != torch.inf
-                else total_grad_norm
-            )
-        else:
-            return None
-
         global log_grad_norm
         if log_grad_norm:
-            if total_grad_norm is not None and self._norm_type != torch.inf:
+            if total_grad_norm is not None and norm_type != torch.inf:
                 # pyre-ignore[58]
-                grad_norm = total_grad_norm ** (1.0 / self._norm_type)
+                grad_norm = total_grad_norm ** (1.0 / norm_type)
             else:
                 grad_norm = total_grad_norm
 
@@ -221,7 +213,15 @@ class GradientClippingOptimizer(OptimizerWrapper):
                 f"Clipping [rank={rank}, step={self._step_num}]: square_sharded_grad_norm = {square_sharded_grad_norm}, square_replicated_grad_norm = {square_replicated_grad_norm}, total_grad_norm = {grad_norm}"
             )
 
-        clip_coef = torch.tensor(max_norm) / (total_grad_norm + 1e-6)
+        # Aggregation
+        if total_grad_norm is None:
+            return
+
+        if norm_type != torch.inf:
+            # pyre-ignore [58]: ** is not supported for operand types torch._tensor.Tensor and float.
+            total_grad_norm = total_grad_norm ** (1.0 / norm_type)
+        # pyre-ignore [58]: / is not supported for operand types float and Union[float, torch._tensor.Tensor].
+        clip_coef = cast(torch.Tensor, max_norm / (total_grad_norm + 1e-6))
         clip_coef_clamped = torch.clamp(clip_coef, max=1.0)
         torch._foreach_mul_(all_grads, clip_coef_clamped)
         return total_grad_norm
