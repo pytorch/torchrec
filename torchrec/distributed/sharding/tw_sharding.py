@@ -135,12 +135,9 @@ class BaseTwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             dtensor_metadata = None
             if self._env.output_dtensor:
                 dtensor_metadata = DTensorMetadata(
-                    mesh=(
-                        self._env.device_mesh["replicate"]  # pyre-ignore[16]
-                        if self._is_2D_parallel
-                        else self._env.device_mesh
-                    ),
-                    placements=(Replicate(),),
+                    mesh=self._env.device_mesh,
+                    placements=(Replicate(),)
+                    * (self._env.device_mesh.ndim),  # pyre-ignore[16]
                     size=(
                         info.embedding_config.num_embeddings,
                         info.embedding_config.embedding_dim,
