@@ -8,7 +8,6 @@
 # pyre-strict
 
 import copy
-import hashlib
 import logging
 import time
 from functools import reduce
@@ -143,7 +142,117 @@ def _merge_plans(best_plans: List[ShardingPlan]) -> ShardingPlan:
         return merged_plan
 
 
-class EmbeddingShardingPlanner(ShardingPlanner):
+class EmbeddingPlannerBase(ShardingPlanner):
+    """
+    Base class for embedding sharding planners that provides common initialization
+    and shared functionality.
+
+    Args:
+        topology (Optional[Topology]): the topology of the current process group.
+        batch_size (Optional[int]): the batch size of the model.
+        enumerator (Optional[Enumerator]): the enumerator to use
+        storage_reservation (Optional[StorageReservation]): the storage reservation to use
+        stats (Optional[Union[Stats, List[Stats]]]): the stats to use
+        constraints (Optional[Dict[str, ParameterConstraints]]): per table constraints
+            for sharding.
+        debug (bool): whether to print debug information.
+        callbacks (Optional[List[Callable[[List[ShardingOption]], List[ShardingOption]]]):
+            callback functions to apply to plans.
+        timeout_seconds (Optional[int]): timeout for planning in seconds.
+        heuristical_storage_reservation_percentage (float): percentage of storage to reserve for sparse archs.
+    """
+
+    def __init__(
+        self,
+        topology: Optional[Topology] = None,
+        batch_size: Optional[int] = None,
+        enumerator: Optional[Enumerator] = None,
+        storage_reservation: Optional[StorageReservation] = None,
+        stats: Optional[Union[Stats, List[Stats]]] = None,
+        constraints: Optional[Dict[str, ParameterConstraints]] = None,
+        debug: bool = True,
+        callbacks: Optional[
+            List[Callable[[List[ShardingOption]], List[ShardingOption]]]
+        ] = None,
+        timeout_seconds: Optional[int] = None,
+        heuristical_storage_reservation_percentage: float = 0.15,
+    ) -> None:
+        if topology is None:
+            topology = Topology(
+                local_world_size=get_local_size(),
+                world_size=dist.get_world_size(),
+                compute_device="cuda" if torch.cuda.is_available() else "cpu",
+            )
+        self._topology: Topology = topology
+        self._batch_size: int = batch_size if batch_size else BATCH_SIZE
+        self._constraints = constraints
+        self._enumerator: Enumerator = (
+            enumerator
+            if enumerator
+            else EmbeddingEnumerator(
+                topology=topology,
+                batch_size=self._batch_size,
+                constraints=constraints,
+            )
+        )
+        self._storage_reservation: StorageReservation = (
+            storage_reservation
+            if storage_reservation
+            else HeuristicalStorageReservation(
+                percentage=heuristical_storage_reservation_percentage
+            )
+        )
+
+        if stats is not None:
+            self._stats: List[Stats] = [stats] if not isinstance(stats, list) else stats
+        else:
+            self._stats = [EmbeddingStats()]
+
+        self._debug = debug
+        self._callbacks: List[
+            Callable[[List[ShardingOption]], List[ShardingOption]]
+        ] = ([] if callbacks is None else callbacks)
+        if timeout_seconds is not None:
+            assert timeout_seconds > 0, "Timeout must be positive"
+        self._timeout_seconds = timeout_seconds
+
+    def collective_plan(
+        self,
+        module: nn.Module,
+        sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
+        pg: Optional[dist.ProcessGroup] = None,
+    ) -> ShardingPlan:
+        """
+        Call self.plan(...) on rank 0 and broadcast
+
+        Args:
+            module (nn.Module): the module to shard.
+            sharders (Optional[List[ModuleSharder[nn.Module]]]): the sharders to use for sharding
+            pg (Optional[dist.ProcessGroup]): the process group to use for collective operations
+
+        Returns:
+            ShardingPlan: the sharding plan for the module.
+        """
+        if pg is None:
+            assert dist.is_initialized(), (
+                "The default process group is not yet initialized. "
+                "Please call torch.distributed.init_process_group() first before invoking this. "
+                "If you are not within a distributed environment, use the single rank version plan() instead."
+            )
+            pg = none_throws(dist.GroupMember.WORLD)
+
+        if sharders is None:
+            sharders = get_default_sharders()
+        return invoke_on_rank_and_broadcast_result(
+            pg,
+            0,
+            self.plan,
+            module,
+            sharders,
+        )
+
+
+class EmbeddingShardingPlanner(EmbeddingPlannerBase):
     """
     Provides an optimized sharding plan for a given module with shardable parameters
     according to the provided sharders, topology, and constraints.
@@ -189,28 +298,16 @@ class EmbeddingShardingPlanner(ShardingPlanner):
         ] = None,
         timeout_seconds: Optional[int] = None,
     ) -> None:
-        if topology is None:
-            topology = Topology(
-                local_world_size=get_local_size(),
-                world_size=dist.get_world_size(),
-                compute_device="cuda" if torch.cuda.is_available() else "cpu",
-            )
-        self._topology: Topology = topology
-        self._batch_size: int = batch_size if batch_size else BATCH_SIZE
-        self._constraints = constraints
-        self._enumerator: Enumerator = (
-            enumerator
-            if enumerator
-            else EmbeddingEnumerator(
-                topology=topology,
-                batch_size=self._batch_size,
-                constraints=constraints,
-            )
-        )
-        self._storage_reservation: StorageReservation = (
-            storage_reservation
-            if storage_reservation
-            else HeuristicalStorageReservation(percentage=0.15)
+        super().__init__(
+            topology=topology,
+            batch_size=batch_size,
+            enumerator=enumerator,
+            storage_reservation=storage_reservation,
+            stats=stats,
+            constraints=constraints,
+            debug=debug,
+            callbacks=callbacks,
+            timeout_seconds=timeout_seconds,
         )
         self._partitioner: Partitioner = (
             partitioner if partitioner else GreedyPerfPartitioner()
@@ -227,24 +324,14 @@ class EmbeddingShardingPlanner(ShardingPlanner):
                 UniformProposer(),
             ]
         self._perf_model: PerfModel = (
-            performance_model if performance_model else NoopPerfModel(topology=topology)
+            performance_model
+            if performance_model
+            else NoopPerfModel(topology=self._topology)
         )
 
-        if stats is not None:
-            self._stats: List[Stats] = [stats] if not isinstance(stats, list) else stats
-        else:
-            self._stats = [EmbeddingStats()]
-
-        self._debug = debug
         self._num_proposals: int = 0
         self._num_plans: int = 0
         self._best_plan: Optional[List[ShardingOption]] = None
-        self._callbacks: List[
-            Callable[[List[ShardingOption]], List[ShardingOption]]
-        ] = ([] if callbacks is None else callbacks)
-        if timeout_seconds is not None:
-            assert timeout_seconds > 0, "Timeout must be positive"
-        self._timeout_seconds = timeout_seconds
 
     def collective_plan(
         self,
