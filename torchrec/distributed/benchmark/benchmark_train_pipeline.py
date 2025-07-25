@@ -110,6 +110,7 @@ class RunOptions:
     sparse_lr: float = 0.1
     sparse_momentum: Optional[float] = None
     sparse_weight_decay: Optional[float] = None
+    export_stacks: bool = False
 
 
 @dataclass
@@ -390,6 +391,7 @@ def runner(
                 func_to_benchmark=_func_to_benchmark,
                 benchmark_func_kwargs={"model": sharded_model, "pipeline": pipeline},
                 rank=rank,
+                export_stacks=run_option.export_stacks,
             )
             results.append(result)
 
