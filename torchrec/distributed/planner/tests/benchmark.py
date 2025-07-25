@@ -76,6 +76,22 @@ class RWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
         return [EmbeddingComputeKernel.DENSE.value]
 
 
+class CWSharder(EmbeddingBagCollectionSharder, ModuleSharder[nn.Module]):
+    """
+    Column-wise sharder for benchmarking.
+    """
+
+    def sharding_types(self, compute_device_type: str) -> List[str]:
+        # compute_device_type is required by the interface
+        return [ShardingType.COLUMN_WISE.value]
+
+    def compute_kernels(
+        self, sharding_type: str, compute_device_type: str
+    ) -> List[str]:
+        # sharding_type and compute_device_type are required by the interface
+        return [EmbeddingComputeKernel.DENSE.value]
+
+
 def build_model_and_enumerator(
     world_size: int,
     num_tables: int,
@@ -292,20 +308,23 @@ def main() -> None:
     parser.add_argument(
         "--sharder",
         type=str,
-        choices=["tw", "rw", "both"],
+        choices=["tw", "rw", "cw", "all"],
         default="tw",
-        help="Sharder type to use: table-wise (tw), row-wise (rw), or both",
+        help="Sharder type to use: table-wise (tw), row-wise (rw), column-wise (cw), or all",
     )
     logger.warning("Running planner enumerator benchmarks...")
 
     args = parser.parse_args()
 
     # Run benchmark with specified sharder(s)
-    if args.sharder == "tw" or args.sharder == "both":
+    if args.sharder == "tw" or args.sharder == "all":
         benchmark_enumerator_comprehensive(TWSharder)
 
-    if args.sharder == "rw" or args.sharder == "both":
+    if args.sharder == "rw" or args.sharder == "all":
         benchmark_enumerator_comprehensive(RWSharder)
+
+    if args.sharder == "cw" or args.sharder == "all":
+        benchmark_enumerator_comprehensive(CWSharder)
 
 
 if __name__ == "__main__":
