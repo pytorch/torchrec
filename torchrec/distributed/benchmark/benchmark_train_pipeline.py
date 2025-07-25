@@ -40,7 +40,11 @@ from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
     TestTowerCollectionSparseNNConfig,
     TestTowerSparseNNConfig,
 )
-from torchrec.distributed.benchmark.benchmark_utils import benchmark_func, cmd_conf
+from torchrec.distributed.benchmark.benchmark_utils import (
+    benchmark_func,
+    BenchmarkResult,
+    cmd_conf,
+)
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import Topology
@@ -201,15 +205,7 @@ def main(
     table_config: EmbeddingTablesConfig,
     model_selection: ModelSelectionConfig,
     pipeline_config: PipelineConfig,
-    model_config: Optional[
-        Union[
-            TestSparseNNConfig,
-            TestTowerCollectionSparseNNConfig,
-            TestTowerSparseNNConfig,
-            DeepFMConfig,
-            DLRMConfig,
-        ]
-    ] = None,
+    model_config: Optional[BaseModelConfig] = None,
 ) -> None:
     tables, weighted_tables = generate_tables(
         num_unweighted_features=table_config.num_unweighted_features,
@@ -254,6 +250,30 @@ def main(
     )
 
 
+def run_pipeline(
+    run_option: RunOptions,
+    table_config: EmbeddingTablesConfig,
+    pipeline_config: PipelineConfig,
+    model_config: BaseModelConfig,
+) -> List[BenchmarkResult]:
+
+    tables, weighted_tables = generate_tables(
+        num_unweighted_features=table_config.num_unweighted_features,
+        num_weighted_features=table_config.num_weighted_features,
+        embedding_feature_dim=table_config.embedding_feature_dim,
+    )
+
+    return run_multi_process_func(
+        func=runner,
+        world_size=run_option.world_size,
+        tables=tables,
+        weighted_tables=weighted_tables,
+        run_option=run_option,
+        model_config=model_config,
+        pipeline_config=pipeline_config,
+    )
+
+
 def runner(
     rank: int,
     world_size: int,
@@ -262,7 +282,7 @@ def runner(
     run_option: RunOptions,
     model_config: BaseModelConfig,
     pipeline_config: PipelineConfig,
-) -> None:
+) -> BenchmarkResult:
     # Ensure GPUs are available and we have enough of them
     assert (
         torch.cuda.is_available() and torch.cuda.device_count() >= world_size
@@ -382,6 +402,8 @@ def runner(
 
         if rank == 0:
             print(result)
+
+        return result
 
 
 if __name__ == "__main__":
