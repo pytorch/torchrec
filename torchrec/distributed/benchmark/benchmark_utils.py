@@ -18,6 +18,7 @@ import inspect
 import json
 import logging
 import os
+import resource
 import time
 import timeit
 from dataclasses import dataclass, fields, is_dataclass, MISSING
@@ -108,14 +109,14 @@ class CompileMode(Enum):
 
 
 @dataclass
-class MemoryStats:
+class GPUMemoryStats:
     rank: int
     malloc_retries: int
     max_mem_allocated_mbs: int
     max_mem_reserved_mbs: int
 
     @classmethod
-    def for_device(cls, rank: int) -> "MemoryStats":
+    def for_device(cls, rank: int) -> "GPUMemoryStats":
         stats = torch.cuda.memory_stats(rank)
         alloc_retries = stats.get("num_alloc_retries", 0)
         max_allocated = stats.get("allocated_bytes.all.peak", 0)
@@ -132,12 +133,30 @@ class MemoryStats:
 
 
 @dataclass
+class CPUMemoryStats:
+    rank: int
+    peak_rss_mbs: int
+
+    @classmethod
+    def for_process(cls, rank: int) -> "CPUMemoryStats":
+        # Peak RSS from resource.getrusage (in KB on CentOS/Linux)
+        peak_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        peak_rss_mb = peak_rss_kb // 1024
+
+        return cls(rank, peak_rss_mb)
+
+    def __str__(self) -> str:
+        return f"Rank {self.rank}: CPU Memory Peak RSS: {self.peak_rss_mbs/1000:.2f} GB"
+
+
+@dataclass
 class BenchmarkResult:
     "Class for holding results of benchmark runs"
     short_name: str
     gpu_elapsed_time: torch.Tensor  # milliseconds
     cpu_elapsed_time: torch.Tensor  # milliseconds
-    mem_stats: List[MemoryStats]  # memory stats per rank
+    gpu_mem_stats: List[GPUMemoryStats]  # GPU memory stats per rank
+    cpu_mem_stats: List[CPUMemoryStats]  # CPU memory stats per rank
     rank: int = -1
 
     def __str__(self) -> str:
@@ -147,14 +166,16 @@ class BenchmarkResult:
         cpu_runtime = (
             f"CPU Runtime (P90): {self.runtime_percentile(90, device='cpu'):.2f} ms"
         )
-        if len(self.mem_stats) == 0:
-            return f"{self.short_name: <{35}} |  {gpu_runtime} | {cpu_runtime}"
-        mem_alloc = (
-            f"Peak Memory alloc (P90): {self.max_mem_alloc_percentile(90)/1000:.2f} GB"
-        )
-        mem_reserved = f"Peak Memory reserved (P90): {self.max_mem_reserved_percentile(90)/1000:.2f} GB"
+        cpu_mem = f"CPU Peak RSS (P90): {self.cpu_mem_percentile(90)/1000:.2f} GB"
+
+        if len(self.gpu_mem_stats) == 0:
+            return (
+                f"{self.short_name: <{35}} |  {gpu_runtime} | {cpu_runtime} | {cpu_mem}"
+            )
+        mem_alloc = f"GPU Peak Memory alloc (P90): {self.max_mem_alloc_percentile(90)/1000:.2f} GB"
+        mem_reserved = f"GPU Peak Memory reserved (P90): {self.max_mem_reserved_percentile(90)/1000:.2f} GB"
         malloc_retries = f"Malloc retries (P50/P90/P100): {self.mem_retries(50)} / {self.mem_retries(90)} / {self.mem_retries(100)}"
-        return f"{self.short_name: <{35}} | {malloc_retries} | {gpu_runtime} | {cpu_runtime} | {mem_alloc} | {mem_reserved}"
+        return f"{self.short_name: <{35}} | {malloc_retries} | {gpu_runtime} | {cpu_runtime} | {mem_alloc} | {mem_reserved} | {cpu_mem}"
 
     def runtime_percentile(
         self,
@@ -199,14 +220,27 @@ class BenchmarkResult:
 
     def _mem_percentile(
         self,
-        mem_selector: Callable[[MemoryStats], int],
+        mem_selector: Callable[[GPUMemoryStats], int],
         percentile: int = 50,
         interpolation: str = "nearest",
     ) -> torch.Tensor:
         mem_data = torch.tensor(
-            [mem_selector(mem_stat) for mem_stat in self.mem_stats], dtype=torch.float
+            [mem_selector(mem_stat) for mem_stat in self.gpu_mem_stats],
+            dtype=torch.float,
         )
         return torch.quantile(mem_data, percentile / 100.0, interpolation=interpolation)
+
+    def cpu_mem_percentile(
+        self, percentile: int = 50, interpolation: str = "nearest"
+    ) -> torch.Tensor:
+        """Return the CPU memory percentile for peak RSS."""
+        cpu_mem_data = torch.tensor(
+            [cpu_stat.peak_rss_mbs for cpu_stat in self.cpu_mem_stats],
+            dtype=torch.float,
+        )
+        return torch.quantile(
+            cpu_mem_data, percentile / 100.0, interpolation=interpolation
+        )
 
 
 class ECWrapper(torch.nn.Module):
@@ -437,8 +471,11 @@ def write_report(
         qps_gpu = int(num_requests / avg_dur_s_gpu)
 
         mem_str = ""
-        for memory_stats in benchmark_res.mem_stats:
-            mem_str += f"{memory_stats}\n"
+        for gpu_memory_stats in benchmark_res.gpu_mem_stats:
+            mem_str += f"{gpu_memory_stats}\n"
+
+        for cpu_memory_stats in benchmark_res.cpu_mem_stats:
+            mem_str += f"{cpu_memory_stats}\n"
 
         report_str += (
             f"{benchmark_res.short_name:40} "
@@ -816,13 +853,16 @@ def _run_benchmark_core(
         gpu_elapsed_time = cpu_elapsed_time.clone()
 
     # Memory statistics collection
-    mem_stats: List[MemoryStats] = []
+    gpu_mem_stats: List[GPUMemoryStats] = []
+    cpu_mem_stats = [CPUMemoryStats.for_process(rank)]
+
     if device_type == "cuda":
         if rank == -1:
             for di in range(world_size):
-                mem_stats.append(MemoryStats.for_device(di))
+                gpu_mem_stats.append(GPUMemoryStats.for_device(di))
         else:
-            mem_stats.append(MemoryStats.for_device(rank))
+            gpu_mem_stats.append(GPUMemoryStats.for_device(rank))
+    # CPU memory stats are collected for both GPU and CPU-only runs
 
     # Optional detailed profiling
     if output_dir and profile_iter_fn and device_type == "cuda":
@@ -868,7 +908,8 @@ def _run_benchmark_core(
         short_name=name,
         gpu_elapsed_time=gpu_elapsed_time,
         cpu_elapsed_time=cpu_elapsed_time,
-        mem_stats=mem_stats,
+        gpu_mem_stats=gpu_mem_stats,
+        cpu_mem_stats=cpu_mem_stats,
         rank=rank,
     )
 
@@ -1139,7 +1180,8 @@ def multi_process_benchmark(
         res = qq.get()
 
         benchmark_res_per_rank.append(res)
-        assert len(res.mem_stats) == 1
+        assert len(res.gpu_mem_stats) == 1
+        assert len(res.cpu_mem_stats) == 1
 
     for p in processes:
         p.join()
@@ -1149,13 +1191,15 @@ def multi_process_benchmark(
         short_name=benchmark_res_per_rank[0].short_name,
         gpu_elapsed_time=benchmark_res_per_rank[0].gpu_elapsed_time,
         cpu_elapsed_time=benchmark_res_per_rank[0].cpu_elapsed_time,
-        mem_stats=[MemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
+        gpu_mem_stats=[GPUMemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
+        cpu_mem_stats=[CPUMemoryStats(rank, 0) for rank in range(world_size)],
         rank=0,
     )
 
     for res in benchmark_res_per_rank:
-        # Each rank's BenchmarkResult contains 1 memory measurement
-        total_benchmark_res.mem_stats[res.rank] = res.mem_stats[0]
+        # Each rank's BenchmarkResult contains 1 GPU and 1 CPU memory measurement
+        total_benchmark_res.gpu_mem_stats[res.rank] = res.gpu_mem_stats[0]
+        total_benchmark_res.cpu_mem_stats[res.rank] = res.cpu_mem_stats[0]
 
     return total_benchmark_res
 

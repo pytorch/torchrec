@@ -20,7 +20,11 @@ import torch
 # Otherwise will get error
 # NotImplementedError: fbgemm::permute_1D_sparse_data: We could not find the abstract impl for this operator.
 from fbgemm_gpu import sparse_ops  # noqa: F401, E402
-from torchrec.distributed.benchmark.benchmark_utils import BenchmarkResult, MemoryStats
+from torchrec.distributed.benchmark.benchmark_utils import (
+    BenchmarkResult,
+    CPUMemoryStats,
+    GPUMemoryStats,
+)
 from torchrec.distributed.dist_data import _get_recat
 
 from torchrec.distributed.test_utils.test_model import ModelInput
@@ -229,7 +233,8 @@ def benchmark_kjt(
         short_name=f"{test_name}-{transform_type.name}",
         gpu_elapsed_time=torch.tensor(times),
         cpu_elapsed_time=torch.tensor(times),
-        mem_stats=[MemoryStats(0, 0, 0, 0)],
+        gpu_mem_stats=[GPUMemoryStats(0, 0, 0, 0)],
+        cpu_mem_stats=[CPUMemoryStats.for_process(0)],
     )
 
     p50_runtime = result.runtime_percentile(50, interpolation="linear").item()
