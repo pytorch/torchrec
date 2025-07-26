@@ -40,7 +40,11 @@ from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
     TestTowerCollectionSparseNNConfig,
     TestTowerSparseNNConfig,
 )
-from torchrec.distributed.benchmark.benchmark_utils import benchmark_func, cmd_conf
+from torchrec.distributed.benchmark.benchmark_utils import (
+    benchmark_func,
+    BenchmarkResult,
+    cmd_conf,
+)
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.planner import Topology
@@ -201,15 +205,7 @@ def main(
     table_config: EmbeddingTablesConfig,
     model_selection: ModelSelectionConfig,
     pipeline_config: PipelineConfig,
-    model_config: Optional[
-        Union[
-            TestSparseNNConfig,
-            TestTowerCollectionSparseNNConfig,
-            TestTowerSparseNNConfig,
-            DeepFMConfig,
-            DLRMConfig,
-        ]
-    ] = None,
+    model_config: Optional[BaseModelConfig] = None,
 ) -> None:
     tables, weighted_tables = generate_tables(
         num_unweighted_features=table_config.num_unweighted_features,
@@ -254,6 +250,30 @@ def main(
     )
 
 
+def run_pipeline(
+    run_option: RunOptions,
+    table_config: EmbeddingTablesConfig,
+    pipeline_config: PipelineConfig,
+    model_config: BaseModelConfig,
+) -> List[BenchmarkResult]:
+
+    tables, weighted_tables = generate_tables(
+        num_unweighted_features=table_config.num_unweighted_features,
+        num_weighted_features=table_config.num_weighted_features,
+        embedding_feature_dim=table_config.embedding_feature_dim,
+    )
+
+    return run_multi_process_func(
+        func=runner,
+        world_size=run_option.world_size,
+        tables=tables,
+        weighted_tables=weighted_tables,
+        run_option=run_option,
+        model_config=model_config,
+        pipeline_config=pipeline_config,
+    )
+
+
 def runner(
     rank: int,
     world_size: int,
@@ -262,7 +282,7 @@ def runner(
     run_option: RunOptions,
     model_config: BaseModelConfig,
     pipeline_config: PipelineConfig,
-) -> None:
+) -> BenchmarkResult:
     # Ensure GPUs are available and we have enough of them
     assert (
         torch.cuda.is_available() and torch.cuda.device_count() >= world_size
@@ -356,48 +376,34 @@ def runner(
                 except StopIteration:
                     break
 
-        # Run comparison if apply_jit is True, otherwise run single benchmark
-        jit_configs = (
-            [(True, "WithJIT"), (False, "WithoutJIT")]
-            if pipeline_config.apply_jit
-            else [(False, "")]
+        pipeline = generate_pipeline(
+            pipeline_type=pipeline_config.pipeline,
+            emb_lookup_stream=pipeline_config.emb_lookup_stream,
+            model=sharded_model,
+            opt=optimizer,
+            device=ctx.device,
+            apply_jit=pipeline_config.apply_jit,
         )
-        results = []
+        pipeline.progress(iter(bench_inputs))
 
-        for apply_jit, jit_suffix in jit_configs:
-            pipeline = generate_pipeline(
-                pipeline_type=pipeline_config.pipeline,
-                emb_lookup_stream=pipeline_config.emb_lookup_stream,
-                model=sharded_model,
-                opt=optimizer,
-                device=ctx.device,
-                apply_jit=apply_jit,
-            )
-            pipeline.progress(iter(bench_inputs))
-
-            name = (
-                f"{type(pipeline).__name__}{jit_suffix}"
-                if jit_suffix
-                else type(pipeline).__name__
-            )
-            result = benchmark_func(
-                name=name,
-                bench_inputs=bench_inputs,  # pyre-ignore
-                prof_inputs=bench_inputs,  # pyre-ignore
-                num_benchmarks=5,
-                num_profiles=2,
-                profile_dir=run_option.profile,
-                world_size=run_option.world_size,
-                func_to_benchmark=_func_to_benchmark,
-                benchmark_func_kwargs={"model": sharded_model, "pipeline": pipeline},
-                rank=rank,
-                export_stacks=run_option.export_stacks,
-            )
-            results.append(result)
+        result = benchmark_func(
+            name=type(pipeline).__name__,
+            bench_inputs=bench_inputs,  # pyre-ignore
+            prof_inputs=bench_inputs,  # pyre-ignore
+            num_benchmarks=5,
+            num_profiles=2,
+            profile_dir=run_option.profile,
+            world_size=run_option.world_size,
+            func_to_benchmark=_func_to_benchmark,
+            benchmark_func_kwargs={"model": sharded_model, "pipeline": pipeline},
+            rank=rank,
+            export_stacks=run_option.export_stacks,
+        )
 
         if rank == 0:
-            for result in results:
-                print(result)
+            print(result)
+
+        return result
 
 
 if __name__ == "__main__":
