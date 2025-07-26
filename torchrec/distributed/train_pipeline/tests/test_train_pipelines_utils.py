@@ -13,8 +13,9 @@ import unittest
 from typing import List
 from unittest.mock import MagicMock
 
+import parameterized
+
 import torch
-from parameterized import parameterized
 
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.test_utils.test_model import ModelInput, TestNegSamplingModule
@@ -260,7 +261,7 @@ class TrainPipelineUtilsTest(TrainPipelineSparseDistTestBase):
         for source_model_type, recipient_model_type in variants:
             self._test_restore_from_snapshot(source_model_type, recipient_model_type)
 
-    @parameterized.expand(
+    @parameterized.parameterized.expand(
         [
             (
                 CallArgs(
