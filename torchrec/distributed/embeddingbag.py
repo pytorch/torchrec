@@ -1797,7 +1797,7 @@ class ShardedEmbeddingBagCollection(
             # Modifies new_opt_state in place and returns it
             optimizer_state = update_optimizer_state_post_resharding(
                 old_opt_state=old_optimizer_state,  # pyre-ignore
-                new_opt_state=copy.deepcopy(self._optim.state_dict()),
+                new_opt_state=self._optim.state_dict(),  # undo deep copy?
                 ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
                 output_tensor=local_optimizer_tensors,
                 max_dim_0=max_dim_0,
