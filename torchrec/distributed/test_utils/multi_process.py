@@ -189,17 +189,27 @@ class MultiProcessTestBase(unittest.TestCase):
             self.assertEqual(0, p.exitcode)
 
 
+def _wrapper_func_for_multiprocessing(args):  # pyre-ignore[2, 3]
+    """Wrapper function that unpacks arguments and calls the original func"""
+    func, rank, world_size, kwargs = args
+    kwargs["rank"] = rank
+    kwargs["world_size"] = world_size
+    return func(**kwargs)
+
+
+# pyre-ignore[3]
 def run_multi_process_func(
+    # pyre-ignore[2]
     func: Callable[
         [int, int, ...],  # rank, world_size, ...
-        None,
+        Any,  # Changed from None to Any to allow return values
     ],
     multiprocessing_method: str = "spawn",
     use_deterministic_algorithms: bool = True,
     world_size: int = 2,
     # pyre-ignore
     **kwargs,
-) -> None:
+) -> List[Any]:
     """ """
     os.environ["MASTER_ADDR"] = str("localhost")
     os.environ["MASTER_PORT"] = str(get_free_port())
@@ -215,22 +225,16 @@ def run_multi_process_func(
     if world_size == 1:
         kwargs["world_size"] = 1
         kwargs["rank"] = 0
-        func(**kwargs)
-        return
-    ctx = multiprocessing.get_context(multiprocessing_method)
-    processes = []
-    for rank in range(world_size):
-        kwargs["rank"] = rank
-        kwargs["world_size"] = world_size
-        p = ctx.Process(
-            target=func,
-            name=f"rank{rank}",
-            kwargs=kwargs,
-        )
-        p.start()
-        processes.append(p)
+        result = func(**kwargs)
+        return [result]
 
-    for p in processes:
-        p.join()
-        if p.exitcode != 0:
-            print(p)
+    ctx = multiprocessing.get_context(multiprocessing_method)
+
+    # Prepare arguments for each process
+    args_list = [(func, rank, world_size, kwargs.copy()) for rank in range(world_size)]
+
+    # Create a pool of worker processes for each rank
+    with ctx.Pool(processes=world_size) as pool:
+        results = pool.map(_wrapper_func_for_multiprocessing, args_list)
+
+    return results
