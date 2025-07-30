@@ -120,11 +120,12 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
 
                     emb1_kv = {
                         t: pmt
-                        for t, pmt, _, _ in emb_module1.get_named_split_embedding_weights_snapshot()
+                        for t, pmt, _, _, _ in emb_module1.get_named_split_embedding_weights_snapshot()
                     }
                     for (
                         t,
                         pmt,
+                        _,
                         _,
                         _,
                     ) in emb_module2.get_named_split_embedding_weights_snapshot():
@@ -760,11 +761,12 @@ class KeyValueSequenceModelParallelStateDictTest(ModelParallelSingleRankBase):
 
                     emb1_kv = {
                         t: pmt
-                        for t, pmt, _, _ in emb_module1.get_named_split_embedding_weights_snapshot()
+                        for t, pmt, _, _, _ in emb_module1.get_named_split_embedding_weights_snapshot()
                     }
                     for (
                         t,
                         pmt,
+                        _,
                         _,
                         _,
                     ) in emb_module2.get_named_split_embedding_weights_snapshot():
@@ -900,12 +902,13 @@ class ZeroCollisionModelParallelTest(ModelParallelSingleRankBase):
                     emb_module2.flush()
 
                     emb1_kv = {
-                        t: (sharded_t, sharded_w_id, bucket)
-                        for t, sharded_t, sharded_w_id, bucket in emb_module1.get_named_split_embedding_weights_snapshot()
+                        t: (sharded_t, sharded_w_id, bucket, metadata)
+                        for t, sharded_t, sharded_w_id, bucket, metadata in emb_module1.get_named_split_embedding_weights_snapshot()
                     }
                     for (
                         t,
                         sharded_t2,
+                        _,
                         _,
                         _,
                     ) in emb_module2.get_named_split_embedding_weights_snapshot():
@@ -953,6 +956,7 @@ class ZeroCollisionModelParallelTest(ModelParallelSingleRankBase):
                     for (
                         t,
                         sharded_t,
+                        _,
                         _,
                         _,
                     ) in ssd_emb_module.get_named_split_embedding_weights_snapshot():
@@ -1367,12 +1371,13 @@ class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBas
                     emb_module2.flush()
 
                     emb1_kv = {
-                        t: (sharded_t, sharded_w_id, bucket)
-                        for t, sharded_t, sharded_w_id, bucket in emb_module1.get_named_split_embedding_weights_snapshot()
+                        t: (sharded_t, sharded_w_id, bucket, metadata)
+                        for t, sharded_t, sharded_w_id, bucket, metadata in emb_module1.get_named_split_embedding_weights_snapshot()
                     }
                     for (
                         t,
                         sharded_t2,
+                        _,
                         _,
                         _,
                     ) in emb_module2.get_named_split_embedding_weights_snapshot():
@@ -1421,6 +1426,7 @@ class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBas
                     for (
                         t,
                         sharded_t,
+                        _,
                         _,
                         _,
                     ) in ssd_emb_module.get_named_split_embedding_weights_snapshot():

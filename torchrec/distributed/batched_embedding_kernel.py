@@ -958,7 +958,7 @@ def _gen_named_parameters_by_table_ssd_pmt(
     name as well as the parameter itself. The embedding table is in the form of
     PartiallyMaterializedTensor to support windowed access.
     """
-    pmts, _, _ = emb_module.split_embedding_weights()
+    pmts, _, _, _ = emb_module.split_embedding_weights()
     for table_config, pmt in zip(config.embedding_tables, pmts):
         table_name = table_config.name
         emb_table = pmt
@@ -1272,7 +1272,7 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
         # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        emb_tables, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_tables, _, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
             emb_table.local_metadata.placement._device = torch.device("cpu")
@@ -1322,6 +1322,7 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
             Union[ShardedTensor, PartiallyMaterializedTensor],
             Optional[ShardedTensor],
             Optional[ShardedTensor],
+            Optional[ShardedTensor],
         ]
     ]:
         """
@@ -1330,13 +1331,14 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
         RocksDB snapshot to support windowed access.
         optional ShardedTensor for weight_id, this won't be used here as this is non-kvzch
         optional ShardedTensor for bucket_cnt, this won't be used here as this is non-kvzch
+        optional ShardedTensor for metadata, this won't be used here as this is non-kvzch
         """
         for config, tensor in zip(
             self._config.embedding_tables,
             self.split_embedding_weights(no_snapshot=False)[0],
         ):
             key = append_prefix(prefix, f"{config.name}")
-            yield key, tensor, None, None
+            yield key, tensor, None, None, None
 
     def flush(self) -> None:
         """
@@ -1362,6 +1364,7 @@ class KeyValueEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule
     # pyre-ignore [15]
     def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
         List[PartiallyMaterializedTensor],
+        Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
@@ -1412,6 +1415,7 @@ class ZeroCollisionKeyValueEmbedding(
         # use split weights result cache so that multiple calls in the same train iteration will only trigger once
         self._split_weights_res: Optional[
             Tuple[
+                List[ShardedTensor],
                 List[ShardedTensor],
                 List[ShardedTensor],
                 List[ShardedTensor],
@@ -1490,7 +1494,7 @@ class ZeroCollisionKeyValueEmbedding(
         # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
         # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        emb_tables, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_tables, _, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
             emb_table.local_metadata.placement._device = torch.device("cpu")
@@ -1546,8 +1550,10 @@ class ZeroCollisionKeyValueEmbedding(
         if not force_regenerate and self._split_weights_res is not None:
             return
 
-        pmt_list, weight_ids_list, bucket_cnt_list = self.split_embedding_weights(
-            no_snapshot=False,
+        pmt_list, weight_ids_list, bucket_cnt_list, metadata_list = (
+            self.split_embedding_weights(
+                no_snapshot=False,
+            )
         )
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
@@ -1581,23 +1587,38 @@ class ZeroCollisionKeyValueEmbedding(
             self._table_name_to_weight_count_per_rank,
             use_param_size_as_rows=True,
         )
-        # pyre-ignore
-        assert len(pmt_list) == len(weight_ids_list) == len(bucket_cnt_list)
+        metadata_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy,
+            metadata_list,  # pyre-ignore [6]
+            self._pg,
+            prefix,
+            self._table_name_to_weight_count_per_rank,
+        )
+
+        assert (
+            len(pmt_list)
+            == len(weight_ids_list)  # pyre-ignore
+            == len(bucket_cnt_list)  # pyre-ignore
+            == len(metadata_list)  # pyre-ignore
+        )
         assert (
             len(pmt_sharded_t_list)
             == len(weight_id_sharded_t_list)
             == len(bucket_cnt_sharded_t_list)
+            == len(metadata_sharded_t_list)
         )
         self._split_weights_res = (
             pmt_sharded_t_list,
             weight_id_sharded_t_list,
             bucket_cnt_sharded_t_list,
+            metadata_sharded_t_list,
         )
 
     def get_named_split_embedding_weights_snapshot(self, prefix: str = "") -> Iterator[
         Tuple[
             str,
             Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
             Optional[ShardedTensor],
             Optional[ShardedTensor],
         ]
@@ -1608,6 +1629,7 @@ class ZeroCollisionKeyValueEmbedding(
         PMT for embedding table with a valid RocksDB snapshot to support tensor IO
         optional ShardedTensor for weight_id
         optional ShardedTensor for bucket_cnt
+        optional ShardedTensor for metadata
         """
         self._init_sharded_split_embedding_weights()
         # pyre-ignore[16]
@@ -1616,13 +1638,14 @@ class ZeroCollisionKeyValueEmbedding(
         pmt_sharded_t_list = self._split_weights_res[0]
         weight_id_sharded_t_list = self._split_weights_res[1]
         bucket_cnt_sharded_t_list = self._split_weights_res[2]
+        metadata_sharded_t_list = self._split_weights_res[3]
         for table_idx, pmt_sharded_t in enumerate(pmt_sharded_t_list):
             table_config = self._config.embedding_tables[table_idx]
             key = append_prefix(prefix, f"{table_config.name}")
 
             yield key, pmt_sharded_t, weight_id_sharded_t_list[
                 table_idx
-            ], bucket_cnt_sharded_t_list[table_idx]
+            ], bucket_cnt_sharded_t_list[table_idx], metadata_sharded_t_list[table_idx]
 
     def flush(self) -> None:
         """
@@ -1649,6 +1672,7 @@ class ZeroCollisionKeyValueEmbedding(
         self, no_snapshot: bool = True, should_flush: bool = False
     ) -> Tuple[
         Union[List[PartiallyMaterializedTensor], List[torch.Tensor]],
+        Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
@@ -2079,7 +2103,7 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
         # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        emb_tables, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_tables, _, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
             emb_table.local_metadata.placement._device = torch.device("cpu")
@@ -2129,6 +2153,7 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
             Union[ShardedTensor, PartiallyMaterializedTensor],
             Optional[ShardedTensor],
             Optional[ShardedTensor],
+            Optional[ShardedTensor],
         ]
     ]:
         """
@@ -2137,13 +2162,14 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
         RocksDB snapshot to support windowed access.
         optional ShardedTensor for weight_id, this won't be used here as this is non-kvzch
         optional ShardedTensor for bucket_cnt, this won't be used here as this is non-kvzch
+        optional ShardedTensor for metadata, this won't be used here as this is non-kvzch
         """
         for config, tensor in zip(
             self._config.embedding_tables,
             self.split_embedding_weights(no_snapshot=False)[0],
         ):
             key = append_prefix(prefix, f"{config.name}")
-            yield key, tensor, None, None
+            yield key, tensor, None, None, None
 
     def flush(self) -> None:
         """
@@ -2168,6 +2194,7 @@ class KeyValueEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor], FusedOptimizer
     # pyre-ignore [15]
     def split_embedding_weights(self, no_snapshot: bool = True) -> Tuple[
         List[PartiallyMaterializedTensor],
+        Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
@@ -2220,6 +2247,7 @@ class ZeroCollisionKeyValueEmbeddingBag(
         # use split weights result cache so that multiple calls in the same train iteration will only trigger once
         self._split_weights_res: Optional[
             Tuple[
+                List[ShardedTensor],
                 List[ShardedTensor],
                 List[ShardedTensor],
                 List[ShardedTensor],
@@ -2298,7 +2326,7 @@ class ZeroCollisionKeyValueEmbeddingBag(
         # in the case no_snapshot=False, a flush is required. we rely on the flush operation in
         # ShardedEmbeddingBagCollection._pre_state_dict_hook()
 
-        emb_tables, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
+        emb_tables, _, _, _ = self.split_embedding_weights(no_snapshot=no_snapshot)
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
             emb_table.local_metadata.placement._device = torch.device("cpu")
@@ -2354,8 +2382,10 @@ class ZeroCollisionKeyValueEmbeddingBag(
         if not force_regenerate and self._split_weights_res is not None:
             return
 
-        pmt_list, weight_ids_list, bucket_cnt_list = self.split_embedding_weights(
-            no_snapshot=False,
+        pmt_list, weight_ids_list, bucket_cnt_list, metadata_list = (
+            self.split_embedding_weights(
+                no_snapshot=False,
+            )
         )
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
@@ -2389,23 +2419,38 @@ class ZeroCollisionKeyValueEmbeddingBag(
             self._table_name_to_weight_count_per_rank,
             use_param_size_as_rows=True,
         )
-        # pyre-ignore
-        assert len(pmt_list) == len(weight_ids_list) == len(bucket_cnt_list)
+        metadata_sharded_t_list = create_virtual_sharded_tensors(
+            emb_table_config_copy,
+            metadata_list,  # pyre-ignore [6]
+            self._pg,
+            prefix,
+            self._table_name_to_weight_count_per_rank,
+        )
+
+        assert (
+            len(pmt_list)
+            == len(weight_ids_list)  # pyre-ignore
+            == len(bucket_cnt_list)  # pyre-ignore
+            == len(metadata_list)  # pyre-ignore
+        )
         assert (
             len(pmt_sharded_t_list)
             == len(weight_id_sharded_t_list)
             == len(bucket_cnt_sharded_t_list)
+            == len(metadata_sharded_t_list)
         )
         self._split_weights_res = (
             pmt_sharded_t_list,
             weight_id_sharded_t_list,
             bucket_cnt_sharded_t_list,
+            metadata_sharded_t_list,
         )
 
     def get_named_split_embedding_weights_snapshot(self, prefix: str = "") -> Iterator[
         Tuple[
             str,
             Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
             Optional[ShardedTensor],
             Optional[ShardedTensor],
         ]
@@ -2416,6 +2461,7 @@ class ZeroCollisionKeyValueEmbeddingBag(
         PMT for embedding table with a valid RocksDB snapshot to support tensor IO
         optional ShardedTensor for weight_id
         optional ShardedTensor for bucket_cnt
+        optional ShardedTensor for metadata
         """
         self._init_sharded_split_embedding_weights()
         # pyre-ignore[16]
@@ -2424,13 +2470,14 @@ class ZeroCollisionKeyValueEmbeddingBag(
         pmt_sharded_t_list = self._split_weights_res[0]
         weight_id_sharded_t_list = self._split_weights_res[1]
         bucket_cnt_sharded_t_list = self._split_weights_res[2]
+        metadata_sharded_t_list = self._split_weights_res[3]
         for table_idx, pmt_sharded_t in enumerate(pmt_sharded_t_list):
             table_config = self._config.embedding_tables[table_idx]
             key = append_prefix(prefix, f"{table_config.name}")
 
             yield key, pmt_sharded_t, weight_id_sharded_t_list[
                 table_idx
-            ], bucket_cnt_sharded_t_list[table_idx]
+            ], bucket_cnt_sharded_t_list[table_idx], metadata_sharded_t_list[table_idx]
 
     def flush(self) -> None:
         """
@@ -2457,6 +2504,7 @@ class ZeroCollisionKeyValueEmbeddingBag(
         self, no_snapshot: bool = True, should_flush: bool = False
     ) -> Tuple[
         Union[List[PartiallyMaterializedTensor], List[torch.Tensor]],
+        Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
         Optional[List[torch.Tensor]],
     ]:
