@@ -18,7 +18,8 @@ import torch
 from torchrec.distributed.benchmark.benchmark_utils import (
     benchmark,
     BenchmarkResult,
-    MemoryStats,
+    CPUMemoryStats,
+    GPUMemoryStats,
 )
 from torchrec.modules.regroup import KTRegroupAsDict
 from torchrec.sparse.jagged_tensor import (
@@ -109,7 +110,8 @@ def bench(
             short_name=name,
             gpu_elapsed_time=torch.tensor(times) * 1e3,
             cpu_elapsed_time=torch.tensor(times) * 1e3,
-            mem_stats=[MemoryStats(0, 0, 0, 0)],
+            gpu_mem_stats=[GPUMemoryStats(0, 0, 0, 0)],
+            cpu_mem_stats=[CPUMemoryStats.for_process(0)],
         )
 
     print(
