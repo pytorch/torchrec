@@ -32,7 +32,7 @@ from torchrec.distributed.planner.proposers import (
     GridSearchProposer,
     UniformProposer,
 )
-from torchrec.distributed.planner.stats import EmbeddingStats
+from torchrec.distributed.planner.stats import EmbeddingStats, NoopEmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
     HeuristicalStorageReservation,
 )
@@ -513,7 +513,10 @@ class EmbeddingShardingPlanner(EmbeddingPlannerBase):
             sharding_plan = to_sharding_plan(best_plan, self._topology)
 
             end_time = perf_counter()
+            shall_log_sharding_plan = False
             for stats in self._stats:
+                if not isinstance(stats, NoopEmbeddingStats):
+                    shall_log_sharding_plan = True
                 stats.log(
                     sharding_plan=sharding_plan,
                     topology=self._topology,
@@ -528,7 +531,8 @@ class EmbeddingShardingPlanner(EmbeddingPlannerBase):
                     sharders=sharders,
                     debug=self._debug,
                 )
-            logger.info(f"Found sharding plan {sharding_plan}")
+            if shall_log_sharding_plan:
+                logger.info(f"Found sharding plan {sharding_plan}")
             return sharding_plan
         else:
             global_storage_capacity = reduce(
