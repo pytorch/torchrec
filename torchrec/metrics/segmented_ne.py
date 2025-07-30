@@ -176,7 +176,7 @@ class SegmentedNEMetricComputation(RecMetricComputation):
     def __init__(
         self,
         *args: Any,
-        include_logloss: bool = False,  # TODO - include
+        include_logloss: bool = False,
         num_groups: int = 1,
         grouping_keys: str = "grouping_keys",
         cast_keys_to_int: bool = False,
