@@ -548,7 +548,6 @@ class TestJaggedTensor(unittest.TestCase):
         )
 
         self.assertTrue(torch.equal(j_offset.lengths(), j_lens.lengths()))
-        # TODO: T88149179
         self.assertTrue(torch.equal(j_offset.offsets(), j_lens.offsets().int()))
 
         stride_per_key_per_rank = [[3], [5]]
