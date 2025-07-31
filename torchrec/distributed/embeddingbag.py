@@ -1459,6 +1459,19 @@ class ShardedEmbeddingBagCollection(
                 inverse_indices[1].device,
             )
 
+    def _is_optimizer_enabled(
+        self,
+        has_local_optimizer: bool,
+        env: ShardingEnv,
+        device: Optional[torch.device],
+    ) -> bool:
+        flag = torch.tensor(
+            [has_local_optimizer], dtype=torch.uint8, device=device
+        )  # example: True
+        # Reduce with MAX to check if any process has True
+        dist.all_reduce(flag, op=dist.ReduceOp.MAX, group=env.process_group)
+        return bool(flag.item())
+
     # pyre-ignore [14]
     def input_dist(
         self,
@@ -1698,9 +1711,16 @@ class ShardedEmbeddingBagCollection(
             return
 
         current_state = self.state_dict()
-        has_optimizer = len(self._optim._optims) > 0 and all(
+        has_local_optimizer = len(self._optim._optims) > 0 and all(
             len(i) > 0 for i in self._optim.state_dict()["state"].values()
         )
+
+        # communicate optimizer state across all ranks, because if one rank owns all tables
+        # and other ranks does not own any table, and later transfer the weights to empty rank
+        # creates inconsistent state, because initally empty rank does not have optimizer state
+        # hence, incorrectly computes the tensor splits
+
+        has_optimizer = self._is_optimizer_enabled(has_local_optimizer, env, device)
 
         # TODO: Saving lookups tensors to CPU to eventually avoid recreating them completely again
         # TODO: Ensure lookup tensors are actually being deleted
@@ -1715,7 +1735,7 @@ class ShardedEmbeddingBagCollection(
         max_dim_0, max_dim_1 = get_largest_dims_from_sharding_plan_updates(
             changed_sharding_params
         )
-        old_optimizer_state = self._optim.state_dict() if has_optimizer else None
+        old_optimizer_state = self._optim.state_dict() if has_local_optimizer else None
 
         local_shard_names_by_src_rank, local_output_tensor = shards_all_to_all(
             module=self,
@@ -1727,6 +1747,7 @@ class ShardedEmbeddingBagCollection(
             max_dim_0=max_dim_0,
             max_dim_1=max_dim_1,
             optimizer_state=old_optimizer_state,
+            has_optimizer=has_optimizer,
         )
 
         for name, param in changed_sharding_params.items():
@@ -1791,30 +1812,25 @@ class ShardedEmbeddingBagCollection(
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
 
         if has_optimizer:
-            split_index = len(local_output_tensor) // 2
-            local_weight_tensors = local_output_tensor[:split_index]
-            local_optimizer_tensors = local_output_tensor[split_index:]
-            # Modifies new_opt_state in place and returns it
             optimizer_state = update_optimizer_state_post_resharding(
                 old_opt_state=old_optimizer_state,  # pyre-ignore
                 new_opt_state=copy.deepcopy(self._optim.state_dict()),
                 ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-                output_tensor=local_optimizer_tensors,
+                output_tensor=local_output_tensor,
                 max_dim_0=max_dim_0,
+                extend_shard_name=self.extend_shard_name,
             )
-
             self._optim.load_state_dict(optimizer_state)
-        else:
-            local_weight_tensors = local_output_tensor
 
         current_state = update_state_dict_post_resharding(
             state_dict=current_state,
             ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-            output_tensor=local_weight_tensors,
+            output_tensor=local_output_tensor,
             new_sharding_params=changed_sharding_params,
             curr_rank=dist.get_rank(),
             extend_shard_name=self.extend_shard_name,
             max_dim_0=max_dim_0,
+            has_optimizer=has_optimizer,
         )
 
         self.load_state_dict(current_state)

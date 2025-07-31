@@ -263,6 +263,11 @@ class ModelParallelTestShared(MultiProcessTestBase):
                 constraints[name] = ParameterConstraints(
                     sharding_types=[sharding_type.value],
                 )
+                if sharding_type == ShardingType.COLUMN_WISE:
+                    constraints[name] = ParameterConstraints(
+                        sharding_types=[sharding_type.value],
+                        min_partition=4,
+                    )
 
         self._run_multi_process_test(
             callable=dynamic_sharding_test,
@@ -291,6 +296,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             offsets_dtype=offsets_dtype,
             lengths_dtype=lengths_dtype,
             random_seed=random_seed,
+            sharding_type=sharding_type,
         )
 
 

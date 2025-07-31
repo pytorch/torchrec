@@ -508,12 +508,12 @@ class MultiRankEBCDynamicShardingTest(MultiProcessTestBase):
 
 
 @skip_if_asan_class
-class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
+class MultiRankDMPDynamicShardingTestTW(ModelParallelTestShared):
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    @given(  # pyre-ignore
+    @given(  # Pyre-ignore
         sharder_type=st.sampled_from(
             [
                 # SharderType.EMBEDDING_BAG.value,
@@ -565,9 +565,10 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         ),  # TODO: Enable variable batch size st.booleans(),
         data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
         random_seed=st.integers(0, 1000),
+        world_size=st.sampled_from([2, 4, 8]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
-    def test_sharding(
+    def test_sharding_tw(
         self,
         sharder_type: str,
         sharding_type: str,
@@ -579,6 +580,7 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         variable_batch_size: bool,
         data_type: DataType,
         random_seed: int,  # Random seed value for deterministically generating sharding plan for resharding
+        world_size: int,
     ) -> None:
         """
         Tests resharding from DMP module interface, rather than EBC level.
@@ -613,6 +615,118 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
             data_type=data_type,
             sharding_type=sharding_type_e,
             random_seed=random_seed,
+            world_size=world_size,
+        )
+
+
+@skip_if_asan_class
+class MultiRankDMPDynamicShardingTestCW(ModelParallelTestShared):
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    @given(  # pyre-ignore
+        sharder_type=st.sampled_from(
+            [
+                # SharderType.EMBEDDING_BAG.value,
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.DENSE.value,
+                EmbeddingComputeKernel.FUSED.value,
+                EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+                EmbeddingComputeKernel.FUSED_UVM.value,
+            ],
+        ),
+        qcomms_config=st.sampled_from(
+            [
+                None,
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+            ]
+        ),
+        apply_optimizer_in_backward_config=st.sampled_from(
+            [
+                None,
+                {
+                    "embedding_bags": (optim.Adagrad, {"lr": 0.04}),
+                },
+                {
+                    "embedding_bags": (torch.optim.SGD, {"lr": 0.01}),
+                },
+                # {
+                #     "embedding_bags": (
+                #         trec_optim.RowWiseAdagrad,
+                #         {"lr": 0.01},
+                #     ),
+                # },
+            ]
+        ),
+        variable_batch_size=st.sampled_from(
+            [False]
+        ),  # TODO: Enable variable batch size st.booleans(),
+        data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
+        random_seed=st.integers(0, 1000),
+        world_size=st.sampled_from([2, 4, 8]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
+    def test_sharding_cw(
+        self,
+        sharder_type: str,
+        sharding_type: str,
+        kernel_type: str,
+        qcomms_config: Optional[QCommsConfig],
+        apply_optimizer_in_backward_config: Optional[
+            Dict[str, Tuple[Type[torch.optim.Optimizer], Dict[str, Any]]]
+        ],
+        variable_batch_size: bool,
+        data_type: DataType,
+        random_seed: int,  # Random seed value for deterministically generating sharding plan for resharding
+        world_size: int,
+    ) -> None:
+        """
+        Tests resharding from DMP module interface, rather than EBC level.
+        """
+        if (
+            self.device == torch.device("cpu")
+            and kernel_type != EmbeddingComputeKernel.FUSED.value
+        ):
+            self.skipTest("CPU does not support uvm.")
+
+        assume(
+            sharder_type == SharderType.EMBEDDING_BAG_COLLECTION.value
+            or not variable_batch_size
+        )
+
+        sharding_type_e = ShardingType(sharding_type)
+        self._test_dynamic_sharding(
+            # pyre-ignore[6]
+            sharders=[
+                create_test_sharder(
+                    sharder_type,
+                    sharding_type,
+                    kernel_type,
+                    qcomms_config=qcomms_config,
+                    device=self.device,
+                ),
+            ],
+            backend=self.backend,
+            qcomms_config=qcomms_config,
+            apply_optimizer_in_backward_config=apply_optimizer_in_backward_config,
+            variable_batch_size=variable_batch_size,
+            data_type=data_type,
+            sharding_type=sharding_type_e,
+            random_seed=random_seed,
+            world_size=world_size,
         )
 
 
