@@ -54,6 +54,7 @@ def training_func_to_benchmark(
     bench_inputs: List[KeyedJaggedTensor],
     optimizer: Optional[torch.optim.Optimizer],
 ) -> None:
+
     for bench_input in bench_inputs:
         pooled_embeddings = model(bench_input)
         vals = []
@@ -120,6 +121,7 @@ def benchmark_ebc(
 
 
 def main() -> None:
+    # torch.cuda.cudart().cudaProfilerStart()
     args: argparse.Namespace = init_argparse_and_args()
 
     num_requests = args.bench_iters * args.batch_size * args.num_benchmarks
@@ -203,6 +205,8 @@ def main() -> None:
     for i, write_report_func in enumerate(write_report_funcs_per_module):
         write_report_func(benchmark_results_per_module[i])
 
+    # torch.cuda.cudart().cudaProfilerStop()
+
 
 def invoke_main() -> None:
     logging.basicConfig()
@@ -212,4 +216,5 @@ def invoke_main() -> None:
 
 
 if __name__ == "__main__":
+
     invoke_main()  # pragma: no cover
