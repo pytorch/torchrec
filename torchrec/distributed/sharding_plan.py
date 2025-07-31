@@ -257,6 +257,7 @@ def _get_block_size_for_cw_shard(
             f"Dim of {columns} cannot be evenly divided with column wise shard"
             "dim {column_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
             UserWarning,
+            stacklevel=2,
         )
         block_size = columns
     return block_size
@@ -281,6 +282,7 @@ def _calculate_cw_shard_sizes_and_offsets(
             f"Dim of {columns} cannot be evenly divided with column wise shard"
             "dim {col_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
             UserWarning,
+            stacklevel=2,
         )
         block_size = columns
 
