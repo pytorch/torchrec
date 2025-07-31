@@ -28,8 +28,9 @@ from torchrec.distributed.benchmark.benchmark_utils import (
     write_report,
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
+from torchrec.distributed.sharding.dynamic_sharding import output_sharding_plan_delta
 from torchrec.distributed.test_utils.test_model import TestEBCSharder
-from torchrec.distributed.types import DataType
+from torchrec.distributed.types import DataType, EmbeddingModuleShardingPlan
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -53,9 +54,27 @@ def training_func_to_benchmark(
     model: torch.nn.Module,
     bench_inputs: List[KeyedJaggedTensor],
     optimizer: Optional[torch.optim.Optimizer],
+    resharding_plan_diffs: Optional[List[EmbeddingModuleShardingPlan]] = None,
 ) -> None:
 
-    for bench_input in bench_inputs:
+    reshard_idx = 0
+
+    for i, bench_input in enumerate(bench_inputs):
+        if resharding_plan_diffs is not None:
+            if (
+                i > 0
+                and len(resharding_plan_diffs) > 0
+                and i % (len(bench_inputs) / len(resharding_plan_diffs)) == 0
+            ):
+
+                plan_difference = output_sharding_plan_delta(
+                    # Pyre-ignore
+                    model.plan.plan["_module"],
+                    resharding_plan_diffs[reshard_idx],
+                )
+                # Pyre-ignore
+                model.reshard("_module", plan_difference)
+                reshard_idx += 1
         pooled_embeddings = model(bench_input)
         vals = []
         for _name, param in pooled_embeddings.to_dict().items():
