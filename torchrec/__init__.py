@@ -21,6 +21,11 @@ from torchrec.modules.embedding_modules import (  # noqa
     EmbeddingBagCollectionInterface,
     EmbeddingCollection,
 )  # noqa
+from torchrec.modules.hash_mc_modules import HashZchManagedCollisionModule  # noqa
+from torchrec.modules.mc_embedding_modules import (  # noqa
+    ManagedCollisionEmbeddingBagCollection,
+    ManagedCollisionEmbeddingCollection,
+)
 from torchrec.sparse.jagged_tensor import (  # noqa
     JaggedTensor,
     KeyedJaggedTensor,
