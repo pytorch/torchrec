@@ -23,7 +23,12 @@ from torchrec.ir.schema import (
 
 from torchrec.ir.types import SerializerInterface
 from torchrec.ir.utils import logging, qualname
-from torchrec.modules.embedding_configs import DataType, EmbeddingBagConfig, PoolingType
+from torchrec.modules.embedding_configs import (
+    data_type_to_dtype,
+    DataType,
+    EmbeddingBagConfig,
+    PoolingType,
+)
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import (
     FeatureProcessor,
@@ -138,7 +143,17 @@ def kt_regroup_meta_forward(
     for i, group in enumerate(op_module._groups):
         out_lengths[i] = sum(lengths_dict[key] for key in group)
     arg_list = [kt.values() for kt in keyed_tensors]
-    outputs = torch.ops.torchrec.ir_kt_regroup(arg_list, batch_size, out_lengths)
+    dtype = (
+        data_type_to_dtype(op_module._emb_dtype)
+        if op_module._emb_dtype
+        else torch.float32
+    )
+    outputs = torch.ops.torchrec.ir_kt_regroup(
+        arg_list,
+        batch_size,
+        out_lengths,
+        dtype=dtype,
+    )
     return dict(zip(op_module._keys, outputs))
 
 
