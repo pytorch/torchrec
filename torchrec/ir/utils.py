@@ -71,20 +71,26 @@ def ir_emb_lookup_fake(
 
 @torch.library.custom_op("torchrec::ir_kt_regroup", mutates_args={})
 def ir_kt_regroup_impl(
-    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+    tensors: List[Optional[torch.Tensor]],
+    batch_size: int,
+    dims: List[int],
+    dtype: torch.dtype = torch.float32,
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
     logger.info(f"torch.ops.torchrec.ir_kt_regroup -> ({batch_size}, {dims}) {device}")
-    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+    return [torch.empty(batch_size, dim, device=device, dtype=dtype) for dim in dims]
 
 
 @torch.library.register_fake("torchrec::ir_kt_regroup")
 def ir_kt_regroup_fake(
-    tensors: List[Optional[torch.Tensor]], batch_size: int, dims: List[int]
+    tensors: List[Optional[torch.Tensor]],
+    batch_size: int,
+    dims: List[int],
+    dtype: torch.dtype = torch.float32,
 ) -> List[torch.Tensor]:
     device = get_device(tensors)
     logger.info(f"ir_kt_regroup_fake -> ({batch_size}, {dims}) {device}")
-    return [torch.empty(batch_size, dim, device=device) for dim in dims]
+    return [torch.empty(batch_size, dim, device=device, dtype=dtype) for dim in dims]
 
 
 @torch.library.custom_op("torchrec::ir_dynamic_batch_emb_lookup", mutates_args={})

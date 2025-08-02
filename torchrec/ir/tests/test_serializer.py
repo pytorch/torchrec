@@ -23,7 +23,7 @@ from torchrec.ir.utils import (
     mark_dynamic_kjt,
     qualname,
 )
-from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_configs import data_type_to_dtype, EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import (
     PositionWeightedModule,
@@ -821,6 +821,14 @@ class TestJsonSerializer(unittest.TestCase):
             # Allows KJT to not be unflattened and run a forward on unflattened EP
             preserve_module_call_signature=(tuple(sparse_fqns)),
         )
+
+        for node in ep.graph.nodes:
+            if (
+                node.op == "call_function"
+                and node.target == torch.ops.torchrec.ir_kt_regroup.default
+            ):
+                for meta in node.meta["val"]:
+                    self.assertEqual(meta.dtype, data_type_to_dtype(data_type))
 
         unflatten_ep = torch.export.unflatten(ep)
         deserialized = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
