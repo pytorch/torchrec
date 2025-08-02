@@ -381,6 +381,7 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
             Union[ShardedTensor, PartiallyMaterializedTensor],
             Optional[ShardedTensor],
             Optional[ShardedTensor],
+            Optional[ShardedTensor],
         ]
     ]:
         """
@@ -730,6 +731,7 @@ class GroupedPooledEmbeddingsLookup(
         Tuple[
             str,
             Union[ShardedTensor, PartiallyMaterializedTensor],
+            Optional[ShardedTensor],
             Optional[ShardedTensor],
             Optional[ShardedTensor],
         ]
