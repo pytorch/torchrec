@@ -251,6 +251,22 @@ class EmbeddingPlannerBase(ShardingPlanner):
             sharders,
         )
 
+    def hash_planner_context_inputs(self) -> int:
+        """
+        Generates a hash for all planner inputs except for partitioner, proposer, performance model, and stats.
+        These are all the inputs needed to verify whether a previously generated sharding plan is still valid in a new context.
+
+        Returns:
+            Generates a hash capturing topology, batch size, enumerator, storage reservation, stats and constraints.
+        """
+        return hash_planner_context_inputs(
+            self._topology,
+            self._batch_size,
+            self._enumerator,
+            self._storage_reservation,
+            self._constraints,
+        )
+
 
 class EmbeddingShardingPlanner(EmbeddingPlannerBase):
     """
@@ -366,22 +382,6 @@ class EmbeddingShardingPlanner(EmbeddingPlannerBase):
             self.plan,
             module,
             sharders,
-        )
-
-    def hash_planner_context_inputs(self) -> int:
-        """
-        Generates a hash for all planner inputs except for partitioner, proposer, performance model, and stats.
-        These are all the inputs needed to verify whether a previously generated sharding plan is still valid in a new context.
-
-        Returns:
-            Generates a hash capturing topology, batch size, enumerator, storage reservation, stats and constraints.
-        """
-        return hash_planner_context_inputs(
-            self._topology,
-            self._batch_size,
-            self._enumerator,
-            self._storage_reservation,
-            self._constraints,
         )
 
     def plan(
