@@ -364,7 +364,7 @@ def dynamic_sharding_test(
             random.randint(0, batch_size) if allow_zero_batch_size else batch_size
         )
         num_steps = 2
-        embedding_dim = 16
+        num_float_features = 16
         # Generate model & inputs.
         (global_model, inputs) = gen_model_and_input(
             model_class=model_class,
@@ -382,7 +382,7 @@ def dynamic_sharding_test(
             # weighted_tables=weighted_tables,
             embedding_groups=embedding_groups,
             world_size=world_size,
-            num_float_features=embedding_dim,
+            num_float_features=num_float_features,
             variable_batch_size=variable_batch_size,
             batch_size=batch_size,
             feature_processor_modules=feature_processor_modules,
@@ -409,7 +409,7 @@ def dynamic_sharding_test(
             embedding_groups=embedding_groups,
             dense_device=ctx.device,
             sparse_device=torch.device("meta"),
-            num_float_features=embedding_dim,
+            num_float_features=num_float_features,
             feature_processor_modules=feature_processor_modules,
         )
 
@@ -420,7 +420,7 @@ def dynamic_sharding_test(
             embedding_groups=embedding_groups,
             dense_device=ctx.device,
             sparse_device=torch.device("meta"),
-            num_float_features=embedding_dim,
+            num_float_features=num_float_features,
             feature_processor_modules=feature_processor_modules,
         )
 
@@ -495,18 +495,18 @@ def dynamic_sharding_test(
         num_tables = len(tables)
 
         ranks_per_tables = [1 for _ in range(num_tables)]
-
-        # CW sharding
-        valid_candidates = [
-            i for i in range(1, world_size + 1) if embedding_dim % i == 0
-        ]
-        ranks_per_tables_for_CW = [
-            random.choice(valid_candidates) for _ in range(num_tables)
-        ]
-
         new_ranks = generate_rank_placements(
             world_size, num_tables, ranks_per_tables, random_seed
         )
+
+        ranks_per_tables_for_CW = []
+        for table in tables:
+
+            # CW sharding
+            valid_candidates = [
+                i for i in range(1, world_size + 1) if table.embedding_dim % i == 0
+            ]
+            ranks_per_tables_for_CW.append(random.choice(valid_candidates))
 
         new_ranks_cw = generate_rank_placements(
             world_size, num_tables, ranks_per_tables_for_CW, random_seed
@@ -536,7 +536,11 @@ def dynamic_sharding_test(
                 )
             elif sharding_type == ShardingType.COLUMN_WISE:
                 new_per_param_sharding[table_name] = sharding_type_constructor(
-                    ranks=new_ranks_cw[i]
+                    ranks=new_ranks_cw[i], compute_kernel=kernel_type
+                )
+            else:
+                raise NotImplementedError(
+                    f"Dynamic Sharding currently does not support {sharding_type}"
                 )
 
         new_module_sharding_plan = construct_module_sharding_plan(
@@ -594,6 +598,7 @@ def dynamic_sharding_test(
             dict(in_backward_optimizer_filter(local_m1_dmp.named_parameters())),
             lambda params: torch.optim.SGD(params, lr=0.1),
         )
+
         local_m1_opt = CombinedOptimizer([local_m1_dmp.fused_optimizer, dense_m1_optim])
 
         # Run a single training step of the sharded model.
@@ -611,7 +616,9 @@ def dynamic_sharding_test(
         )
 
         local_m1_dmp.reshard("sparse.ebc", new_module_sharding_plan_delta)
+
         # Must recreate local_m1_opt, because current local_m1_opt is a copy of underlying fused_opt
+
         local_m1_opt = CombinedOptimizer([local_m1_dmp.fused_optimizer, dense_m1_optim])
 
         local_m1_pred = gen_full_pred_after_one_step(

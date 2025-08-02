@@ -625,6 +625,7 @@ def row_wise(
 def column_wise(
     ranks: Optional[List[int]] = None,
     size_per_rank: Optional[List[int]] = None,
+    compute_kernel: Optional[str] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::COLUMN_WISE` for construct_module_sharding_plan.
@@ -694,6 +695,7 @@ def column_wise(
             local_size,
             device_type,
             sharder,
+            compute_kernel=compute_kernel,
         )
 
     return _parameter_sharding_generator
