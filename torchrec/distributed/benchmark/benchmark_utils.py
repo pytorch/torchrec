@@ -56,6 +56,8 @@ from torchrec.distributed.planner.shard_estimators import (
     EmbeddingStorageEstimator,
 )
 from torchrec.distributed.shard import _shard_modules
+
+from torchrec.distributed.sharding.dynamic_sharding import output_sharding_plan_delta
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     get_sharding_constructor_from_type,
@@ -63,7 +65,12 @@ from torchrec.distributed.sharding_plan import (
 from torchrec.distributed.test_utils.multi_process import MultiProcessContext
 from torchrec.distributed.test_utils.test_model import ModelInput
 
-from torchrec.distributed.types import DataType, ModuleSharder, ShardingEnv
+from torchrec.distributed.types import (
+    DataType,
+    EmbeddingModuleShardingPlan,
+    ModuleSharder,
+    ShardingEnv,
+)
 from torchrec.fx import symbolic_trace
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.quant.embedding_modules import (
@@ -368,7 +375,7 @@ def _generate_rank_placements(
     world_size: int,
     num_tables: int,
     ranks_per_tables: List[int],
-    random_seed: int = None,
+    random_seed: Optional[int] = None,
 ) -> List[List[int]]:
     # Cannot include old/new rank generation with hypothesis library due to depedency on world_size
     if random_seed is None:
@@ -387,7 +394,9 @@ def _generate_rank_placements(
 
 
 def default_func_to_benchmark(
-    model: torch.nn.Module, bench_inputs: List[KeyedJaggedTensor]
+    model: torch.nn.Module,
+    bench_inputs: List[KeyedJaggedTensor],
+    resharding_plan_diffs: Optional[List[EmbeddingModuleShardingPlan]] = None,
 ) -> None:
     with torch.inference_mode():
         for bench_input in bench_inputs:
@@ -855,11 +864,6 @@ def _run_benchmark_core(
     # Timings
     start_events, end_events, times = [], [], []
 
-<<<<<<< dest:   af95f723afd1 - noreply+1244265887488347: [AutoAccept][Codemod...
-=======
-    times = []
-
->>>>>>> source: ea51915e8d98 - isuru: Reshard API Performance Benchmarking
     if device_type == "cuda":
         start_events = [
             torch.cuda.Event(enable_timing=True) for _ in range(num_benchmarks)
@@ -1154,6 +1158,37 @@ def init_module_and_run_benchmark(
         if rank != -1
         else contextlib.nullcontext()
     ) as ctx:
+
+        resharding_plans = []
+
+        if new_ranks_per_plan is not None and len(new_ranks_per_plan) > 0:
+            sharding_type_constructor = get_sharding_constructor_from_type(
+                sharding_type
+            )
+            for new_ranks_per_table in new_ranks_per_plan:
+                new_per_param_sharding = {}
+                for table_id, table in enumerate(tables):
+                    if sharding_type == ShardingType.TABLE_WISE:
+                        new_per_param_sharding[table.name] = sharding_type_constructor(
+                            rank=new_ranks_per_table[table_id][0],
+                            compute_kernel=sharder._kernel_type,
+                        )
+                    elif sharding_type == ShardingType.COLUMN_WISE:
+                        new_per_param_sharding[table.name] = sharding_type_constructor(
+                            ranks=new_ranks_per_table[table_id]
+                        )
+
+                new_module_sharding_plan = construct_module_sharding_plan(
+                    module=module._module,  # Pyre-ignore
+                    # Pyre-ignore
+                    sharder=sharder,
+                    per_param_sharding=new_per_param_sharding,
+                    local_size=world_size,
+                    world_size=world_size,
+                    device_type=device.type,
+                )
+                resharding_plans.append(new_module_sharding_plan)
+
         module = transform_module(
             module=module,
             device=device,
@@ -1173,39 +1208,9 @@ def init_module_and_run_benchmark(
         else:
             name = benchmark_type_name(compile_mode, sharding_type)
 
-        resharding_plans = []
-
-        import fbvscode
-
-        fbvscode.set_trace()
-
-        if new_ranks_per_plan is not None and len(new_ranks_per_plan) > 0:
-            sharding_type_constructor = get_sharding_constructor_from_type(
-                sharding_type
-            )
-            for i, new_ranks in enumerate(new_ranks_per_plan):
-                new_per_param_sharding = {}
-                for table in tables:
-                    if sharding_type == ShardingType.TABLE_WISE:
-                        new_per_param_sharding[table.name] = sharding_type_constructor(
-                            rank=new_ranks, compute_kernel=sharder._kernel_type
-                        )
-                    elif sharding_type == ShardingType.COLUMN_WISE:
-                        new_per_param_sharding[table.name] = sharding_type_constructor(
-                            ranks=new_ranks
-                        )
-
-                new_module_sharding_plan = construct_module_sharding_plan(
-                    module=module.module,
-                    # Pyre-ignore
-                    sharder=sharder,
-                    per_param_sharding=new_per_param_sharding,
-                    local_size=world_size,
-                    world_size=world_size,
-                    device_type="cuda" if torch.cuda.is_available() else "cpu",
-                )
-                resharding_plans.append(new_module_sharding_plan)
-            benchmark_func_kwargs["resharding_plans"] = resharding_plans
+        if benchmark_func_kwargs is None:
+            benchmark_func_kwargs = {}
+        benchmark_func_kwargs["resharding_plan_diffs"] = resharding_plans
 
         res = benchmark(
             name,
@@ -1398,22 +1403,18 @@ def benchmark_module(
             )
 
             if train:
-                total_plans_per_benchmark = bench_iters // resharding_interval
-                total_plans_per_benchmark = max(1, total_plans_per_benchmark)
+
                 new_ranks_per_plan = []
+
                 if enable_resharding:
+                    total_plans_per_benchmark = bench_iters // resharding_interval
+                    total_plans_per_benchmark = max(1, total_plans_per_benchmark)
+
                     num_tables = len(tables)
-                    new_ranks_count_per_plan = [
-                        [] for _ in range(total_plans_per_benchmark)
-                    ]
+                    ranks_per_tables = []
+
                     if sharding_type == ShardingType.TABLE_WISE:
                         ranks_per_tables = [1 for _ in range(num_tables)]
-                        new_ranks_per_plan = [
-                            _generate_rank_placements(
-                                world_size, num_tables, ranks_per_tables
-                            )
-                            for _ in range(total_plans_per_benchmark)
-                        ]
 
                     elif sharding_type == ShardingType.COLUMN_WISE:
                         valid_candidates = [
@@ -1424,11 +1425,12 @@ def benchmark_module(
                         ranks_per_tables = [
                             random.choice(valid_candidates) for _ in range(num_tables)
                         ]
+
                         new_ranks_per_plan = [
                             _generate_rank_placements(
                                 world_size, num_tables, ranks_per_tables
                             )
-                            for ranks_per_tables in (new_ranks_count_per_plan)
+                            for _ in range(total_plans_per_benchmark)
                         ]
 
                 res = multi_process_benchmark(
