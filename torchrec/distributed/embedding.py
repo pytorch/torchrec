@@ -698,10 +698,13 @@ class ShardedEmbeddingCollection(
                 weight_key = f"{prefix}embeddings.{table_name}.weight"
                 weight_id_key = f"{prefix}embeddings.{table_name}.weight_id"
                 bucket_key = f"{prefix}embeddings.{table_name}.bucket"
+                metadata_key = f"{prefix}embeddings.{table_name}.metadata"
                 if weight_id_key in state_dict:
                     del state_dict[weight_id_key]
                 if bucket_key in state_dict:
                     del state_dict[bucket_key]
+                if metadata_key in state_dict:
+                    del state_dict[metadata_key]
                 assert weight_key in state_dict
                 assert (
                     len(self._model_parallel_name_to_local_shards[table_name]) == 1
@@ -1037,6 +1040,7 @@ class ShardedEmbeddingCollection(
                         weights_t,
                         weight_ids_sharded_t,
                         id_cnt_per_bucket_sharded_t,
+                        metadata_sharded_t,
                     ) in (
                         lookup.get_named_split_embedding_weights_snapshot()  # pyre-ignore
                     ):
@@ -1048,6 +1052,7 @@ class ShardedEmbeddingCollection(
                             assert (
                                 weight_ids_sharded_t is not None
                                 and id_cnt_per_bucket_sharded_t is not None
+                                and metadata_sharded_t is not None
                             )
                             # The logic here assumes there is only one shard per table on any particular rank
                             # if there are cases each rank has >1 shards, we need to update here accordingly
@@ -1055,12 +1060,14 @@ class ShardedEmbeddingCollection(
                             virtual_table_sharded_t_map[table_name] = (
                                 weight_ids_sharded_t,
                                 id_cnt_per_bucket_sharded_t,
+                                metadata_sharded_t,
                             )
                         else:
                             assert isinstance(weights_t, PartiallyMaterializedTensor)
                             assert (
                                 weight_ids_sharded_t is None
                                 and id_cnt_per_bucket_sharded_t is None
+                                and metadata_sharded_t is None
                             )
                             # The logic here assumes there is only one shard per table on any particular rank
                             # if there are cases each rank has >1 shards, we need to update here accordingly
@@ -1098,6 +1105,12 @@ class ShardedEmbeddingCollection(
                         "bucket",
                         destination,
                         virtual_table_sharded_t_map[table_name][1],
+                    )
+                    update_destination(
+                        table_name,
+                        "metadata",
+                        destination,
+                        virtual_table_sharded_t_map[table_name][2],
                     )
 
         def _post_load_state_dict_hook(
