@@ -135,6 +135,10 @@ class KeyedOptimizer(optim.Optimizer):
                         f"Different number of shards {num_shards} vs {num_new_shards} for the path of {json.dumps(parent_keys)}"
                     )
                 for shard, new_shard in zip(v.local_shards(), new_v.local_shards()):
+                    # CW sharding can create different size tensors
+                    if shard.tensor.shape != new_shard.tensor.shape:
+                        # Resize the tensor to match the new shape
+                        shard.tensor.resize_(new_shard.tensor.shape)
                     shard.tensor.detach().copy_(new_shard.tensor)
             elif isinstance(v, DTensor):
                 assert isinstance(new_v, DTensor)
