@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cuda-tag: ["cu118", "cu126", "cu128"]
+        cuda-tag: ["cu126", "cu128"]
         os:
           - linux.g5.12xlarge.nvidia.gpu
         python:
@@ -43,8 +43,6 @@ jobs:
         is_pr:
           - ${{ github.event_name == 'pull_request' }}
         exclude:
-          - is_pr: true
-            cuda-tag: "cu118"
           - is_pr: true
             cuda-tag: "cu126"
           - is_pr: true
