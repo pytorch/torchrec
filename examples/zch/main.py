@@ -13,7 +13,6 @@ import time
 import torch
 
 from torchrec import EmbeddingConfig, KeyedJaggedTensor
-from torchrec.distributed.benchmark.benchmark_utils import get_inputs
 from tqdm import tqdm
 
 from .sparse_arch import SparseArch
