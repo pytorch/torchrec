@@ -33,9 +33,6 @@ from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
     DLRMConfig,
     generate_data,
     generate_pipeline,
-    generate_planner,
-    generate_sharded_model_and_optimizer,
-    generate_tables,
     TestSparseNNConfig,
     TestTowerCollectionSparseNNConfig,
     TestTowerSparseNNConfig,
@@ -44,6 +41,9 @@ from torchrec.distributed.benchmark.benchmark_utils import (
     benchmark_func,
     BenchmarkResult,
     cmd_conf,
+    generate_planner,
+    generate_sharded_model_and_optimizer,
+    generate_tables,
 )
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
