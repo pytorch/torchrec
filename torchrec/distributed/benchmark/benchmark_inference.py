@@ -17,14 +17,16 @@ from functools import partial
 from typing import List, Tuple
 
 import torch
+from torchrec.distributed.benchmark.benchmark_ebc import (
+    benchmark_ebc_module,
+    get_tables,
+)
 
 from torchrec.distributed.benchmark.benchmark_utils import (
-    benchmark_module,
     BenchmarkResult,
     CompileMode,
     DLRM_NUM_EMBEDDINGS_PER_FEATURE,
     EMBEDDING_DIM,
-    get_tables,
     init_argparse_and_args,
     write_report,
 )
@@ -84,7 +86,7 @@ def benchmark_qec(args: argparse.Namespace, output_dir: str) -> List[BenchmarkRe
         if not argname.startswith("_") and argname not in IGNORE_ARGNAME
     }
 
-    return benchmark_module(
+    return benchmark_ebc_module(
         module=module,
         sharder=sharder,
         sharding_types=BENCH_SHARDING_TYPES,
@@ -118,7 +120,7 @@ def benchmark_qebc(args: argparse.Namespace, output_dir: str) -> List[BenchmarkR
         if not argname.startswith("_") and argname not in IGNORE_ARGNAME
     }
 
-    return benchmark_module(
+    return benchmark_ebc_module(
         module=module,
         sharder=sharder,
         sharding_types=BENCH_SHARDING_TYPES,
@@ -153,7 +155,7 @@ def benchmark_qec_unsharded(
         if not argname.startswith("_") and argname not in IGNORE_ARGNAME
     }
 
-    return benchmark_module(
+    return benchmark_ebc_module(
         module=module,
         sharder=sharder,
         sharding_types=[],
@@ -190,7 +192,7 @@ def benchmark_qebc_unsharded(
         if not argname.startswith("_") and argname not in IGNORE_ARGNAME
     }
 
-    return benchmark_module(
+    return benchmark_ebc_module(
         module=module,
         sharder=sharder,
         sharding_types=[],

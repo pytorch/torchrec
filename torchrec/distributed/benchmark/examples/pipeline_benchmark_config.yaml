@@ -1,0 +1,38 @@
+# Example YAML configuration for pipeline-level benchmarking
+# Usage: python -m torchrec.distributed.benchmark.unified_benchmark_runner --yaml_config=pipeline_benchmark_config.yaml
+
+UnifiedBenchmarkConfig:
+  benchmark_type: "pipeline"
+
+PipelineConfig:
+  pipeline: "sparse"
+  emb_lookup_stream: "data_dist"
+  apply_jit: false
+
+RunOptions:
+  world_size: 2
+  num_batches: 10
+  sharding_type: "table_wise"
+  compute_kernel: "fused"
+  input_type: "kjt"
+  planner_type: "embedding"
+  dense_optimizer: "SGD"
+  dense_lr: 0.1
+  sparse_optimizer: "EXACT_ADAGRAD"
+  sparse_lr: 0.1
+
+ModelSelectionConfig:
+  model_name: "test_sparse_nn"
+  batch_size: 8192
+  num_float_features: 10
+  feature_pooling_avg: 10
+  use_offsets: false
+  long_kjt_indices: true
+  long_kjt_offsets: true
+  long_kjt_lengths: true
+  pin_memory: true
+
+EmbeddingTablesConfig:
+  num_unweighted_features: 100
+  num_weighted_features: 100
+  embedding_feature_dim: 128
