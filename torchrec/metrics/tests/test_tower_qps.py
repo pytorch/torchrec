@@ -16,7 +16,12 @@ import torch
 import torch.distributed as dist
 from torchrec.metrics.metrics_config import DefaultTaskInfo
 from torchrec.metrics.model_utils import parse_task_model_outputs
-from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
+from torchrec.metrics.rec_metric import (
+    RecComputeMode,
+    RecMetric,
+    RecMetricException,
+    RecTaskInfo,
+)
 from torchrec.metrics.test_utils import (
     gen_test_batch,
     gen_test_tasks,
@@ -326,4 +331,49 @@ class TowerQPSMetricTest(unittest.TestCase):
             )
             self.assertEqual(
                 qps._metrics_computations[1].num_examples, (step + 2) // 2 * batch_size
+            )
+
+    def test_tower_qps_update_with_invalid_tensors(self) -> None:
+        warmup_steps = 2
+        batch_size = 128
+        task_names = ["t1", "t2"]
+        tasks = gen_test_tasks(task_names)
+        qps = TowerQPSMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=batch_size,
+            tasks=tasks,
+            warmup_steps=warmup_steps,
+            compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            compute_on_all_ranks=False,
+            should_validate_update=True,
+            window_size=200,
+        )
+
+        with self.assertRaisesRegex(
+            RecMetricException,
+            "Failed to convert labels to tensor for fused computation",
+        ):
+            qps.update(
+                predictions=torch.ones(batch_size),
+                labels={
+                    "key_0": torch.rand(batch_size),
+                    "key_1": torch.rand(batch_size),
+                    "key_2": torch.rand(batch_size),
+                },
+                weights=torch.rand(batch_size),
+            )
+
+        with self.assertRaisesRegex(
+            RecMetricException,
+            "Failed to convert weights to tensor for fused computation",
+        ):
+            qps.update(
+                predictions=torch.ones(batch_size),
+                labels=torch.rand(batch_size),
+                weights={
+                    "key_0": torch.rand(batch_size),
+                    "key_1": torch.rand(batch_size),
+                    "key_2": torch.rand(batch_size),
+                },
             )
