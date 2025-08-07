@@ -1095,6 +1095,7 @@ def _maybe_compute_stride_kjt(
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
     stride_per_key_per_rank: Optional[torch.IntTensor],
+    inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
 ) -> int:
     if stride is None:
         if len(keys) == 0:
@@ -1102,6 +1103,10 @@ def _maybe_compute_stride_kjt(
         elif (
             stride_per_key_per_rank is not None and stride_per_key_per_rank.numel() > 0
         ):
+            # For VBE KJT, batch size should be based on inverse_indices when set.
+            if inverse_indices is not None:
+                return inverse_indices[1].shape[-1]
+
             s = stride_per_key_per_rank.sum(dim=1).max().item()
             if not torch.jit.is_scripting() and is_non_strict_exporting():
                 stride = torch.sym_int(s)
@@ -1728,6 +1733,8 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
         "_weights",
         "_lengths",
         "_offsets",
+        "_stride_per_key_per_rank",
+        "_inverse_indices",
     ]
 
     def __init__(
@@ -2144,6 +2151,7 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self._lengths,
             self._offsets,
             self._stride_per_key_per_rank,
+            self._inverse_indices,
         )
         self._stride = stride
         return stride
@@ -3016,7 +3024,26 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 def _kjt_flatten(
     t: KeyedJaggedTensor,
 ) -> Tuple[List[Optional[torch.Tensor]], List[str]]:
-    return [getattr(t, a) for a in KeyedJaggedTensor._fields], t._keys
+    """
+    Used by PyTorch's pytree utilities for serialization and processing.
+    Extracts tensor attributes of a KeyedJaggedTensor and returns them
+    as a flat list, along with the necessary metadata to reconstruct the KeyedJaggedTensor.
+
+    Component tensors are returned as dynamic attributes.
+    KJT metadata are added as static specs.
+
+    Returns:
+        Tuple containing:
+            - List[Optional[torch.Tensor]]: All tensor attributes (_values, _weights, _lengths,
+              _offsets, _stride_per_key_per_rank, and the tensor part of _inverse_indices if present)
+            - Tuple[List[str], List[str]]: Metadata needed for reconstruction:
+                - List of keys from the original KeyedJaggedTensor
+                - List of inverse indices keys (if present, otherwise empty list)
+    """
+    values = [getattr(t, a) for a in KeyedJaggedTensor._fields[:-1]]
+    values.append(t._inverse_indices[1] if t._inverse_indices is not None else None)
+
+    return values, t._keys
 
 
 def _kjt_flatten_with_keys(
@@ -3030,15 +3057,24 @@ def _kjt_flatten_with_keys(
 
 
 def _kjt_unflatten(
-    values: List[Optional[torch.Tensor]], context: List[str]  # context is the _keys
+    values: List[Optional[torch.Tensor]],
+    context: List[str],  # context is _keys
 ) -> KeyedJaggedTensor:
-    return KeyedJaggedTensor(context, *values)
+    return KeyedJaggedTensor(
+        context,
+        *values[:-2],
+        stride_per_key_per_rank=values[-2],
+        inverse_indices=(context, values[-1]) if values[-1] is not None else None,
+    )
 
 
 def _kjt_flatten_spec(
     t: KeyedJaggedTensor, spec: TreeSpec
 ) -> List[Optional[torch.Tensor]]:
-    return [getattr(t, a) for a in KeyedJaggedTensor._fields]
+    values = [getattr(t, a) for a in KeyedJaggedTensor._fields[:-1]]
+    values.append(t._inverse_indices[1] if t._inverse_indices is not None else None)
+
+    return values
 
 
 register_pytree_node(

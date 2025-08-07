@@ -121,7 +121,7 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
     ]:
         assert (
             self._name in self._context.embedding_a2a_requests
-        ), "Invalid EmbeddingPipelinedForward usage, please do not directly call model.forward()"
+        ), "Invalid EmbeddingPipelinedForward usage, please call pipeline.detach() before torch.no_grad() and/or  model.forward()"
 
         ctx = self._context.module_contexts.pop(self._name)
         cur_stream = torch.get_device_module(self._device).current_stream()
