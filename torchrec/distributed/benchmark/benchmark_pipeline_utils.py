@@ -16,24 +16,14 @@ Adding New Model Support:
     3. Add model-specific params to ModelSelectionConfig and create_model_config's arguments in benchmark_train_pipeline.py
 """
 
-import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
-from typing import Any, cast, Dict, List, Optional, Tuple, Type, Union
+from typing import Dict, List, Optional, Type, Union
 
 import torch
-import torch.distributed as dist
-from torch import nn, optim
-from torch.optim import Optimizer
-from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel
-from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
-from torchrec.distributed.planner.constants import NUM_POOLINGS, POOLING_FACTOR
-from torchrec.distributed.planner.planners import HeteroEmbeddingShardingPlanner
-from torchrec.distributed.planner.types import ParameterConstraints
+from torch import nn
 from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.distributed.test_utils.test_model import (
-    TestEBCSharder,
     TestSparseNN,
     TestTowerCollectionSparseNN,
     TestTowerSparseNN,
@@ -47,7 +37,6 @@ from torchrec.distributed.train_pipeline.train_pipelines import (
     PrefetchTrainPipelineSparseDist,
     TrainPipelineSemiSync,
 )
-from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingType
 from torchrec.models.deepfm import SimpleDeepFMNNWrapper
 from torchrec.models.dlrm import DLRMWrapper
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -248,55 +237,6 @@ def create_model_config(model_name: str, **kwargs) -> BaseModelConfig:
     return model_class(**filtered_kwargs)
 
 
-def generate_tables(
-    num_unweighted_features: int,
-    num_weighted_features: int,
-    embedding_feature_dim: int,
-) -> Tuple[
-    List[EmbeddingBagConfig],
-    List[EmbeddingBagConfig],
-]:
-    """
-    Generate embedding bag configurations for both unweighted and weighted features.
-
-    This function creates two lists of EmbeddingBagConfig objects:
-    1. Unweighted tables: Named as "table_{i}" with feature names "feature_{i}"
-    2. Weighted tables: Named as "weighted_table_{i}" with feature names "weighted_feature_{i}"
-
-    For both types, the number of embeddings scales with the feature index,
-    calculated as max(i + 1, 100) * 1000.
-
-    Args:
-        num_unweighted_features (int): Number of unweighted features to generate.
-        num_weighted_features (int): Number of weighted features to generate.
-        embedding_feature_dim (int): Dimension of the embedding vectors.
-
-    Returns:
-        Tuple[List[EmbeddingBagConfig], List[EmbeddingBagConfig]]: A tuple containing
-        two lists - the first for unweighted embedding tables and the second for
-        weighted embedding tables.
-    """
-    tables = [
-        EmbeddingBagConfig(
-            num_embeddings=max(i + 1, 100) * 1000,
-            embedding_dim=embedding_feature_dim,
-            name="table_" + str(i),
-            feature_names=["feature_" + str(i)],
-        )
-        for i in range(num_unweighted_features)
-    ]
-    weighted_tables = [
-        EmbeddingBagConfig(
-            num_embeddings=max(i + 1, 100) * 1000,
-            embedding_dim=embedding_feature_dim,
-            name="weighted_table_" + str(i),
-            feature_names=["weighted_feature_" + str(i)],
-        )
-        for i in range(num_weighted_features)
-    ]
-    return tables, weighted_tables
-
-
 def generate_pipeline(
     pipeline_type: str,
     emb_lookup_stream: str,
@@ -369,156 +309,6 @@ def generate_pipeline(
         Pipeline = _pipeline_cls[pipeline_type]
         # pyre-ignore[28]
         return Pipeline(model=model, optimizer=opt, device=device, apply_jit=apply_jit)
-
-
-def generate_planner(
-    planner_type: str,
-    topology: Topology,
-    tables: Optional[List[EmbeddingBagConfig]],
-    weighted_tables: Optional[List[EmbeddingBagConfig]],
-    sharding_type: ShardingType,
-    compute_kernel: EmbeddingComputeKernel,
-    batch_sizes: List[int],
-    pooling_factors: Optional[List[float]],
-    num_poolings: Optional[List[float]],
-) -> Union[EmbeddingShardingPlanner, HeteroEmbeddingShardingPlanner]:
-    """
-    Generate an embedding sharding planner based on the specified configuration.
-
-    Args:
-        planner_type: Type of planner to use ("embedding" or "hetero")
-        topology: Network topology for distributed training
-        tables: List of unweighted embedding tables
-        weighted_tables: List of weighted embedding tables
-        sharding_type: Strategy for sharding embedding tables
-        compute_kernel: Compute kernel to use for embedding tables
-        batch_sizes: Sizes of each batch
-        pooling_factors: Pooling factors for each feature of the table
-        num_poolings: Number of poolings for each feature of the table
-
-    Returns:
-        An instance of EmbeddingShardingPlanner or HeteroEmbeddingShardingPlanner
-
-    Raises:
-        RuntimeError: If an unknown planner type is specified
-    """
-    # Create parameter constraints for tables
-    constraints = {}
-    num_batches = len(batch_sizes)
-
-    if pooling_factors is None:
-        pooling_factors = [POOLING_FACTOR] * num_batches
-
-    if num_poolings is None:
-        num_poolings = [NUM_POOLINGS] * num_batches
-
-    assert (
-        len(pooling_factors) == num_batches and len(num_poolings) == num_batches
-    ), "The length of pooling_factors and num_poolings must match the number of batches."
-
-    if tables is not None:
-        for table in tables:
-            constraints[table.name] = ParameterConstraints(
-                sharding_types=[sharding_type.value],
-                compute_kernels=[compute_kernel.value],
-                device_group="cuda",
-                pooling_factors=pooling_factors,
-                num_poolings=num_poolings,
-                batch_sizes=batch_sizes,
-            )
-
-    if weighted_tables is not None:
-        for table in weighted_tables:
-            constraints[table.name] = ParameterConstraints(
-                sharding_types=[sharding_type.value],
-                compute_kernels=[compute_kernel.value],
-                device_group="cuda",
-                pooling_factors=pooling_factors,
-                num_poolings=num_poolings,
-                batch_sizes=batch_sizes,
-                is_weighted=True,
-            )
-
-    if planner_type == "embedding":
-        return EmbeddingShardingPlanner(
-            topology=topology,
-            constraints=constraints if constraints else None,
-        )
-    elif planner_type == "hetero":
-        topology_groups = {"cuda": topology}
-        return HeteroEmbeddingShardingPlanner(
-            topology_groups=topology_groups,
-            constraints=constraints if constraints else None,
-        )
-    else:
-        raise RuntimeError(f"Unknown planner type: {planner_type}")
-
-
-def generate_sharded_model_and_optimizer(
-    model: nn.Module,
-    sharding_type: str,
-    kernel_type: str,
-    pg: dist.ProcessGroup,
-    device: torch.device,
-    fused_params: Dict[str, Any],
-    dense_optimizer: str,
-    dense_lr: float,
-    dense_momentum: Optional[float],
-    dense_weight_decay: Optional[float],
-    planner: Optional[
-        Union[
-            EmbeddingShardingPlanner,
-            HeteroEmbeddingShardingPlanner,
-        ]
-    ] = None,
-) -> Tuple[nn.Module, Optimizer]:
-
-    sharder = TestEBCSharder(
-        sharding_type=sharding_type,
-        kernel_type=kernel_type,
-        fused_params=fused_params,
-    )
-    sharders = [cast(ModuleSharder[nn.Module], sharder)]
-
-    # Use planner if provided
-    plan = None
-    if planner is not None:
-        if pg is not None:
-            plan = planner.collective_plan(model, sharders, pg)
-        else:
-            plan = planner.plan(model, sharders)
-
-    sharded_model = DistributedModelParallel(
-        module=copy.deepcopy(model),
-        env=ShardingEnv.from_process_group(pg),
-        init_data_parallel=True,
-        device=device,
-        sharders=sharders,
-        plan=plan,
-    ).to(device)
-
-    # Get dense parameters
-    dense_params = [
-        param
-        for name, param in sharded_model.named_parameters()
-        if "sparse" not in name
-    ]
-
-    # Create optimizer based on the specified type
-    optimizer_class = getattr(optim, dense_optimizer)
-
-    # Create optimizer with momentum and/or weight_decay if provided
-    optimizer_kwargs = {"lr": dense_lr}
-
-    if dense_momentum is not None:
-        optimizer_kwargs["momentum"] = dense_momentum
-
-    if dense_weight_decay is not None:
-        optimizer_kwargs["weight_decay"] = dense_weight_decay
-
-    optimizer = optimizer_class(dense_params, **optimizer_kwargs)
-
-    return sharded_model, optimizer
 
 
 def generate_data(
