@@ -194,9 +194,13 @@ class CountBasedEvictionPolicy(VirtualTableEvictionPolicy):
         15  # eviction threshold for count based eviction policy. 0 means no eviction
     )
     decay_rate: float = 0.99  # default decay by default
-    inference_eviction_threshold: int = (
-        eviction_threshold  # eviction threshold for inference count based eviction policy. 0 means no eviction
+    inference_eviction_threshold: Optional[int] = (
+        None  # eviction threshold for inference count based eviction policy. 0 means no eviction
     )
+
+    def __post_init__(self) -> None:
+        if self.inference_eviction_threshold is None:
+            self.inference_eviction_threshold = self.eviction_threshold
 
 
 @dataclass
@@ -206,7 +210,11 @@ class TimestampBasedEvictionPolicy(VirtualTableEvictionPolicy):
     """
 
     eviction_ttl_mins: int = 24 * 60  # 1 day. 0 means no eviction
-    inference_eviction_ttl_mins: int = eviction_ttl_mins  # 0 means no eviction
+    inference_eviction_ttl_mins: Optional[int] = None  # 0 means no eviction
+
+    def __post_init__(self) -> None:
+        if self.inference_eviction_ttl_mins is None:
+            self.inference_eviction_ttl_mins = self.eviction_ttl_mins
 
 
 @dataclass
@@ -220,13 +228,20 @@ class CountTimestampMixedEvictionPolicy(VirtualTableEvictionPolicy):
     )
     decay_rate: float = 0.99  # default decay by default
     eviction_ttl_mins: int = 24 * 60  # 1 day. 0 means no eviction based on timestamp
-    inference_eviction_threshold: int = (
-        eviction_threshold  # eviction threshold for inference count based eviction policy. 0 means no eviction based on count
+    inference_eviction_threshold: Optional[int] = (
+        None  # eviction threshold for inference count based eviction policy. 0 means no eviction based on count
     )
 
-    inference_eviction_ttl_mins: int = (
-        eviction_ttl_mins  # 0 means no eviction based on timestamp
+    inference_eviction_ttl_mins: Optional[int] = (
+        None  # 0 means no eviction based on timestamp
     )
+
+    def __post_init__(self) -> None:
+        if self.inference_eviction_ttl_mins is None:
+            self.inference_eviction_ttl_mins = self.eviction_ttl_mins
+
+        if self.inference_eviction_threshold is None:
+            self.inference_eviction_threshold = self.eviction_threshold
 
 
 @dataclass
@@ -238,7 +253,11 @@ class FeatureL2NormBasedEvictionPolicy(VirtualTableEvictionPolicy):
     eviction_threshold: float = (
         0.0  # eviction threshold for feature l2 norm based eviction policy. 0.0 means no eviction
     )
-    inference_eviction_threshold: float = eviction_threshold
+    inference_eviction_threshold: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.inference_eviction_threshold is None:
+            self.inference_eviction_threshold = self.eviction_threshold
 
 
 @dataclass
