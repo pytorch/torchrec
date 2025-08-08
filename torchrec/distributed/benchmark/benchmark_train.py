@@ -17,15 +17,16 @@ from functools import partial
 from typing import List, Optional, Tuple
 
 import torch
-
 from torchrec.distributed.benchmark.benchmark_utils import (
-    benchmark_module,
     BenchmarkResult,
     CompileMode,
-    get_tables,
     init_argparse_and_args,
     set_embedding_config,
     write_report,
+)
+from torchrec.distributed.benchmark.embedding_collection_wrappers import (
+    benchmark_ebc_module,
+    get_tables,
 )
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel, ShardingType
 from torchrec.distributed.test_utils.test_model import TestEBCSharder
@@ -106,7 +107,7 @@ def benchmark_ebc(
 
     args_kwargs["variable_batch_embeddings"] = variable_batch_embeddings
 
-    return benchmark_module(
+    return benchmark_ebc_module(
         module=module,
         sharder=sharder,
         sharding_types=BENCH_SHARDING_TYPES,

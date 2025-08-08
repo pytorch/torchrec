@@ -29,6 +29,7 @@ from typing import (
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_embedding_configs import EmbOptimType as OptimType
 from fbgemm_gpu.split_table_batched_embeddings_ops_common import (
     BackendType,
     EvictionPolicy,
@@ -432,29 +433,25 @@ class ZeroCollisionKeyValueEmbeddingFusedOptimizer(FusedOptimizer):
         all_optimizer_states = emb_module.get_optimizer_state(
             sorted_id_tensor=sorted_id_tensors,
         )
-        opt_param_list = [param["momentum1"] for param in all_optimizer_states]
+
         emb_table_config_copy = copy.deepcopy(self._config.embedding_tables)
         for emb_table in emb_table_config_copy:
             emb_table.local_metadata.placement._device = torch.device("cpu")
-        opt_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy, opt_param_list, self._pg
-        )
 
-        for (
-            emb_config,
-            sharded_weight,
-            opt_sharded_t,
-        ) in zip(
+        for emb_config, sharded_weight, opt_state in zip(
             emb_table_config_copy,
             sharded_embedding_weights_by_table,
-            opt_sharded_t_list,
+            all_optimizer_states,
         ):
             param_key = emb_config.name + ".weight"
             state[sharded_weight] = {}
             param_group["params"].append(sharded_weight)
             params[param_key] = sharded_weight
-
-            state[sharded_weight][f"{emb_config.name}.momentum1"] = opt_sharded_t
+            for key, value in opt_state.items():
+                opt_sharded_t = create_virtual_sharded_tensors(
+                    [emb_config], [value], self._pg
+                )[0]
+                state[sharded_weight][f"{emb_config.name}.{key}"] = opt_sharded_t
 
         super().__init__(params, state, [param_group])
 
