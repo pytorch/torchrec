@@ -149,7 +149,9 @@ class GradientClippingOptimizer(OptimizerWrapper):
         sharded_grads = {
             pgs: _get_grads(dist_params) for pgs, dist_params in sharded_params.items()
         }
-        all_grads.extend(*sharded_grads.values())
+
+        for grads in sharded_grads.values():
+            all_grads.extend(grads)
 
         # Process replicated parameters and gradients
         replicate_grads = _get_grads(replicate_params)
