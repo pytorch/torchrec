@@ -1135,11 +1135,16 @@ def _use_segment_sum_csr(stride_per_key: List[int]) -> bool:
         return False
 
     elements_per_segment = sum(stride_per_key) / len(stride_per_key)
-    segment_threshold = int(
+    segment_threshold_float = (
         1.39771
         + 0.0000312222 * elements_per_segment
         + 1.63949e-10 * elements_per_segment**2
     )
+    if not torch.jit.is_scripting() and is_non_strict_exporting():
+        segment_threshold = torch.sym_int(segment_threshold_float)
+    else:
+        segment_threshold = int(segment_threshold_float)
+
     return len(stride_per_key) >= segment_threshold
 
 
