@@ -33,9 +33,6 @@ from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
     DLRMConfig,
     generate_data,
     generate_pipeline,
-    generate_planner,
-    generate_sharded_model_and_optimizer,
-    generate_tables,
     TestSparseNNConfig,
     TestTowerCollectionSparseNNConfig,
     TestTowerSparseNNConfig,
@@ -44,6 +41,11 @@ from torchrec.distributed.benchmark.benchmark_utils import (
     benchmark_func,
     BenchmarkResult,
     cmd_conf,
+    CPUMemoryStats,
+    generate_planner,
+    generate_sharded_model_and_optimizer,
+    generate_tables,
+    GPUMemoryStats,
 )
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -255,7 +257,7 @@ def run_pipeline(
     table_config: EmbeddingTablesConfig,
     pipeline_config: PipelineConfig,
     model_config: BaseModelConfig,
-) -> List[BenchmarkResult]:
+) -> BenchmarkResult:
 
     tables, weighted_tables = generate_tables(
         num_unweighted_features=table_config.num_unweighted_features,
@@ -263,7 +265,7 @@ def run_pipeline(
         embedding_feature_dim=table_config.embedding_feature_dim,
     )
 
-    return run_multi_process_func(
+    benchmark_res_per_rank = run_multi_process_func(
         func=runner,
         world_size=run_option.world_size,
         tables=tables,
@@ -272,6 +274,28 @@ def run_pipeline(
         model_config=model_config,
         pipeline_config=pipeline_config,
     )
+
+    # Combine results from all ranks into a single BenchmarkResult
+    # Use timing data from rank 0, combine memory stats from all ranks
+    world_size = run_option.world_size
+
+    total_benchmark_res = BenchmarkResult(
+        short_name=benchmark_res_per_rank[0].short_name,
+        gpu_elapsed_time=benchmark_res_per_rank[0].gpu_elapsed_time,
+        cpu_elapsed_time=benchmark_res_per_rank[0].cpu_elapsed_time,
+        gpu_mem_stats=[GPUMemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
+        cpu_mem_stats=[CPUMemoryStats(rank, 0) for rank in range(world_size)],
+        rank=0,
+    )
+
+    for res in benchmark_res_per_rank:
+        # Each rank's BenchmarkResult contains 1 GPU and 1 CPU memory measurement
+        if len(res.gpu_mem_stats) > 0:
+            total_benchmark_res.gpu_mem_stats[res.rank] = res.gpu_mem_stats[0]
+        if len(res.cpu_mem_stats) > 0:
+            total_benchmark_res.cpu_mem_stats[res.rank] = res.cpu_mem_stats[0]
+
+    return total_benchmark_res
 
 
 def runner(
