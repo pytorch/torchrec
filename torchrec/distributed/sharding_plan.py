@@ -626,13 +626,21 @@ def column_wise(
     ranks: Optional[List[int]] = None,
     size_per_rank: Optional[List[int]] = None,
     compute_kernel: Optional[str] = None,
+    device_types: Optional[List[str]] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::COLUMN_WISE` for construct_module_sharding_plan.
-    Table will the sharded column-wise evenly across specified ranks (and can reuse ranks).
+    Table will be sharded column-wise across specified ranks (and can reuse ranks).
 
     Args:
-    ranks (List[int]): ranks to place columns
+        ranks (Optional[List[int]]): Ranks to place columns. Required if size_per_rank is None.
+        size_per_rank (Optional[List[int]]): List specifying the number of columns per rank.
+            If provided, the columns will be distributed according to these sizes.
+        device_types (Optional[List[str]]): List of device types (e.g., "cpu", "cuda") for each shard.
+            Used to specify different device placements for different shards.
+
+    Returns:
+        ParameterShardingGenerator: A function that generates parameter sharding configuration.
 
     Example::
 
@@ -652,6 +660,23 @@ def column_wise(
         device_type: str,
         sharder: ModuleSharder[nn.Module],
     ) -> ParameterSharding:
+        """
+        Internal function that generates the parameter sharding configuration.
+
+        Args:
+            param: The parameter tensor to be sharded.
+            local_size: Number of devices in the local process group.
+            world_size: Total number of devices across all process groups.
+            device_type: Type of device (e.g., "cuda", "cpu").
+            sharder: The module sharder instance.
+
+        Returns:
+            ParameterSharding: The sharding configuration for the parameter.
+
+        Raises:
+            ValueError: If the parameter cannot be evenly divided across ranks or
+                if the specified sizes cannot fit the tensor.
+        """
         if size_per_rank is None:
             assert ranks is not None
 
@@ -688,6 +713,17 @@ def column_wise(
                     f"Cannot fit tensor of {rows, cols} into sizes_ranks_placements = {size_per_rank}"
                 )
 
+        placements: List[str] = []
+        if device_types is not None:
+            assert len(device_types) == len(
+                size_offset_ranks
+            ), "device_types must be the same length as ranks"
+            index: int = 0
+            for device in device_types:
+                placements.append(placement_helper(device, index, index))
+                if device != "cpu":
+                    index += 1
+
         return _get_parameter_sharding(
             param,
             ShardingType.COLUMN_WISE.value,
@@ -695,6 +731,7 @@ def column_wise(
             local_size,
             device_type,
             sharder,
+            placements=placements if placements else None,
             compute_kernel=compute_kernel,
         )
 
