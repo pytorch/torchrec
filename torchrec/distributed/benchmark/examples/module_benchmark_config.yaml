@@ -1,0 +1,27 @@
+# Example YAML configuration for module-level benchmarking
+# Usage: python -m torchrec.distributed.benchmark.unified_benchmark_runner --yaml_config=module_benchmark_config.yaml
+
+UnifiedBenchmarkConfig:
+  benchmark_type: "module"
+  module_path: "torchrec.models.deepfm"
+  module_class: "SimpleDeepFMNNWrapper"
+  module_kwargs:
+    hidden_layer_size: 20
+    deep_fm_dimension: 5
+
+RunOptions:
+  world_size: 2
+  num_batches: 10
+  sharding_type: "table_wise"
+  compute_kernel: "fused"
+  input_type: "kjt"
+  planner_type: "embedding"
+  dense_optimizer: "SGD"
+  dense_lr: 0.1
+  sparse_optimizer: "EXACT_ADAGRAD"
+  sparse_lr: 0.1
+
+EmbeddingTablesConfig:
+  num_unweighted_features: 100
+  num_weighted_features: 100
+  embedding_feature_dim: 128

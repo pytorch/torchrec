@@ -22,7 +22,7 @@ import os
 import resource
 import time
 import timeit
-from dataclasses import dataclass, fields, is_dataclass, MISSING
+from dataclasses import dataclass, field, fields, is_dataclass, MISSING
 from enum import Enum
 from typing import (
     Any,
@@ -138,6 +138,25 @@ class CPUMemoryStats:
 
     def __str__(self) -> str:
         return f"Rank {self.rank}: CPU Memory Peak RSS: {self.peak_rss_mbs/1000:.2f} GB"
+
+
+@dataclass
+class ModuleBenchmarkConfig:
+    """Configuration for module-level benchmarking."""
+
+    module_path: str = ""  # e.g., "torchrec.models.deepfm"
+    module_class: str = ""  # e.g., "SimpleDeepFMNNWrapper"
+    module_kwargs: Dict[str, Any] = field(
+        default_factory=dict
+    )  # Additional kwargs for module instantiation
+    num_float_features: int = 0
+    sharding_type: ShardingType = ShardingType.TABLE_WISE
+    planner_type: str = "embedding"
+    world_size: int = 2
+    num_benchmarks: int = 5
+    batch_size: int = 2048
+    compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.FUSED
+    device_type: str = "cuda"
 
 
 @dataclass
@@ -728,8 +747,9 @@ def _init_module_and_run_benchmark(
         def _func_to_benchmark(
             model: torch.nn.Module, bench_inputs: List[KeyedJaggedTensor]
         ) -> None:
-            for bench_input in bench_inputs:
-                model(bench_input)
+            with torch.inference_mode():
+                for bench_input in bench_inputs:
+                    model(bench_input)
 
         name = f"{sharding_type.value}-{planner_type}"
 
@@ -828,6 +848,7 @@ def benchmark_module(
     if weighted_tables is None:
         weighted_tables = []
 
+    # Use multiprocessing for distributed benchmarking (always assume train mode)
     res = multi_process_benchmark(
         callable=_init_module_and_run_benchmark,
         module=module,
