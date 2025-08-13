@@ -189,17 +189,31 @@ class EmbeddingEnumerator(Enumerator):
                         sharder.compute_kernels(sharding_type, self._compute_device),
                         sharding_type,
                     ):
-                        (
-                            shard_sizes,
-                            shard_offsets,
-                        ) = calculate_shard_sizes_and_offsets(
-                            tensor=param,
-                            world_size=self._world_size,
-                            local_world_size=self._local_world_size,
-                            sharding_type=sharding_type,
-                            col_wise_shard_dim=col_wise_shard_dim,
-                            device_memory_sizes=self._device_memory_sizes,
-                        )
+                        try:
+                            (
+                                shard_sizes,
+                                shard_offsets,
+                            ) = calculate_shard_sizes_and_offsets(
+                                tensor=param,
+                                world_size=self._world_size,
+                                local_world_size=self._local_world_size,
+                                sharding_type=sharding_type,
+                                col_wise_shard_dim=col_wise_shard_dim,
+                                device_memory_sizes=self._device_memory_sizes,
+                            )
+                        except ZeroDivisionError as e:
+                            # Re-raise with additional context about the table and module
+                            raise ValueError(
+                                f"Failed to calculate sharding plan: {str(e)} "
+                                f"Context: table_name='{name}', module_path='{child_path}', "
+                                f"module_type='{type(child_module).__name__}', "
+                                f"sharder='{sharder.__class__.__name__}', "
+                                f"tensor.shape={param.shape}, sharding_type='{sharding_type}', "
+                                f"compute_kernel='{compute_kernel}', world_size={self._world_size}, "
+                                f"local_world_size={self._local_world_size}, "
+                                f"col_wise_shard_dim={col_wise_shard_dim}, "
+                                f"compute_device='{self._compute_device}'"
+                            ) from e
                         dependency = None
                         if isinstance(child_module, EmbeddingTower):
                             dependency = child_path
