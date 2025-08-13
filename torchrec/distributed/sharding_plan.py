@@ -268,23 +268,7 @@ def _calculate_cw_shard_sizes_and_offsets(
     rows: int,
     col_wise_shard_dim: Optional[int] = None,
 ) -> Tuple[List[List[int]], List[List[int]]]:
-    block_size: int = min(
-        (
-            _find_base_dim(col_wise_shard_dim, columns)
-            if col_wise_shard_dim
-            else _find_base_dim(MIN_CW_DIM, columns)
-        ),
-        columns,
-    )
-
-    if columns % block_size != 0:
-        warnings.warn(
-            f"Dim of {columns} cannot be evenly divided with column wise shard"
-            "dim {col_wise_shard_dim}, overriding block_size to embedding_dim={columns}",
-            UserWarning,
-            stacklevel=2,
-        )
-        block_size = columns
+    block_size = _get_block_size_for_cw_shard(columns, col_wise_shard_dim)
 
     num_col_wise_shards, _residual = divmod(columns, block_size)
 
