@@ -232,7 +232,7 @@ class EmbeddingStats(Stats):
                 stats[rank]["input_sizes"] += input_sizes[i]
                 stats[rank]["output_sizes"] += output_sizes[i]
 
-        used_hbm, used_ddr, perf = _compute_mem_usage_and_perf(
+        sparse_hbm, used_hbm, used_ddr, perf = _compute_mem_usage_and_perf(
             topology=topology,
             best_plan=best_plan,
             dense_storage=dense_storage,
@@ -322,7 +322,7 @@ class EmbeddingStats(Stats):
                 )
 
                 # Max perf and HBM to help root cause imbalance
-                self._log_max_perf_and_max_hbm(perf, used_hbm, best_plan)
+                self._log_max_perf_and_max_hbm(perf, sparse_hbm, used_hbm, best_plan)
             self._log_storage_reservation_stats(
                 storage_reservation,
                 topology,
@@ -449,7 +449,11 @@ class EmbeddingStats(Stats):
             )
 
     def _log_max_perf_and_max_hbm(
-        self, perfs: List[Perf], used_hbm: List[int], best_plan: List[ShardingOption]
+        self,
+        perfs: List[Perf],
+        sparse_hbm: List[int],
+        used_hbm: List[int],
+        best_plan: List[ShardingOption],
     ) -> None:
         total_perfs = [perf.total for perf in perfs]
 
@@ -505,6 +509,12 @@ class EmbeddingStats(Stats):
         self._stats_table.append(f"#{'' : ^{self._width-2}}#")
         self._stats_table.append(
             f"# {'Estimated Sharding Distribution' : <{self._width-2}}#"
+        )
+        self._stats_table.append(
+            f"# {'Sparse only Max HBM: '+_generate_rank_hbm_stats(sparse_hbm, max) : <{self._width-3}}#"
+        )
+        self._stats_table.append(
+            f"# {'Sparse only Min HBM: '+_generate_rank_hbm_stats(sparse_hbm, min) : <{self._width-3}}#"
         )
         self._stats_table.append(
             f"# {'Max HBM: '+_generate_rank_hbm_stats(used_hbm, max) : <{self._width-3}}#"
@@ -996,8 +1006,8 @@ def _compute_mem_usage_and_perf(
     best_plan: List[ShardingOption],
     dense_storage: Storage,
     kjt_storage: Storage,
-) -> Tuple[List[int], List[int], List[Perf]]:
-    used_hbm = [0] * topology.world_size
+) -> Tuple[List[int], List[int], List[int], List[Perf]]:
+    sparse_hbm = [0] * topology.world_size
     used_ddr = [0] * topology.world_size
     perf = [
         Perf(fwd_compute=0, fwd_comms=0, bwd_compute=0, bwd_comms=0)
@@ -1007,13 +1017,12 @@ def _compute_mem_usage_and_perf(
         for shard in sharding_option.shards:
             shard_storage = cast(Storage, shard.storage)
             rank = cast(int, shard.rank)
-            used_hbm[rank] += shard_storage.hbm
+            sparse_hbm[rank] += shard_storage.hbm
             used_ddr[rank] += shard_storage.ddr
             perf[rank] += cast(Perf, shard.perf)
-
-    used_hbm = [hbm + dense_storage.hbm + kjt_storage.hbm for hbm in used_hbm]
+    used_hbm = [hbm + dense_storage.hbm + kjt_storage.hbm for hbm in sparse_hbm]
     used_ddr = [ddr + dense_storage.ddr + kjt_storage.ddr for ddr in used_ddr]
-    return used_hbm, used_ddr, perf
+    return sparse_hbm, used_hbm, used_ddr, perf
 
 
 def _format_storage_breakdown(storage: Storage) -> str:
