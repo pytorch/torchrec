@@ -53,6 +53,7 @@ from torchrec.distributed.train_pipeline.runtime_forwards import (
     PrefetchPipelinedForward,
 )
 from torchrec.distributed.train_pipeline.tracing import PipelinedPostproc
+from torchrec.distributed.train_pipeline.types import PipelineState
 from torchrec.distributed.train_pipeline.utils import (
     _override_input_dist_forwards,
     _pipeline_detach_model,
@@ -71,6 +72,7 @@ from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.pt2.utils import default_pipeline_input_transformer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Pipelineable
+
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -103,6 +105,10 @@ class TrainPipeline(abc.ABC, Generic[In, Out]):
     @abc.abstractmethod
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
         pass
+
+    def __init__(self) -> None:
+        # pipeline state such as in foward, in backward etc, used in training recover scenarios
+        self._state: PipelineState = PipelineState.IDLE
 
     def sync_embeddings(
         self,
@@ -192,6 +198,7 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._cur_batch: Optional[In] = None
         self._connected = False
         self._data_iter_stopped = False
+        super().__init__()
 
     def _reset_data_iter(self) -> None:
         self._connected = False
@@ -311,6 +318,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
         self._cur_batch: Optional[In] = None
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        self._state = PipelineState.IDLE
         if self._iter == 0:
             # Turn on sync collectives for PT2 pipeline.
             # To have similar logic between compiled/graph_break ranks.
@@ -335,6 +343,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
                 self._optimizer.zero_grad()
 
         with record_function("## forward ##"):
+            self._state = PipelineState.CALL_FWD
             if self._iter == cc.compile_on_iter:
                 logger.info("Compiling model...")
                 if self._pre_compile_fn:
@@ -362,6 +371,7 @@ class TrainPipelinePT2(TrainPipelineBase[In, Out]):
 
         if self._model.training:
             with record_function("## backward ##"):
+                self._state = PipelineState.CALL_BWD
                 torch.sum(losses).backward()
 
             with record_function("## optimizer ##"):
@@ -478,11 +488,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._dmp_collection_sync_interval_batches = (
             dmp_collection_sync_interval_batches
         )
+
         if self._dmp_collection_sync_interval_batches is not None:
             logger.info(
                 f"{self.__class__.__name__}: [Sparse 2D] DMP collection will sync every "
                 f"{self._dmp_collection_sync_interval_batches} batches"
             )
+        super().__init__()
 
         # DEPRECATED FIELDS
         self._batch_i: Optional[In] = None
@@ -634,6 +646,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             batches[2]: i+2 batch, for copy_batch_to_gpu (expecting non-exhausted dataloader iter)
         """
 
+        self._state = PipelineState.IDLE
         # attach the model just in case the user forgets to call it, especially when the user
         # pauses the pipeline.progress and detach the model for other purpose.
         if not self._model_attached:
@@ -667,6 +680,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # forward
         with record_function("## forward ##"):
+            self._state = PipelineState.CALL_FWD
             losses, output = self._model_fwd(self.batches[0])
 
         if self._enqueue_batch_after_forward:
@@ -681,6 +695,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         if self._model.training:
             # backward
+            self._state = PipelineState.CALL_BWD
             self._backward(losses)
 
             self.sync_embeddings(

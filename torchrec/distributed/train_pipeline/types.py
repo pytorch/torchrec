@@ -8,6 +8,7 @@
 # pyre-strict
 import abc
 from dataclasses import dataclass
+from enum import Enum, unique
 from typing import Any, Dict, List, Tuple
 
 
@@ -84,3 +85,14 @@ class CallArgs:
             key: arg.process_steps(initial_input) for key, arg in self.kwargs.items()
         }
         return args, kwargs
+
+
+@unique
+class PipelineState(Enum):
+    """
+    Pipeline state for the train pipeline.
+    """
+
+    IDLE = 0
+    CALL_FWD = 1
+    CALL_BWD = 2
