@@ -25,6 +25,7 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    Union,
 )
 
 import torch
@@ -37,6 +38,9 @@ from torchrec.distributed.embedding_sharding import (
     KJTSplitsAllToAllMeta,
 )
 from torchrec.distributed.embedding_types import KJTList
+from torchrec.distributed.fp_embeddingbag import (
+    ShardedFeatureProcessedEmbeddingBagCollection,
+)
 from torchrec.distributed.model_parallel import DistributedModelParallel, ShardedModule
 from torchrec.distributed.train_pipeline.pipeline_context import (
     EmbeddingTrainPipelineContext,
@@ -62,6 +66,7 @@ from torchrec.distributed.train_pipeline.tracing import (
 )
 from torchrec.distributed.train_pipeline.types import CallArgs  # noqa
 from torchrec.distributed.types import Awaitable
+from torchrec.distributed.utils import _modify_input_for_feature_processor
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
 
@@ -147,6 +152,15 @@ def _start_data_dist(
         # and this info was done in the _rewrite_model by tracing the
         # entire model to get the arg_info_list
         args, kwargs = forward.args.build_args_kwargs(batch)
+        if isinstance(module, ShardedFeatureProcessedEmbeddingBagCollection):
+            logger.info("Feature Processor identified, modifying input")
+            for x in args:
+                if isinstance(x, KeyedJaggedTensor):
+                    _modify_input_for_feature_processor(
+                        features=x,
+                        feature_processors=module._feature_processors,
+                        is_collection=module._is_collection,
+                    )
 
         # Start input distribution.
         module_ctx = module.create_context()
@@ -379,6 +393,8 @@ def _rewrite_model(  # noqa C901
             logger.info(f"Module '{node.target}' will be pipelined")
             child = sharded_modules[node.target]
             original_forwards.append(child.forward)
+            # Set pipelining flag on the child module
+            child._is_pipelined = True  # pyre-ignore[16]
             # pyre-ignore[8] Incompatible attribute type
             child.forward = pipelined_forward(
                 node.target,

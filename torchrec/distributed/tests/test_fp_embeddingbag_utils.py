@@ -18,6 +18,7 @@ from torchrec.distributed.fp_embeddingbag import (
 )
 from torchrec.distributed.test_utils.test_model import TestEBCSharder
 from torchrec.distributed.types import QuantizedCommCodecs
+from torchrec.fb.modules.feature_processor_ import IDSBucketizeWeightsModule
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.feature_processor_ import (
@@ -64,7 +65,7 @@ class SparseArch(nn.Module):
                         Dict[str, FeatureProcessor],
                         {
                             feature_name: PositionWeightedModule(
-                                max_feature_length=max_feature_length
+                                max_feature_length=max_feature_length,
                             )
                             for feature_name, max_feature_length in zip(
                                 feature_names, max_feature_lengths
@@ -86,7 +87,12 @@ class SparseArch(nn.Module):
         pred = torch.cat(
             [
                 fp_ebc_out[key]
-                for key in ["feature_0", "feature_1", "feature_2", "feature_3"]
+                for key in [
+                    "feature_0",
+                    "feature_1",
+                    "feature_2",
+                    "feature_3",
+                ]
             ],
             dim=1,
         )
