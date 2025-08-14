@@ -1130,7 +1130,7 @@ def _use_segment_sum_csr(stride_per_key: List[int]) -> bool:
     per segment that match performance between the kernel and PyTorch solution, to
     determine the threshold of when to use `segment_sum_csr`.
     """
-    if is_torchdynamo_compiling():
+    if is_pt2_compiling():
         # dynamo symbolic shapes can not pass this condition without concrete stride values
         return False
 
