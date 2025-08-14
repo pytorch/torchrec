@@ -1028,6 +1028,9 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 if sharder.fused_params
                 else KV_CACHING_RATIO
             )
+            use_virtual_table: bool = (
+                constraints.use_virtual_table if constraints else False
+            )
 
             # hardcoded as 8 bytes
             # input indices can be of int32, but in TBE they get converted to int64 anyway
@@ -1073,6 +1076,7 @@ class EmbeddingStorageEstimator(ShardEstimator):
                 multipass_prefetch_max_pass=mpp_conf.num_passes if mpp_conf else None,
                 key_value_params=key_value_params,
                 kv_cache_load_factor=kv_cache_load_factor,
+                use_virtual_table=use_virtual_table,
             )
             for shard, storage in zip(sharding_option.shards, shard_storages):
                 shard.storage = storage
@@ -1143,6 +1147,7 @@ def calculate_shard_storages(
     multipass_prefetch_max_pass: Optional[int] = None,
     key_value_params: Optional[KeyValueParams] = None,
     kv_cache_load_factor: float = KV_CACHING_RATIO,
+    use_virtual_table: bool = False,
 ) -> List[Storage]:
     """
     Calculates estimated storage sizes for each sharded tensor, comprised of input,
@@ -1223,11 +1228,17 @@ def calculate_shard_storages(
         is_inference=is_inference,
     )
 
-    if compute_kernel in {
-        EmbeddingComputeKernel.KEY_VALUE.value,
-        EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
-        EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
-    }:
+    if (
+        compute_kernel
+        in {
+            EmbeddingComputeKernel.KEY_VALUE.value,
+            EmbeddingComputeKernel.SSD_VIRTUAL_TABLE.value,
+            EmbeddingComputeKernel.DRAM_VIRTUAL_TABLE.value,
+        }
+        or use_virtual_table
+    ):
+        # KVZCH does not have dedicated inference compute kernel, so we use use_virtual_table
+        # to settup ddr_specific_sizes
         key_value_params = key_value_params or KeyValueParams(
             max_l1_cache_size=0, l2_cache_size=0
         )
