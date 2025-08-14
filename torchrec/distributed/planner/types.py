@@ -722,6 +722,7 @@ class ParameterConstraints:
             or a gpu device.
         key_value_params (Optional[KeyValueParams]): key value params for SSD TBE, either for
             SSD or PS.
+        use_virtual_table (bool): is virtual table enabled for this table.
     """
 
     sharding_types: Optional[List[str]] = None
@@ -741,6 +742,7 @@ class ParameterConstraints:
     output_dtype: Optional[DataType] = None
     device_group: Optional[str] = None
     key_value_params: Optional[KeyValueParams] = None
+    use_virtual_table: bool = False
 
     def __hash__(self) -> int:
         hashable_list = [
@@ -759,6 +761,7 @@ class ParameterConstraints:
             self.output_dtype,
             self.device_group,
             self.key_value_params,
+            self.use_virtual_table,
         ]
 
         return hash_sha256_to_int(hashable_list)
