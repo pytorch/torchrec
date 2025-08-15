@@ -68,7 +68,7 @@ jobs:
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
-          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+          pip install --pre fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
         conda run -n build_binary \
           python -c "import fbgemm_gpu"
         echo "fbgemm_gpu succeeded"
