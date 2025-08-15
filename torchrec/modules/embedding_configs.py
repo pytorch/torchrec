@@ -211,6 +211,17 @@ class CountBasedEvictionPolicy(VirtualTableEvictionPolicy):
 
 
 @dataclass
+class FeatureScoreBasedEvictionPolicy(VirtualTableEvictionPolicy):
+    """
+    Feature score based eviction policy for virtual table.
+    """
+
+    decay_rate: float = 0.99  # default decay by default #TODO: Change to real value
+    max_training_id_num_per_rank: int = 0  # max number of training ids per rank
+    target_eviction_percent: float = 0.0  # target eviction percent
+
+
+@dataclass
 class TimestampBasedEvictionPolicy(VirtualTableEvictionPolicy):
     """
     Timestamp based eviction policy for virtual table.
