@@ -66,6 +66,7 @@ class DataType(Enum):
     UINT8 = "UINT8"
     INT4 = "INT4"
     INT2 = "INT2"
+    NFP8 = "NFP8"
 
     def __str__(self) -> str:
         return self.value

@@ -19,10 +19,15 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
+    SparseType,
+    SplitTableBatchedEmbeddingBagsCodegen,
+)
 from torch import nn
 from torch.autograd.profiler import record_function
 from torchrec import optim as trec_optim
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+
 from torchrec.distributed.types import (
     DataType,
     EmbeddingEvent,
@@ -624,3 +629,60 @@ def get_bucket_metadata_from_shard_metadata(
         current_bucket_offset += num_buckets_in_shard
 
     return bucket_metadata
+
+
+def _group_sharded_modules(
+    module: nn.Module,
+) -> List[torch.nn.Module]:
+    # Post init DMP, save the embedding kernels
+    sharded_modules: List[torch.nn.Module] = []
+
+    def _find_sharded_modules(
+        module: torch.nn.Module,
+    ) -> None:
+        if isinstance(module, SplitTableBatchedEmbeddingBagsCodegen):
+            sharded_modules.append(module)
+        if hasattr(module, "_lookups"):
+            # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Module, Tensor]` is
+            #  not a function.
+            for lookup in module._lookups:
+                _find_sharded_modules(lookup)
+            return
+        for _, child in module.named_children():
+            _find_sharded_modules(child)
+
+    _find_sharded_modules(module)
+    return sharded_modules
+
+
+def _quantize_embedding_modules(module: nn.Module, converted_dtype: DataType) -> None:
+    sharded_embs = _group_sharded_modules(module)
+    logger.info(
+        f"convert embedding modules to converted_dtype={converted_dtype.value} quantization"
+    )
+    converted_sparse_dtype = data_type_to_sparse_type(converted_dtype)
+
+    def convert_weights(
+        weights: torch.Tensor,
+        converted_dtype: SparseType,
+    ) -> torch.Tensor:
+        torch_dtype = converted_dtype.as_dtype()
+        new_weights = weights.to(torch_dtype)
+        weights.untyped_storage().resize_(0)
+        return new_weights
+
+    for emb_kernel in sharded_embs:
+        emb_kernel.weights_dev = convert_weights(  # pyre-ignore [16]
+            emb_kernel.weights_dev,  # pyre-ignore [6]
+            converted_sparse_dtype,
+        )
+        emb_kernel.weights_host = convert_weights(  # pyre-ignore [16]
+            emb_kernel.weights_host,  # pyre-ignore [6]
+            converted_sparse_dtype,
+        )
+        emb_kernel.weights_uvm = convert_weights(  # pyre-ignore [16]
+            emb_kernel.weights_uvm,  # pyre-ignore [6]
+            converted_sparse_dtype,
+        )
+
+        emb_kernel.weights_precision = converted_sparse_dtype  # pyre-ignore [16]
