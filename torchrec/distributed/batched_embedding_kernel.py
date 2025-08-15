@@ -1104,10 +1104,22 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
             self.split_embedding_weights(),
         ):
             assert param.shape == (rows, emb_dim)  # pyre-ignore[16]
-            param.data.uniform_(  # pyre-ignore[16]
-                weight_init_min,
-                weight_init_max,
-            )
+            if param.data.dtype in [  # pyre-ignore[16]
+                torch.float8_e4m3fn,
+                torch.float8_e5m2,
+            ]:
+                tmp_param = torch.zeros(
+                    param.shape, device=param.device  # pyre-ignore[16]
+                )
+                tmp_param.uniform_(weight_init_min, weight_init_max).to(
+                    param.data.dtype
+                )
+                param.data.copy_(tmp_param)
+            else:
+                param.data.uniform_(
+                    weight_init_min,
+                    weight_init_max,
+                )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         return self.emb_module(
@@ -1914,10 +1926,22 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
             self.split_embedding_weights(),
         ):
             assert param.shape == (rows, emb_dim)  # pyre-ignore[16]
-            param.data.uniform_(  # pyre-ignore[16]
-                weight_init_min,
-                weight_init_max,
-            )
+            if param.data.dtype in [  # pyre-ignore[16]
+                torch.float8_e4m3fn,
+                torch.float8_e5m2,
+            ]:
+                tmp_param = torch.zeros(
+                    param.shape, device=param.device  # pyre-ignore[16]
+                )
+                tmp_param.uniform_(weight_init_min, weight_init_max).to(
+                    param.data.dtype
+                )
+                param.data.copy_(tmp_param)
+            else:
+                param.data.uniform_(
+                    weight_init_min,
+                    weight_init_max,
+                )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         weights = features.weights_or_none()
@@ -2552,6 +2576,8 @@ class BatchedFusedEmbeddingBag(
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
+            if weights_precision == SparseType.NFP8:
+                fused_params["cache_precision"] = SparseType.FP16
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(

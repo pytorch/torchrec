@@ -13,9 +13,11 @@ import os
 import random
 import unittest
 from typing import cast, List, Optional, Tuple
+from unittest.mock import Mock, patch
 
 import torch
 import torch.distributed as dist
+from fbgemm_gpu.split_table_batched_embeddings_ops_training import SparseType
 from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_sharding import bucketize_kjt_before_all2all
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
@@ -33,6 +35,7 @@ from torchrec.distributed.types import (
     ShardMetadata,
 )
 from torchrec.distributed.utils import (
+    _quantize_embedding_modules,
     add_params_from_parameter_sharding,
     convert_to_fbgemm_types,
     get_bucket_metadata_from_shard_metadata,
@@ -79,6 +82,7 @@ class UtilsTest(unittest.TestCase):
             dense_device=device,
             sparse_device=device,
         )
+
         dmp = DistributedModelParallel(
             module=m,
             init_data_parallel=False,
@@ -93,6 +97,229 @@ class UtilsTest(unittest.TestCase):
             sorted(["_dmp_wrapped_module.over", "_dmp_wrapped_module.dense"]),
         )
         dist.destroy_process_group()
+
+
+class QuantizeEmbeddingModulesTest(unittest.TestCase):
+    def test_quantize_embedding_modules(self) -> None:
+        """Test that _quantize_embedding_modules correctly converts embedding weight tensors."""
+        # Create a mock embedding module that mimics SplitTableBatchedEmbeddingBagsCodegen
+        mock_emb = Mock()
+
+        # Create mock tensors that support the operations we need
+        mock_weights_dev = Mock()
+        mock_weights_dev.dtype = torch.float32
+        mock_weights_dev.to.return_value = Mock()
+        mock_weights_dev.to.return_value.dtype = torch.float16
+        storage_mock_dev = Mock()
+        storage_mock_dev.resize_ = Mock()
+        mock_weights_dev.untyped_storage.return_value = storage_mock_dev
+
+        mock_weights_host = Mock()
+        mock_weights_host.dtype = torch.float32
+        mock_weights_host.to.return_value = Mock()
+        mock_weights_host.to.return_value.dtype = torch.float16
+        storage_mock_host = Mock()
+        storage_mock_host.resize_ = Mock()
+        mock_weights_host.untyped_storage.return_value = storage_mock_host
+
+        mock_weights_uvm = Mock()
+        mock_weights_uvm.dtype = torch.float32
+        mock_weights_uvm.to.return_value = Mock()
+        mock_weights_uvm.to.return_value.dtype = torch.float16
+        storage_mock_uvm = Mock()
+        storage_mock_uvm.resize_ = Mock()
+        mock_weights_uvm.untyped_storage.return_value = storage_mock_uvm
+
+        mock_emb.weights_dev = mock_weights_dev
+        mock_emb.weights_host = mock_weights_host
+        mock_emb.weights_uvm = mock_weights_uvm
+        mock_emb.weights_precision = SparseType.FP32
+
+        # Create a module that contains the mock embedding
+        module = torch.nn.Module()
+
+        # Mock the _group_sharded_modules function to return our mock embedding
+        with patch(
+            "torchrec.distributed.utils._group_sharded_modules"
+        ) as mock_group_sharded:
+            mock_group_sharded.return_value = [mock_emb]
+
+            # Mock the data_type_to_sparse_type function
+            with patch(
+                "torchrec.distributed.utils.data_type_to_sparse_type"
+            ) as mock_convert:
+                mock_sparse_type = Mock()
+                mock_sparse_type.as_dtype.return_value = torch.float16
+                mock_convert.return_value = mock_sparse_type
+
+                # Mock the logger
+                with patch("torchrec.distributed.utils.logger") as mock_logger:
+                    # Call the function with FP16 data type
+                    _quantize_embedding_modules(module, DataType.FP16)
+
+                    # Verify that _group_sharded_modules was called with the module
+                    mock_group_sharded.assert_called_once_with(module)
+
+                    # Verify that data_type_to_sparse_type was called with FP16
+                    mock_convert.assert_called_once_with(DataType.FP16)
+
+                    # Verify that logger.info was called with the expected message
+                    mock_logger.info.assert_called_once_with(
+                        f"convert embedding modules to converted_dtype={DataType.FP16.value} quantization"
+                    )
+
+                    # Verify that .to() was called on each tensor with the correct dtype
+                    mock_weights_dev.to.assert_called_once_with(torch.float16)
+                    mock_weights_host.to.assert_called_once_with(torch.float16)
+                    mock_weights_uvm.to.assert_called_once_with(torch.float16)
+
+                    # Verify that the storage resize was called for each tensor
+                    storage_mock_dev.resize_.assert_called_once_with(0)
+                    storage_mock_host.resize_.assert_called_once_with(0)
+                    storage_mock_uvm.resize_.assert_called_once_with(0)
+
+                    # Verify that weights_precision is correctly set to the converted sparse type
+                    self.assertEqual(mock_emb.weights_precision, mock_sparse_type)
+
+    def test_quantize_embedding_modules_no_sharded_modules(self) -> None:
+        """Test that _quantize_embedding_modules handles modules with no sharded embeddings."""
+        # Create a module with no sharded embeddings
+        module = torch.nn.Module()
+
+        # Mock the _group_sharded_modules function to return empty list
+        with patch(
+            "torchrec.distributed.utils._group_sharded_modules"
+        ) as mock_group_sharded:
+            mock_group_sharded.return_value = []
+
+            # Mock the data_type_to_sparse_type function
+            with patch(
+                "torchrec.distributed.utils.data_type_to_sparse_type"
+            ) as mock_convert:
+                mock_sparse_type = Mock()
+                mock_convert.return_value = mock_sparse_type
+
+                # Mock the logger
+                with patch("torchrec.distributed.utils.logger") as mock_logger:
+                    # Call the function - should not raise any errors
+                    _quantize_embedding_modules(module, DataType.FP16)
+
+                    # Verify that _group_sharded_modules was called
+                    mock_group_sharded.assert_called_once_with(module)
+
+                    # Verify that data_type_to_sparse_type was called
+                    mock_convert.assert_called_once_with(DataType.FP16)
+
+                    # Verify that logger.info was called
+                    mock_logger.info.assert_called_once()
+
+    def test_quantize_embedding_modules_multiple_embeddings(self) -> None:
+        """Test that _quantize_embedding_modules handles multiple embedding modules."""
+        # Create multiple mock embedding modules
+        mock_emb1 = Mock()
+        mock_emb2 = Mock()
+
+        # Create fully mocked tensors for first embedding
+        mock_weights_dev1 = Mock()
+        mock_weights_dev1.dtype = torch.float32
+        mock_weights_dev1.to.return_value = Mock()
+        mock_weights_dev1.to.return_value.dtype = torch.int8
+        storage_mock_dev1 = Mock()
+        storage_mock_dev1.resize_ = Mock()
+        mock_weights_dev1.untyped_storage.return_value = storage_mock_dev1
+
+        mock_weights_host1 = Mock()
+        mock_weights_host1.dtype = torch.float32
+        mock_weights_host1.to.return_value = Mock()
+        mock_weights_host1.to.return_value.dtype = torch.int8
+        storage_mock_host1 = Mock()
+        storage_mock_host1.resize_ = Mock()
+        mock_weights_host1.untyped_storage.return_value = storage_mock_host1
+
+        mock_weights_uvm1 = Mock()
+        mock_weights_uvm1.dtype = torch.float32
+        mock_weights_uvm1.to.return_value = Mock()
+        mock_weights_uvm1.to.return_value.dtype = torch.int8
+        storage_mock_uvm1 = Mock()
+        storage_mock_uvm1.resize_ = Mock()
+        mock_weights_uvm1.untyped_storage.return_value = storage_mock_uvm1
+
+        mock_emb1.weights_dev = mock_weights_dev1
+        mock_emb1.weights_host = mock_weights_host1
+        mock_emb1.weights_uvm = mock_weights_uvm1
+        mock_emb1.weights_precision = SparseType.FP32
+
+        # Create fully mocked tensors for second embedding
+        mock_weights_dev2 = Mock()
+        mock_weights_dev2.dtype = torch.float32
+        mock_weights_dev2.to.return_value = Mock()
+        mock_weights_dev2.to.return_value.dtype = torch.int8
+        storage_mock_dev2 = Mock()
+        storage_mock_dev2.resize_ = Mock()
+        mock_weights_dev2.untyped_storage.return_value = storage_mock_dev2
+
+        mock_weights_host2 = Mock()
+        mock_weights_host2.dtype = torch.float32
+        mock_weights_host2.to.return_value = Mock()
+        mock_weights_host2.to.return_value.dtype = torch.int8
+        storage_mock_host2 = Mock()
+        storage_mock_host2.resize_ = Mock()
+        mock_weights_host2.untyped_storage.return_value = storage_mock_host2
+
+        mock_weights_uvm2 = Mock()
+        mock_weights_uvm2.dtype = torch.float32
+        mock_weights_uvm2.to.return_value = Mock()
+        mock_weights_uvm2.to.return_value.dtype = torch.int8
+        storage_mock_uvm2 = Mock()
+        storage_mock_uvm2.resize_ = Mock()
+        mock_weights_uvm2.untyped_storage.return_value = storage_mock_uvm2
+
+        mock_emb2.weights_dev = mock_weights_dev2
+        mock_emb2.weights_host = mock_weights_host2
+        mock_emb2.weights_uvm = mock_weights_uvm2
+        mock_emb2.weights_precision = SparseType.FP32
+
+        # Create a module
+        module = torch.nn.Module()
+
+        # Mock the _group_sharded_modules function to return both mock embeddings
+        with patch(
+            "torchrec.distributed.utils._group_sharded_modules"
+        ) as mock_group_sharded:
+            mock_group_sharded.return_value = [mock_emb1, mock_emb2]
+
+            # Mock the data_type_to_sparse_type function
+            with patch(
+                "torchrec.distributed.utils.data_type_to_sparse_type"
+            ) as mock_convert:
+                mock_sparse_type = Mock()
+                mock_sparse_type.as_dtype.return_value = torch.int8
+                mock_convert.return_value = mock_sparse_type
+
+                # Call the function
+                _quantize_embedding_modules(module, DataType.INT8)
+
+                # Verify that .to() was called on each tensor with the correct dtype
+                mock_weights_dev1.to.assert_called_once_with(torch.int8)
+                mock_weights_host1.to.assert_called_once_with(torch.int8)
+                mock_weights_uvm1.to.assert_called_once_with(torch.int8)
+
+                mock_weights_dev2.to.assert_called_once_with(torch.int8)
+                mock_weights_host2.to.assert_called_once_with(torch.int8)
+                mock_weights_uvm2.to.assert_called_once_with(torch.int8)
+
+                # Verify that the storage resize was called for each tensor
+                storage_mock_dev1.resize_.assert_called_once_with(0)
+                storage_mock_host1.resize_.assert_called_once_with(0)
+                storage_mock_uvm1.resize_.assert_called_once_with(0)
+
+                storage_mock_dev2.resize_.assert_called_once_with(0)
+                storage_mock_host2.resize_.assert_called_once_with(0)
+                storage_mock_uvm2.resize_.assert_called_once_with(0)
+
+                # Verify that weights_precision is correctly set to the converted sparse type
+                self.assertEqual(mock_emb1.weights_precision, mock_sparse_type)
+                self.assertEqual(mock_emb2.weights_precision, mock_sparse_type)
 
 
 def _compute_translated_lengths(

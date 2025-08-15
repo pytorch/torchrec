@@ -1306,8 +1306,13 @@ class ShardedEmbeddingBagCollection(
                 continue
             assert table_config.init_fn is not None
             param = self.embedding_bags[f"{table_config.name}"].weight
-            # pyre-ignore
-            table_config.init_fn(param)
+            if param.data.dtype in [torch.float8_e4m3fn, torch.float8_e5m2]:
+                tmp_param = torch.zeros(param.shape, device=param.device)  # pyre-ignore
+                table_config.init_fn(tmp_param).to(param.data.dtype)  # pyre-ignore
+                param.data.copy_(tmp_param)  # pyre-ignore
+            else:
+                # pyre-ignore
+                table_config.init_fn(param)
 
             sharding_type = self.module_sharding_plan[table_config.name].sharding_type
             if sharding_type == ShardingType.DATA_PARALLEL.value:
