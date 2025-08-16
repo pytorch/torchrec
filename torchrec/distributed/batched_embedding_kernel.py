@@ -84,6 +84,7 @@ from torchrec.modules.embedding_configs import (
     CountTimestampMixedEvictionPolicy,
     data_type_to_sparse_type,
     FeatureL2NormBasedEvictionPolicy,
+    FeatureScoreBasedEvictionPolicy,
     NoEvictionPolicy,
     pooling_type_to_pooling_mode,
     TimestampBasedEvictionPolicy,
@@ -235,6 +236,9 @@ def _populate_zero_collision_tbe_params(
         counter_thresholds = [0] * len(config.embedding_tables)
         ttls_in_mins = [0] * len(config.embedding_tables)
         counter_decay_rates = [0.0] * len(config.embedding_tables)
+        feature_score_counter_decay_rates = [0.0] * len(config.embedding_tables)
+        max_training_id_num_per_table = [0] * len(config.embedding_tables)
+        target_eviction_percent_per_table = [0.0] * len(config.embedding_tables)
         l2_weight_thresholds = [0.0] * len(config.embedding_tables)
         eviction_strategy = -1
         table_names = [table.name for table in config.embedding_tables]
@@ -250,6 +254,20 @@ def _populate_zero_collision_tbe_params(
                     else:
                         raise ValueError(
                             f"Do not support multiple eviction strategy in one tbe {eviction_strategy} and 1 for tables {table_names}"
+                        )
+                elif isinstance(policy_t, FeatureScoreBasedEvictionPolicy):
+                    feature_score_counter_decay_rates[i] = policy_t.decay_rate
+                    max_training_id_num_per_table[i] = (
+                        policy_t.max_training_id_num_per_rank
+                    )
+                    target_eviction_percent_per_table[i] = (
+                        policy_t.target_eviction_percent
+                    )
+                    if eviction_strategy == -1 or eviction_strategy == 5:
+                        eviction_strategy = 5
+                    else:
+                        raise ValueError(
+                            f"Do not support multiple eviction strategy in one tbe {eviction_strategy} and 5 for tables {table_names}"
                         )
                 elif isinstance(policy_t, TimestampBasedEvictionPolicy):
                     ttls_in_mins[i] = policy_t.eviction_ttl_mins
@@ -288,6 +306,9 @@ def _populate_zero_collision_tbe_params(
             counter_thresholds=counter_thresholds,
             ttls_in_mins=ttls_in_mins,
             counter_decay_rates=counter_decay_rates,
+            feature_score_counter_decay_rates=feature_score_counter_decay_rates,
+            max_training_id_num_per_table=max_training_id_num_per_table,
+            target_eviction_percent_per_table=target_eviction_percent_per_table,
             l2_weight_thresholds=l2_weight_thresholds,
             meta_header_lens=meta_header_lens,
         )
@@ -1104,10 +1125,22 @@ class BaseBatchedEmbedding(BaseEmbedding, Generic[SplitWeightType]):
             self.split_embedding_weights(),
         ):
             assert param.shape == (rows, emb_dim)  # pyre-ignore[16]
-            param.data.uniform_(  # pyre-ignore[16]
-                weight_init_min,
-                weight_init_max,
-            )
+            if param.data.dtype in [  # pyre-ignore[16]
+                torch.float8_e4m3fn,
+                torch.float8_e5m2,
+            ]:
+                tmp_param = torch.zeros(
+                    param.shape, device=param.device  # pyre-ignore[16]
+                )
+                tmp_param.uniform_(weight_init_min, weight_init_max).to(
+                    param.data.dtype
+                )
+                param.data.copy_(tmp_param)
+            else:
+                param.data.uniform_(
+                    weight_init_min,
+                    weight_init_max,
+                )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         return self.emb_module(
@@ -1914,10 +1947,22 @@ class BaseBatchedEmbeddingBag(BaseEmbedding, Generic[SplitWeightType]):
             self.split_embedding_weights(),
         ):
             assert param.shape == (rows, emb_dim)  # pyre-ignore[16]
-            param.data.uniform_(  # pyre-ignore[16]
-                weight_init_min,
-                weight_init_max,
-            )
+            if param.data.dtype in [  # pyre-ignore[16]
+                torch.float8_e4m3fn,
+                torch.float8_e5m2,
+            ]:
+                tmp_param = torch.zeros(
+                    param.shape, device=param.device  # pyre-ignore[16]
+                )
+                tmp_param.uniform_(weight_init_min, weight_init_max).to(
+                    param.data.dtype
+                )
+                param.data.copy_(tmp_param)
+            else:
+                param.data.uniform_(
+                    weight_init_min,
+                    weight_init_max,
+                )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
         weights = features.weights_or_none()
@@ -2552,6 +2597,8 @@ class BatchedFusedEmbeddingBag(
         fused_params = config.fused_params or {}
         if "cache_precision" not in fused_params:
             fused_params["cache_precision"] = weights_precision
+            if weights_precision == SparseType.NFP8:
+                fused_params["cache_precision"] = SparseType.FP16
         self._emb_module: SplitTableBatchedEmbeddingBagsCodegen = (
             SplitTableBatchedEmbeddingBagsCodegen(
                 embedding_specs=list(

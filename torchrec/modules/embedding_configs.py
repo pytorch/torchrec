@@ -64,6 +64,7 @@ DATA_TYPE_NUM_BITS: Dict[DataType, int] = {
     DataType.BF16: 16,
     DataType.INT8: 8,
     DataType.UINT8: 8,
+    DataType.NFP8: 8,
     DataType.INT4: 4,
     DataType.INT2: 2,
 }
@@ -88,6 +89,8 @@ def dtype_to_data_type(dtype: torch.dtype) -> DataType:
         return DataType.INT4
     elif dtype == torch.quint2x4:
         return DataType.INT2
+    elif dtype == torch.float8_e4m3fn:
+        return DataType.NFP8
     else:
         raise Exception(f"Invalid data type {dtype}")
 
@@ -134,6 +137,8 @@ def data_type_to_sparse_type(data_type: DataType) -> SparseType:
         return SparseType.INT4
     elif data_type == DataType.INT2:
         return SparseType.INT2
+    elif data_type == DataType.NFP8:
+        return SparseType.NFP8
     else:
         raise ValueError(f"Invalid DataType {data_type}")
 
@@ -145,6 +150,8 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
         return torch.float16
     elif data_type.value == DataType.BF16.value:
         return torch.bfloat16
+    elif data_type.value == DataType.NFP8.value:
+        return torch.float8_e4m3fn
     elif data_type.value == DataType.INT64.value:
         return torch.int64
     elif data_type.value == DataType.INT32.value:
@@ -201,6 +208,24 @@ class CountBasedEvictionPolicy(VirtualTableEvictionPolicy):
     def __post_init__(self) -> None:
         if self.inference_eviction_threshold is None:
             self.inference_eviction_threshold = self.eviction_threshold
+
+
+@dataclass
+class FeatureScoreBasedEvictionPolicy(VirtualTableEvictionPolicy):
+    """
+    Feature score based eviction policy for virtual table.
+    """
+
+    decay_rate: float = 0.99  # default decay by default #TODO: Change to real value
+    max_training_id_num_per_rank: int = 0  # max number of training ids per rank
+    target_eviction_percent: float = 0.0  # target eviction percent
+    inference_eviction_feature_score_threshold: Optional[float] = (
+        None  # 0 means no eviction
+    )
+
+    def __post_init__(self) -> None:
+        if self.inference_eviction_feature_score_threshold is None:
+            self.inference_eviction_feature_score_threshold = 0
 
 
 @dataclass
