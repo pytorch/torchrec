@@ -57,10 +57,11 @@ from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
 from torchrec.distributed.sharding.dynamic_sharding import (
     get_largest_dims_from_sharding_plan_updates,
+    move_sharded_tensors_to_cpu,
     shards_all_to_all,
     update_module_sharding_plan,
     update_optimizer_state_post_resharding,
-    update_state_dict_post_resharding,
+    update_state_post_resharding,
 )
 from torchrec.distributed.sharding.grid_sharding import GridPooledEmbeddingSharding
 from torchrec.distributed.sharding.rw_sharding import RwPooledEmbeddingSharding
@@ -1377,6 +1378,25 @@ class ShardedEmbeddingBagCollection(
                 device=self._device,
             )
 
+    def _purge_lookups(self) -> None:
+        # Purge old lookups
+        for lookup in self._lookups:
+            # Call purge method if available (for TBE modules)
+            if hasattr(lookup, "purge") and callable(lookup.purge):
+                # Pyre-ignore
+                lookup.purge()
+
+            # For DDP modules, get the underlying module
+            while isinstance(lookup, DistributedDataParallel):
+                lookup = lookup.module
+                if hasattr(lookup, "purge") and callable(lookup.purge):
+                    lookup.purge()
+
+        # Clear the lookups list
+        self._lookups.clear()
+        # Force garbage collection to free memory
+        torch.cuda.empty_cache()
+
     def _create_lookups(
         self,
     ) -> None:
@@ -1723,12 +1743,13 @@ class ShardedEmbeddingBagCollection(
             env (ShardingEnv): The sharding environment for the module.
             device (Optional[torch.device]): The device to place the updated module on.
         """
-
         if env.output_dtensor:
             raise RuntimeError("We do not yet support DTensor for resharding yet")
             return
 
         current_state = self.state_dict()
+        current_state = move_sharded_tensors_to_cpu(current_state)
+        # TODO: improve, checking one would be enough
         has_local_optimizer = len(self._optim._optims) > 0 and all(
             len(i) > 0 for i in self._optim.state_dict()["state"].values()
         )
@@ -1740,22 +1761,18 @@ class ShardedEmbeddingBagCollection(
 
         has_optimizer = self._is_optimizer_enabled(has_local_optimizer, env, device)
 
-        # TODO: Saving lookups tensors to CPU to eventually avoid recreating them completely again
-        # TODO: Ensure lookup tensors are actually being deleted
-        for _, lookup in enumerate(self._lookups):
-            # pyre-ignore
-            lookup.purge()
-
-        # Deleting all lookups
-        self._lookups.clear()
+        # TODO: make sure this is clearing  all lookups
+        self._purge_lookups()
 
         # Get max dim size to enable padding for all_to_all
         max_dim_0, max_dim_1 = get_largest_dims_from_sharding_plan_updates(
             changed_sharding_params
         )
         old_optimizer_state = self._optim.state_dict() if has_local_optimizer else None
+        if old_optimizer_state is not None:
+            move_sharded_tensors_to_cpu(old_optimizer_state)
 
-        local_shard_names_by_src_rank, local_output_tensor = shards_all_to_all(
+        local_shard_names_by_src_rank, local_output_tensor_cpu = shards_all_to_all(
             module=self,
             state_dict=current_state,
             device=device,  # pyre-ignore
@@ -1832,22 +1849,21 @@ class ShardedEmbeddingBagCollection(
         if has_optimizer:
             optimizer_state = update_optimizer_state_post_resharding(
                 old_opt_state=old_optimizer_state,  # pyre-ignore
-                new_opt_state=copy.deepcopy(self._optim.state_dict()),
+                new_opt_state=self._optim.state_dict(),
                 ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-                output_tensor=local_output_tensor,
+                output_tensor=local_output_tensor_cpu,
                 max_dim_0=max_dim_0,
                 extend_shard_name=self.extend_shard_name,
             )
             self._optim.load_state_dict(optimizer_state)
 
-        current_state = update_state_dict_post_resharding(
-            state_dict=current_state,
+        new_state = self.state_dict()
+        current_state = update_state_post_resharding(
+            old_state=current_state,
+            new_state=new_state,
             ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-            output_tensor=local_output_tensor,
-            new_sharding_params=changed_sharding_params,
-            curr_rank=dist.get_rank(),
+            output_tensor=local_output_tensor_cpu,
             extend_shard_name=self.extend_shard_name,
-            max_dim_0=max_dim_0,
             has_optimizer=has_optimizer,
         )
 

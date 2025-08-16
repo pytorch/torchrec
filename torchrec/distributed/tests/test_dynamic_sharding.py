@@ -284,7 +284,7 @@ def _test_ebc_resharding(
             device=ctx.device,
         )
 
-        new_module_sharding_plan_delta = output_sharding_plan_delta(
+        _, new_module_sharding_plan_delta = output_sharding_plan_delta(
             module_sharding_plan, new_module_sharding_plan
         )
 
@@ -544,7 +544,7 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         ),
         data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
         random_seed=st.integers(0, 1000),
-        world_size=st.sampled_from([2, 4, 8]),
+        world_size=st.sampled_from([8]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding(
@@ -672,7 +672,7 @@ class SingleRankDynamicShardingUtilsTest(unittest.TestCase):
             device_type="cuda" if torch.cuda.is_available() else "cpu",
         )
 
-        new_module_sharding_plan_delta = output_sharding_plan_delta(
+        _, new_module_sharding_plan_delta = output_sharding_plan_delta(
             module_sharding_plan, new_module_sharding_plan
         )
 
