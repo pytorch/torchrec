@@ -590,7 +590,7 @@ def dynamic_sharding_test(
             exclude_predfix="sparse.pooled_embedding_arch.embedding_modules._itp_iter",
         )
 
-        new_module_sharding_plan_delta = output_sharding_plan_delta(
+        _, new_module_sharding_plan_delta = output_sharding_plan_delta(
             plan.plan["sparse.ebc"], new_module_sharding_plan  # pyre-ignore
         )
 
