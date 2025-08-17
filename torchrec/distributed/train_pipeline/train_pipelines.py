@@ -143,6 +143,12 @@ class TrainPipeline(abc.ABC, Generic[In, Out]):
             with record_function("## dmp_collection_sync ##"):
                 model.sync()
 
+    def reset(self) -> None:
+        """
+        Reset the pipeline state. Override in subclasses if custom reset logic is needed.
+        """
+        pass
+
 
 @dataclass
 class TorchCompileConfig:
@@ -276,6 +282,9 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
                 self._optimizer.step()
 
         return output
+
+    def reset(self) -> None:
+        self._reset_data_iter()
 
 
 class TrainPipelinePT2(TrainPipelineBase[In, Out]):
@@ -743,6 +752,16 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._original_kjt_dist_forwards = _override_input_dist_forwards(
             self._pipelined_modules
         )
+
+    def reset(self) -> None:
+        self.contexts.clear()
+        self.batches.clear()
+        self._dataloader_exhausted = False
+        self._next_index = 0
+        self._batch_i = None
+        self._batch_ip2 = None
+        self._batch_ip1 = None
+        self._context = self._context_type(version=0)
 
     def _init_pipelined_modules(
         self,
