@@ -226,6 +226,9 @@ class GreedyPerfPartitioner(Partitioner):
             # The topology updates are done after the end of all the placements (the other
             # in the example is just for clarity).
         """
+        logger.info(
+            f"GreedyPerfPartitioner - sort_by: {self._sort_by}, balance_modules: {self._balance_modules}"
+        )
 
         _topology: Topology = copy.deepcopy(storage_constraint)
         minheap_devices: Optional[List[OrderedDeviceHardware]] = None
@@ -587,6 +590,10 @@ class MemoryBalancedPartitioner(Partitioner):
         within the tolerance of the original plan that uses the least amount
         of memory.
         """
+        logger.info(
+            f"MemoryBalancedPartitioner - _max_search_count: {self._max_search_count}, _tolerance: {self._tolerance}, _balance_modules: {self._balance_modules}"
+        )
+
         _perf_model: PerfModel = NoopPerfModel(storage_constraint)
         _partitioner = GreedyPerfPartitioner(
             sort_by=SortBy.PERF, balance_modules=self._balance_modules
