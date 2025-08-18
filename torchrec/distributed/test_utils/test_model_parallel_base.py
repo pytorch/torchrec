@@ -380,19 +380,23 @@ class ModelParallelSingleRankBase(unittest.TestCase):
         m2: DistributedModelParallel,
         batch: ModelInput,
         is_deterministic: bool = True,
+        tolerance: Optional[float] = None,
     ) -> None:
         with torch.no_grad():
             loss1, pred1 = m1(batch)
             loss2, pred2 = m2(batch)
-
         if is_deterministic:
             self.assertTrue(torch.equal(loss1, loss2))
             self.assertTrue(torch.equal(pred1, pred2))
         else:
-            rtol, atol = _get_default_rtol_and_atol(loss1, loss2)
-            torch.testing.assert_close(loss1, loss2, rtol=rtol, atol=atol)
-            rtol, atol = _get_default_rtol_and_atol(pred1, pred2)
-            torch.testing.assert_close(pred1, pred2, rtol=rtol, atol=atol)
+            if tolerance:
+                torch.testing.assert_close(loss1, loss2, rtol=tolerance, atol=tolerance)
+                torch.testing.assert_close(pred1, pred2, rtol=tolerance, atol=tolerance)
+            else:
+                rtol, atol = _get_default_rtol_and_atol(loss1, loss2)
+                torch.testing.assert_close(loss1, loss2, rtol=rtol, atol=atol)
+                rtol, atol = _get_default_rtol_and_atol(pred1, pred2)
+                torch.testing.assert_close(pred1, pred2, rtol=rtol, atol=atol)
 
     def _compare_models(
         self,
@@ -400,6 +404,7 @@ class ModelParallelSingleRankBase(unittest.TestCase):
         m2: DistributedModelParallel,
         is_deterministic: bool = True,
         use_virtual_table: bool = False,
+        tolerance: Optional[float] = None,
     ) -> None:
         sd1 = m1.state_dict()
         sd2 = m2.state_dict()
@@ -437,7 +442,12 @@ class ModelParallelSingleRankBase(unittest.TestCase):
                     if is_deterministic:
                         self.assertTrue(torch.allclose(src_tensor, dst_tensor))
                     else:
-                        rtol, atol = _get_default_rtol_and_atol(src_tensor, dst_tensor)
+                        if tolerance:
+                            rtol, atol = tolerance, tolerance
+                        else:
+                            rtol, atol = _get_default_rtol_and_atol(
+                                src_tensor, dst_tensor
+                            )
                         torch.testing.assert_close(
                             src_tensor, dst_tensor, rtol=rtol, atol=atol
                         )
@@ -453,7 +463,10 @@ class ModelParallelSingleRankBase(unittest.TestCase):
                     if is_deterministic:
                         self.assertTrue(torch.equal(src, dst))
                     else:
-                        rtol, atol = _get_default_rtol_and_atol(src, dst)
+                        if tolerance:
+                            rtol, atol = tolerance, tolerance
+                        else:
+                            rtol, atol = _get_default_rtol_and_atol(src, dst)
                         torch.testing.assert_close(
                             src._local_tensor, dst._local_tensor, rtol=rtol, atol=atol
                         )
@@ -463,7 +476,10 @@ class ModelParallelSingleRankBase(unittest.TestCase):
                 if is_deterministic:
                     self.assertTrue(torch.equal(src, dst))
                 else:
-                    rtol, atol = _get_default_rtol_and_atol(src, dst)
+                    if tolerance:
+                        rtol, atol = tolerance, tolerance
+                    else:
+                        rtol, atol = _get_default_rtol_and_atol(src, dst)
                     torch.testing.assert_close(src, dst, rtol=rtol, atol=atol)
 
 

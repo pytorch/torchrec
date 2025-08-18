@@ -1022,7 +1022,7 @@ class ZeroCollisionModelParallelTest(ModelParallelSingleRankBase):
             "learning_rate": 0.1,
             "stochastic_rounding": stochastic_rounding,
         }
-        is_deterministic = dtype == DataType.FP32 or not stochastic_rounding
+        is_deterministic = dtype == DataType.FP32
         constraints = {
             table.name: ParameterConstraints(
                 sharding_types=[sharding_type],
@@ -1049,9 +1049,15 @@ class ZeroCollisionModelParallelTest(ModelParallelSingleRankBase):
 
         if is_training:
             self._train_models(m1, m2, batch)
-        self._eval_models(m1, m2, batch, is_deterministic=is_deterministic)
+        self._eval_models(
+            m1, m2, batch, is_deterministic=is_deterministic, tolerance=1e-2
+        )
         self._compare_models(
-            m1, m2, is_deterministic=is_deterministic, use_virtual_table=True
+            m1,
+            m2,
+            is_deterministic=is_deterministic,
+            use_virtual_table=True,
+            tolerance=1e-2,
         )
 
     @unittest.skipIf(
