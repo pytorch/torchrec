@@ -47,6 +47,7 @@ from torchrec.distributed.embedding_types import (
     ShardingType,
 )
 from torchrec.distributed.fused_params import (
+    ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION,
     FUSED_PARAM_IS_SSD_TABLE,
     FUSED_PARAM_SSD_TABLE_LIST,
 )
@@ -419,6 +420,20 @@ class ShardedEmbeddingCollection(
         module_fqn: Optional[str] = None,
     ) -> None:
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
+        self._enable_feature_score_weight_accumulation: bool = False
+
+        if (
+            fused_params is not None
+            and ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION in fused_params
+        ):
+            self._enable_feature_score_weight_accumulation = cast(
+                bool, fused_params[ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION]
+            )
+            fused_params.pop(ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION)
+            logger.info(
+                f"EC feature score weight accumulation enabled: {self._enable_feature_score_weight_accumulation}."
+            )
+
         self._module_fqn = module_fqn
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
         self._table_names: List[str] = [
@@ -1321,11 +1336,32 @@ class ShardedEmbeddingCollection(
                     input_feature.offsets().to(torch.int64),
                     input_feature.values().to(torch.int64),
                 )
+                acc_weights = None
+                if (
+                    self._enable_feature_score_weight_accumulation
+                    and input_feature.weights_or_none() is not None
+                ):
+                    source_weights = input_feature.weights()
+                    assert (
+                        source_weights.dtype == torch.float32
+                    ), "Only float32 weights are supported for feature score eviction weights."
+
+                    acc_weights = torch.ops.fbgemm.jagged_acc_weights_and_counts(
+                        source_weights.view(-1),
+                        reverse_indices,
+                        unique_indices.numel(),
+                    )
+
                 dedup_features = KeyedJaggedTensor(
                     keys=input_feature.keys(),
                     lengths=lengths,
                     offsets=offsets,
                     values=unique_indices,
+                    weights=(
+                        acc_weights.view(torch.float64).view(-1)
+                        if acc_weights is not None
+                        else None
+                    ),
                 )
 
                 ctx.input_features.append(input_feature)
