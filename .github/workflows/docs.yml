@@ -59,7 +59,7 @@ jobs:
     - name: Install PyTorch
       shell: bash
       run: |
-        conda run -n build_binary pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
+        conda run -n build_binary pip install torch==2.9.0.dev20250716+cpu --index-url https://download.pytorch.org/whl/nightly/cpu
     - name: Install fbgemm
       run: |
         conda run -n build_binary pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
