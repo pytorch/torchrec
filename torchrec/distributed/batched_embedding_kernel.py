@@ -88,7 +88,6 @@ from torchrec.modules.embedding_configs import (
     NoEvictionPolicy,
     pooling_type_to_pooling_mode,
     TimestampBasedEvictionPolicy,
-    VirtualTableEvictionPolicy,
 )
 from torchrec.optim.fused import (
     EmptyFusedOptimizer,
@@ -1713,7 +1712,11 @@ class ZeroCollisionKeyValueEmbedding(
         self._split_weights_res = None
         self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
 
-        return super().forward(features)
+        return self.emb_module(
+            indices=features.values().long(),
+            offsets=features.offsets().long(),
+            weights=features.weights_or_none(),
+        )
 
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule):
