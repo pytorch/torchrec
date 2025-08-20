@@ -36,6 +36,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
@@ -100,7 +101,9 @@ def initialize_and_test_parameters(
                 )
         elif isinstance(model.state_dict()[key], ShardedTensor):
             if ctx.rank == 0:
-                gathered_tensor = torch.empty_like(embedding_tables.state_dict()[key])
+                gathered_tensor = torch.empty_like(
+                    embedding_tables.state_dict()[key], device=ctx.device
+                )
             else:
                 gathered_tensor = None
 
@@ -108,7 +111,7 @@ def initialize_and_test_parameters(
 
             if ctx.rank == 0:
                 torch.testing.assert_close(
-                    gathered_tensor,
+                    none_throws(gathered_tensor).to("cpu"),
                     embedding_tables.state_dict()[key],
                 )
         elif isinstance(model.state_dict()[key], torch.Tensor):
@@ -160,7 +163,6 @@ class ParameterInitializationTest(MultiProcessTestBase):
 
         # Initialize embedding table on non-meta device, in this case cuda:0
         embedding_tables = EmbeddingCollection(
-            device=torch.device("cuda:0"),
             tables=[
                 EmbeddingConfig(
                     name=table_name,
@@ -210,7 +212,6 @@ class ParameterInitializationTest(MultiProcessTestBase):
 
         # Initialize embedding bag on non-meta device, in this case cuda:0
         embedding_tables = EmbeddingBagCollection(
-            device=torch.device("cuda:0"),
             tables=[
                 EmbeddingBagConfig(
                     name=table_name,
