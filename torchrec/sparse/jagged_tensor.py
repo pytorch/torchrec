@@ -1095,7 +1095,6 @@ def _maybe_compute_stride_kjt(
     lengths: Optional[torch.Tensor],
     offsets: Optional[torch.Tensor],
     stride_per_key_per_rank: Optional[torch.IntTensor],
-    inverse_indices: Optional[Tuple[List[str], torch.Tensor]] = None,
 ) -> int:
     if stride is None:
         if len(keys) == 0:
@@ -1103,10 +1102,6 @@ def _maybe_compute_stride_kjt(
         elif (
             stride_per_key_per_rank is not None and stride_per_key_per_rank.numel() > 0
         ):
-            # For VBE KJT, batch size should be based on inverse_indices when set.
-            if inverse_indices is not None:
-                return inverse_indices[1].shape[-1]
-
             s = stride_per_key_per_rank.sum(dim=1).max().item()
             if not torch.jit.is_scripting() and is_non_strict_exporting():
                 stride = torch.sym_int(s)
@@ -2156,7 +2151,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             self._lengths,
             self._offsets,
             self._stride_per_key_per_rank,
-            self._inverse_indices,
         )
         self._stride = stride
         return stride
