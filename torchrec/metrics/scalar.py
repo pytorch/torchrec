@@ -53,8 +53,10 @@ class ScalarMetricComputation(RecMetricComputation):
 
         states = {
             "labels": labels.mean(dim=-1),
-            "window_count": torch.tensor([1.0]).to(
-                labels.device
+            "window_count": torch.ones(
+                torch.Size([self._n_tasks]),
+                device=labels.device,
+                dtype=torch.double,
             ),  # put window count on the correct device
         }
         for state_name, state_value in states.items():
