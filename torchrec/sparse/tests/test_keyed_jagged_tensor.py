@@ -172,6 +172,18 @@ class TestKeyedJaggedTensor(unittest.TestCase):
         self.assertIsNone(kjt_0.inverse_indices_or_none())
         self.assertIsNone(kjt_1.inverse_indices_or_none())
 
+        kjt_0 = KeyedJaggedTensor(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            weights=weights,
+        )
+        elems, spec = pytree.tree_flatten(kjt_0)
+
+        # Simulate extra fields
+        with self.assertRaises(ValueError):
+            kjt_1 = pytree.tree_unflatten(elems + elems, spec)
+
     def test_to_dict_vb(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
         weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
