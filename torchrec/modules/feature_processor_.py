@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 
 import torch
 
-from torch import distributed as dist, nn
+from torch import nn
 
 from torchrec.pt2.checks import is_non_strict_exporting
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
@@ -71,7 +71,6 @@ class PositionWeightedModule(FeatureProcessor):
             torch.empty([max_feature_length], device=device),
             requires_grad=True,
         )
-        self.pipelined = False
 
         self.reset_parameters()
 
@@ -85,18 +84,15 @@ class PositionWeightedModule(FeatureProcessor):
     ) -> JaggedTensor:
         """
         Args:
-            features (JaggedTensor): feature representation
+            features (JaggedTensor]): feature representation
 
         Returns:
             JaggedTensor: same as input features with `weights` field being populated.
         """
-        if self.pipelined:
-            # position is embedded as weights
-            seq = features.weights().clone().to(torch.int64)
-        else:
-            seq = torch.ops.fbgemm.offsets_range(
-                features.offsets().long(), torch.numel(features.values())
-            )
+
+        seq = torch.ops.fbgemm.offsets_range(
+            features.offsets().long(), torch.numel(features.values())
+        )
         weighted_features = JaggedTensor(
             values=features.values(),
             lengths=features.lengths(),
@@ -104,20 +100,6 @@ class PositionWeightedModule(FeatureProcessor):
             weights=torch.gather(self.position_weight, dim=0, index=seq),
         )
         return weighted_features
-
-    def pre_process_pipeline_input(self, features: JaggedTensor) -> None:
-        """
-        Args:
-            features (JaggedTensor]): feature representation
-
-        Returns:
-            torch.Tensor: position weights
-        """
-        self.pipelined = True
-        cat_seq = torch.ops.fbgemm.offsets_range(
-            features.offsets().long(), torch.numel(features.values())
-        )
-        features.weights().copy_(cat_seq.to(torch.float32))
 
 
 class FeatureProcessorsCollection(nn.Module):
@@ -186,7 +168,7 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
         for length in self.max_feature_lengths.values():
             if length <= 0:
                 raise
-        self.pipelined = False  # if pipelined, input dist has performed part of input feature processing
+
         self.position_weights: nn.ParameterDict = nn.ParameterDict()
         # needed since nn.ParameterDict isn't torchscriptable (get_items)
         self.position_weights_dict: Dict[str, nn.Parameter] = {}
@@ -208,6 +190,7 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
                 self.position_weights_dict[key] = self.position_weights[key]
 
     def forward(self, features: KeyedJaggedTensor) -> KeyedJaggedTensor:
+        # TODO unflattener doesnt work well with aten.to at submodule boundaries
         if is_non_strict_exporting():
             offsets = features.offsets()
             if offsets.dtype == torch.int64:
@@ -219,12 +202,9 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
                     features.offsets().long(), torch.numel(features.values())
                 )
         else:
-            if self.pipelined:
-                cat_seq = features.weights().clone().to(torch.int64)
-            else:
-                cat_seq = torch.ops.fbgemm.offsets_range(
-                    features.offsets().long(), torch.numel(features.values())
-                )
+            cat_seq = torch.ops.fbgemm.offsets_range(
+                features.offsets().long(), torch.numel(features.values())
+            )
 
         return KeyedJaggedTensor(
             keys=features.keys(),
@@ -252,10 +232,3 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
             self.position_weights_dict[k] = param
 
         return self
-
-    def pre_process_pipeline_input(self, features: KeyedJaggedTensor) -> None:
-        self.pipelined = True
-        cat_seq = torch.ops.fbgemm.offsets_range(
-            features.offsets().long(), torch.numel(features.values())
-        )
-        features.weights().copy_(cat_seq.to(torch.float32))
