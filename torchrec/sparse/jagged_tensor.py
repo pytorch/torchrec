@@ -3065,6 +3065,12 @@ def _kjt_unflatten(
     values: List[Optional[torch.Tensor]],
     context: List[str],  # context is _keys
 ) -> KeyedJaggedTensor:
+    if len(values) < len(KeyedJaggedTensor._fields):
+        values.extend([None] * (len(KeyedJaggedTensor._fields) - len(values)))
+    elif len(values) > len(KeyedJaggedTensor._fields):
+        raise ValueError(
+            f"Too many values provided for KeyedJaggedTensor: {len(values)} vs {len(KeyedJaggedTensor._fields)}"
+        )
     return KeyedJaggedTensor(
         context,
         *values[:-2],

@@ -74,7 +74,9 @@ class PipelinedForward(BaseForward[TrainPipelineContext]):
     def __call__(self, *input, **kwargs) -> Awaitable:
         assert (
             self._name in self._context.input_dist_tensors_requests
-        ), "Invalid PipelinedForward usage, please do not directly call model.forward()"
+        ), f"Invalid PipelinedForward usage, input_dist of {self._name} is not available, probably consumed by others"
+        # we made a basic assumption that an embedding module (EBC, EC, etc.) should only be evoked only
+        # once in the model's forward pass. For more details: https://github.com/pytorch/torchrec/pull/3294
         request = self._context.input_dist_tensors_requests.pop(self._name)
         assert isinstance(request, Awaitable)
         with record_function("## wait_sparse_data_dist ##"):
@@ -121,7 +123,9 @@ class EmbeddingPipelinedForward(BaseForward[EmbeddingTrainPipelineContext]):
     ]:
         assert (
             self._name in self._context.embedding_a2a_requests
-        ), "Invalid EmbeddingPipelinedForward usage, please call pipeline.detach() before torch.no_grad() and/or  model.forward()"
+        ), f"Invalid PipelinedForward usage, input_dist of {self._name} is not available, probably consumed by others"
+        # we made a basic assumption that an embedding module (EBC, EC, etc.) should only be evoked only
+        # once in the model's forward pass. For more details: https://github.com/pytorch/torchrec/pull/3294
 
         ctx = self._context.module_contexts.pop(self._name)
         cur_stream = torch.get_device_module(self._device).current_stream()

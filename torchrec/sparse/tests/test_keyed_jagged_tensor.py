@@ -112,42 +112,77 @@ class TestKeyedJaggedTensor(unittest.TestCase):
             torch.equal(j1.values(), torch.Tensor([4.0, 5.0, 6.0, 7.0, 8.0]))
         )
 
-    def test_pytree(self) -> None:
-        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-        j0 = JaggedTensor(
+    def test_pytree_kjt(self) -> None:
+        values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+        weights = torch.Tensor([1.0, 0.5, 1.5, 1.0, 0.5, 1.0, 1.0, 1.5])
+        keys = ["index_0", "index_1"]
+        offsets = torch.IntTensor([0, 2, 2, 3, 4, 5, 8])
+        stride_per_key_per_rank = [[2], [4]]
+        inverse_indices = torch.tensor([[0, 1, 0], [0, 0, 0]])
+
+        kjt_0 = KeyedJaggedTensor(
             values=values,
-            lengths=torch.IntTensor([1, 0, 2, 3]),
+            keys=keys,
+            offsets=offsets,
+            weights=weights,
+            stride_per_key_per_rank=stride_per_key_per_rank,
+            inverse_indices=(keys, inverse_indices),
         )
-        elems, spec = pytree.tree_flatten(j0)
-        j1 = pytree.tree_unflatten(elems, spec)
+        elems, spec = pytree.tree_flatten(kjt_0)
+        kjt_1 = pytree.tree_unflatten(elems, spec)
 
-        self.assertTrue(torch.equal(j0.lengths(), j1.lengths()))
-        self.assertIsNone(j0.weights_or_none())
-        self.assertIsNone(j1.weights_or_none())
-        self.assertTrue(torch.equal(j0.values(), j1.values()))
+        self.assertTrue(torch.equal(kjt_0.values(), kjt_1.values()))
+        self.assertIsNone(kjt_0.lengths_or_none())
+        self.assertIsNone(kjt_1.lengths_or_none())
+        self.assertTrue(torch.equal(kjt_0.weights(), kjt_1.weights()))
+        self.assertTrue(torch.equal(kjt_0.offsets(), kjt_1.offsets()))
+        self.assertEqual(kjt_0.keys(), kjt_1.keys())
+        self.assertEqual(
+            kjt_0.stride_per_key_per_rank(), kjt_1.stride_per_key_per_rank()
+        )
+        self.assertEqual(kjt_0.inverse_indices()[0], kjt_1.inverse_indices()[0])
+        self.assertTrue(
+            torch.equal(kjt_0.inverse_indices()[1], kjt_1.inverse_indices()[1])
+        )
 
-        values = [
-            torch.Tensor([1.0]),
-            torch.Tensor(),
-            torch.Tensor([7.0, 8.0]),
-            torch.Tensor([10.0, 11.0, 12.0]),
-        ]
-        weights = [
-            torch.Tensor([1.0]),
-            torch.Tensor(),
-            torch.Tensor([7.0, 8.0]),
-            torch.Tensor([10.0, 11.0, 12.0]),
-        ]
-        j0 = JaggedTensor.from_dense(
+        kjt_0 = KeyedJaggedTensor(
             values=values,
+            keys=keys,
+            offsets=offsets,
             weights=weights,
         )
-        elems, spec = pytree.tree_flatten(j0)
-        j1 = pytree.tree_unflatten(elems, spec)
+        elems, spec = pytree.tree_flatten(kjt_0)
 
-        self.assertTrue(torch.equal(j0.lengths(), j1.lengths()))
-        self.assertTrue(torch.equal(j0.weights(), j1.weights()))
-        self.assertTrue(torch.equal(j0.values(), j1.values()))
+        # Simulate missing stride_per_key_per_rank and inverse_indices
+        spec = pytree.TreeSpec(
+            type=spec.type,
+            context=spec.context,
+            children_specs=spec.children_specs[:4],
+        )
+        kjt_1 = pytree.tree_unflatten(elems[:4], spec)
+
+        self.assertTrue(torch.equal(kjt_0.values(), kjt_1.values()))
+        self.assertIsNone(kjt_0.lengths_or_none())
+        self.assertIsNone(kjt_1.lengths_or_none())
+        self.assertTrue(torch.equal(kjt_0.weights(), kjt_1.weights()))
+        self.assertTrue(torch.equal(kjt_0.offsets(), kjt_1.offsets()))
+        self.assertEqual(kjt_0.keys(), kjt_1.keys())
+        self.assertTrue(len(kjt_0.stride_per_key_per_rank()) == 0)
+        self.assertTrue(len(kjt_1.stride_per_key_per_rank()) == 0)
+        self.assertIsNone(kjt_0.inverse_indices_or_none())
+        self.assertIsNone(kjt_1.inverse_indices_or_none())
+
+        kjt_0 = KeyedJaggedTensor(
+            values=values,
+            keys=keys,
+            offsets=offsets,
+            weights=weights,
+        )
+        elems, spec = pytree.tree_flatten(kjt_0)
+
+        # Simulate extra fields
+        with self.assertRaises(ValueError):
+            kjt_1 = pytree.tree_unflatten(elems + elems, spec)
 
     def test_to_dict_vb(self) -> None:
         values = torch.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
