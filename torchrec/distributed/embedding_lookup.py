@@ -594,6 +594,18 @@ class GroupedPooledEmbeddingsLookup(
         self, embeddings: List[torch.Tensor], splits: List[List[int]]
     ) -> List[torch.Tensor]:
         assert len(embeddings) > 1 and len(splits) > 1
+
+        logger.info(
+            "Merge VBE embeddings from the following TBEs "
+            f"(world size: {self._world_size}):\n"
+            + "\n".join(
+                [
+                    f"\t{module.__class__.__name__}:{len(split)} splits"
+                    for module, split in zip(self._emb_modules, splits)
+                ]
+            )
+        )
+
         split_embs = [e.split(s) for e, s in zip(embeddings, splits)]
         combined_embs = [
             emb
