@@ -262,6 +262,7 @@ def _populate_zero_collision_tbe_params(
                     target_eviction_percent_per_table[i] = (
                         policy_t.target_eviction_percent
                     )
+                    ttls_in_mins[i] = policy_t.eviction_ttl_mins
                     if eviction_strategy == -1 or eviction_strategy == 5:
                         eviction_strategy = 5
                     else:
