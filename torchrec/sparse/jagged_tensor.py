@@ -1104,7 +1104,7 @@ def _maybe_compute_stride_kjt(
             stride_per_key_per_rank is not None and stride_per_key_per_rank.numel() > 0
         ):
             # For VBE KJT, batch size should be based on inverse_indices when set.
-            if inverse_indices is not None:
+            if inverse_indices is not None and inverse_indices[1].numel() > 0:
                 return inverse_indices[1].shape[-1]
 
             s = stride_per_key_per_rank.sum(dim=1).max().item()
