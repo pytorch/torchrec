@@ -367,20 +367,21 @@ class TwPooledEmbeddingDist(
         """
         if self._dist is None:
             self._create_output_dist_module(sharding_ctx)
-
-        if sharding_ctx is None:
-            return cast(PooledEmbeddingsAllToAll, self._dist)(local_embs)
-        elif sharding_ctx.variable_batch_per_feature:
+        if isinstance(self._dist, VariableBatchPooledEmbeddingsAllToAll):
+            sharding_ctx = none_throws(sharding_ctx)
             return cast(VariableBatchPooledEmbeddingsAllToAll, self._dist)(
                 local_embs,
-                batch_size_per_rank_per_feature=sharding_ctx.batch_size_per_rank_per_feature,
-                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a,
+                batch_size_per_rank_per_feature=sharding_ctx.batch_size_per_rank_per_feature
+                or sharding_ctx.batch_size_per_rank,
+                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a
+                or sharding_ctx.batch_size_per_rank,
             )
-        else:
-            return cast(PooledEmbeddingsAllToAll, self._dist)(
-                local_embs,
-                batch_size_per_rank=sharding_ctx.batch_size_per_rank,
-            )
+        return cast(PooledEmbeddingsAllToAll, self._dist)(
+            local_embs,
+            batch_size_per_rank=(
+                sharding_ctx.batch_size_per_rank if sharding_ctx else None
+            ),
+        )
 
     def _create_output_dist_module(
         self, sharding_ctx: Optional[EmbeddingShardingContext] = None
