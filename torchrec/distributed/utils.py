@@ -50,6 +50,16 @@ version checks
 """
 
 
+def get_device_type() -> str:
+    if torch.cuda.is_available():
+        device_type = "cuda"
+    elif torch.mtia.is_available():
+        device_type = "mtia"
+    else:
+        device_type = "cpu"
+    return device_type
+
+
 def get_class_name(obj: object) -> str:
     if obj is None:
         return "None"
