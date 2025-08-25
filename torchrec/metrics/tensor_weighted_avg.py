@@ -83,7 +83,7 @@ class TensorWeightedAvgMetricComputation(RecMetricComputation):
 
         if "required_inputs" not in kwargs:
             raise RecMetricException(
-                f"TensorWeightedAvgMetricComputation expects {"required_inputs"} to exist."
+                "TensorWeightedAvgMetricComputation expects 'required_inputs' to exist."
             )
         else:
             if len(self.tasks) > 1:
