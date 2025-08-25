@@ -2992,18 +2992,19 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             values.numel(),
                         )
                     elif single_batch_per_rank:
-                        (
-                            lengths,
-                            values,
-                            weights,
-                        ) = torch.ops.fbgemm.permute_2D_sparse_data(
-                            torch.jit._unwrap_optional(recat),
-                            lengths.view(-1, stride),
-                            values,
-                            weights,
-                            values.numel(),
-                        )
-                        lengths = lengths.view(-1)
+                        if stride > 0:
+                            (
+                                lengths,
+                                values,
+                                weights,
+                            ) = torch.ops.fbgemm.permute_2D_sparse_data(
+                                torch.jit._unwrap_optional(recat),
+                                lengths.view(-1, stride),
+                                values,
+                                weights,
+                                values.numel(),
+                            )
+                            lengths = lengths.view(-1)
                     else:  # variable batch size per rank
                         (
                             lengths,
