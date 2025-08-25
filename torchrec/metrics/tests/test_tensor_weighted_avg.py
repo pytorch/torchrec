@@ -79,29 +79,40 @@ class TensorWeightedAvgMetricTest(unittest.TestCase):
             entry_point=metric_test_helper,
         )
 
-    def test_tensor_weighted_avg_fused_fails(self) -> None:
-        """Test that TensorWeightedAvgMetric fails with FUSED_TASKS_COMPUTATION as expected."""
-        # This test verifies the current limitation - FUSED mode should fail
-        with self.assertRaisesRegex(
-            RecMetricException, "expects task_config to be RecTaskInfo not"
-        ):
-            rec_metric_value_test_launcher(
-                target_clazz=TensorWeightedAvgMetric,
-                target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
-                test_clazz=TestTensorWeightedAvgMetric,
-                metric_name=METRIC_NAMESPACE,
-                task_names=["t1", "t2", "t3"],
-                fused_update_limit=0,
-                compute_on_all_ranks=False,
-                should_validate_update=False,
-                world_size=WORLD_SIZE,
-                entry_point=metric_test_helper,
-            )
+    def test_tensor_weighted_avg_fused(self) -> None:
+        """Test TensorWeightedAvgMetric with FUSED_TASKS_COMPUTATION."""
+        rec_metric_value_test_launcher(
+            target_clazz=TensorWeightedAvgMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            test_clazz=TestTensorWeightedAvgMetric,
+            metric_name=METRIC_NAMESPACE,
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
 
-    def test_tensor_weighted_avg_single_task(self) -> None:
+    def test_tensor_weighted_avg_single_task_unfused(self) -> None:
         rec_metric_value_test_launcher(
             target_clazz=TensorWeightedAvgMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            test_clazz=TestTensorWeightedAvgMetric,
+            metric_name=METRIC_NAMESPACE,
+            task_names=["single_task"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=WORLD_SIZE,
+            entry_point=metric_test_helper,
+        )
+
+    def test_tensor_weighted_avg_single_task_fused(self) -> None:
+        """Test TensorWeightedAvgMetric with single task in FUSED_TASKS_COMPUTATION mode."""
+        rec_metric_value_test_launcher(
+            target_clazz=TensorWeightedAvgMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
             test_clazz=TestTensorWeightedAvgMetric,
             metric_name=METRIC_NAMESPACE,
             task_names=["single_task"],
@@ -116,13 +127,29 @@ class TensorWeightedAvgMetricTest(unittest.TestCase):
 class TensorWeightedAvgGPUSyncTest(unittest.TestCase):
     """GPU synchronization tests for TensorWeightedAvgMetric."""
 
-    def test_sync_tensor_weighted_avg(self) -> None:
+    def test_sync_tensor_weighted_avg_unfused(self) -> None:
         rec_metric_gpu_sync_test_launcher(
             target_clazz=TensorWeightedAvgMetric,
             target_compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
             test_clazz=TestTensorWeightedAvgMetric,
             metric_name=METRIC_NAMESPACE,
-            task_names=["t1"],
+            task_names=["t1", "t2", "t3"],
+            fused_update_limit=0,
+            compute_on_all_ranks=False,
+            should_validate_update=False,
+            world_size=2,
+            batch_size=5,
+            batch_window_size=20,
+            entry_point=sync_test_helper,
+        )
+
+    def test_sync_tensor_weighted_avg_fused(self) -> None:
+        rec_metric_gpu_sync_test_launcher(
+            target_clazz=TensorWeightedAvgMetric,
+            target_compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+            test_clazz=TestTensorWeightedAvgMetric,
+            metric_name=METRIC_NAMESPACE,
+            task_names=["t1", "t2", "t3"],
             fused_update_limit=0,
             compute_on_all_ranks=False,
             should_validate_update=False,
@@ -161,8 +188,8 @@ class TensorWeightedAvgFunctionalityTest(unittest.TestCase):
         self.assertEqual(len(metric._metrics_computations), 1)
 
         computation = metric._metrics_computations[0]
-        self.assertEqual(computation.tensor_name, "test_tensor")
-        self.assertTrue(computation.weighted)
+        self.assertEqual(computation.tasks[0].tensor_name, "test_tensor")
+        self.assertTrue(computation.tasks[0].weighted)
 
     def test_tensor_weighted_avg_unweighted_task(self) -> None:
 
@@ -188,34 +215,10 @@ class TensorWeightedAvgFunctionalityTest(unittest.TestCase):
         )
 
         computation = metric._metrics_computations[0]
-        self.assertEqual(computation.tensor_name, "test_tensor")
-        self.assertFalse(computation.weighted)
+        self.assertEqual(computation.tasks[0].tensor_name, "test_tensor")
+        self.assertFalse(computation.tasks[0].weighted)
 
-    def test_tensor_weighted_avg_missing_tensor_name_throws_exception(self) -> None:
-
-        # Create task with None tensor_name
-        tasks = [
-            RecTaskInfo(
-                name="test_task",
-                label_name="test_label",
-                prediction_name="test_pred",
-                weight_name="test_weight",
-                tensor_name=None,
-                weighted=True,
-            )
-        ]
-
-        with self.assertRaisesRegex(RecMetricException, "tensor_name"):
-            TensorWeightedAvgMetric(
-                world_size=1,
-                my_rank=0,
-                batch_size=4,
-                tasks=tasks,
-                compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-                window_size=100,
-            )
-
-    def test_tensor_weighted_avg_required_inputs_validation(self) -> None:
+    def test_tensor_weighted_avg_unfused_required_inputs_validation(self) -> None:
         tasks = [
             RecTaskInfo(
                 name="test_task",
@@ -246,6 +249,86 @@ class TensorWeightedAvgFunctionalityTest(unittest.TestCase):
                 predictions={"test_task": torch.tensor([0.1, 0.2])},
                 labels={"test_task": torch.tensor([1.0, 0.0])},
                 weights={"test_task": torch.tensor([1.0, 2.0])},
+            )
+
+    def test_tensor_weighted_avg_unfused_missing_tensor_name_init_error(self) -> None:
+        with self.assertRaisesRegex(RecMetricException, "tensor_name"):
+            TensorWeightedAvgMetric(
+                world_size=1,
+                my_rank=0,
+                batch_size=2,
+                tasks=[
+                    RecTaskInfo(
+                        name="test_task",
+                        label_name="test_label",
+                        prediction_name="test_pred",
+                        weight_name="test_weight",
+                        tensor_name=None,
+                        weighted=True,
+                    )
+                ],
+                compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+                window_size=100,
+            )
+
+    def test_tensor_weighted_avg_unfused_missing_tensor_name_update_error(self) -> None:
+        """Test error when tensor_name is missing in required_inputs for UNFUSED mode."""
+        single_task = [
+            RecTaskInfo(
+                name="test_task",
+                label_name="test_label",
+                prediction_name="test_pred",
+                weight_name="test_weight",
+                tensor_name="test_tensor",
+                weighted=True,
+            )
+        ]
+
+        single_metric = TensorWeightedAvgMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=2,
+            tasks=single_task,
+            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            window_size=100,
+        )
+
+        with self.assertRaisesRegex(RecMetricException, "test_tensor"):
+            single_metric.update(
+                predictions={"test_task": torch.tensor([0.1, 0.2])},
+                labels={"test_task": torch.tensor([1.0, 0.0])},
+                weights={"test_task": torch.tensor([1.0, 2.0])},
+                required_inputs={"wrong_tensor_name": torch.tensor([1.0, 2.0])},
+            )
+
+    def test_tensor_weighted_avg_fused_conflicting_weighted_flags_error(self) -> None:
+        with self.assertRaisesRegex(
+            RecMetricException, "already registered as weighted"
+        ):
+            TensorWeightedAvgMetric(
+                world_size=1,
+                my_rank=0,
+                batch_size=2,
+                tasks=[
+                    RecTaskInfo(
+                        name="task1",
+                        label_name="test_label",
+                        prediction_name="test_pred",
+                        weight_name="test_weight",
+                        tensor_name="shared_tensor",
+                        weighted=True,
+                    ),
+                    RecTaskInfo(
+                        name="task2",
+                        label_name="test_label",
+                        prediction_name="test_pred",
+                        weight_name="test_weight",
+                        tensor_name="shared_tensor",
+                        weighted=False,
+                    ),
+                ],
+                compute_mode=RecComputeMode.FUSED_TASKS_COMPUTATION,
+                window_size=100,
             )
 
 
@@ -389,7 +472,7 @@ class TensorWeightedAvgValueTest(unittest.TestCase):
                     msg=f"Actual: {cur_actual_tensor_weighted_avg}, Expected: {cur_expected_tensor_weighted_avg}",
                 )
 
-    def test_tensor_weighted_avg_computation_correctness(self) -> None:
+    def test_tensor_weighted_avg_correctness(self) -> None:
         """Test tensor weighted average computation correctness with known values."""
         test_data = generate_tensor_model_outputs_cases()
         for inputs in test_data:

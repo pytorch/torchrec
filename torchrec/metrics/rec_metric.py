@@ -623,6 +623,27 @@ class RecMetric(nn.Module, abc.ABC):
                     labels, torch.Tensor
                 )
 
+                # Metrics such as TensorWeightedAvgMetric will have tensors that we also need to stack.
+                # Stack in task order: (n_tasks, batch_size)
+                if "required_inputs" in kwargs:
+                    target_tensors: list[torch.Tensor] = []
+                    for task in self._tasks:
+                        if (
+                            task.tensor_name
+                            and task.tensor_name in kwargs["required_inputs"]
+                        ):
+                            target_tensors.append(
+                                kwargs["required_inputs"][task.tensor_name]
+                            )
+
+                    if target_tensors:
+                        stacked_tensor = torch.stack(target_tensors)
+
+                        # Reshape the stacked_tensor to size([len(self._tasks), self._batch_size])
+                        stacked_tensor = stacked_tensor.view(len(self._tasks), -1)
+                        assert isinstance(stacked_tensor, torch.Tensor)
+                        kwargs["required_inputs"]["target_tensor"] = stacked_tensor
+
                 predictions = (
                     # Reshape the predictions to size([len(self._tasks), self._batch_size])
                     predictions.view(len(self._tasks), -1)
