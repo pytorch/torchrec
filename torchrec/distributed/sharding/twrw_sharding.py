@@ -504,14 +504,21 @@ class TwRwPooledEmbeddingDist(
             self._create_output_dist_modules(sharding_ctx)
         local_rank = self._rank % self._intra_pg.size()
         current_node = self._rank // self._intra_pg.size()
-        if sharding_ctx is not None and sharding_ctx.variable_batch_per_feature:
+        if isinstance(
+            self._intra_dist, VariableBatchPooledEmbeddingsReduceScatter
+        ) and isinstance(self._cross_dist, VariableBatchPooledEmbeddingsAllToAll):
+            assert sharding_ctx is not None and (
+                sharding_ctx.batch_size_per_rank_per_feature
+                or sharding_ctx.batch_size_per_rank
+            ), "Batch size not found in KJT input for VBE"
             (
                 batch_size_per_rank_per_feature_by_cross_group,
                 batch_size_per_feature_sum_by_cross_group,
             ) = self._preprocess_batch_size_per_rank_per_feature(
                 self._intra_pg.size(),
                 self._cross_pg.size(),
-                sharding_ctx.batch_size_per_rank_per_feature,
+                sharding_ctx.batch_size_per_rank_per_feature
+                or [sharding_ctx.batch_size_per_rank],
             )
             rs_result = cast(
                 VariableBatchPooledEmbeddingsReduceScatter, self._intra_dist
@@ -525,7 +532,8 @@ class TwRwPooledEmbeddingDist(
                 batch_size_per_rank_per_feature=batch_size_per_rank_per_feature_by_cross_group[
                     local_rank
                 ],
-                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a,
+                batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a
+                or sharding_ctx.batch_size_per_rank,
             )
         elif (
             sharding_ctx is not None and len(set(sharding_ctx.batch_size_per_rank)) > 1
