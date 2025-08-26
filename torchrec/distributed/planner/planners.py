@@ -67,7 +67,7 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardMetadata,
 )
-from torchrec.distributed.utils import none_throws
+from torchrec.distributed.utils import get_device_type, none_throws
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -178,10 +178,11 @@ class EmbeddingPlannerBase(ShardingPlanner):
         heuristical_storage_reservation_percentage: float = 0.15,
     ) -> None:
         if topology is None:
+            compute_device = get_device_type()
             topology = Topology(
                 local_world_size=get_local_size(),
                 world_size=dist.get_world_size(),
-                compute_device="cuda" if torch.cuda.is_available() else "cpu",
+                compute_device=compute_device,
             )
         self._topology: Topology = topology
         self._batch_size: int = batch_size if batch_size else BATCH_SIZE
@@ -624,7 +625,8 @@ class HeteroEmbeddingShardingPlanner(ShardingPlanner):
             List[Callable[[List[ShardingOption]], List[ShardingOption]]]
         ] = None,
     ) -> None:
-        default_device = "cuda" if torch.cuda.is_available() else "cpu"
+        default_device = get_device_type()
+
         if topology_groups is None:
             topology_groups = {
                 default_device: Topology(
