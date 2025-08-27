@@ -405,6 +405,31 @@ def rec_metric_gpu_sync_test_launcher(
         )
 
 
+def _assert_metric_results(
+    test_metrics: TestRecMetricOutput,
+    task_names: List[str],
+    res: Dict[str, torch.Tensor],
+    metric_name: str,
+) -> None:
+    """Helper function to assert metric results based on metric name."""
+    # Serving Calibration uses Calibration naming inconsistently
+    if metric_name == "serving_calibration":
+        assert torch.allclose(
+            test_metrics[1][task_names[0]],
+            res[f"{metric_name}-{task_names[0]}|window_calibration"],
+        )
+    elif metric_name == "effective_sample_rate":
+        assert torch.allclose(
+            test_metrics[1][task_names[0]],
+            res[f"effective_rate-{task_names[0]}|window_{metric_name}"],
+        )
+    else:
+        assert torch.allclose(
+            test_metrics[1][task_names[0]],
+            res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
+        )
+
+
 def sync_test_helper(
     target_clazz: Type[RecMetric],
     target_compute_mode: RecComputeMode,
@@ -504,17 +529,7 @@ def sync_test_helper(
     res = target_metric_obj.compute()
 
     if rank == 0:
-        # Serving Calibration uses Calibration naming inconsistently
-        if metric_name == "serving_calibration":
-            assert torch.allclose(
-                test_metrics[1][task_names[0]],
-                res[f"{metric_name}-{task_names[0]}|window_calibration"],
-            )
-        else:
-            assert torch.allclose(
-                test_metrics[1][task_names[0]],
-                res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
-            )
+        _assert_metric_results(test_metrics, task_names, res, metric_name)
 
     # we also test the case where other rank has more tensors than rank 0
     target_metric_obj.reset()
@@ -544,17 +559,7 @@ def sync_test_helper(
     res = target_metric_obj.compute()
 
     if rank == 0:
-        # Serving Calibration uses Calibration naming inconsistently
-        if metric_name == "serving_calibration":
-            assert torch.allclose(
-                test_metrics[1][task_names[0]],
-                res[f"{metric_name}-{task_names[0]}|window_calibration"],
-            )
-        else:
-            assert torch.allclose(
-                test_metrics[1][task_names[0]],
-                res[f"{metric_name}-{task_names[0]}|window_{metric_name}"],
-            )
+        _assert_metric_results(test_metrics, task_names, res, metric_name)
 
     dist.destroy_process_group()
 
