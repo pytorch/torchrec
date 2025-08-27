@@ -42,7 +42,7 @@ from torchrec.distributed.types import (
     ShardingType,
     ShardMetadata,
 )
-from torchrec.distributed.utils import none_throws
+from torchrec.distributed.utils import get_device_type, none_throws
 
 
 def get_default_sharders() -> List[ModuleSharder[nn.Module]]:
@@ -620,7 +620,7 @@ def column_wise(
         ranks (Optional[List[int]]): Ranks to place columns. Required if size_per_rank is None.
         size_per_rank (Optional[List[int]]): List specifying the number of columns per rank.
             If provided, the columns will be distributed according to these sizes.
-        device_types (Optional[List[str]]): List of device types (e.g., "cpu", "cuda") for each shard.
+        device_types (Optional[List[str]]): List of device types (e.g., "cpu", "cuda", "mtia") for each shard.
             Used to specify different device placements for different shards.
 
     Returns:
@@ -651,7 +651,7 @@ def column_wise(
             param: The parameter tensor to be sharded.
             local_size: Number of devices in the local process group.
             world_size: Total number of devices across all process groups.
-            device_type: Type of device (e.g., "cuda", "cpu").
+            device_type: Type of device (e.g., "cuda", "cpu", "mtia").
             sharder: The module sharder instance.
 
         Returns:
@@ -895,7 +895,7 @@ def construct_module_sharding_plan(
         )
     """
     if device_type is None:
-        device_type = "cuda" if torch.cuda.is_available() else "cpu"
+        device_type = get_device_type()
     if sharder is None:
         sharder = get_module_to_default_sharders().get(type(module), None)
     assert (
