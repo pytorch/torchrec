@@ -12,7 +12,7 @@ import os
 import random
 import tempfile
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from unittest.mock import Mock, patch
 
 import torch
@@ -45,7 +45,9 @@ def gen_test_batch(
     mask: Optional[torch.Tensor] = None,
     n_classes: Optional[int] = None,
     seed: Optional[int] = None,
+    device: Optional[Union[str, torch.device]] = None,
 ) -> Dict[str, torch.Tensor]:
+    device = torch.device(device or "cpu")
     if seed is not None:
         torch.manual_seed(seed)
     if label_value is not None:
@@ -65,14 +67,14 @@ def gen_test_batch(
     else:
         weight = torch.rand(batch_size, dtype=torch.double)
     test_batch = {
-        label_name: label,
-        prediction_name: prediction,
-        weight_name: weight,
-        tensor_name: torch.rand(batch_size, dtype=torch.double),
+        label_name: label.to(device),
+        prediction_name: prediction.to(device),
+        weight_name: weight.to(device),
+        tensor_name: torch.rand(batch_size, dtype=torch.double).to(device),
     }
     if mask_tensor_name is not None:
         if mask is None:
-            mask = torch.ones(batch_size, dtype=torch.double)
+            mask = torch.ones(batch_size, dtype=torch.double).to(device)
         test_batch[mask_tensor_name] = mask
 
     return test_batch
@@ -240,8 +242,10 @@ def rec_metric_value_test_helper(
     n_classes: Optional[int] = None,
     zero_weights: bool = False,
     zero_labels: bool = False,
+    device: Optional[Union[str, torch.device]] = None,
     **kwargs: Any,
 ) -> Tuple[Dict[str, torch.Tensor], Tuple[Dict[str, torch.Tensor], ...]]:
+    device = torch.device(device or "cpu")
     tasks = gen_test_tasks(task_names)
     model_outs = []
     for _ in range(nsteps):
@@ -263,6 +267,7 @@ def rec_metric_value_test_helper(
                 n_classes=n_classes,
                 weight_value=weight_value,
                 label_value=label_value,
+                device=device,
             )
             for task in tasks
         ]
@@ -293,7 +298,8 @@ def rec_metric_value_test_helper(
             compute_on_all_ranks=compute_on_all_ranks,
             should_validate_update=should_validate_update,
             **kwargs,
-        )
+        ).to(device)
+
         for i in range(nsteps):
             # Get required_inputs_list from the target metric
             required_inputs_list = list(target_metric_obj.get_required_inputs())
@@ -381,6 +387,7 @@ def rec_metric_gpu_sync_test_launcher(
     entry_point: Callable[..., None],
     batch_size: int = BATCH_SIZE,
     batch_window_size: int = BATCH_WINDOW_SIZE,
+    device: Optional[Union[str, torch.device]] = None,
     **kwargs: Dict[str, Any],
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -402,6 +409,8 @@ def rec_metric_gpu_sync_test_launcher(
             batch_size,
             batch_window_size,
             kwargs.get("n_classes", None),
+            False,
+            torch.device(device or "cpu"),
         )
 
 
@@ -419,8 +428,10 @@ def sync_test_helper(
     batch_window_size: int = BATCH_WINDOW_SIZE,
     n_classes: Optional[int] = None,
     zero_weights: bool = False,
+    device: Optional[Union[str, torch.device]] = None,
     **kwargs: Dict[str, Any],
 ) -> None:
+    device = torch.device(device or "cpu")
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
     dist.init_process_group(
@@ -444,7 +455,7 @@ def sync_test_helper(
         window_size=batch_window_size * world_size,
         # pyre-ignore[6]: Incompatible parameter type
         **kwargs,
-    )
+    ).to(device)
 
     weight_value: Optional[torch.Tensor] = None
 
@@ -458,6 +469,7 @@ def sync_test_helper(
             n_classes=n_classes,
             weight_value=weight_value,
             seed=42,  # we set seed because of how test metric places tensors on ranks
+            device=device,
         )
         for task in tasks
     ]
@@ -575,6 +587,7 @@ def rec_metric_value_test_launcher(
     n_classes: Optional[int] = None,
     zero_weights: bool = False,
     zero_labels: bool = False,
+    device: Optional[Union[str, torch.device]] = None,
     **kwargs: Any,
 ) -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -600,6 +613,7 @@ def rec_metric_value_test_launcher(
             n_classes=n_classes,
             zero_weights=zero_weights,
             zero_labels=zero_labels,
+            device=device,
             **kwargs,
         )
 
@@ -616,6 +630,7 @@ def rec_metric_value_test_launcher(
             n_classes,
             test_nsteps,
             zero_weights,
+            device,
         )
 
 
@@ -642,6 +657,7 @@ def metric_test_helper(
     n_classes: Optional[int] = None,
     nsteps: int = 1,
     zero_weights: bool = False,
+    device: Optional[Union[str, torch.device]] = None,
     is_time_dependent: bool = False,
     time_dependent_metric: Optional[Dict[Type[RecMetric], str]] = None,
     **kwargs: Any,
@@ -670,6 +686,7 @@ def metric_test_helper(
         is_time_dependent=is_time_dependent,
         time_dependent_metric=time_dependent_metric,
         zero_weights=zero_weights,
+        device=device,
         **kwargs,
     )
 
