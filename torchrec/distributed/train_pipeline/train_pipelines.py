@@ -640,11 +640,13 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             return
 
     def _wait_for_batch(self) -> None:
-        with record_function("## wait_for_batch ##"):
+        batch_id = self.contexts[0].index if len(self.contexts) > 0 else "?"
+        with record_function(f"## wait_for_batch {batch_id} ##"):
             _wait_for_batch(cast(In, self.batches[0]), self._data_dist_stream)
 
     def _backward(self, losses: torch.Tensor) -> None:
-        with record_function("## backward ##"):
+        batch_id = self.contexts[0].index if len(self.contexts) > 0 else "?"
+        with record_function(f"## backward {batch_id} ##"):
             torch.sum(losses, dim=0).backward()
 
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
@@ -688,7 +690,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self.enqueue_batch(dataloader_iter)
 
         # forward
-        with record_function("## forward ##"):
+        with record_function(f"## forward {self.contexts[0].index} ##"):
             self._state = PipelineState.CALL_FWD
             losses, output = self._model_fwd(self.batches[0])
 
@@ -714,7 +716,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             )
 
             # update
-            with record_function("## optimizer ##"):
+            with record_function(f"## optimizer {self.contexts[0].index} ##"):
                 self._optimizer.step()
 
         self.dequeue_batch()
@@ -1063,7 +1065,7 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
         self.enqueue_batch(dataloader_iter)
 
         # forward
-        with record_function("## forward ##"):
+        with record_function(f"## forward {self.contexts[0].index} ##"):
             losses, output = self._model_fwd(self.batches[0])
 
         if len(self.batches) >= 2:

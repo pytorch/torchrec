@@ -572,9 +572,6 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
         dtype: DataType,
     ) -> None:
         self._set_table_weights_precision(dtype)
-        fused_params = {
-            "prefetch_pipeline": True,
-        }
         constraints = {
             table.name: ParameterConstraints(
                 min_partition=4,
@@ -601,7 +598,7 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
             embedding_groups={},
             tables=self.tables,
             # pyre-fixme[6]
-            sharders=[EmbeddingBagCollectionSharder(fused_params=fused_params)],
+            sharders=[EmbeddingBagCollectionSharder()],
             optim=EmbOptimType.EXACT_SGD,
             # The optimizer config here will overwrite the SGD optimizer above
             apply_optimizer_in_backward_config={
