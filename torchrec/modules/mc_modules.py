@@ -54,6 +54,11 @@ def _cat_jagged_values(jd: Dict[str, JaggedTensor]) -> torch.Tensor:
     return torch.cat([jt.values() for jt in jd.values()])
 
 
+@torch.fx.wrap
+def _cat_jagged_lengths(jd: Dict[str, JaggedTensor]) -> torch.Tensor:
+    return torch.cat([jt.lengths() for jt in jd.values()])
+
+
 # TODO: keep the old implementation for backward compatibility and will remove it later
 @torch.fx.wrap
 def _mcc_lazy_init(
@@ -416,10 +421,11 @@ class ManagedCollisionCollection(nn.Module):
 
         assert output is not None
         values: torch.Tensor = _cat_jagged_values(output)
+        lengths: torch.Tensor = _cat_jagged_lengths(output)
         return KeyedJaggedTensor(
             keys=features.keys(),
             values=values,
-            lengths=features.lengths(),
+            lengths=lengths,
             weights=features.weights_or_none(),
         )
 
