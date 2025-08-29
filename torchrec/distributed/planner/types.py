@@ -635,6 +635,18 @@ class ShardingOption:
             )
         )
 
+    def storage_hash(self) -> int:
+        """
+        Hash needed to preserve sharding option uniquely based on input before
+        planning. This is needed to restore sharding option from the loaded plan.
+        """
+        # Use BLAKE2b for deterministic hashing, constrained to 32-bit signed int range
+        hash_str = f"{self.fqn}|{self.sharding_type}|{self.compute_kernel}"
+        hash_bytes = hashlib.blake2b(hash_str.encode("utf-8"), digest_size=8).digest()
+        hash_int = int.from_bytes(hash_bytes, byteorder="big")
+        # Constrain to 32-bit signed integer range for Thrift compatibility
+        return hash_int % 2147483647  # 2^31 - 1
+
     def __deepcopy__(
         self, memo: Optional[Dict[int, "ShardingOption"]]
     ) -> "ShardingOption":
