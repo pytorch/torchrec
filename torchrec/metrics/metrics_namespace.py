@@ -88,6 +88,8 @@ class MetricName(MetricNameBase):
     HINDSIGHT_TARGET_PRECISION = "hindsight_target_precision"
     HINDSIGHT_TARGET_RECALL = "hindsight_target_recall"
 
+    EFFECTIVE_SAMPLE_RATE = "effective_sample_rate"
+
 
 class MetricNamespaceBase(StrValueMixin, Enum):
     pass
@@ -140,6 +142,11 @@ class MetricNamespace(MetricNamespaceBase):
     UNWEIGHTED_NE = "unweighted_ne"
 
     HINDSIGHT_TARGET_PR = "hindsight_target_pr"
+
+    # All metrics related to effective rate should be put into this namespace.
+    # For example, effective_sample_rate, effective_pos_sample_rate, etc.
+    # This is particularly useful for MTML models train with composite pipelines to figure out per-batch blending ratio.
+    EFFECTIVE_RATE = "effective_rate"
 
 
 class MetricPrefix(StrValueMixin, Enum):
