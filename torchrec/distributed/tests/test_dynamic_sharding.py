@@ -544,7 +544,7 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         ),
         data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
         random_seed=st.integers(0, 1000),
-        world_size=st.sampled_from([8]),
+        world_size=st.sampled_from([2, 4]),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding(
@@ -598,6 +598,7 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         apply_optimizer_in_backward_config = random.choice(optimizer_options)
 
         sharding_type_e = ShardingType(sharding_type)
+
         self._test_dynamic_sharding(
             sharders=[  # Pyre-ignore
                 create_test_sharder(

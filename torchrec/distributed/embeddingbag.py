@@ -11,6 +11,7 @@ import copy
 from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
 from functools import partial
+from itertools import zip_longest
 from typing import (
     Any,
     cast,
@@ -56,12 +57,12 @@ from torchrec.distributed.fused_params import (
 from torchrec.distributed.sharding.cw_sharding import CwPooledEmbeddingSharding
 from torchrec.distributed.sharding.dp_sharding import DpPooledEmbeddingSharding
 from torchrec.distributed.sharding.dynamic_sharding import (
-    get_largest_dims_from_sharding_plan_updates,
-    move_sharded_tensors_to_cpu,
-    shards_all_to_all,
+    CommP2PMetadata,
+    CommStrategy,
+    prepare_comm_ops,
+    transfer_data,
     update_module_sharding_plan,
-    update_optimizer_state_post_resharding,
-    update_state_post_resharding,
+    update_state_dictionaries,
 )
 from torchrec.distributed.sharding.grid_sharding import GridPooledEmbeddingSharding
 from torchrec.distributed.sharding.rw_sharding import RwPooledEmbeddingSharding
@@ -1378,24 +1379,10 @@ class ShardedEmbeddingBagCollection(
                 device=self._device,
             )
 
-    def _purge_lookups(self) -> None:
-        # Purge old lookups
-        for lookup in self._lookups:
-            # Call purge method if available (for TBE modules)
-            if hasattr(lookup, "purge") and callable(lookup.purge):
-                # Pyre-ignore
-                lookup.purge()
-
-            # For DDP modules, get the underlying module
-            while isinstance(lookup, DistributedDataParallel):
-                lookup = lookup.module
-                if hasattr(lookup, "purge") and callable(lookup.purge):
-                    lookup.purge()
-
-        # Clear the lookups list
+    def _softcopy_lookups(self) -> List[nn.Module]:
+        old_modules: List[nn.Module] = [lookup for lookup in self._lookups]
         self._lookups.clear()
-        # Force garbage collection to free memory
-        torch.cuda.empty_cache()
+        return old_modules
 
     def _create_lookups(
         self,
@@ -1727,77 +1714,58 @@ class ShardedEmbeddingBagCollection(
         device: Optional[torch.device],
     ) -> None:
         """
-        This is the main API used in sharder.reshard, currently only support redistribution
-        of existing shards (across different ranks, ideally from hot ranks to cold ranks)
-        Update shards for this module based on the changed_sharding_params. This will:
-        1. Move current lookup tensors to CPU
-        2. Purge lookups
-        3. Call shards_all_2_all containing collective to redistribute tensors
-        4. Update state_dict and other attributes to reflect new placements and shards
-        5. Create new lookups, and load in updated state_dict
+        Updates the sharded embedding module in place based on the changed_sharding_params,
+        which contains the new ParameterSharding with different shard placements.
+
+        This method handles resharding of embedding tables, optimizer state transfer,
+        and updates the internal lookup and distribution modules to reflect the new sharding.
 
         Args:
             changed_sharding_params (Dict[str, ParameterSharding]): A dictionary mapping
                 table names to their new parameter sharding configs. This should only
                 contain shards/table names that need to be moved.
-            env (ShardingEnv): The sharding environment for the module.
+            env (ShardingEnv): The sharding environment.
             device (Optional[torch.device]): The device to place the updated module on.
+
+        Returns:
+            None
+        Raises:
+            RuntimeError: If DTensor output is enabled, as resharding is not yet supported for DTensor.
         """
         if env.output_dtensor:
             raise RuntimeError("We do not yet support DTensor for resharding yet")
             return
 
         current_state = self.state_dict()
-        current_state = move_sharded_tensors_to_cpu(current_state)
-        # TODO: improve, checking one would be enough
+
+        # Check if local optimizer state exists and is non-empty for all optimizers.
         has_local_optimizer = len(self._optim._optims) > 0 and all(
             len(i) > 0 for i in self._optim.state_dict()["state"].values()
         )
 
-        # communicate optimizer state across all ranks, because if one rank owns all tables
-        # and other ranks does not own any table, and later transfer the weights to empty rank
-        # creates inconsistent state, because initally empty rank does not have optimizer state
-        # hence, incorrectly computes the tensor splits
-
+        # Communicate optimizer state across all ranks to ensure consistency.
         has_optimizer = self._is_optimizer_enabled(has_local_optimizer, env, device)
 
-        # TODO: make sure this is clearing  all lookups
-        self._purge_lookups()
+        # Save old lookup modules for cleanup.
+        old_lookups: List[nn.Module] = self._softcopy_lookups()
 
-        # Get max dim size to enable padding for all_to_all
-        max_dim_0, max_dim_1 = get_largest_dims_from_sharding_plan_updates(
-            changed_sharding_params
-        )
+        # Save old optimizer state if present.
         old_optimizer_state = self._optim.state_dict() if has_local_optimizer else None
-        if old_optimizer_state is not None:
-            move_sharded_tensors_to_cpu(old_optimizer_state)
 
-        local_shard_names_by_src_rank, local_output_tensor_cpu = shards_all_to_all(
-            module=self,
-            state_dict=current_state,
-            device=device,  # pyre-ignore
-            changed_sharding_params=changed_sharding_params,
-            env=env,
-            extend_shard_name=self.extend_shard_name,
-            max_dim_0=max_dim_0,
-            max_dim_1=max_dim_1,
-            optimizer_state=old_optimizer_state,
-            has_optimizer=has_optimizer,
+        assert hasattr(self, "module_sharding_plan")
+        current_module_sharding_plan = copy.deepcopy(self.module_sharding_plan)
+
+        # Update the module sharding plan with the changed sharding parameters.
+        update_module_sharding_plan(
+            self, changed_sharding_params, self.sharding_type_to_sharding_infos
         )
-
-        for name, param in changed_sharding_params.items():
-            self.module_sharding_plan[name] = param
-            # TODO: Support detecting old sharding type when sharding type is changing
-            for sharding_info in self.sharding_type_to_sharding_infos[
-                param.sharding_type
-            ]:
-                if sharding_info.embedding_config.name == name:
-                    sharding_info.param_sharding = param
 
         self._sharding_types: List[str] = list(
             self.sharding_type_to_sharding_infos.keys()
         )
         # TODO: Optimize to update only the changed embedding shardings
+
+        # Recreate embedding sharding modules based on the new sharding infos.
         self._embedding_shardings: List[
             EmbeddingSharding[
                 EmbeddingShardingContext,
@@ -1816,7 +1784,7 @@ class ShardedEmbeddingBagCollection(
             for embedding_configs in self.sharding_type_to_sharding_infos.values()
         ]
 
-        # Reset input dists
+        # Reset input distribution and feature ordering.
         self._has_uninitialized_input_dist = True
         self._input_dists: List[nn.Module] = []
         self._features_order: List[int] = []
@@ -1825,15 +1793,16 @@ class ShardedEmbeddingBagCollection(
         self._create_lookups()
         self._update_output_dist()
 
+        # Re-initialize torch state if in a distributed environment.
         if env.process_group and dist.get_backend(env.process_group) != "fake":
             self._initialize_torch_state(skip_registering=True)
 
-        # update optimizer
+        # Update optimizer to reflect new parameters.
         optims = []
         for lookup in self._lookups:
             for _, tbe_module in lookup.named_modules():
                 if isinstance(tbe_module, FusedOptimizerModule):
-                    # modify param keys to match EmbeddingBagCollection
+                    # Modify param keys to match EmbeddingBagCollection
                     params: Mapping[str, Union[torch.Tensor, ShardedTensor]] = {}
                     for (
                         param_key,
@@ -1845,31 +1814,82 @@ class ShardedEmbeddingBagCollection(
                     optims.append(("", tbe_module.fused_optimizer))
 
         self._optim: CombinedOptimizer = CombinedOptimizer(optims)
+        new_state = self.state_dict()
 
-        if has_optimizer:
-            optimizer_state = update_optimizer_state_post_resharding(
-                old_opt_state=old_optimizer_state,  # pyre-ignore
-                new_opt_state=self._optim.state_dict(),
-                ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-                output_tensor=local_output_tensor_cpu,
-                max_dim_0=max_dim_0,
+        optimizer_state: Dict[str, Dict[str, Dict[str, Any]]] = self._optim.state_dict()
+
+        # Prepare and execute communication operations for state transfer.
+        shard_keys = list(changed_sharding_params.keys())
+        comms_op: Dict[CommStrategy, List[CommP2PMetadata]] = {}
+        reqs: List[Tuple[dist.Work, CommP2PMetadata]] = []
+        # Pipeline for communication and computation overlapping
+        # move shards of current table while loading next table shards for communiucation
+        for i, (shard_name, nxt_shard_name) in enumerate(
+            zip_longest(shard_keys, shard_keys[1:])
+        ):
+            if i == 0:
+                # Prepare communication P2P operations
+                comms_op = prepare_comm_ops(
+                    module_sharding_plan=current_module_sharding_plan,
+                    current_state_dict=current_state,
+                    new_state_dict=new_state,
+                    changed_sharding_params=changed_sharding_params,
+                    shard_name=shard_name,
+                    env=env,
+                    current_opt_state=old_optimizer_state,
+                    new_opt_state=optimizer_state,
+                    extend_shard_name=self.extend_shard_name,
+                    has_optimizer=has_optimizer,
+                )
+
+            if comms_op:
+                # call underlying batch_isend_irecv primitives
+                reqs = transfer_data(comms_op=comms_op)
+
+            if nxt_shard_name:
+                comms_op = prepare_comm_ops(
+                    module_sharding_plan=current_module_sharding_plan,
+                    current_state_dict=current_state,
+                    new_state_dict=new_state,
+                    changed_sharding_params=changed_sharding_params,
+                    shard_name=nxt_shard_name,
+                    env=env,
+                    current_opt_state=old_optimizer_state,
+                    new_opt_state=optimizer_state,
+                    extend_shard_name=self.extend_shard_name,
+                    has_optimizer=has_optimizer,
+                )
+            else:
+                break
+            # Update state and optimizer states
+            update_state_dictionaries(
+                reqs=reqs,
+                old_optimizer_state=old_optimizer_state,
+                new_optimizer_state=optimizer_state,
+                old_state=current_state,
+                new_state=new_state,
+                changed_sharding_params=changed_sharding_params,
                 extend_shard_name=self.extend_shard_name,
             )
-            self._optim.load_state_dict(optimizer_state)
 
-        new_state = self.state_dict()
-        current_state = update_state_post_resharding(
+        update_state_dictionaries(
+            reqs=reqs,
+            old_optimizer_state=old_optimizer_state,
+            new_optimizer_state=optimizer_state,
             old_state=current_state,
             new_state=new_state,
-            ordered_shard_names_and_lengths=local_shard_names_by_src_rank,
-            output_tensor=local_output_tensor_cpu,
+            changed_sharding_params=changed_sharding_params,
             extend_shard_name=self.extend_shard_name,
-            has_optimizer=has_optimizer,
+            update_local=True,
         )
 
-        self.load_state_dict(current_state)
-
-        update_module_sharding_plan(self, changed_sharding_params)
+        # Clean up old lookup modules.
+        for lookup in old_lookups:
+            del lookup
+        old_lookups.clear()
+        self.load_state_dict(new_state, assign=True)
+        if has_optimizer:
+            self._optim.load_state_dict(optimizer_state)
         return
 
     def create_rocksdb_hard_link_snapshot(self) -> None:
