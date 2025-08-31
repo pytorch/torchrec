@@ -321,6 +321,11 @@ def _populate_zero_collision_tbe_params(
         enable_optimizer_offloading=True,
         backend_return_whole_row=(backend_type == BackendType.DRAM),
         eviction_policy=eviction_policy,
+        embedding_cache_mode=(
+            config.fused_params.get("embedding_cache_mode", False)
+            if config.fused_params
+            else False
+        ),
     )
 
 
