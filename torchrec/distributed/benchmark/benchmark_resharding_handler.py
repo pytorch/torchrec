@@ -76,6 +76,13 @@ class ReshardingHandler:
                 rng = random.Random(index)
                 ranks_per_tables_for_CW.append(rng.choice(valid_candidates))
 
+            lightweight_ebc = EmbeddingBagCollection(
+                tables=module._embedding_bag_configs,
+                device=torch.device(
+                    "meta"
+                ),  # Use meta device to avoid actual memory allocation
+            )
+            meta_device = torch.device("meta")
             for i in range(num_plans):
                 new_ranks = generate_rank_placements(
                     world_size, num_tables, ranks_per_tables, i
@@ -98,23 +105,14 @@ class ReshardingHandler:
                         )
                         new_per_param_sharding[talbe_id] = tw_gen
 
-            lightweight_ebc = EmbeddingBagCollection(
-                tables=module._embedding_bag_configs,
-                device=torch.device(
-                    "meta"
-                ),  # Use meta device to avoid actual memory allocation
-            )
-
-            meta_device = torch.device("meta")
-            new_plan = construct_module_sharding_plan(
-                lightweight_ebc,
-                per_param_sharding=new_per_param_sharding,  # Pyre-ignore
-                local_size=world_size,
-                world_size=world_size,
-                # Pyre-ignore
-                device_type=meta_device,
-            )
-            self._resharding_plans.append(new_plan)
+                new_plan = construct_module_sharding_plan(
+                    lightweight_ebc,
+                    per_param_sharding=new_per_param_sharding,
+                    world_size=world_size,
+                    # Pyre-ignore
+                    device_type=meta_device,
+                )
+                self._resharding_plans.append(new_plan)
         else:
             raise RuntimeError(f"Plan does not have key: {key}")
 

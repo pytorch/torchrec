@@ -8,11 +8,13 @@
 # pyre-strict
 
 import copy
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
-import torch.nn.functional as F
+from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
     ParameterSharding,
@@ -21,6 +23,14 @@ from torchrec.distributed.types import (
     ShardingEnv,
     ShardingType,
 )
+
+
+class CommStrategy(Enum):
+    STATE_INTER_NODE_COMM = "state_inter_node_comm"
+    STATE_INTRA_NODE_COMM = "state_intra_node_comm"
+    OPT_INTER_NODE_COMM = "opt_inter_node_comm"
+    OPT_INTRA_NODE_COMM = "opt_intra_node_comm"
+
 
 OrderedShardNamesWithSizes = List[Tuple[str, List[int]]]
 """
@@ -93,31 +103,43 @@ The structure of each tuple is as follows:
     source modulesharding plan. and the data can be accessed through rank=1, first local tensor and this is being sent to rank 2,
     the new shard size is (10,4)
 """
+MAX_TAG_HASH_VALUE: int = 0x7FFFFFFF
+
+
+@dataclass
+class CommP2PMetadata:
+    shard_name: str
+    offsets: List[int]
+    comm_op: dist.P2POp
+    requires_copy: bool
+    is_optimizer_state: bool
 
 
 def _generate_shard_allocation_metadata(
-    shard_name: str,
     source_params: ParameterSharding,
     destination_params: ParameterSharding,
     rank: int,
     world_size: int,
 ) -> ShardToRankMapping:
     """
-    Generates a mapping of shards to ranks for redistribution of data.
+    Generates metadata mapping for shard allocation between source and destination sharding parameters.
 
-    This function creates a mapping from source ranks to destination ranks
-    based on the sharding specifications provided in the source and destination
-    parameters. It calculates the shard dimensions and allocates them to the
-    appropriate ranks in a greedy manner.
+    This function computes how shards from the source sharding plan should be allocated to the destination
+    sharding plan, producing a mapping from source ranks to lists of tuples describing the shard transfer.
+    Each tuple contains:
+        - The index of the shard in the source sharding plan.
+        - The local shard index for the source rank.
+        - The destination rank to which the shard is being sent.
+        - The offsets (start and end) in the shard's dimension for the transfer.
 
     Args:
-        shard_name (str): The name of the shard being processed.
-        source_params (ParameterSharding): The sharding parameters for the source.
-        destination_params (ParameterSharding): The sharding parameters for the destination.
+        source_params (ParameterSharding): The sharding parameters of the source (current) sharding plan.
+        destination_params (ParameterSharding): The sharding parameters of the destination (new) sharding plan.
+        rank (int): The current process rank.
+        world_size (int): The total number of ranks in the distributed setup.
 
     Returns:
-        Dict[int, List[Tuple[int, List[int]]]]: A dictionary mapping source ranks to a list of tuples,
-        where each tuple contains a destination rank and the corresponding shard offsets.
+        ShardToRankMapping: A dictionary mapping source ranks to lists of shard transfer metadata tuples.
     """
     shard_to_rank_mapping: ShardToRankMapping = {}
     src_rank_index = 0
@@ -177,56 +199,83 @@ def _generate_shard_allocation_metadata(
     return shard_to_rank_mapping
 
 
-def _process_shard_redistribution_metadata(
+def _is_intra_comm(src_rank: int, dst_rank: int, local_world_size: int) -> bool:
+    return (src_rank // local_world_size) == (dst_rank // local_world_size)
+
+
+def _generate_tag(
+    src_rank: int,
+    shard_id: int,
+    local_shard_id: int,
+    dst_rank: int,
+    shard_name: str,
+    is_optimizer_state: bool = False,
+) -> int:
+    """
+    Generates a unique tag for point-to-point (P2P) communication operations.
+
+    This function creates a unique tag for each P2P communication operation based on the provided parameters.
+    The tag is generated using a hash-based approach to ensure uniqueness within a 32-bit signed integer range.
+    """
+    return (
+        hash(
+            (
+                src_rank,
+                shard_id,
+                local_shard_id,
+                dst_rank,
+                shard_name,
+                is_optimizer_state,
+            )
+        )
+        & MAX_TAG_HASH_VALUE
+    )
+
+
+def _prepare_shard_distribution_comm_ops(
     rank: int,
     shard_name: str,
-    max_dim_0: int,
-    max_dim_1: int,
     shard_to_rank_mapping: ShardToRankMapping,
-    sharded_tensor: ShardedTensor,
-    input_splits_per_rank: List[List[int]],
-    output_splits_per_rank: List[List[int]],
-    shard_names_to_lengths_by_src_rank: List[List[Tuple[str, List[int]]]],
-    local_table_to_input_tensor_by_dst_rank: List[List[torch.Tensor]],
-    local_table_to_opt_by_dst_rank: List[List[torch.Tensor]],
-    optimizer_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]] = None,
+    current_state_dict: Dict[str, ShardedTensor],
+    new_state_dict: Dict[str, ShardedTensor],
+    comm_ops: Dict[CommStrategy, List[CommP2PMetadata]],
     extend_shard_name: Callable[[str], str] = lambda x: x,
+    current_opt_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]] = None,
+    new_opt_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]] = None,
     has_optimizer: bool = False,
-) -> Tuple[int, int]:
+    process_group: Optional[dist.ProcessGroup] = None,
+) -> None:
     """
-    Processes the metadata for shard redistribution across ranks.
+    Prepares the point-to-point (P2P) communication operations required to redistribute sharded tensors
+    (and optionally optimizer state) between source and destination ranks during resharding.
 
-    This function handles the redistribution of shards from source ranks to destination ranks
-    based on the provided shard-to-rank mapping. It updates the input and output splits for
-    each rank and manages the optimizer state if present.
+    This function processes the shard-to-rank mapping and, for each shard that needs to be sent or received
+    by the current rank, creates the appropriate send/receive operations (isend/irecv) for both model state
+    and optimizer state. It organizes these operations into the provided comm_ops dictionary, grouped by
+    communication strategy (inter-node/intra-node, model/optimizer).
 
     Args:
-        rank (int): The current rank of the process.
-        shard_name (str): The name of the shard being processed.
-        max_dim_0 (int): The maximum dimension size of dim 0 for padding.
-        max_dim_1 (int): The maximum dimension size of dim 1 for padding.
-        shard_to_rank_mapping ShardToRankMapping: Mapping of source ranks to destination ranks and shard offsets.
-        sharded_tensor (ShardedTensor): The sharded tensor being processed.
-        input_splits_per_rank (List[List[int]]): Input split sizes for each rank.
-        output_splits_per_rank (List[List[int]]): Output split sizes for each rank.
-        shard_names_to_lengths_by_src_rank (List[List[Tuple[str, List[int]]]]): List of shard names and sizes by source rank.
-        local_table_to_input_tensor_by_dst_rank (List[List[torch.Tensor]]): Local input tensors for each destination rank.
-        local_table_to_opt_by_dst_rank (List[List[torch.Tensor]]): Local optimizer tensors for each destination rank.
-        optimizer_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]]): The optimizer state, if present.
-        extend_shard_name (Callable[[str], str]): Function to extend shard names.
-        has_optimizer (bool): Flag indicating whether any rank has an optimizer state for this shard. Destination ranks
-            initally may not have an optimizer state, but if any source rank has an optimizer state, then all destinations
-            should recreate that optimizer state.
+        rank (int): The current process rank.
+        shard_name (str): The name of the shard/table being processed.
+        shard_to_rank_mapping (ShardToRankMapping): Mapping from source ranks to lists of shard transfer metadata.
+        current_state_dict (Dict[str, ShardedTensor]): State dict containing current sharded tensors.
+        new_state_dict (Dict[str, ShardedTensor]): State dict for the new sharded tensors after redistribution.
+        comm_ops (Dict[CommStrategy, List[CommP2PMetadata]]): Dictionary to be populated with communication operations.
+        extend_shard_name (Callable[[str], str], optional): Function to extend shard names to full names in state dicts.
+        current_opt_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]], optional): Current optimizer state dict.
+        new_opt_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]], optional): New optimizer state dict to update.
+        has_optimizer (bool, optional): Whether optimizer state communication is required.
+        process_group (Optional[dist.ProcessGroup], optional): The process group for distributed communication.
 
     Returns:
-        Tuple[int, int]: Counts of output tensors and optimizer tensors processed.
+        None
     """
-
-    output_tensor_count = 0
-    output_optimizer_count = 0
     has_local_optimizer = (
-        optimizer_state is not None
+        current_opt_state is not None
     )  # local optimizer represents wether sharding table has optimizer state locally.
+
+    receiving_shards_metadata: List[Tuple[int, int, int, int, List[int]]] = []
+    extended_shard_name: str = extend_shard_name(shard_name)
 
     # Process each shard mapping from source to destination
     for src_rank, dsts in shard_to_rank_mapping.items():
@@ -234,26 +283,34 @@ def _process_shard_redistribution_metadata(
         for shard_id, local_shard_id, dst_rank, split_offsets in dsts:
 
             # Get shard metadata
-            shard_metadata = sharded_tensor.metadata().shards_metadata[shard_id]
+
+            sharded_t = current_state_dict[extended_shard_name]
+
+            shard_metadata = sharded_t.metadata().shards_metadata[shard_id]
             shard_size = shard_metadata.shard_sizes
+
+            shard_offsets = shard_metadata.shard_offsets
 
             assert split_offsets[0] >= 0
             assert split_offsets[1] <= shard_size[1]
             # Update the shard size with new size
             shard_size = [shard_size[0], split_offsets[1] - split_offsets[0], shard_id]
-            # Update split sizes for communication
-            input_splits_per_rank[src_rank][dst_rank] += shard_size[0]
-            output_splits_per_rank[dst_rank][src_rank] += shard_size[0]
 
+            intra = _is_intra_comm(src_rank, dst_rank, 8)
+            # Create unique tag for P2P communication (32-bit limit for PyTorch)
+
+            tag = _generate_tag(
+                src_rank, shard_id, local_shard_id, dst_rank, shard_name, False
+            )
+            tag_opt = _generate_tag(
+                src_rank, shard_id, local_shard_id, dst_rank, shard_name, True
+            )
             # Process data being sent from current rank
             if src_rank == rank:
-                # Handle optimizer state if present
-                extended_shard_name: str = extend_shard_name(shard_name)
                 if has_local_optimizer:
-                    momentun_name = tmp_momentum_extender(shard_name)
-
+                    momentun_name = _tmp_momentum_extender(shard_name)
                     # Pyre-ignore
-                    local_optimizer_shards = optimizer_state["state"][
+                    local_optimizer_shards = current_opt_state["state"][
                         extended_shard_name
                     ][momentun_name].local_shards()
 
@@ -261,149 +318,367 @@ def _process_shard_redistribution_metadata(
                         local_shard_id
                     ].tensor
 
-                    if len(local_optimizer_tensor.size()) == 1:  # 1D Optimizer Tensor
-                        # Convert to 2D Tensor, transpose, for AllToAll
-                        local_optimizer_tensor = local_optimizer_tensor.view(
-                            local_optimizer_tensor.size(0), 1
-                        )
-                    else:
+                    if len(local_optimizer_tensor.size()) > 1:  # 2D Optimizer Tensor
                         local_optimizer_tensor = local_optimizer_tensor[
                             :, split_offsets[0] : split_offsets[1]
                         ]
 
-                    padded_optimizer_tensor = pad_tensor_to_max_dims(
-                        local_optimizer_tensor, shard_size[0], max_dim_1
+                    comm_op = dist.P2POp(
+                        dist.isend,
+                        local_optimizer_tensor,
+                        dst_rank,
+                        process_group,
+                        tag_opt,
                     )
-                    local_table_to_opt_by_dst_rank[dst_rank].append(
-                        padded_optimizer_tensor
+                    comm_ops_obj = CommP2PMetadata(
+                        shard_name,
+                        [split_offsets[0], split_offsets[1]],
+                        comm_op,
+                        False,
+                        True,
                     )
+                    if intra:
+                        comm_ops[CommStrategy.OPT_INTRA_NODE_COMM].append(comm_ops_obj)
+                    else:
+                        comm_ops[CommStrategy.OPT_INTER_NODE_COMM].append(comm_ops_obj)
 
-                    input_splits_per_rank[src_rank][dst_rank] += shard_size[0]
-
-                local_shards = sharded_tensor.local_shards()
+                local_shards = sharded_t.local_shards()
 
                 local_tensor = local_shards[local_shard_id].tensor
 
                 dst_t = local_tensor[:, split_offsets[0] : split_offsets[1]]
+                if not dst_t.is_contiguous():
+                    dst_t = dst_t.contiguous()
 
-                padded_tensor = pad_tensor_to_max_dims(dst_t, shard_size[0], max_dim_1)
-                local_table_to_input_tensor_by_dst_rank[dst_rank].append(padded_tensor)
+                comm_op_state = dist.P2POp(
+                    dist.isend, dst_t, dst_rank, process_group, tag
+                )
+                comm_ops_obj = CommP2PMetadata(
+                    shard_name,
+                    [split_offsets[0], split_offsets[1]],
+                    comm_op_state,
+                    False,
+                    False,
+                )
+
+                if intra:
+                    comm_ops[CommStrategy.STATE_INTRA_NODE_COMM].append(comm_ops_obj)
+                else:
+                    comm_ops[CommStrategy.STATE_INTER_NODE_COMM].append(comm_ops_obj)
 
             # Process data being received at current rank
             if dst_rank == rank:
-                shard_names_to_lengths_by_src_rank[src_rank].append(
-                    (shard_name, shard_size)
+                receiving_shards_metadata.append(
+                    (shard_offsets[1], src_rank, tag, tag_opt, shard_size)
                 )
 
-                output_tensor_count += shard_size[0]
-                if has_optimizer:
+    if len(receiving_shards_metadata) > 0:
 
-                    output_optimizer_count += shard_size[0]
-                    output_splits_per_rank[dst_rank][src_rank] += shard_size[0]
+        receiving_shards_metadata.sort(key=lambda x: x[0])
+        dst_t = new_state_dict[extended_shard_name]
+        local_shards_dst = dst_t.local_shards()
 
-    return output_tensor_count, output_optimizer_count
+        # TODO: assume only one tensor is available, but min_partiton property can have multiple tensors
+        local_tensor_dst = local_shards_dst[0].tensor
+
+        tensor_col_offset = 0
+        for _, src_rank, tag, tag_opt, shard_size in receiving_shards_metadata:
+            intra = _is_intra_comm(src_rank, rank, 8)
+            end_col_offset = tensor_col_offset + shard_size[1]
+            receving_tensor_view = local_tensor_dst[:, tensor_col_offset:end_col_offset]
+            copy = False
+            if not receving_tensor_view.is_contiguous():
+                receving_tensor_view = receving_tensor_view.contiguous()
+                copy = True
+
+            comm_op_state_new = dist.P2POp(
+                dist.irecv, receving_tensor_view, src_rank, process_group, tag
+            )
+            comm_ops_obj = CommP2PMetadata(
+                shard_name,
+                [tensor_col_offset, end_col_offset],
+                comm_op_state_new,
+                copy,
+                False,
+            )
+
+            if intra:
+                comm_ops[CommStrategy.STATE_INTRA_NODE_COMM].append(comm_ops_obj)
+            else:
+                comm_ops[CommStrategy.STATE_INTER_NODE_COMM].append(comm_ops_obj)
+            if has_optimizer:
+                momentum_name = _tmp_momentum_extender(shard_name)
+                new_opt_state_state = new_opt_state["state"]
+                sharded_t_opt = new_opt_state_state[extended_shard_name][momentum_name]
+                local_tensor_opt_dst = sharded_t_opt._local_shards[0].tensor
+                receving_tensor_view_opt = local_tensor_opt_dst
+                if len(local_tensor_opt_dst.size()) > 1:
+                    # TODO: changing col_dims require separate handling of tensor,for row_wise ada grad,
+                    # because we need to merge incoming weights
+                    receving_tensor_view_opt = local_tensor_opt_dst[
+                        :, tensor_col_offset:end_col_offset
+                    ]
+                copy = False
+                if not receving_tensor_view_opt.is_contiguous():
+                    receving_tensor_view_opt = receving_tensor_view_opt.contiguous()
+                    copy = True
+                comm_op_opt_receiv = dist.P2POp(
+                    dist.irecv,
+                    receving_tensor_view_opt,
+                    src_rank,
+                    process_group,
+                    tag_opt,
+                )
+                comm_ops_obj = CommP2PMetadata(
+                    shard_name,
+                    [tensor_col_offset, end_col_offset],
+                    comm_op_opt_receiv,
+                    copy,
+                    True,
+                )
+                if intra:
+                    comm_ops[CommStrategy.OPT_INTRA_NODE_COMM].append(comm_ops_obj)
+                else:
+                    comm_ops[CommStrategy.OPT_INTER_NODE_COMM].append(comm_ops_obj)
+            tensor_col_offset = end_col_offset
 
 
-def _create_local_shard_tensors(
-    ordered_shard_names_and_lengths: OrderedShardNamesWithSizes,
-    output_tensor: torch.Tensor,
-    has_optimizer: bool = False,
-    optimizer_mode: bool = False,
-    new_state: Optional[Dict[str, Dict[str, ShardedTensor]]] = None,
-    extend_shard_name: Optional[Callable[[str], str]] = None,
-) -> Dict[str, List[torch.Tensor]]:
+def _update_state_post_resharding(
+    old_state: Dict[str, ShardedTensor],
+    new_state: Dict[str, ShardedTensor],
+    changed_sharding_params: Dict[str, ParameterSharding],
+    extend_shard_name: Callable[[str], str] = lambda x: x,
+    comm_metadata: Optional[CommP2PMetadata] = None,
+) -> None:
     """
-    Creates local shard tensors from the output tensor based on the ordered shard names and lengths.
+    Updates the model state dictionary after resharding communication.
 
-    This function slices the output tensor into smaller tensors (shards) according to the specified
-    dimensions in `ordered_shard_names_and_lengths`. It pads each shard to the maximum dimensions
-    and concatenates them if multiple shards exist for the same shard name.
+    This function handles two scenarios:
+    1. If `comm_metadata` is provided, it updates a specific slice of the local shard tensor in `new_state`
+       with the received data (`updated_tensor`) for the given shard and offsets.
+    2. If `comm_metadata` is not provided, it iterates over all shards in `new_state` and copies the local
+       shard tensors and metadata from `old_state` for shards that have not changed sharding parameters.
 
     Args:
-        ordered_shard_names_and_lengths (OrderedShardNamesWithSizes): A list of tuples containing shard names
-            and their corresponding sizes.
-        output_tensor (torch.Tensor): The tensor containing all shards received by the current rank.
+        old_state (Dict[str, ShardedTensor]): Previous model state dictionary containing sharded tensors.
+        new_state (Dict[str, ShardedTensor]): New model state dictionary to be updated.
+        changed_sharding_params (Dict[str, ParameterSharding]): Dictionary of parameters whose sharding has changed.
+        extend_shard_name (Callable[[str], str], optional): Function to extend shard names to full names in state dicts.
+        comm_metadata (Optional[CommP2PMetadata], optional): Communication metadata for a specific shard update.
 
     Returns:
-        Dict[str, torch.Tensor]: A dictionary mapping shard names to their corresponding local output tensors.
-        has_optimizer (bool): Flag indicating whether optimizer is enabled and optimizer weights are present.
-            It is helpful, to determine the split indexes of the output_tensor.
-
-        e.g output_tensor_format when has_optimizer enabled = [ST1,OPW1,ST2,OPW2,ST3,OPW3,ST4,OPW4]
-        e.g output_tensor_format when has_optimizer disabled = [ST1,ST2,ST3,ST4]
+        None
     """
+    if comm_metadata:
+        shard_name = comm_metadata.shard_name
+        offsets = comm_metadata.offsets
+        updated_tensor = comm_metadata.comm_op.tensor
+        extended_shard_name = extend_shard_name(shard_name)
+        sharded_t = new_state[extended_shard_name]
+        local_shards = sharded_t._local_shards
+        assert len(sharded_t._local_shards) == 1
+        local_t = sharded_t._local_shards[0].tensor
+        local_t_slice = local_t[:, offsets[0] : offsets[1]]
+        local_t_slice.copy_(updated_tensor, non_blocking=True)
+    else:
+        for extended_shard_name, _ in new_state.items():
+            shard_name = _extract_shard_name(extended_shard_name)
+            if (
+                old_state is not None
+                and extended_shard_name in old_state
+                and shard_name not in changed_sharding_params.keys()
+            ):
 
-    shard_name_to_local_output_tensor: Dict[str, List[torch.Tensor]] = {}
+                sharded_t = new_state[extended_shard_name]
+                sharded_t_old = old_state[extended_shard_name]
 
-    slice_index = 0
+                local_shards = sharded_t._local_shards
+                for i, shard in enumerate(local_shards):
+                    shard.tensor.copy_(
+                        sharded_t_old._local_shards[i].tensor, non_blocking=True
+                    )
+                    shard.metadata = sharded_t_old._local_shards[i].metadata
 
-    splitted_shards_with_names: Dict[str, List[Tuple[int, torch.Tensor]]] = {}
-    for i, (shard_name, shard_size) in enumerate(ordered_shard_names_and_lengths):
-        if i == 0:
-            slice_index = 0 if not optimizer_mode else shard_size[0]
-        shard_id = shard_size[2]
-        end_slice_index = slice_index + shard_size[0]
-        cur_t = output_tensor[slice_index:end_slice_index]
-        cur_t = cur_t[: shard_size[0], : shard_size[1]]
 
-        extended_shard_name = (
-            extend_shard_name(shard_name) if extend_shard_name else shard_name
-        )
-        new_state = new_state if new_state else {}
+def _update_optimizer_state_post_resharding(
+    old_opt_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]],
+    new_opt_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]],
+    changed_sharding_params: Dict[str, ParameterSharding],
+    extend_shard_name: Callable[[str], str] = lambda x: x,
+    comm_metadata: Optional[CommP2PMetadata] = None,
+) -> None:
+    """
+    Updates the optimizer state dictionary after resharding communication.
 
-        momentum_name = tmp_momentum_extender(shard_name)
+    This function handles two scenarios:
+    1. If `comm_metadata` is provided, it updates a specific slice of the local shard tensor in `new_opt_state`
+       with the received data (`updated_tensor`) for the given shard and offsets.
+    2. If `comm_metadata` is not provided, it iterates over all shards in `new_opt_state` and copies the local
+       shard tensors and metadata from `old_opt_state` for shards that have not changed sharding parameters.
 
-        if (
-            optimizer_mode
-            and new_state is not None
-            and extended_shard_name in new_state.keys()
-        ):
-            sharded_t = new_state[extended_shard_name][momentum_name]
-            assert len(sharded_t._local_shards) == 1
+    Args:
+        old_opt_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]]): Previous optimizer state dictionary.
+        new_opt_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]]): New optimizer state dictionary to be updated.
+        changed_sharding_params (Dict[str, ParameterSharding]): Dictionary of parameters whose sharding has changed.
+        extend_shard_name (Callable[[str], str], optional): Function to extend shard names to full names in state dicts.
+        comm_metadata (Optional[CommP2PMetadata], optional): Communication metadata for a specific shard update.
 
-            if len(sharded_t._local_shards[0].tensor.size()) == 1:
-                cur_t.mul_(shard_size[1])  # Supporting RowWise Adagrad operation
+    Returns:
+        None
+    """
+    new_opt_state_state = new_opt_state["state"] if new_opt_state else None
+    old_opt_state_state = old_opt_state["state"] if old_opt_state else None
 
-        if shard_name not in splitted_shards_with_names:
-            splitted_shards_with_names[shard_name] = [(shard_id, cur_t)]
+    if new_opt_state_state is None or len(new_opt_state_state) == 0:
+        return
+
+    if comm_metadata:
+        shard_name = comm_metadata.shard_name
+        offsets = comm_metadata.offsets
+        updated_tensor = comm_metadata.comm_op.tensor
+        momentum_name = _tmp_momentum_extender(shard_name)
+        extended_shard_name = extend_shard_name(shard_name)
+        item = new_opt_state_state[extended_shard_name]
+        sharded_t = item[momentum_name]
+        assert len(sharded_t._local_shards) == 1
+        local_t = sharded_t._local_shards[0].tensor
+        if len(local_t.size()) == 1:
+            # TODO:  need a way to  merge the optimizer
+            # Only invokes in row_wise adagrad, col dimesional changes
+            local_t.copy_(updated_tensor, non_blocking=True)
+
         else:
-            splitted_shards_with_names[shard_name].append((shard_id, cur_t))
+            local_t_slice = local_t[:, offsets[0] : offsets[1]]
+            local_t_slice.copy_(updated_tensor, non_blocking=True)
 
-        slice_index = (
-            end_slice_index
-            if not has_optimizer
-            else (
-                end_slice_index + shard_size[0]
-                if not optimizer_mode
-                else (
-                    end_slice_index + ordered_shard_names_and_lengths[i + 1][1][0]
-                    if i < len(ordered_shard_names_and_lengths) - 1
-                    else end_slice_index
+    else:
+        for extended_shard_name, _ in new_opt_state_state.items():
+            shard_name = _extract_shard_name(extended_shard_name)
+            momentum_name = _tmp_momentum_extender(shard_name)
+            if (
+                old_opt_state_state is not None
+                and extended_shard_name in old_opt_state_state
+                and shard_name not in changed_sharding_params.keys()
+            ):
+
+                sharded_t = new_opt_state_state[extended_shard_name][momentum_name]
+                sharded_t_old = old_opt_state_state[extended_shard_name][momentum_name]
+                local_shards = sharded_t._local_shards
+                for i, shard in enumerate(local_shards):
+                    shard.tensor.copy_(
+                        sharded_t_old._local_shards[i].tensor, non_blocking=True
+                    )
+                    shard.metadata = sharded_t_old._local_shards[i].metadata
+
+
+def _aggregate_response_list(
+    works: List[dist.Work], ops_list: List[CommP2PMetadata]
+) -> List[Tuple[dist.Work, CommP2PMetadata]]:
+    """
+    Aggregates the results of asynchronous communication operations with their corresponding metadata.
+
+    This function matches the list of distributed work objects (`works`) with the list of communication
+    operation metadata (`ops_list`). If there is a one-to-one correspondence (no batching), it zips the two lists.
+    If batching occurred (i.e., a single work object corresponds to multiple operations), it pairs each operation
+    in `ops_list` with the first work object in `works`.
+
+    Args:
+        works (List[dist.Work]): List of distributed work objects returned by communication operations.
+        ops_list (List[CommP2PMetadata]): List of communication operation metadata.
+
+    Returns:
+        List[Tuple[dist.Work, CommP2PMetadata]]: List of tuples pairing each work object with its corresponding metadata.
+    """
+    res: List[Tuple[dist.Work, CommP2PMetadata]] = []
+    if len(works) == len(ops_list):
+        # 1:1 mapping (no batching occurred)
+        res.extend(list(zip(works, ops_list)))
+    else:
+        # Batching occurred - all operations share the same work object
+        for entry in ops_list:
+            res.append((works[0], entry))
+    return res
+
+
+"""
+Utils for Optimizer State accessing
+"""
+
+
+def _tmp_momentum_extender(name: str) -> str:
+    return name + ".momentum1"
+
+
+def _extract_shard_name(name: str) -> str:
+    return name.split(".")[-2]
+
+
+def update_state_dictionaries(
+    reqs: List[Tuple[dist.Work, CommP2PMetadata]],
+    old_optimizer_state: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+    new_optimizer_state: Optional[Dict[str, Dict[str, Dict[str, Any]]]],
+    old_state: Dict[str, Any],
+    new_state: Dict[str, Any],
+    changed_sharding_params: Dict[str, ParameterSharding],
+    extend_shard_name: Callable[[str], str] = lambda x: x,
+    update_local: bool = False,
+) -> None:
+    """
+    Updates the state dictionaries for model and optimizer after resharding communication operations.
+
+    This function waits for corresponding asynchronous communication operations (such as isend/irecv) to complete,
+    and then updates the local state dictionaries (model and optimizer) with the received data.
+    It handles both optimizer state and model state updates, depending on the communication metadata.
+    If `update_local` is True, it also updates local shards that were not changed during communication.
+
+    Args:
+        reqs (List[Tuple[dist.Work, CommP2PMetadata]]): List of tuples containing waitable communication work objects
+            and associated metadata for each communication operation.
+        old_optimizer_state (Optional[Dict[str, Dict[str, Dict[str, Any]]]]): Previous optimizer state dictionary.
+        new_optimizer_state (Optional[Dict[str, Dict[str, Dict[str, Any]]]]): New optimizer state dictionary to be updated.
+        old_state (Dict[str, Any]): Previous model state dictionary.
+        new_state (Dict[str, Any]): New model state dictionary to be updated.
+        changed_sharding_params (Dict[str, ParameterSharding]): Dictionary of sharding parameters that have changed.
+        extend_shard_name (Callable[[str], str], optional): Function to extend shard names to full names in state dicts.
+        update_local (bool, optional): If True, also update local shards that were not changed during communication.
+
+    Returns:
+        None
+    """
+    for waitable, comm_obj in reqs:
+        waitable.wait()
+        if comm_obj.requires_copy:
+            if comm_obj.is_optimizer_state:
+                _update_optimizer_state_post_resharding(
+                    old_opt_state=old_optimizer_state,
+                    new_opt_state=new_optimizer_state,
+                    changed_sharding_params=changed_sharding_params,
+                    extend_shard_name=extend_shard_name,
+                    comm_metadata=comm_obj,
                 )
-            )
-        )
-
-    # Assuming splitted_shards_with_names is already populated
-    for shard_name, shards in splitted_shards_with_names.items():
-        # Sort shards by shard_id if needed, since, CW sharding can have multiple shards for the same table
-        shards.sort(key=lambda x: x[0])
-
-        for _, curr_t in shards:
-            # Initialize shard_name_to_local_output_tensor[shard_name] if it doesn't exist
-            if shard_name not in shard_name_to_local_output_tensor:
-                # Initialize with a list containing the first tensor
-                shard_name_to_local_output_tensor[shard_name] = [curr_t]
             else:
-                # Since we always assume one tensor in the list, concatenate with it
-                # TODO: Extend this for multiple shards per table for same rank for new state.
-                # TODO: Although original plan supports min_partition, we assume changing plan has only one shard per table IN CW sharding
-                concatenated_tensor = torch.cat(
-                    (shard_name_to_local_output_tensor[shard_name][0], curr_t), dim=1
+                _update_state_post_resharding(
+                    old_state=old_state,
+                    new_state=new_state,
+                    changed_sharding_params=changed_sharding_params,
+                    extend_shard_name=extend_shard_name,
+                    comm_metadata=comm_obj,
                 )
-                # Replace the existing tensor with the concatenated one
-                shard_name_to_local_output_tensor[shard_name][0] = concatenated_tensor
+    if update_local:
+        if old_optimizer_state:
+            _update_optimizer_state_post_resharding(
+                old_opt_state=old_optimizer_state,
+                new_opt_state=new_optimizer_state,
+                changed_sharding_params=changed_sharding_params,
+                extend_shard_name=extend_shard_name,
+            )
 
-    return shard_name_to_local_output_tensor
+        _update_state_post_resharding(
+            old_state=old_state,
+            new_state=new_state,
+            changed_sharding_params=changed_sharding_params,
+            extend_shard_name=extend_shard_name,
+        )
 
 
 def move_sharded_tensors_to_cpu(state_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -444,427 +719,153 @@ def move_sharded_tensors_to_cpu(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     return processed_dict
 
 
-def shards_all_to_all(
-    module: ShardedModule[Any, Any, Any, Any],  # pyre-ignore
-    state_dict: Dict[str, ShardedTensor],
-    device: torch.device,
+def prepare_comm_ops(
+    module_sharding_plan: EmbeddingModuleShardingPlan,
+    current_state_dict: Dict[str, ShardedTensor],
+    new_state_dict: Dict[str, ShardedTensor],
     changed_sharding_params: Dict[str, ParameterSharding],
+    shard_name: str,
     env: ShardingEnv,
-    max_dim_0: int,
-    max_dim_1: int,
     extend_shard_name: Callable[[str], str] = lambda x: x,
-    optimizer_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]] = None,
+    current_opt_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]] = None,
+    new_opt_state: Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]] = None,
     has_optimizer: bool = False,
-) -> Tuple[OrderedShardNamesWithSizes, torch.Tensor]:
+) -> Dict[CommStrategy, List[CommP2PMetadata]]:
     """
-    Performs an all-to-all communication to redistribute shards across ranks based on new sharding parameters.
-    Assumes ranks are ordered in ParameterSharding.ranks. Implements padding for concatenating, sending and
-    receiving tensors of different sizes in dim 0 or 1.
+    Prepares the communication operations required for resharding a specific embedding table or parameter.
+
+    This function determines the necessary point-to-point (P2P) communication operations (send/receive)
+    to redistribute sharded tensors (and optionally optimizer state) according to a new sharding plan.
+    It supports both inter-node and intra-node communication, and handles both model and optimizer state.
 
     Args:
-        module (ShardedModule[Any, Any, Any, Any]): The module containing sharded tensors to be redistributed.
-            TODO: Update to support more modules, currently only supports ShardedEmbeddingBagCollection.
-
-        state_dict (Dict[str, ShardedTensor]): The state dictionary containing the current sharded tensors.
-
-        device (torch.device): The device on which the output tensors will be placed.
-
-        changed_sharding_params (Dict[str, ParameterSharding]): A dictionary mapping shard names to their new sharding parameters.
-
-        env (ShardingEnv): The sharding environment containing world size and other distributed information.
-
-        extend_shard_name (Callable[[str], str], optional): A function to extend shard names to the full name in state_dict.
-
-        max_dim_0 (int): The maximum dimension size of dim 0 across all tables in the module.
-
-        max_dim_1 (int): The maximum dimension size of dim 1 across all tables in the module.
-
-        optimizer_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]]): The optimizer state, if present.
-            A dictionary mapping shard names to their optimizer states, which are themselves
-            dictionaries mapping parameter names to their optimizer states.
-
-        has_optimizer (bool): Flag indicating if optimizer state is present.
+        module_sharding_plan (EmbeddingModuleShardingPlan): The current sharding plan for the module.
+        current_state_dict (Dict[str, ShardedTensor]): The current state dictionary containing sharded tensors.
+        new_state_dict (Dict[str, ShardedTensor]): The new state dictionary to be updated after resharding.
+        changed_sharding_params (Dict[str, ParameterSharding]): Dictionary of parameters whose sharding has changed.
+        shard_name (str): The name of the shard/table to be resharded.
+        env (ShardingEnv): The sharding environment containing world size, rank, and process group.
+        extend_shard_name (Callable[[str], str], optional): Function to extend shard names to full names in state dicts.
+        current_opt_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]], optional): Current optimizer state dict.
+        new_opt_state (Optional[Dict[str, Dict[str, Dict[str, ShardedTensor]]]], optional): New optimizer state dict to update.
+        has_optimizer (bool, optional): Whether optimizer state communication is required.
 
     Returns:
-        Tuple[List[Tuple[str, List[int]]], torch.Tensor]: Two outputs containing:
-            - A list of shard name and the corresponding shard_size in dim 0 & 1 that were sent to the current rank.
-                This is a flattened and pruned nested list, which orders the shards names and sizes by source rank, then shard order.
-            - The tensor containing all shards received by the current rank after the all-to-all operation.
+        Dict[CommStrategy, List[CommP2PMetadata]]: A dictionary mapping communication strategies to lists of
+        communication metadata, describing the P2P operations to be performed for resharding.
     """
+    comm_dict = {
+        CommStrategy.STATE_INTER_NODE_COMM: [],
+        CommStrategy.STATE_INTRA_NODE_COMM: [],
+        CommStrategy.OPT_INTER_NODE_COMM: [],
+        CommStrategy.OPT_INTRA_NODE_COMM: [],
+    }
+
     if env.output_dtensor:
         raise RuntimeError("We do not yet support DTensor for resharding yet")
-        return
-
-    # Module sharding plan is used to get the source ranks for each shard
-    assert hasattr(module, "module_sharding_plan")
-
-    has_local_optimizer = has_optimizer and optimizer_state is not None
 
     world_size = env.world_size
     rank = dist.get_rank()
-    input_splits_per_rank = [[0] * world_size for _ in range(world_size)]
-    output_splits_per_rank = [[0] * world_size for _ in range(world_size)]
+    pg = env.process_group
 
-    output_tensor_tensor_count = 0
-    output_optimizer_tensor_count = 0
-    shard_names_to_lengths_by_src_rank = [[] for _ in range(world_size)]
-    local_table_to_input_tensor_by_dst_rank = [[] for _ in range(world_size)]
-    local_table_to_opt_by_dst_rank = [[] for _ in range(world_size)]
+    param = changed_sharding_params[shard_name]
 
-    for shard_name, param in changed_sharding_params.items():
-        sharded_t = state_dict[extend_shard_name(shard_name)]
-        assert param.ranks is not None
+    assert param.ranks is not None
 
-        # pyre-ignore
-        src_params = module.module_sharding_plan[shard_name]
+    src_params = module_sharding_plan[shard_name]
 
-        assert (
-            param.sharding_type == ShardingType.COLUMN_WISE.value
-            or param.sharding_type == ShardingType.TABLE_WISE.value
-        )
-
-        shard_mapping = _generate_shard_allocation_metadata(
-            shard_name=shard_name,
-            source_params=src_params,
-            destination_params=param,
-            rank=rank,
-            world_size=world_size,
-        )
-
-        tensor_count, optimizer_count = _process_shard_redistribution_metadata(
-            rank=rank,
-            shard_name=shard_name,
-            max_dim_0=max_dim_0,
-            max_dim_1=max_dim_1,
-            shard_to_rank_mapping=shard_mapping,
-            sharded_tensor=sharded_t,
-            input_splits_per_rank=input_splits_per_rank,
-            output_splits_per_rank=output_splits_per_rank,
-            shard_names_to_lengths_by_src_rank=shard_names_to_lengths_by_src_rank,
-            local_table_to_input_tensor_by_dst_rank=local_table_to_input_tensor_by_dst_rank,
-            local_table_to_opt_by_dst_rank=local_table_to_opt_by_dst_rank,
-            optimizer_state=optimizer_state,
-            extend_shard_name=extend_shard_name,
-            has_optimizer=has_optimizer,
-        )
-
-        output_tensor_tensor_count += tensor_count
-        if has_optimizer:
-            output_optimizer_tensor_count += optimizer_count
-
-    local_input_splits = input_splits_per_rank[rank]
-    local_output_splits = output_splits_per_rank[rank]
-
-    total_input_size = sum(local_input_splits)
-    local_input_tensor = torch.zeros(
-        [total_input_size, max_dim_1], device=torch.device("cpu")
+    assert (
+        param.sharding_type == ShardingType.COLUMN_WISE.value
+        or param.sharding_type == ShardingType.TABLE_WISE.value
     )
 
-    current_pos = 0
-
-    for i, sub_l in enumerate(local_table_to_input_tensor_by_dst_rank):
-        batch_size = local_input_splits[i]
-        if batch_size == 0:
-            continue
-
-        # Create a view into the pre-allocated tensor for this destination rank
-        batch_view = local_input_tensor[current_pos : current_pos + batch_size]
-
-        current_row = 0
-        for j, shard_info_cpu in enumerate(sub_l):
-            if shard_info_cpu is not None:
-                rows = shard_info_cpu.size(0)
-
-                # Copying data to input tensor uvm->uvm operation
-                batch_view[current_row : current_row + rows] = shard_info_cpu
-                current_row += rows
-
-            # Free CPU memory by removing reference
-            local_table_to_input_tensor_by_dst_rank[i][j] = None
-
-            if has_local_optimizer:
-                opt_shard_info_cpu = local_table_to_opt_by_dst_rank[i][j]
-                if opt_shard_info_cpu is not None:
-                    opt_rows = opt_shard_info_cpu.size(0)
-
-                    batch_view[current_row : current_row + opt_rows] = (
-                        opt_shard_info_cpu
-                    )
-                    current_row += opt_rows
-
-                    # Free CPU memory by removing reference
-                    local_table_to_opt_by_dst_rank[i][j] = None
-
-        # Move position pointer forward
-        current_pos += batch_size
-
-    receive_count = output_tensor_tensor_count + output_optimizer_tensor_count
-    max_embedding_size = max_dim_1
-    local_output_tensor_cpu = torch.empty(
-        [
-            receive_count,
-            max_embedding_size,
-        ],
-        device=torch.device("cpu"),
+    shard_mapping = _generate_shard_allocation_metadata(
+        source_params=src_params,
+        destination_params=param,
+        rank=rank,
+        world_size=world_size,
     )
 
-    assert sum(local_output_splits) == len(local_output_tensor_cpu)
-    assert sum(local_input_splits) == len(local_input_tensor)
-
-    # TODO: move this to hireachical process creation if possible for scaling beyond 32
-    if not hasattr(env, "cpu_process_group"):
-        # Create a CPU process group with Gloo backend
-        # Pyre-ignore
-        env.cpu_process_group = dist.new_group(
-            ranks=list(range(env.world_size)),
-            backend="gloo",  # Use Gloo backend for CPU operations
-        )
-
-    dist.all_to_all_single(
-        output=local_output_tensor_cpu,
-        input=local_input_tensor,
-        output_split_sizes=local_output_splits,
-        input_split_sizes=local_input_splits,
-        group=env.cpu_process_group,  # TODO: 2D uses env.sharding_pg
+    _prepare_shard_distribution_comm_ops(
+        rank=rank,
+        shard_name=shard_name,
+        shard_to_rank_mapping=shard_mapping,
+        current_state_dict=current_state_dict,
+        new_state_dict=new_state_dict,
+        comm_ops=comm_dict,
+        current_opt_state=current_opt_state,
+        new_opt_state=new_opt_state,
+        extend_shard_name=extend_shard_name,
+        has_optimizer=has_optimizer,
+        process_group=pg,
     )
-    del local_input_tensor
 
-    flattened_output_names_lengths = [
-        shard_info
-        for sub_l in shard_names_to_lengths_by_src_rank
-        for shard_info in sub_l
-    ]
-
-    return flattened_output_names_lengths, local_output_tensor_cpu
+    return comm_dict
 
 
-def update_state_post_resharding(
-    old_state: Dict[str, ShardedTensor],
-    new_state: Dict[str, ShardedTensor],
-    ordered_shard_names_and_lengths: OrderedShardNamesWithSizes,
-    output_tensor: torch.Tensor,
-    extend_shard_name: Callable[[str], str] = lambda x: x,
-    has_optimizer: bool = False,
-) -> Dict[str, ShardedTensor]:
+def transfer_data(
+    comms_op: Dict[CommStrategy, List[CommP2PMetadata]]
+) -> List[Tuple[dist.Work, CommP2PMetadata]]:
     """
-    Updates and returns the given state_dict with new placements and
-    local_shards based on the output tensor of the AllToAll collective.
-    Removes padding from the output tensor in dim 0 and 1 if necessary.
+    Executes batched point-to-point communication operations for resharding.
+
+    This function processes the communication operations grouped by strategy (inter/intra node, state/optimizer)
+    and launches batched isend/irecv operations for each group using torch.distributed. It then aggregates
+    the resulting work objects with their corresponding communication metadata for later synchronization and
+    post-processing.
 
     Args:
-        state_dict (Dict[str, Any]): The state dict to be updated with new shard placements and local shards.
-
-        ordered_shard_names_and_lengths (List[Tuple[str, List[int]]]): A list of shard name and the corresponding shard_size.
-            This is a flattened and pruned nested list, which orders the shards names and sizes by rank, then shard order.
-
-        output_tensor (torch.Tensor): The tensor containing the output data from the AllToAll operation.
-
-        new_sharding_params (Dict[str, ParameterSharding]): A dictionary mapping shard names to their new sharding parameters.
-            This should only contain shard names that were updated during the AllToAll operation.
-
-        curr_rank (int): The current rank of the process in the distributed environment.
-
-        max_dim_0 (int): The maximum dimension size of dim 0 across all tables in the module. Only dim 0
-            is needed here to slice the output tensor correctly, as removing the padding will only reference
-            the original shard sizes stored in ordered_shard_names_and_lengths.
-
-        extend_shard_name (Callable[[str], str], optional): A function to extend shard names to the full name in state_dict.
+        comms_op (Dict[CommStrategy, List[CommP2PMetadata]]): Dictionary mapping communication strategies to lists
+            of communication metadata describing the P2P operations to be performed.
 
     Returns:
-        Dict[str, ShardedTensor]: The updated state dictionary with new shard placements and local shards.
+        List[Tuple[dist.Work, CommP2PMetadata]]: List of tuples pairing each distributed work object with its
+        corresponding communication metadata, to be used for waiting and updating state dictionaries.
     """
 
-    shard_name_to_local_output_tensor: Dict[str, List[torch.Tensor]] = (
-        _create_local_shard_tensors(
-            ordered_shard_names_and_lengths,
-            output_tensor,
-            has_optimizer=has_optimizer,
-            optimizer_mode=False,
-        )
-    )
-
-    for extended_shard_name, item in new_state.items():
-        shard_name = extract_shard_name(extended_shard_name)
-        if (
-            old_state is not None
-            and extended_shard_name in old_state
-            and shard_name not in shard_name_to_local_output_tensor.keys()
-        ):
-
-            sharded_t = new_state[extended_shard_name]
-            sharded_t_old = old_state[extended_shard_name]
-
-            local_shards = sharded_t._local_shards
-            for i, shard in enumerate(local_shards):
-                shard.tensor.copy_(
-                    sharded_t_old._local_shards[i].tensor, non_blocking=True
-                )
-                shard.metadata = sharded_t_old._local_shards[i].metadata
-        else:
-
-            sharded_t = item
-            assert len(sharded_t._local_shards) == 1
-            # local_tensor is updated in-pace for CW sharding
-            local_tensor = shard_name_to_local_output_tensor[shard_name][0]
-
-            for i, shard in enumerate(sharded_t._local_shards):
-                shard.tensor.copy_(local_tensor, non_blocking=True)
-                shard.metadata = sharded_t._local_shards[i].metadata
-
-    return new_state
-
-
-def update_optimizer_state_post_resharding(
-    old_opt_state: Dict[str, Dict[str, Dict[str, ShardedTensor]]],
-    new_opt_state: Dict[str, Dict[str, Dict[str, ShardedTensor]]],
-    ordered_shard_names_and_lengths: OrderedShardNamesWithSizes,
-    output_tensor: torch.Tensor,
-    max_dim_0: int,
-    extend_shard_name: Callable[[str], str] = lambda x: x,
-) -> Dict[str, Dict[str, Dict[str, ShardedTensor]]]:
-    new_opt_state_state = new_opt_state["state"] if new_opt_state else None
-    old_opt_state_state = old_opt_state["state"] if old_opt_state else None
-
-    # Remove padding and store tensors by shard name
-    shard_name_to_local_output_tensor: Dict[str, List[torch.Tensor]] = (
-        _create_local_shard_tensors(
-            ordered_shard_names_and_lengths,
-            output_tensor,
-            has_optimizer=True,
-            optimizer_mode=True,
-            new_state=new_opt_state_state,
-            extend_shard_name=extend_shard_name,
-        )
-    )
-
-    if new_opt_state_state is None or len(new_opt_state_state) == 0:
-        return new_opt_state
-
-    for extended_shard_name, item in new_opt_state_state.items():
-        shard_name = extract_shard_name(extended_shard_name)
-        momentum_name = tmp_momentum_extender(shard_name)
-
-        if (
-            old_opt_state_state is not None
-            and extended_shard_name in old_opt_state_state
-            and shard_name not in shard_name_to_local_output_tensor.keys()
-        ):
-
-            sharded_t = new_opt_state_state[extended_shard_name][momentum_name]
-            sharded_t_old = old_opt_state_state[extended_shard_name][momentum_name]
-            local_shards = sharded_t._local_shards
-            for i, shard in enumerate(local_shards):
-                shard.tensor.copy_(
-                    sharded_t_old._local_shards[i].tensor, non_blocking=True
-                )
-                shard.metadata = sharded_t_old._local_shards[i].metadata
-        else:
-
-            sharded_t = item[momentum_name]
-            assert len(sharded_t._local_shards) == 1
-            # local_tensor is updated in-pace for CW sharding
-            local_tensor = shard_name_to_local_output_tensor[shard_name][0]
-            if len(sharded_t._local_shards[0].tensor.size()) == 1:
-                # Need to transpose 1D optimizer tensor, due to previous conversion
-
-                local_tensor_dim = local_tensor.size()[1]
-                squared_sum_t = torch.sum(local_tensor, dim=1, keepdim=True)
-                mean_squared_sum_t = torch.div(squared_sum_t, local_tensor_dim)
-                local_tensor = mean_squared_sum_t.T[0]
-
-            for i, shard in enumerate(sharded_t._local_shards):
-                shard.tensor.copy_(local_tensor, non_blocking=True)
-                shard.metadata = sharded_t._local_shards[i].metadata
-
-    return new_opt_state
+    reqs: List[Tuple[dist.Work, CommP2PMetadata]] = []
+    for _, ops in comms_op.items():
+        if len(ops) > 0:
+            works = dist.batch_isend_irecv([entry.comm_op for entry in ops])
+            reqs.extend(_aggregate_response_list(works, ops))
+    return reqs
 
 
 def update_module_sharding_plan(
     module: ShardedModule[Any, Any, Any, Any],  # pyre-ignore
     changed_sharding_params: Dict[str, ParameterSharding],
+    sharding_type_to_sharding_infos: Dict[str, List[EmbeddingShardingInfo]],
 ) -> None:
+    """
+    Updates the module's sharding plan and associated sharding information after a change in sharding parameters.
+
+    This function modifies the `module_sharding_plan` attribute of the given `module` by updating it with the
+    new sharding parameters provided in `changed_sharding_params`. It also updates the corresponding
+    `EmbeddingShardingInfo` objects in `sharding_type_to_sharding_infos` to reflect the new parameter sharding.
+
+    Args:
+        module (ShardedModule): The sharded module whose sharding plan is to be updated. Must have a `module_sharding_plan` attribute.
+        changed_sharding_params (Dict[str, ParameterSharding]): A dictionary mapping parameter/table names to their new sharding parameters.
+        sharding_type_to_sharding_infos (Dict[str, List[EmbeddingShardingInfo]]): A mapping from sharding type to a list of
+            `EmbeddingShardingInfo` objects, which are updated to reflect the new sharding parameters.
+
+    Raises:
+        RuntimeError: If the module does not have a `module_sharding_plan` attribute.
+
+    Returns:
+        None
+    """
     if not hasattr(module, "module_sharding_plan"):
-        return
+        raise RuntimeError("Module does not have a module_sharding_plan attribute")
 
-    # pyre-ignore
-    current_plan: Dict[str, ParameterSharding] = module.module_sharding_plan
-    for table_name, param_sharding in changed_sharding_params.items():
-        current_plan[table_name] = param_sharding
-    return
-
-
-def get_largest_dims_from_state_dict(
-    state_dict: Dict[str, ShardedTensor],
-) -> Tuple[int, int]:
-    """
-    Returns the largest dimension size of dim 0 and 1 across all tables in a module.
-
-    Args:
-        state_dict (Dict[str, ShardedTensor]): The state dict containing the sharded tensors.
-
-    Returns:
-        List[int]: A list of the largest dimension size of each table in the state_dict.
-    """
-    max_dim_0 = 0
-    max_dim_1 = 0
-    for sharded_t in state_dict.values():
-        for shard in sharded_t.metadata().shards_metadata:
-            max_dim_0 = max(max_dim_0, shard.shard_sizes[0])
-            max_dim_1 = max(max_dim_1, shard.shard_sizes[1])
-
-    return max_dim_0, max_dim_1
-
-
-def get_largest_dims_from_sharding_plan_updates(
-    sharding_plan_updates: Dict[str, ParameterSharding],
-) -> Tuple[int, int]:
-    """
-    Returns the largest dimension size of dim 0 and 1 across all tables in a module.
-
-    Args:
-        state_dict (Dict[str, ShardedTensor]): The state dict containing the sharded tensors.
-
-    Returns:
-        List[int]: A list of the largest dimension size of each table in the state_dict.
-    """
-    max_dim_0 = 0
-    max_dim_1 = 0
-    for _, param in sharding_plan_updates.items():
-        assert hasattr(param.sharding_spec, "shards")
-        for shard in param.sharding_spec.shards:  # pyre-ignore
-            max_dim_0 = max(max_dim_0, shard.shard_sizes[0])
-            max_dim_1 = max(max_dim_1, shard.shard_sizes[1])
-
-    return max_dim_0, max_dim_1
-
-
-def pad_tensor_to_max_dims(
-    t: torch.Tensor,
-    expected_dim_0: int,
-    expected_dim_1: int,
-) -> torch.Tensor:
-    """
-    Pads a tensor on the right and bottom with zeros.
-
-    Args:
-        tensor (torch.Tensor): The tensor to be padded.
-        pad_right (int): The number of zeros to pad on the right.
-        pad_bottom (int): The number of zeros to pad on the bottom.
-
-    Returns:
-        torch.Tensor: The padded tensor.
-    """
-    if expected_dim_0 == t.size(0) and expected_dim_1 == t.size(1):
-        return t
-    pad_right = expected_dim_1 - t.size(1)
-    pad_bottom = expected_dim_0 - t.size(0)
-    pad = (0, pad_right, 0, pad_bottom)
-    return F.pad(
-        input=t,
-        pad=pad,
-        mode="constant",
-        value=0,
-    )
+    module_sharding_plan = module.module_sharding_plan
+    for name, param in changed_sharding_params.items():
+        # pyre-ignore
+        module_sharding_plan[name] = param
+        # TODO: Support detecting old sharding type when sharding type is changing
+        for sharding_info in sharding_type_to_sharding_infos[param.sharding_type]:
+            if sharding_info.embedding_config.name == name:
+                sharding_info.param_sharding = param
 
 
 # Utils
@@ -899,16 +900,3 @@ def output_sharding_plan_delta(
                 )  # Asumming float datatype
 
     return (data_volume, diff)
-
-
-"""
-Utils for Optimizer State accessing
-"""
-
-
-def tmp_momentum_extender(name: str) -> str:
-    return name + ".momentum1"
-
-
-def extract_shard_name(name: str) -> str:
-    return name.split(".")[-2]
