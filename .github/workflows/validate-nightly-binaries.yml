@@ -18,7 +18,8 @@ on:
     paths:
       - '.github/workflows/validate-nightly-binaries.yml'
       - '.github/workflows/validate-binaries.yml'
-      - '.github/scripts/validate-binaries.sh'
+      - '.github/scripts/validate_binaries.sh.sh'
+      - '.github/scripts/filter.py'
 jobs:
   nightly:
     uses: ./.github/workflows/validate-binaries.yml

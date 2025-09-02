@@ -9,7 +9,14 @@
 export PYTORCH_CUDA_PKG=""
 export CONDA_ENV="build_binary"
 
-if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
+if [[ ${MATRIX_PYTHON_VERSION} = '3.14' ]]; then
+    # conda currently doesn't support 3.14 unless using the forge channel
+    conda create -y -n "${CONDA_ENV}" python="3.14" -c conda-forge
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.14t' ]]; then
+    # use conda-forge to install python3.14t
+    conda create -y -n "${CONDA_ENV}" python="3.14" python-freethreading -c conda-forge
+    conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
     # use conda-forge to install python3.13t
     conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
     conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
@@ -34,6 +41,12 @@ if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
         export CUDA_VERSION="cu126"
     elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.8' ]]; then
         export CUDA_VERSION="cu128"
+    elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.9' ]]; then
+        export CUDA_VERSION="cu129"
+    elif [[ ${MATRIX_GPU_ARCH_VERSION} = '13.0' ]]; then
+        echo "fbgemm does not support cuda 13.0 so far, exit"
+        exit 0
+        export CUDA_VERSION="cu130"
     else
         export CUDA_VERSION="cu126"
     fi
@@ -124,7 +137,10 @@ else
     fi
 fi
 
-if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
+if [[ ${MATRIX_PYTHON_VERSION} = '3.14' ]]; then
+    # conda currently doesn't support 3.14 unless using the forge channel
+    conda create -y -n "${CONDA_ENV}" python="3.14" -c conda-forge
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
     exit 0  # fbgemm-gpu can't support python=3.13t in PYPI
     # use conda-forge to install python3.13t
     conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
