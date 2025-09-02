@@ -60,7 +60,11 @@ def main():
     new_matrix_entries = []
 
     for entry in full_matrix["include"]:
-        if entry["desired_cuda"] == "cu129":
+        if entry["desired_cuda"] == "cu130":
+            # fbgemm only supports cuda 12.6, 12.8 and 12.9
+            continue
+        if entry["python_version"] == "3.14":
+            # it seems stuck `conda create myenv python=3.14 -c conda-forge`
             continue
         new_matrix_entries.append(entry)
 
