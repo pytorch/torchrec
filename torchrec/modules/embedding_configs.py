@@ -227,6 +227,9 @@ class FeatureScoreBasedEvictionPolicy(VirtualTableEvictionPolicy):
     eviction_ttl_mins: int = (
         0  # if not 0, means we will use timestamp based policy but not feature score policy
     )
+    max_inference_id_num_per_rank: int = (
+        0  # max number of inference ids per rank, default is max_training_id_num_per_rank
+    )
     inference_eviction_feature_score_threshold: Optional[float] = (
         None  # 0 means no eviction
     )
@@ -237,6 +240,8 @@ class FeatureScoreBasedEvictionPolicy(VirtualTableEvictionPolicy):
             self.inference_eviction_feature_score_threshold = 0
         if self.inference_eviction_ttl_mins is None:
             self.inference_eviction_ttl_mins = self.eviction_ttl_mins
+        if self.max_inference_id_num_per_rank == 0:
+            self.max_inference_id_num_per_rank = self.max_training_id_num_per_rank
 
 
 @dataclass
