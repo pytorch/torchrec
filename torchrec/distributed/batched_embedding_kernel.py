@@ -225,12 +225,12 @@ def _populate_zero_collision_tbe_params(
     meta_header_lens = [0] * len(config.embedding_tables)
     for i, table in enumerate(config.embedding_tables):
         # virtual_table_eviction_policy won't be None in reality: https://fburl.com/code/864a0w0f
-        if table.virtual_table_eviction_policy is not None:
-            meta_header_lens[i] = (
-                table.virtual_table_eviction_policy.get_meta_header_len()
-            )
-            if not isinstance(table.virtual_table_eviction_policy, NoEvictionPolicy):
-                enabled = True
+        assert (
+            table.virtual_table_eviction_policy is not None
+        ), "virtual_table_eviction_policy for kvzch table should not be None"
+        meta_header_lens[i] = table.virtual_table_eviction_policy.get_meta_header_len()
+        if not isinstance(table.virtual_table_eviction_policy, NoEvictionPolicy):
+            enabled = True
     if enabled:
         counter_thresholds = [0] * len(config.embedding_tables)
         ttls_in_mins = [0] * len(config.embedding_tables)
