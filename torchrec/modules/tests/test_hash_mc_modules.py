@@ -32,7 +32,7 @@ class TestMCH(unittest.TestCase):
     # pyre-ignore[56]
     @unittest.skipIf(
         torch.cuda.device_count() < 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+        "Not enough GPUs, this test requires at least one GPU",
     )
     def test_zch_hash_inference(self) -> None:
         # prepare
@@ -214,12 +214,12 @@ class TestMCH(unittest.TestCase):
 
     @unittest.skipIf(
         torch.cuda.device_count() < 2,
-        "Not enough GPUs, this test requires at least one GPUs",
+        "Not enough GPUs, this test requires at least two GPUs",
     )
     # pyre-ignore [56]
     @given(hash_size=st.sampled_from([0, 80]), keep_original_indices=st.booleans())
     @settings(max_examples=6, deadline=None)
-    def test_zch_hash_train_to_inf_block_bucketize(
+    def test_zch_hash_train_to_inf_block_bucketize_disabled_in_oss_compatibility(
         self, hash_size: int, keep_original_indices: bool
     ) -> None:
         # rank 0
@@ -293,12 +293,14 @@ class TestMCH(unittest.TestCase):
 
     @unittest.skipIf(
         torch.cuda.device_count() < 2,
-        "Not enough GPUs, this test requires at least one GPUs",
+        "Not enough GPUs, this test requires at least two GPUs",
     )
     # pyre-ignore [56]
     @given(hash_size=st.sampled_from([0, 80]))
     @settings(max_examples=5, deadline=None)
-    def test_zch_hash_train_rescales_two(self, hash_size: int) -> None:
+    def test_zch_hash_train_rescales_two_disabled_in_oss_compatibility(
+        self, hash_size: int
+    ) -> None:
         keep_original_indices = False
         # rank 0
         world_size = 2
