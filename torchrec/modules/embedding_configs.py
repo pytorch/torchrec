@@ -172,23 +172,28 @@ def data_type_to_dtype(data_type: DataType) -> torch.dtype:
 class VirtualTableEvictionPolicy:
     # metadata header length in element size for virtual table in weight tensor value
     meta_header_len: int = 0
+    embedding_dim: int = 0
     initialized: bool = False
 
     """
     Eviction policy for virtual table.
     """
 
-    def init_metaheader_config(self, data_type: DataType) -> None:
+    def init_metaheader_config(self, data_type: DataType, embedding_dim: int) -> None:
         # the eviction metaheader is set for training data type only. Once initialized, we don't need to reinitialize again
         if self.initialized:
             return
         # 8 bytes for key, 4 bytes timestamp, 4 bytes shared by used and count: 1 bit for used, 31 bits for count
         # for more details, please refer to: https://github.com/pytorch/FBGEMM/pull/4187
         self.meta_header_len = 16 // data_type_to_dtype(data_type).itemsize
+        self.embedding_dim = embedding_dim
         self.initialized = True
 
     def get_meta_header_len(self) -> int:
         return self.meta_header_len
+
+    def get_embedding_dim(self) -> int:
+        return self.embedding_dim
 
 
 @dataclass

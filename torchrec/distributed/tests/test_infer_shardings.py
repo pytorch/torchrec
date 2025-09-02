@@ -380,7 +380,9 @@ class InferShardingsTest(unittest.TestCase):
         batch_size = 4
         local_device = torch.device(f"{device_type}:0")
         eviction_policy = TimestampBasedEvictionPolicy()
-        eviction_policy.init_metaheader_config(dtype_to_data_type(torch.float16))
+        eviction_policy.init_metaheader_config(
+            dtype_to_data_type(torch.float16), emb_dim
+        )
         mi = create_test_model(
             num_embeddings,
             emb_dim,
@@ -392,6 +394,13 @@ class InferShardingsTest(unittest.TestCase):
             weight_dtype=weight_dtype,
             virtual_table_eviction_policy=eviction_policy,
         )
+        for t in mi.tables:
+            self.assertIsNotNone(t.virtual_table_eviction_policy)
+            self.assertEqual(
+                # pyre-ignore [16]
+                t.virtual_table_eviction_policy.get_embedding_dim(),
+                emb_dim,
+            )
 
         non_sharded_model = mi.quant_model
         num_emb_half = num_embeddings // 2
@@ -430,19 +439,18 @@ class InferShardingsTest(unittest.TestCase):
             ["table_0"],
             ShardingType.ROW_WISE.value,
         )
-        print(weights_spec)
-        assert (
+
+        self.assertIsNotNone(
             weights_spec[
                 "_module.sparse.ebc.tbes.0.0.table_0.weight"
             ].virtual_table_dim_offsets
-            is not None
         )
-        assert (
+        self.assertEqual(
             # pyre-ignore [16]
             weights_spec[
                 "_module.sparse.ebc.tbes.0.0.table_0.weight"
-            ].virtual_table_dim_offsets[0]
-            == 8
+            ].virtual_table_dim_offsets[0],
+            8,
         )
 
     @unittest.skipIf(
