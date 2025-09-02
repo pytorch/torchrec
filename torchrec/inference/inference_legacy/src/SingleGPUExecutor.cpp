@@ -143,7 +143,7 @@ void SingleGPUExecutor::process() {
           &manager_->allInstances().at(execInfo.interpIdx));
 
       std::vector<std::string> names;
-      folly::split(".", submodulePath, names);
+      folly::split('.', submodulePath, names);
       auto m = I.fromMovable(execInfo.model);
       for (const auto& name : names) {
         if (name == "") {
