@@ -106,7 +106,6 @@ jobs:
         else
           skip_expression=${skip_expression:5}  # Remove the leading " and "
         fi
-        nvidia-smi
         conda run -n build_binary \
           python -m pytest torchrec -v -s -W ignore::pytest.PytestCollectionWarning --continue-on-collection-errors \
           --ignore=torchrec/distributed/tests/test_comm.py --ignore=torchrec/distributed/tests/test_infer_shardings.py \
