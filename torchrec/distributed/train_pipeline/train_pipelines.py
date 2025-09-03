@@ -964,6 +964,7 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
         ] = None,
         strict: bool = False,
         emb_lookup_stream: str = "data_dist",  # new, current, data_dist (default)
+        embedding_lookup_after_data_dist: bool = False,
     ) -> None:
         super().__init__(
             model=model,
@@ -975,6 +976,8 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
         )
+        self._embedding_lookup_after_data_dist = embedding_lookup_after_data_dist
+
         if emb_lookup_stream == "new":
             self._emb_lookup_stream: Optional[torch.Stream] = (
                 (torch.get_device_module(device).Stream())
@@ -1046,8 +1049,9 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
         self._set_module_context(self.contexts[0])
 
         # start embedding_lookup so it can overlap with previous optimizer
-        # pyre-ignore [6]
-        self.start_embedding_lookup(self.batches[0], self.contexts[0])
+        if not self._embedding_lookup_after_data_dist:
+            # pyre-ignore [6]
+            self.start_embedding_lookup(self.batches[0], self.contexts[0])
 
         if self._model.training:
             with record_function("## zero_grad ##"):
@@ -1063,6 +1067,10 @@ class TrainPipelineFusedSparseDist(TrainPipelineSparseDist[In, Out]):
 
         # batch i+2: load data and copy to gpu, the dataload iter will first exhaust here
         self.enqueue_batch(dataloader_iter)
+
+        if self._embedding_lookup_after_data_dist:
+            # pyre-ignore [6]
+            self.start_embedding_lookup(self.batches[0], self.contexts[0])
 
         # forward
         with record_function(f"## forward {self.contexts[0].index} ##"):
