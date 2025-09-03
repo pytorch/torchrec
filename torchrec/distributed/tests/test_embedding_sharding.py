@@ -36,7 +36,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.types import ShardedTensorMetadata, ShardMetadata
-from torchrec.modules.embedding_configs import DataType, PoolingType
+from torchrec.modules.embedding_configs import DataType, NoEvictionPolicy, PoolingType
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 WORLD_SIZE = 2
@@ -591,6 +591,7 @@ class TestECBucketMetadata(unittest.TestCase):
                     ],
                     size=torch.Size([10000 * (2 * i + 1), embedding_dim]),
                 ),
+                virtual_table_eviction_policy=NoEvictionPolicy(),
             )
             for i in range(WORLD_SIZE)
         ]

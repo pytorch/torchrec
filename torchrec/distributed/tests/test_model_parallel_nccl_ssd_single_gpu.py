@@ -49,6 +49,7 @@ from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
     EmbeddingConfig,
+    NoEvictionPolicy,
 )
 from torchrec.optim import RowWiseAdagrad
 from torchrec.optim.keyed import CombinedOptimizer
@@ -996,6 +997,7 @@ class ZeroCollisionModelParallelTest(ModelParallelSingleRankBase):
                 feature_names=["feature_" + str(i)],
                 total_num_buckets=10,
                 use_virtual_table=True,
+                virtual_table_eviction_policy=NoEvictionPolicy(),
             )
             for i in range(num_features)
         ]
@@ -1442,6 +1444,7 @@ class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBas
                 feature_names=["feature_" + str(i)],
                 total_num_buckets=10,
                 use_virtual_table=True,
+                virtual_table_eviction_policy=NoEvictionPolicy(),
             )
             for i in range(num_features)
         ]
@@ -1454,6 +1457,7 @@ class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBas
                 feature_names=["feature_" + str(i)],
                 total_num_buckets=10,
                 use_virtual_table=True,
+                virtual_table_eviction_policy=NoEvictionPolicy(),
             )
             for i in range(shared_features)
         ]
