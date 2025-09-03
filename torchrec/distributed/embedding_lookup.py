@@ -10,7 +10,7 @@
 import logging
 from abc import ABC
 from collections import OrderedDict
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, cast, Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
@@ -49,6 +49,7 @@ from torchrec.distributed.composable.table_batched_embedding_slice import (
 from torchrec.distributed.embedding_kernel import BaseEmbedding
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
+    BaseEmbeddingUpdate,
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
@@ -409,6 +410,33 @@ class GroupedEmbeddingsLookup(BaseEmbeddingLookup[KeyedJaggedTensor, torch.Tenso
         for emb_module in self._emb_modules:
             # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
             emb_module.purge()
+
+
+class GroupedEmbeddingsUpdate(BaseEmbeddingUpdate[KeyedJaggedTensor]):
+    """
+    Update modules for Sequence embeddings (i.e Embeddings)
+    """
+
+    def __init__(
+        self,
+        grouped_embeddings_lookup: GroupedEmbeddingsLookup,
+    ) -> None:
+        super().__init__()
+        self._emb_modules: List[BaseEmbedding] = []
+        self._feature_splits: List[int] = []
+        for emb_module in grouped_embeddings_lookup._emb_modules:
+            emb_module = cast(BaseBatchedEmbedding[torch.Tensor], emb_module)
+            if emb_module.config.enable_embedding_update:
+                self._feature_splits.append(emb_module.config.num_features())
+                self._emb_modules.append(emb_module)
+
+    def forward(self, embeddings: KeyedJaggedTensor) -> None:
+        features_by_group = embeddings.split(
+            self._feature_splits,
+        )
+        for emb_module, features in zip(self._emb_modules, features_by_group):
+            # pyre-fixme[29]: `Union[Module, Tensor]` is not a function.
+            emb_module.update(features)
 
 
 class CommOpGradientScaling(torch.autograd.Function):

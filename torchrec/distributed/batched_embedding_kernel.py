@@ -331,7 +331,7 @@ def _populate_zero_collision_tbe_params(
         enable_optimizer_offloading=True,
         backend_return_whole_row=(backend_type == BackendType.DRAM),
         eviction_policy=eviction_policy,
-        embedding_cache_mode=embedding_cache_mode_,
+        embedding_cache_mode=(config.enable_embedding_update),
     )
 
 
@@ -1823,7 +1823,6 @@ class ZeroCollisionKeyValueEmbedding(
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         backend_type: BackendType = BackendType.SSD,
-        embedding_cache_mode: bool = False,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -1850,13 +1849,7 @@ class ZeroCollisionKeyValueEmbedding(
             self._bucket_spec,
             config,
             backend_type,
-            embedding_cache_mode,
         )
-        self.embedding_cache_mode = embedding_cache_mode
-        if ssd_tbe_params.get("kv_zch_params", None) is not None:
-            self.embedding_cache_mode = ssd_tbe_params[
-                "kv_zch_params"
-            ].embedding_cache_mode
         compute_kernel = config.embedding_tables[0].compute_kernel
         embedding_location = compute_kernel_to_embedding_location(compute_kernel)
 
@@ -1905,6 +1898,14 @@ class ZeroCollisionKeyValueEmbedding(
             )
         )
         self.init_parameters()
+
+    def update(self, embeddings: KeyedJaggedTensor) -> None:
+        """
+        Update the embedding table with the new embeddings.
+        """
+        self.emb_module.direct_write_embedding(
+            embeddings.values(), embeddings.offsets(), embeddings.weights()
+        )
 
     def init_parameters(self) -> None:
         """
@@ -2145,17 +2146,16 @@ class ZeroCollisionEmbeddingCache(ZeroCollisionKeyValueEmbedding):
         )
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        # in the case of embedding_cache_mode, we don't need backward pass, so call forward in no_grad mode
-        with torch.no_grad():
-            return super().forward(features)
+        # reset split weights during training
 
-    def update(self, embeddings: KeyedJaggedTensor) -> None:
-        """
-        Update the embedding table with the new embeddings.
-        """
-        self.emb_module.direct_write_embedding(
-            embeddings.values(), embeddings.offsets(), embeddings.weights()
+        self._split_weights_res = None
+        self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
+        result = self.emb_module(
+            indices=features.values().long(),
+            offsets=features.offsets().long(),
+            weights=features.weights_or_none(),
         )
+        return result
 
 
 class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerModule):
