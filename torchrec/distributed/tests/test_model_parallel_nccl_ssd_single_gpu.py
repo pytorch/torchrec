@@ -15,6 +15,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
+from fbgemm_gpu.tbe.ssd import SSDTableBatchedEmbeddingBags
 from hypothesis import given, settings, strategies as st, Verbosity
 from torchrec.distributed.batched_embedding_kernel import (
     KeyValueEmbedding,
@@ -48,8 +49,10 @@ from torchrec.modules.embedding_configs import (
     DataType,
     EmbeddingBagConfig,
     EmbeddingConfig,
+    NoEvictionPolicy,
 )
 from torchrec.optim import RowWiseAdagrad
+from torchrec.optim.keyed import CombinedOptimizer
 
 
 def _load_split_embedding_weights(
@@ -93,6 +96,65 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
             )
             for i in range(num_features)
         ]
+
+    @staticmethod
+    def _compare_ssd_fused_optimizer(m1: DistributedModelParallel) -> None:
+        """
+        Util function to compare optimizer weights from SSD TBE and DistributedModelParallel.
+        """
+        # pyre-fixme[16]: Item `Tensor` of `Tensor | Module` has no attribute `ebc`.
+        for lookup1 in m1.module.sparse.ebc._lookups:
+            for emb_module1 in lookup1._emb_modules:
+                ssd_emb_modules = {KeyValueEmbeddingBag, KeyValueEmbedding}
+                if type(emb_module1) in ssd_emb_modules:
+                    emb_module1.create_rocksdb_hard_link_snapshot()
+                    # Getting the optimizer weights from the embedding module
+                    optimizer_weights_from_emb_bag = (
+                        emb_module1._emb_module.get_optimizer_state(
+                            sorted_id_tensor=None
+                        )
+                    )
+                    # Getting the optimizer weights from the DistributedModelParallel, which is the combinedfused optimizer
+                    optimizer_weights_from_optim = m1._optim.state
+                    # All assert statements for flow verification
+                    # Assumption:
+                    # 1. Embedding module is SSDTableBatchedEmbeddingBags
+                    # 2. Optimizer is CombinedOptimizer
+                    assert isinstance(
+                        m1._optim,
+                        CombinedOptimizer,
+                    ), f"Optimizer class should only be CombinedOptimizer. but got type: {type(m1._optim)}"
+                    assert isinstance(
+                        emb_module1._emb_module, SSDTableBatchedEmbeddingBags
+                    ), f"Embedding module should only be SSDTableBatchedEmbeddingBags. but got type: {type(emb_module1._emb_module)}"
+
+                    # Checking if the optimizer weights are not none
+                    assert (
+                        optimizer_weights_from_emb_bag is not None
+                        and optimizer_weights_from_optim is not None
+                    ), "Expect optimizer weights to be not None."
+
+                    optimizer_weights_from_optim_list = list(
+                        optimizer_weights_from_optim.values()
+                    )
+                    for weight_from_emb_bag, weight_from_optim in zip(
+                        optimizer_weights_from_emb_bag,
+                        optimizer_weights_from_optim_list,
+                    ):
+                        optim_weight_from_emb_tensor = list(
+                            weight_from_emb_bag.values()
+                        )[0]
+
+                        optim_weight_from_optim_tensor = [
+                            shard.tensor
+                            for shard in (list(weight_from_optim.values()))[
+                                0
+                            ].local_shards()
+                        ][0]
+                        assert torch.equal(
+                            optim_weight_from_emb_tensor,
+                            optim_weight_from_optim_tensor,
+                        ), "Expect optimizer weights from emb and optim to be equal."
 
     @staticmethod
     def _copy_ssd_emb_modules(
@@ -461,6 +523,76 @@ class KeyValueModelParallelTest(ModelParallelSingleRankBase):
             base_model, test_model, batch, is_deterministic=is_deterministic
         )
         self._compare_models(base_model, test_model, is_deterministic=is_deterministic)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    # pyre-ignore[56]
+    @given(
+        sharder_type=st.sampled_from(
+            [
+                SharderType.EMBEDDING_BAG_COLLECTION.value,
+            ]
+        ),
+        kernel_type=st.sampled_from(
+            [
+                EmbeddingComputeKernel.KEY_VALUE.value,
+            ]
+        ),
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                # TODO: uncomment when ssd ckpt support cw sharding
+                # ShardingType.COLUMN_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.TABLE_ROW_WISE.value,
+                # TODO: uncomment when ssd ckpt support cw sharding
+                # ShardingType.TABLE_COLUMN_WISE.value,
+            ]
+        ),
+        stochastic_rounding=st.booleans(),
+        dtype=st.sampled_from([DataType.FP32, DataType.FP16]),
+    )
+    @settings(verbosity=Verbosity.verbose, max_examples=4, deadline=None)
+    def test_ssd_key_value_fused_optimizer(
+        self,
+        sharder_type: str,
+        kernel_type: str,
+        sharding_type: str,
+        stochastic_rounding: bool,
+        dtype: DataType,
+    ) -> None:
+        """
+        Purpose of this test is to make sure the initialization of the KeyValueBatchedFusedOptimizer works as expected for SSD Offloading use-cases
+        """
+        constraints = {
+            table.name: ParameterConstraints(
+                sharding_types=[sharding_type],
+                compute_kernels=[kernel_type],
+                key_value_params=KeyValueParams(bulk_init_chunk_size=1024),
+            )
+            for _, table in enumerate(self.tables)
+        }
+
+        base_sharders = [
+            create_test_sharder(
+                sharder_type,
+                sharding_type,
+                kernel_type,
+                fused_params={
+                    "learning_rate": 0.2,
+                    "stochastic_rounding": stochastic_rounding,
+                },
+            ),
+        ]
+        models, _ = self._generate_dmps_and_batch(
+            base_sharders,  # pyre-ignore
+            constraints=constraints,
+        )
+        model, _ = models
+
+        self._compare_ssd_fused_optimizer(model)
 
     @unittest.skipIf(
         not torch.cuda.is_available(),
@@ -865,6 +997,7 @@ class ZeroCollisionModelParallelTest(ModelParallelSingleRankBase):
                 feature_names=["feature_" + str(i)],
                 total_num_buckets=10,
                 use_virtual_table=True,
+                virtual_table_eviction_policy=NoEvictionPolicy(),
             )
             for i in range(num_features)
         ]
@@ -1311,6 +1444,7 @@ class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBas
                 feature_names=["feature_" + str(i)],
                 total_num_buckets=10,
                 use_virtual_table=True,
+                virtual_table_eviction_policy=NoEvictionPolicy(),
             )
             for i in range(num_features)
         ]
@@ -1323,6 +1457,7 @@ class ZeroCollisionSequenceModelParallelStateDictTest(ModelParallelSingleRankBas
                 feature_names=["feature_" + str(i)],
                 total_num_buckets=10,
                 use_virtual_table=True,
+                virtual_table_eviction_policy=NoEvictionPolicy(),
             )
             for i in range(shared_features)
         ]
