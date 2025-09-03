@@ -211,6 +211,7 @@ def _populate_zero_collision_tbe_params(
     sharded_local_buckets: List[Tuple[int, int, int]],
     config: GroupedEmbeddingConfig,
     backend_type: BackendType,
+    embedding_cache_mode: bool = False,
 ) -> None:
     """
     Construct Zero Collision TBE params from config and fused params dict.
@@ -315,17 +316,22 @@ def _populate_zero_collision_tbe_params(
     else:
         eviction_policy = EvictionPolicy(meta_header_lens=meta_header_lens)
 
+    embedding_cache_mode_ = (
+        embedding_cache_mode
+        if embedding_cache_mode
+        else (
+            config.fused_params.get("embedding_cache_mode", False)
+            if config.fused_params
+            else False
+        )
+    )
     tbe_params["kv_zch_params"] = KVZCHParams(
         bucket_offsets=bucket_offsets,
         bucket_sizes=bucket_sizes,
         enable_optimizer_offloading=True,
         backend_return_whole_row=(backend_type == BackendType.DRAM),
         eviction_policy=eviction_policy,
-        embedding_cache_mode=(
-            config.fused_params.get("embedding_cache_mode", False)
-            if config.fused_params
-            else False
-        ),
+        embedding_cache_mode=embedding_cache_mode_,
     )
 
 
@@ -1817,6 +1823,7 @@ class ZeroCollisionKeyValueEmbedding(
         pg: Optional[dist.ProcessGroup] = None,
         device: Optional[torch.device] = None,
         backend_type: BackendType = BackendType.SSD,
+        embedding_cache_mode: bool = False,
     ) -> None:
         super().__init__(config, pg, device)
 
@@ -1839,8 +1846,17 @@ class ZeroCollisionKeyValueEmbedding(
             )
         )
         _populate_zero_collision_tbe_params(
-            ssd_tbe_params, self._bucket_spec, config, backend_type
+            ssd_tbe_params,
+            self._bucket_spec,
+            config,
+            backend_type,
+            embedding_cache_mode,
         )
+        self.embedding_cache_mode = embedding_cache_mode
+        if ssd_tbe_params.get("kv_zch_params", None) is not None:
+            self.embedding_cache_mode = ssd_tbe_params[
+                "kv_zch_params"
+            ].embedding_cache_mode
         compute_kernel = config.embedding_tables[0].compute_kernel
         embedding_location = compute_kernel_to_embedding_location(compute_kernel)
 
@@ -2111,15 +2127,34 @@ class ZeroCollisionKeyValueEmbedding(
     ]:
         return self.emb_module.split_embedding_weights(no_snapshot, should_flush)
 
-    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
-        # reset split weights during training
-        self._split_weights_res = None
-        self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
 
-        return self.emb_module(
-            indices=features.values().long(),
-            offsets=features.offsets().long(),
-            weights=features.weights_or_none(),
+class ZeroCollisionEmbeddingCache(ZeroCollisionKeyValueEmbedding):
+    def __init__(
+        self,
+        config: GroupedEmbeddingConfig,
+        pg: Optional[dist.ProcessGroup] = None,
+        device: Optional[torch.device] = None,
+        backend_type: BackendType = BackendType.SSD,
+    ) -> None:
+        super().__init__(
+            config,
+            pg,
+            device,
+            backend_type,
+            True,  # embedding_cache_mode
+        )
+
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        # in the case of embedding_cache_mode, we don't need backward pass, so call forward in no_grad mode
+        with torch.no_grad():
+            return super().forward(features)
+
+    def update(self, embeddings: KeyedJaggedTensor) -> None:
+        """
+        Update the embedding table with the new embeddings.
+        """
+        self.emb_module.direct_write_embedding(
+            embeddings.values(), embeddings.offsets(), embeddings.weights()
         )
 
 
