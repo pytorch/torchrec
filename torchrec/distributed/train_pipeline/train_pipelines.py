@@ -446,6 +446,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         self._apply_jit = apply_jit
         self._enqueue_batch_after_forward = enqueue_batch_after_forward
 
+        logger.info(
+            f"enqueue_batch_after_forward: {self._enqueue_batch_after_forward} "
+            f"execute_all_batches: {self._execute_all_batches}"
+        )
+
         if device.type == "cuda":
             # use two data streams to support two concurrent batches
             # Dynamo does not support cuda stream specificaiton,
@@ -624,6 +629,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # batch i, data (batch) and context
         if not self.enqueue_batch(dataloader_iter):
+            logger.info("fill_pipeline: failed to load batch i")
             return
 
         # modify the (sharded) sparse module forward, and invoke the first part of input_dist
@@ -637,6 +643,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
 
         # batch i+1
         if not self.enqueue_batch(dataloader_iter):
+            logger.info("fill_pipeline: failed to load batch i+1")
             return
 
     def _wait_for_batch(self) -> None:
@@ -801,7 +808,14 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 if batch is not None:
                     batch = _to_device(batch, self._device, non_blocking=True)
                 elif not self._execute_all_batches:
+                    logger.info(
+                        "copy_batch_to_gpu: raising StopIteration for None Batch (execute_all_batches=False)"
+                    )
                     raise StopIteration
+                else:
+                    logger.info(
+                        "copy_batch_to_gpu: returning None batch (execute_all_batches=True)"
+                    )
                 return batch, context
 
     def _next_batch(self, dataloader_iter: Iterator[In]) -> Optional[In]:
@@ -820,6 +834,9 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 batch = next(dataloader_iter, None)
             if batch is None:
                 self._dataloader_exhausted = True
+
+        if batch is None:
+            logger.info("_next_batch: dataloader exhausted")
         return batch
 
     def start_sparse_data_dist(
