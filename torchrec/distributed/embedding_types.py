@@ -251,6 +251,7 @@ class GroupedEmbeddingConfig:
     compute_kernel: EmbeddingComputeKernel
     embedding_tables: List[ShardedEmbeddingTable]
     fused_params: Optional[Dict[str, Any]] = None
+    enable_embedding_update: bool = False
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []
@@ -320,6 +321,19 @@ class BaseEmbeddingLookup(abc.ABC, nn.Module, Generic[F, T]):
         self,
         sparse_features: F,
     ) -> T:
+        pass
+
+
+class BaseEmbeddingUpdate(abc.ABC, nn.Module, Generic[F]):
+    """
+    Interface implemented by different embedding implementations for updating the weights
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        embeddings: F,
+    ) -> None:
         pass
 
 
