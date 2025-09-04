@@ -14,6 +14,7 @@ import itertools
 import logging
 import tempfile
 from dataclasses import dataclass
+from math import sqrt
 from typing import (
     Any,
     cast,
@@ -151,7 +152,9 @@ def _populate_res_params(config: GroupedEmbeddingConfig) -> Tuple[bool, RESParam
     return (enable_raw_embedding_streaming, res_params)
 
 
-def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
+def _populate_ssd_tbe_params(
+    config: GroupedEmbeddingConfig, is_kvzch: bool = False
+) -> Dict[str, Any]:
     """
     Construct SSD TBE params dict from config and fused params dict.
     """
@@ -192,6 +195,9 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
         )
 
     # populate init min and max
+    if is_kvzch:
+        _generate_init_range_for_kvzch(ssd_tbe_params, config)
+
     if (
         "ssd_uniform_init_lower" not in ssd_tbe_params
         or "ssd_uniform_init_upper" not in ssd_tbe_params
@@ -243,6 +249,50 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
     ssd_tbe_params[ENABLE_RAW_EMBEDDING_STREAMING_STR] = enable_res
 
     return ssd_tbe_params
+
+
+def _generate_init_range_for_kvzch(
+    tbe_params: Dict[str, Any],
+    config: GroupedEmbeddingConfig,
+) -> None:
+    """
+    Generate uniform init range for zero collision TBE based
+    """
+    # populate init min and max
+    if (
+        "ssd_uniform_init_lower" not in tbe_params
+        or "ssd_uniform_init_upper" not in tbe_params
+    ):
+        # Right now we do not support a per table init max and min. To use
+        # per table init max and min, either we allow it in SSD TBE, or we
+        # create one SSD TBE per table.
+        weights_precision = data_type_to_sparse_type(config.data_type)
+
+        # For Float32: use mathematically correct values, for Half: use safe range
+        max_size = 4_000_000_000  # 4B virtual embeddings
+        default_init_range = (
+            (-sqrt(1 / max_size), sqrt(1 / max_size))
+            if weights_precision.as_dtype() == torch.float32
+            else (-0.001, 0.001)
+        )
+
+        def get_init_value(
+            table_init_val: Optional[float], default_value: float
+        ) -> float:
+            return table_init_val if table_init_val is not None else default_value
+
+        init_mins = [
+            get_init_value(table.weight_init_min, default_init_range[0])
+            for table in config.embedding_tables
+        ]
+        init_maxs = [
+            get_init_value(table.weight_init_max, default_init_range[1])
+            for table in config.embedding_tables
+        ]
+
+        num_tables = len(config.embedding_tables)
+        tbe_params["ssd_uniform_init_lower"] = sum(init_mins) / num_tables
+        tbe_params["ssd_uniform_init_upper"] = sum(init_maxs) / num_tables
 
 
 def _populate_zero_collision_tbe_params(
@@ -1878,7 +1928,7 @@ class ZeroCollisionKeyValueEmbedding(
                 "not divisible by 4. "
             )
 
-        ssd_tbe_params = _populate_ssd_tbe_params(config)
+        ssd_tbe_params = _populate_ssd_tbe_params(config, is_kvzch=True)
         self._bucket_spec: List[Tuple[int, int, int]] = (
             _get_sharded_local_buckets_for_zero_collision(
                 self._config.embedding_tables, self._pg
@@ -2758,7 +2808,7 @@ class ZeroCollisionKeyValueEmbeddingBag(
                 "not divisible by 4. "
             )
 
-        ssd_tbe_params = _populate_ssd_tbe_params(config)
+        ssd_tbe_params = _populate_ssd_tbe_params(config, is_kvzch=True)
         self._bucket_spec: List[Tuple[int, int, int]] = (
             _get_sharded_local_buckets_for_zero_collision(
                 self._config.embedding_tables, self._pg
