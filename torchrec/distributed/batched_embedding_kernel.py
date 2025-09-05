@@ -2216,6 +2216,17 @@ class ZeroCollisionKeyValueEmbedding(
     ]:
         return self.emb_module.split_embedding_weights(no_snapshot, should_flush)
 
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        # reset split weights during training
+        self._split_weights_res = None
+        self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
+
+        return self.emb_module(
+            indices=features.values().long(),
+            offsets=features.offsets().long(),
+            weights=features.weights_or_none(),
+        )
+
 
 class ZeroCollisionEmbeddingCache(ZeroCollisionKeyValueEmbedding):
     def __init__(
