@@ -14,6 +14,7 @@ import itertools
 import logging
 import tempfile
 from dataclasses import dataclass
+from math import sqrt
 from typing import (
     Any,
     cast,
@@ -192,6 +193,9 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
         )
 
     # populate init min and max
+    if config.is_using_virtual_table:
+        _generate_init_range_for_virtual_tables(ssd_tbe_params, config)
+
     if (
         "ssd_uniform_init_lower" not in ssd_tbe_params
         or "ssd_uniform_init_upper" not in ssd_tbe_params
@@ -243,6 +247,50 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
     ssd_tbe_params[ENABLE_RAW_EMBEDDING_STREAMING_STR] = enable_res
 
     return ssd_tbe_params
+
+
+def _generate_init_range_for_virtual_tables(
+    tbe_params: Dict[str, Any],
+    config: GroupedEmbeddingConfig,
+) -> None:
+    """
+    Generate uniform init range for zero collision TBE based
+    """
+    # populate init min and max
+    if (
+        "ssd_uniform_init_lower" not in tbe_params
+        or "ssd_uniform_init_upper" not in tbe_params
+    ):
+        # Right now we do not support a per table init max and min. To use
+        # per table init max and min, either we allow it in SSD TBE, or we
+        # create one SSD TBE per table.
+        weights_precision = data_type_to_sparse_type(config.data_type)
+
+        # For Float32: use mathematically correct values, for Half: use safe range
+        max_size = 4_000_000_000  # 4B virtual embeddings
+        default_init_range = (
+            (-sqrt(1 / max_size), sqrt(1 / max_size))
+            if weights_precision.as_dtype() == torch.float32
+            else (-0.001, 0.001)
+        )
+
+        def get_init_value(
+            table_init_val: Optional[float], default_value: float
+        ) -> float:
+            return table_init_val if table_init_val is not None else default_value
+
+        init_mins = [
+            get_init_value(table.weight_init_min, default_init_range[0])
+            for table in config.embedding_tables
+        ]
+        init_maxs = [
+            get_init_value(table.weight_init_max, default_init_range[1])
+            for table in config.embedding_tables
+        ]
+
+        num_tables = len(config.embedding_tables)
+        tbe_params["ssd_uniform_init_lower"] = sum(init_mins) / num_tables
+        tbe_params["ssd_uniform_init_upper"] = sum(init_maxs) / num_tables
 
 
 def _populate_zero_collision_tbe_params(
@@ -1872,6 +1920,9 @@ class ZeroCollisionKeyValueEmbedding(
         assert (
             len({table.embedding_dim for table in config.embedding_tables}) == 1
         ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+        assert (
+            config.is_using_virtual_table
+        ), "Try to create ZeroCollisionKeyValueEmbedding for non virtual tables"
         for table in config.embedding_tables:
             assert table.local_cols % 4 == 0, (
                 f"table {table.name} has local_cols={table.local_cols} "
@@ -2751,6 +2802,9 @@ class ZeroCollisionKeyValueEmbeddingBag(
         assert (
             len({table.embedding_dim for table in config.embedding_tables}) == 1
         ), "Currently we expect all tables in SSD TBE to have the same embedding dimension."
+        assert (
+            config.is_using_virtual_table
+        ), "Try to create ZeroCollisionKeyValueEmbeddingBag for non virtual tables"
 
         for table in config.embedding_tables:
             assert table.local_cols % 4 == 0, (
