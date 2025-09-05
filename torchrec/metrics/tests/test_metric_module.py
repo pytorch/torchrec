@@ -73,7 +73,6 @@ class TestMetricModule(RecMetricModule):
         compute_interval_steps: int = 100,
         min_compute_interval: float = 0.0,
         max_compute_interval: float = float("inf"),
-        memory_usage_limit_mb: float = 512,
     ) -> None:
         super().__init__(
             batch_size,
@@ -85,7 +84,6 @@ class TestMetricModule(RecMetricModule):
             compute_interval_steps=compute_interval_steps,
             min_compute_interval=min_compute_interval,
             max_compute_interval=max_compute_interval,
-            memory_usage_limit_mb=memory_usage_limit_mb,
         )
 
     def _update_rec_metrics(
