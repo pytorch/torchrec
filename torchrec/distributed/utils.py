@@ -665,34 +665,94 @@ def _group_sharded_modules(
     return sharded_modules
 
 
-def _quantize_embedding_modules(module: nn.Module, converted_dtype: DataType) -> None:
-    sharded_embs = _group_sharded_modules(module)
-    logger.info(
-        f"convert embedding modules to converted_dtype={converted_dtype.value} quantization"
+def _convert_weights(
+    weights: torch.Tensor,
+    converted_dtype: SparseType,
+) -> torch.Tensor:
+    torch_dtype = converted_dtype.as_dtype()
+    new_weights = weights.to(dtype=torch_dtype)
+    weights.untyped_storage().resize_(0)
+    return new_weights
+
+
+def weights_bytes_in_emb_kernel(emb: nn.Module) -> int:
+    total_bytes = (
+        emb.weights_dev.element_size() * emb.weights_dev.numel()  # pyre-ignore [29]
+        + emb.weights_host.element_size() * emb.weights_host.numel()  # pyre-ignore [29]
+        + emb.weights_uvm.element_size() * emb.weights_uvm.numel()  # pyre-ignore [29]
     )
-    converted_sparse_dtype = data_type_to_sparse_type(converted_dtype)
+    return total_bytes
 
-    def convert_weights(
-        weights: torch.Tensor,
-        converted_dtype: SparseType,
-    ) -> torch.Tensor:
-        torch_dtype = converted_dtype.as_dtype()
-        new_weights = weights.to(torch_dtype)
-        weights.untyped_storage().resize_(0)
-        return new_weights
 
-    for emb_kernel in sharded_embs:
-        emb_kernel.weights_dev = convert_weights(  # pyre-ignore [16]
-            emb_kernel.weights_dev,  # pyre-ignore [6]
-            converted_sparse_dtype,
-        )
-        emb_kernel.weights_host = convert_weights(  # pyre-ignore [16]
-            emb_kernel.weights_host,  # pyre-ignore [6]
-            converted_sparse_dtype,
-        )
-        emb_kernel.weights_uvm = convert_weights(  # pyre-ignore [16]
-            emb_kernel.weights_uvm,  # pyre-ignore [6]
-            converted_sparse_dtype,
-        )
+class EmbeddingQuantizationUtils:
+    def __init__(self) -> None:
+        self._emb_kernel_to_sparse_dtype: Dict[
+            SplitTableBatchedEmbeddingBagsCodegen, SparseType
+        ] = {}
 
-        emb_kernel.weights_precision = converted_sparse_dtype  # pyre-ignore [16]
+    def quantize_embedding_modules(
+        self, module: nn.Module, converted_dtype: DataType
+    ) -> None:
+        sharded_embs = _group_sharded_modules(module)
+        sharded_embs.sort(key=weights_bytes_in_emb_kernel)
+        logger.info(
+            f"convert embedding modules to converted_dtype={converted_dtype.value} quantization"
+        )
+        converted_sparse_dtype = data_type_to_sparse_type(converted_dtype)
+
+        for emb_kernel in sharded_embs:
+            emb_kernel.weights_dev = _convert_weights(  # pyre-ignore [16]
+                emb_kernel.weights_dev,  # pyre-ignore [6]
+                converted_sparse_dtype,
+            )
+            emb_kernel.weights_host = _convert_weights(  # pyre-ignore [16]
+                emb_kernel.weights_host,  # pyre-ignore [6]
+                converted_sparse_dtype,
+            )
+            emb_kernel.weights_uvm = _convert_weights(  # pyre-ignore [16]
+                emb_kernel.weights_uvm,  # pyre-ignore [6]
+                converted_sparse_dtype,
+            )
+            self._emb_kernel_to_sparse_dtype.setdefault(
+                emb_kernel, emb_kernel.weights_precision  # pyre-ignore [6]
+            )
+
+            emb_kernel.weights_precision = converted_sparse_dtype  # pyre-ignore [16]
+
+    def recreate_embedding_modules(
+        self,
+        module: nn.Module,
+    ) -> None:
+        sharded_embs = _group_sharded_modules(module)
+        sharded_embs.sort(key=weights_bytes_in_emb_kernel)
+
+        for emb_kernel in sharded_embs:
+            converted_sparse_dtype = self._emb_kernel_to_sparse_dtype[emb_kernel]  # pyre-ignore [6]: Incompatible parameter type
+
+            emb_kernel.weights_dev = _convert_weights(  # pyre-ignore [16]
+                emb_kernel.weights_dev,  # pyre-ignore [6]
+                converted_sparse_dtype,
+            )
+            emb_kernel.weights_host = _convert_weights(  # pyre-ignore [16]
+                emb_kernel.weights_host,  # pyre-ignore [6]
+                converted_sparse_dtype,
+            )
+            emb_kernel.weights_uvm = _convert_weights(  # pyre-ignore [16]
+                emb_kernel.weights_uvm,  # pyre-ignore [6]
+                converted_sparse_dtype,
+            )
+        self._recalculate_torch_state(module)
+
+    def _recalculate_torch_state(self, module: nn.Module) -> None:
+        def _recalculate_torch_state_helper(
+            module: torch.nn.Module,
+        ) -> None:
+            if hasattr(module, "_lookups") or hasattr(module, "_lookup"):
+                # pyre-fixme[29]: `Union[(self: Tensor) -> Any, Module, Tensor]` is
+                #  not a function.
+                module._initialize_torch_state(skip_registering=True)
+                return
+            for _, child in module.named_children():
+                _recalculate_torch_state_helper(child)
+
+        _recalculate_torch_state_helper(module)

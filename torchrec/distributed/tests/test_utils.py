@@ -35,12 +35,14 @@ from torchrec.distributed.types import (
     ShardMetadata,
 )
 from torchrec.distributed.utils import (
-    _quantize_embedding_modules,
+    _convert_weights,
     add_params_from_parameter_sharding,
     convert_to_fbgemm_types,
+    EmbeddingQuantizationUtils,
     get_bucket_metadata_from_shard_metadata,
     get_unsharded_module_names,
     merge_fused_params,
+    weights_bytes_in_emb_kernel,
 )
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -99,52 +101,30 @@ class UtilsTest(unittest.TestCase):
         dist.destroy_process_group()
 
 
-class QuantizeEmbeddingModulesTest(unittest.TestCase):
+class EmbeddingQuantizationUtilsTest(unittest.TestCase):
+    def test_init(self) -> None:
+        """Test EmbeddingQuantizationUtils initialization."""
+        utils = EmbeddingQuantizationUtils()
+        self.assertEqual(utils._emb_kernel_to_sparse_dtype, {})
+
     def test_quantize_embedding_modules(self) -> None:
-        """Test that _quantize_embedding_modules correctly converts embedding weight tensors."""
-        # Create a mock embedding module that mimics SplitTableBatchedEmbeddingBagsCodegen
+        """Test quantize_embedding_modules correctly converts embedding weight tensors."""
+        utils = EmbeddingQuantizationUtils()
+
+        # Create a mock embedding module
         mock_emb = Mock()
-
-        # Create mock tensors that support the operations we need
-        mock_weights_dev = Mock()
-        mock_weights_dev.dtype = torch.float32
-        mock_weights_dev.to.return_value = Mock()
-        mock_weights_dev.to.return_value.dtype = torch.float16
-        storage_mock_dev = Mock()
-        storage_mock_dev.resize_ = Mock()
-        mock_weights_dev.untyped_storage.return_value = storage_mock_dev
-
-        mock_weights_host = Mock()
-        mock_weights_host.dtype = torch.float32
-        mock_weights_host.to.return_value = Mock()
-        mock_weights_host.to.return_value.dtype = torch.float16
-        storage_mock_host = Mock()
-        storage_mock_host.resize_ = Mock()
-        mock_weights_host.untyped_storage.return_value = storage_mock_host
-
-        mock_weights_uvm = Mock()
-        mock_weights_uvm.dtype = torch.float32
-        mock_weights_uvm.to.return_value = Mock()
-        mock_weights_uvm.to.return_value.dtype = torch.float16
-        storage_mock_uvm = Mock()
-        storage_mock_uvm.resize_ = Mock()
-        mock_weights_uvm.untyped_storage.return_value = storage_mock_uvm
-
-        mock_emb.weights_dev = mock_weights_dev
-        mock_emb.weights_host = mock_weights_host
-        mock_emb.weights_uvm = mock_weights_uvm
+        mock_emb.weights_dev = torch.tensor([1.0, 2.0, 3.0])
+        mock_emb.weights_host = torch.tensor([4.0, 5.0])
+        mock_emb.weights_uvm = torch.tensor([6.0])
         mock_emb.weights_precision = SparseType.FP32
 
-        # Create a module that contains the mock embedding
+        # Create a module
         module = torch.nn.Module()
 
-        # Mock the _group_sharded_modules function to return our mock embedding
-        with patch(
-            "torchrec.distributed.utils._group_sharded_modules"
-        ) as mock_group_sharded:
-            mock_group_sharded.return_value = [mock_emb]
+        # Mock functions
+        with patch("torchrec.distributed.utils._group_sharded_modules") as mock_group:
+            mock_group.return_value = [mock_emb]
 
-            # Mock the data_type_to_sparse_type function
             with patch(
                 "torchrec.distributed.utils.data_type_to_sparse_type"
             ) as mock_convert:
@@ -152,174 +132,168 @@ class QuantizeEmbeddingModulesTest(unittest.TestCase):
                 mock_sparse_type.as_dtype.return_value = torch.float16
                 mock_convert.return_value = mock_sparse_type
 
-                # Mock the logger
-                with patch("torchrec.distributed.utils.logger") as mock_logger:
-                    # Call the function with FP16 data type
-                    _quantize_embedding_modules(module, DataType.FP16)
+                with patch(
+                    "torchrec.distributed.utils._convert_weights"
+                ) as mock_convert_weights:
+                    mock_converted_tensor = torch.tensor([1.0], dtype=torch.float16)
+                    mock_convert_weights.return_value = mock_converted_tensor
 
-                    # Verify that _group_sharded_modules was called with the module
-                    mock_group_sharded.assert_called_once_with(module)
+                    with patch(
+                        "torchrec.distributed.utils.weights_bytes_in_emb_kernel"
+                    ) as mock_bytes:
+                        mock_bytes.return_value = 100
 
-                    # Verify that data_type_to_sparse_type was called with FP16
-                    mock_convert.assert_called_once_with(DataType.FP16)
+                        # Call the function
+                        utils.quantize_embedding_modules(module, DataType.FP16)
 
-                    # Verify that logger.info was called with the expected message
-                    mock_logger.info.assert_called_once_with(
-                        f"convert embedding modules to converted_dtype={DataType.FP16.value} quantization"
-                    )
+                        # Verify the weights were converted
+                        self.assertEqual(mock_convert_weights.call_count, 3)
 
-                    # Verify that .to() was called on each tensor with the correct dtype
-                    mock_weights_dev.to.assert_called_once_with(torch.float16)
-                    mock_weights_host.to.assert_called_once_with(torch.float16)
-                    mock_weights_uvm.to.assert_called_once_with(torch.float16)
+                        # Verify weights_precision was updated
+                        self.assertEqual(mock_emb.weights_precision, mock_sparse_type)
 
-                    # Verify that the storage resize was called for each tensor
-                    storage_mock_dev.resize_.assert_called_once_with(0)
-                    storage_mock_host.resize_.assert_called_once_with(0)
-                    storage_mock_uvm.resize_.assert_called_once_with(0)
+                        # Verify the sparse type was stored
+                        self.assertIn(mock_emb, utils._emb_kernel_to_sparse_dtype)
 
-                    # Verify that weights_precision is correctly set to the converted sparse type
-                    self.assertEqual(mock_emb.weights_precision, mock_sparse_type)
+    def test_recreate_embedding_modules(self) -> None:
+        """Test recreate_embedding_modules restores original precision."""
+        utils = EmbeddingQuantizationUtils()
 
-    def test_quantize_embedding_modules_no_sharded_modules(self) -> None:
-        """Test that _quantize_embedding_modules handles modules with no sharded embeddings."""
-        # Create a module with no sharded embeddings
+        # Create a mock embedding module
+        mock_emb = Mock()
+        mock_emb.weights_dev = torch.tensor([1.0, 2.0])
+        mock_emb.weights_host = torch.tensor([3.0])
+        mock_emb.weights_uvm = torch.tensor([4.0])
+
+        # Set up the stored sparse type
+        original_sparse_type = SparseType.FP32
+        utils._emb_kernel_to_sparse_dtype[mock_emb] = original_sparse_type
+
         module = torch.nn.Module()
 
-        # Mock the _group_sharded_modules function to return empty list
-        with patch(
-            "torchrec.distributed.utils._group_sharded_modules"
-        ) as mock_group_sharded:
-            mock_group_sharded.return_value = []
+        # Mock functions
+        with patch("torchrec.distributed.utils._group_sharded_modules") as mock_group:
+            mock_group.return_value = [mock_emb]
 
-            # Mock the data_type_to_sparse_type function
             with patch(
-                "torchrec.distributed.utils.data_type_to_sparse_type"
-            ) as mock_convert:
-                mock_sparse_type = Mock()
-                mock_convert.return_value = mock_sparse_type
+                "torchrec.distributed.utils._convert_weights"
+            ) as mock_convert_weights:
+                mock_converted_tensor = torch.tensor([1.0])
+                mock_convert_weights.return_value = mock_converted_tensor
 
-                # Mock the logger
-                with patch("torchrec.distributed.utils.logger") as mock_logger:
-                    # Call the function - should not raise any errors
-                    _quantize_embedding_modules(module, DataType.FP16)
+                with patch("torchrec.distributed.utils.weights_bytes_in_emb_kernel"):
+                    with patch.object(utils, "_recalculate_torch_state") as mock_recalc:
+                        # Call the function
+                        utils.recreate_embedding_modules(module)
 
-                    # Verify that _group_sharded_modules was called
-                    mock_group_sharded.assert_called_once_with(module)
+                        # Verify weights were converted back
+                        self.assertEqual(mock_convert_weights.call_count, 3)
 
-                    # Verify that data_type_to_sparse_type was called
-                    mock_convert.assert_called_once_with(DataType.FP16)
+                        # Verify _recalculate_torch_state was called
+                        mock_recalc.assert_called_once_with(module)
 
-                    # Verify that logger.info was called
-                    mock_logger.info.assert_called_once()
+    def test_recalculate_torch_state(self) -> None:
+        """Test _recalculate_torch_state calls _initialize_torch_state on modules with lookups."""
+        utils = EmbeddingQuantizationUtils()
 
-    def test_quantize_embedding_modules_multiple_embeddings(self) -> None:
-        """Test that _quantize_embedding_modules handles multiple embedding modules."""
-        # Create multiple mock embedding modules
-        mock_emb1 = Mock()
-        mock_emb2 = Mock()
+        # Create a mock module with _lookups attribute
+        mock_module_with_lookups = Mock()
+        mock_module_with_lookups._initialize_torch_state = Mock()
+        mock_module_with_lookups._lookups = Mock()  # Has _lookups attribute
 
-        # Create fully mocked tensors for first embedding
-        mock_weights_dev1 = Mock()
-        mock_weights_dev1.dtype = torch.float32
-        mock_weights_dev1.to.return_value = Mock()
-        mock_weights_dev1.to.return_value.dtype = torch.int8
-        storage_mock_dev1 = Mock()
-        storage_mock_dev1.resize_ = Mock()
-        mock_weights_dev1.untyped_storage.return_value = storage_mock_dev1
+        # Create a mock module with _lookup attribute (singular)
+        mock_module_with_lookup = Mock()
+        mock_module_with_lookup._initialize_torch_state = Mock()
+        mock_module_with_lookup._lookup = Mock()  # Has _lookup attribute
 
-        mock_weights_host1 = Mock()
-        mock_weights_host1.dtype = torch.float32
-        mock_weights_host1.to.return_value = Mock()
-        mock_weights_host1.to.return_value.dtype = torch.int8
-        storage_mock_host1 = Mock()
-        storage_mock_host1.resize_ = Mock()
-        mock_weights_host1.untyped_storage.return_value = storage_mock_host1
+        # Create a mock module without lookup attributes (should be processed recursively)
+        mock_module_without_lookups = Mock()
+        mock_module_without_lookups.named_children.return_value = (
+            []
+        )  # No children to recurse into
+        # Ensure it doesn't have lookup attributes
+        if hasattr(mock_module_without_lookups, "_lookups"):
+            delattr(mock_module_without_lookups, "_lookups")
+        if hasattr(mock_module_without_lookups, "_lookup"):
+            delattr(mock_module_without_lookups, "_lookup")
 
-        mock_weights_uvm1 = Mock()
-        mock_weights_uvm1.dtype = torch.float32
-        mock_weights_uvm1.to.return_value = Mock()
-        mock_weights_uvm1.to.return_value.dtype = torch.int8
-        storage_mock_uvm1 = Mock()
-        storage_mock_uvm1.resize_ = Mock()
-        mock_weights_uvm1.untyped_storage.return_value = storage_mock_uvm1
+        # Create parent module that doesn't have _lookups or _lookup but has children
+        mock_parent = Mock()
+        # Ensure parent doesn't have the attributes
+        if hasattr(mock_parent, "_lookups"):
+            delattr(mock_parent, "_lookups")
+        if hasattr(mock_parent, "_lookup"):
+            delattr(mock_parent, "_lookup")
+        mock_parent.named_children.return_value = [
+            ("child1", mock_module_with_lookups),
+            ("child2", mock_module_with_lookup),
+            ("child3", mock_module_without_lookups),
+        ]
 
-        mock_emb1.weights_dev = mock_weights_dev1
-        mock_emb1.weights_host = mock_weights_host1
-        mock_emb1.weights_uvm = mock_weights_uvm1
-        mock_emb1.weights_precision = SparseType.FP32
+        # Call the function on the parent
+        utils._recalculate_torch_state(mock_parent)
 
-        # Create fully mocked tensors for second embedding
-        mock_weights_dev2 = Mock()
-        mock_weights_dev2.dtype = torch.float32
-        mock_weights_dev2.to.return_value = Mock()
-        mock_weights_dev2.to.return_value.dtype = torch.int8
-        storage_mock_dev2 = Mock()
-        storage_mock_dev2.resize_ = Mock()
-        mock_weights_dev2.untyped_storage.return_value = storage_mock_dev2
+        # Verify _initialize_torch_state was called on both child modules with lookups
+        mock_module_with_lookups._initialize_torch_state.assert_called_once_with(
+            skip_registering=True
+        )
+        mock_module_with_lookup._initialize_torch_state.assert_called_once_with(
+            skip_registering=True
+        )
 
-        mock_weights_host2 = Mock()
-        mock_weights_host2.dtype = torch.float32
-        mock_weights_host2.to.return_value = Mock()
-        mock_weights_host2.to.return_value.dtype = torch.int8
-        storage_mock_host2 = Mock()
-        storage_mock_host2.resize_ = Mock()
-        mock_weights_host2.untyped_storage.return_value = storage_mock_host2
 
-        mock_weights_uvm2 = Mock()
-        mock_weights_uvm2.dtype = torch.float32
-        mock_weights_uvm2.to.return_value = Mock()
-        mock_weights_uvm2.to.return_value.dtype = torch.int8
-        storage_mock_uvm2 = Mock()
-        storage_mock_uvm2.resize_ = Mock()
-        mock_weights_uvm2.untyped_storage.return_value = storage_mock_uvm2
+class ConvertWeightsTest(unittest.TestCase):
+    def test_convert_weights(self) -> None:
+        """Test _convert_weights function."""
+        # Create a test tensor
+        weights = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
 
-        mock_emb2.weights_dev = mock_weights_dev2
-        mock_emb2.weights_host = mock_weights_host2
-        mock_emb2.weights_uvm = mock_weights_uvm2
-        mock_emb2.weights_precision = SparseType.FP32
+        # Create a mock sparse type
+        mock_sparse_type = Mock()
+        mock_sparse_type.as_dtype.return_value = torch.float16
 
-        # Create a module
-        module = torch.nn.Module()
+        # Call the function
+        new_weights = _convert_weights(weights, mock_sparse_type)
 
-        # Mock the _group_sharded_modules function to return both mock embeddings
-        with patch(
-            "torchrec.distributed.utils._group_sharded_modules"
-        ) as mock_group_sharded:
-            mock_group_sharded.return_value = [mock_emb1, mock_emb2]
+        # Verify the tensor was converted to the correct dtype
+        self.assertEqual(new_weights.dtype, torch.float16)
 
-            # Mock the data_type_to_sparse_type function
-            with patch(
-                "torchrec.distributed.utils.data_type_to_sparse_type"
-            ) as mock_convert:
-                mock_sparse_type = Mock()
-                mock_sparse_type.as_dtype.return_value = torch.int8
-                mock_convert.return_value = mock_sparse_type
+        # Verify the original storage was resized to 0
+        self.assertEqual(weights.untyped_storage().size(), 0)
 
-                # Call the function
-                _quantize_embedding_modules(module, DataType.INT8)
+        # Verify the values are correct (approximately, due to precision change)
+        expected_values = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float16)
+        torch.testing.assert_close(new_weights, expected_values)
 
-                # Verify that .to() was called on each tensor with the correct dtype
-                mock_weights_dev1.to.assert_called_once_with(torch.int8)
-                mock_weights_host1.to.assert_called_once_with(torch.int8)
-                mock_weights_uvm1.to.assert_called_once_with(torch.int8)
 
-                mock_weights_dev2.to.assert_called_once_with(torch.int8)
-                mock_weights_host2.to.assert_called_once_with(torch.int8)
-                mock_weights_uvm2.to.assert_called_once_with(torch.int8)
+class WeightsBytesTest(unittest.TestCase):
+    def test_weights_bytes_in_emb_kernel(self) -> None:
+        """Test weights_bytes_in_emb_kernel function."""
+        # Create a mock embedding module
+        mock_emb = Mock()
 
-                # Verify that the storage resize was called for each tensor
-                storage_mock_dev1.resize_.assert_called_once_with(0)
-                storage_mock_host1.resize_.assert_called_once_with(0)
-                storage_mock_uvm1.resize_.assert_called_once_with(0)
+        # Mock weights tensors with specific sizes and element sizes
+        mock_weights_dev = Mock()
+        mock_weights_dev.element_size.return_value = 4  # 4 bytes per element (float32)
+        mock_weights_dev.numel.return_value = 10  # 10 elements
 
-                storage_mock_dev2.resize_.assert_called_once_with(0)
-                storage_mock_host2.resize_.assert_called_once_with(0)
-                storage_mock_uvm2.resize_.assert_called_once_with(0)
+        mock_weights_host = Mock()
+        mock_weights_host.element_size.return_value = 2  # 2 bytes per element (float16)
+        mock_weights_host.numel.return_value = 5  # 5 elements
 
-                # Verify that weights_precision is correctly set to the converted sparse type
-                self.assertEqual(mock_emb1.weights_precision, mock_sparse_type)
-                self.assertEqual(mock_emb2.weights_precision, mock_sparse_type)
+        mock_weights_uvm = Mock()
+        mock_weights_uvm.element_size.return_value = 1  # 1 byte per element (int8)
+        mock_weights_uvm.numel.return_value = 8  # 8 elements
+
+        mock_emb.weights_dev = mock_weights_dev
+        mock_emb.weights_host = mock_weights_host
+        mock_emb.weights_uvm = mock_weights_uvm
+
+        # Call the function
+        total_bytes = weights_bytes_in_emb_kernel(mock_emb)
+
+        # Expected: (4 * 10) + (2 * 5) + (1 * 8) = 40 + 10 + 8 = 58
+        self.assertEqual(total_bytes, 58)
 
 
 def _compute_translated_lengths(

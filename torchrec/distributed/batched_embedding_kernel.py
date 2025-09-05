@@ -2310,15 +2310,22 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
             self._emb_module,
             pg,
         )
-        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+        self.init_parameters()
+
+    @property
+    def _param_per_table(self) -> Dict[str, TableBatchedEmbeddingSlice]:
+        return dict(
             _gen_named_parameters_by_table_fused(
                 emb_module=self._emb_module,
                 table_name_to_count=self.table_name_to_count.copy(),
                 config=self._config,
-                pg=pg,
+                pg=self._pg,
             )
         )
-        self.init_parameters()
+
+    @_param_per_table.setter
+    def _param_per_table(self, v: Dict[str, TableBatchedEmbeddingSlice]) -> None:
+        self.__dict__["_param_per_table"] = v
 
     @property
     def emb_module(
@@ -3169,15 +3176,22 @@ class BatchedFusedEmbeddingBag(
             self._emb_module,
             pg,
         )
-        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+        self.init_parameters()
+
+    @property
+    def _param_per_table(self) -> Dict[str, TableBatchedEmbeddingSlice]:
+        return dict(
             _gen_named_parameters_by_table_fused(
                 emb_module=self._emb_module,
                 table_name_to_count=self.table_name_to_count.copy(),
                 config=self._config,
-                pg=pg,
+                pg=self._pg,
             )
         )
-        self.init_parameters()
+
+    @_param_per_table.setter
+    def _param_per_table(self, v: Dict[str, TableBatchedEmbeddingSlice]) -> None:
+        self.__dict__["_param_per_table"] = v
 
     @property
     def emb_module(
