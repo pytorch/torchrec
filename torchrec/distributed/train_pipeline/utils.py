@@ -52,6 +52,7 @@ from torchrec.distributed.train_pipeline.runtime_forwards import (
     InSyncEmbeddingPipelinedForward,
     KJTAllToAllForward,
     PipelinedForward,
+    PrefetchEmbeddingPipelinedForward,
     PrefetchPipelinedForward,
     TForwardContext,
 )
@@ -138,6 +139,7 @@ def _start_data_dist(
                 PrefetchPipelinedForward,
                 EmbeddingPipelinedForward,
                 InSyncEmbeddingPipelinedForward,
+                PrefetchEmbeddingPipelinedForward,
             ),
         )
 
@@ -539,6 +541,10 @@ class DataLoadingThread(Thread, Generic[In]):
         return batch
 
 
+def _prefetch_enabled(forward: BaseForward[TForwardContext]) -> bool:
+    return isinstance(forward, BaseForward) and forward.prefetch()
+
+
 def _prefetch_embeddings(
     batch: In,
     context: PrefetchTrainPipelineContext,
@@ -551,7 +557,11 @@ def _prefetch_embeddings(
     data_per_sharded_module = {}
     for sharded_module in pipelined_modules:
         forward = sharded_module.forward
-        assert isinstance(forward, PrefetchPipelinedForward)
+        # for backward compatibility, consider it valid if it is PrefetchPipelinedForward
+        # because the class might not have prefetch method
+        assert isinstance(forward, PrefetchPipelinedForward) or _prefetch_enabled(
+            forward
+        )
         assert forward._name in context.input_dist_tensors_requests
         request = context.input_dist_tensors_requests.pop(forward._name)
         assert isinstance(request, Awaitable)
