@@ -696,7 +696,7 @@ class EmbeddingQuantizationUtils:
         sharded_embs = _group_sharded_modules(module)
         sharded_embs.sort(key=weights_bytes_in_emb_kernel)
         logger.info(
-            f"convert embedding modules to converted_dtype={converted_dtype.value} quantization"
+            f"[TorchRec] Converting embedding modules to converted_dtype={converted_dtype.value} quantization"
         )
         converted_sparse_dtype = data_type_to_sparse_type(converted_dtype)
 
@@ -727,7 +727,9 @@ class EmbeddingQuantizationUtils:
         sharded_embs.sort(key=weights_bytes_in_emb_kernel)
 
         for emb_kernel in sharded_embs:
-            converted_sparse_dtype = self._emb_kernel_to_sparse_dtype[emb_kernel]  # pyre-ignore [6]: Incompatible parameter type
+            converted_sparse_dtype = self._emb_kernel_to_sparse_dtype[
+                emb_kernel  # pyre-ignore [6]: Incompatible parameter type
+            ]
 
             emb_kernel.weights_dev = _convert_weights(  # pyre-ignore [16]
                 emb_kernel.weights_dev,  # pyre-ignore [6]
