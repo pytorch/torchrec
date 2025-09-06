@@ -33,9 +33,6 @@ FUSED_PARAM_LENGTHS_TO_OFFSETS_LOOKUP: str = "__register_lengths_to_offsets_look
 FUSED_PARAM_SSD_TABLE_LIST: str = "__register_ssd_table_list"
 # Bool fused param per table to check if the table is offloaded to SSD
 FUSED_PARAM_IS_SSD_TABLE: str = "__register_is_ssd_table"
-ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION: str = (
-    "enable_feature_score_weight_accumulation"
-)
 
 
 class TBEToRegisterMixIn:
