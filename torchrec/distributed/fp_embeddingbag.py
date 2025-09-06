@@ -163,6 +163,9 @@ class ShardedFeatureProcessedEmbeddingBagCollection(
             if "_embedding_bag_collection" in fqn:
                 yield append_prefix(prefix, fqn)
 
+    def _initialize_torch_state(self, skip_registering: bool = False) -> None:  # noqa
+        self._embedding_bag_collection._initialize_torch_state(skip_registering)
+
 
 class FeatureProcessedEmbeddingBagCollectionSharder(
     BaseEmbeddingSharder[FeatureProcessedEmbeddingBagCollection]

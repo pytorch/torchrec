@@ -2217,6 +2217,17 @@ class ZeroCollisionKeyValueEmbedding(
     ]:
         return self.emb_module.split_embedding_weights(no_snapshot, should_flush)
 
+    def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        # reset split weights during training
+        self._split_weights_res = None
+        self._optim.set_sharded_embedding_weight_ids(sharded_embedding_weight_ids=None)
+
+        return self.emb_module(
+            indices=features.values().long(),
+            offsets=features.offsets().long(),
+            weights=features.weights_or_none(),
+        )
+
 
 class ZeroCollisionEmbeddingCache(ZeroCollisionKeyValueEmbedding):
     def __init__(
@@ -2310,15 +2321,22 @@ class BatchedFusedEmbedding(BaseBatchedEmbedding[torch.Tensor], FusedOptimizerMo
             self._emb_module,
             pg,
         )
-        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+        self.init_parameters()
+
+    @property
+    def _param_per_table(self) -> Dict[str, TableBatchedEmbeddingSlice]:
+        return dict(
             _gen_named_parameters_by_table_fused(
                 emb_module=self._emb_module,
                 table_name_to_count=self.table_name_to_count.copy(),
                 config=self._config,
-                pg=pg,
+                pg=self._pg,
             )
         )
-        self.init_parameters()
+
+    @_param_per_table.setter
+    def _param_per_table(self, v: Dict[str, TableBatchedEmbeddingSlice]) -> None:
+        self.__dict__["_param_per_table"] = v
 
     @property
     def emb_module(
@@ -3169,15 +3187,22 @@ class BatchedFusedEmbeddingBag(
             self._emb_module,
             pg,
         )
-        self._param_per_table: Dict[str, TableBatchedEmbeddingSlice] = dict(
+        self.init_parameters()
+
+    @property
+    def _param_per_table(self) -> Dict[str, TableBatchedEmbeddingSlice]:
+        return dict(
             _gen_named_parameters_by_table_fused(
                 emb_module=self._emb_module,
                 table_name_to_count=self.table_name_to_count.copy(),
                 config=self._config,
-                pg=pg,
+                pg=self._pg,
             )
         )
-        self.init_parameters()
+
+    @_param_per_table.setter
+    def _param_per_table(self, v: Dict[str, TableBatchedEmbeddingSlice]) -> None:
+        self.__dict__["_param_per_table"] = v
 
     @property
     def emb_module(
