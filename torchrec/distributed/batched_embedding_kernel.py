@@ -240,6 +240,12 @@ def _populate_ssd_tbe_params(config: GroupedEmbeddingConfig) -> Dict[str, Any]:
                 "by max_l1_cache_size, cap at max_cache_sets instead"
             )
             ssd_tbe_params["cache_sets"] = int(max_cache_sets)
+
+    if "kvzch_eviction_trigger_mode" in fused_params and config.is_using_virtual_table:
+        ssd_tbe_params["kvzch_eviction_trigger_mode"] = fused_params.get(
+            "kvzch_eviction_trigger_mode"
+        )
+
     ssd_tbe_params["table_names"] = [table.name for table in config.embedding_tables]
 
     enable_res, res_params = _populate_res_params(config)
@@ -324,16 +330,24 @@ def _populate_zero_collision_tbe_params(
         ttls_in_mins = [0] * len(config.embedding_tables)
         counter_decay_rates = [0.0] * len(config.embedding_tables)
         feature_score_counter_decay_rates = [0.0] * len(config.embedding_tables)
-        max_training_id_num_per_table = [0] * len(config.embedding_tables)
-        target_eviction_percent_per_table = [0.0] * len(config.embedding_tables)
+        training_id_eviction_trigger_count = [0] * len(config.embedding_tables)
+        training_id_keep_count = [0] * len(config.embedding_tables)
         l2_weight_thresholds = [0.0] * len(config.embedding_tables)
         eviction_strategy = -1
         table_names = [table.name for table in config.embedding_tables]
         l2_cache_size = tbe_params["l2_cache_size"]
+        if "kvzch_eviction_trigger_mode" in tbe_params:
+            eviction_tirgger_mode = tbe_params["kvzch_eviction_trigger_mode"]
+            tbe_params.pop("kvzch_eviction_trigger_mode")
+        else:
+            eviction_tirgger_mode = 2  # 2 means mem_util based eviction
         for i, table in enumerate(config.embedding_tables):
             policy_t = table.virtual_table_eviction_policy
             if policy_t is not None:
                 if isinstance(policy_t, CountBasedEvictionPolicy):
+                    training_id_eviction_trigger_count[i] = (
+                        policy_t.training_id_eviction_trigger_count
+                    )
                     counter_thresholds[i] = policy_t.eviction_threshold
                     counter_decay_rates[i] = policy_t.decay_rate
                     if eviction_strategy == -1 or eviction_strategy == 1:
@@ -344,12 +358,10 @@ def _populate_zero_collision_tbe_params(
                         )
                 elif isinstance(policy_t, FeatureScoreBasedEvictionPolicy):
                     feature_score_counter_decay_rates[i] = policy_t.decay_rate
-                    max_training_id_num_per_table[i] = (
-                        policy_t.max_training_id_num_per_rank
+                    training_id_eviction_trigger_count[i] = (
+                        policy_t.training_id_eviction_trigger_count
                     )
-                    target_eviction_percent_per_table[i] = (
-                        policy_t.target_eviction_percent
-                    )
+                    training_id_keep_count[i] = policy_t.training_id_keep_count
                     ttls_in_mins[i] = policy_t.eviction_ttl_mins
                     if eviction_strategy == -1 or eviction_strategy == 5:
                         eviction_strategy = 5
@@ -358,6 +370,9 @@ def _populate_zero_collision_tbe_params(
                             f"Do not support multiple eviction strategy in one tbe {eviction_strategy} and 5 for tables {table_names}"
                         )
                 elif isinstance(policy_t, TimestampBasedEvictionPolicy):
+                    training_id_eviction_trigger_count[i] = (
+                        policy_t.training_id_eviction_trigger_count
+                    )
                     ttls_in_mins[i] = policy_t.eviction_ttl_mins
                     if eviction_strategy == -1 or eviction_strategy == 0:
                         eviction_strategy = 0
@@ -366,6 +381,9 @@ def _populate_zero_collision_tbe_params(
                             f"Do not support multiple eviction strategy in one tbe {eviction_strategy} and 0 for tables {table_names}"
                         )
                 elif isinstance(policy_t, FeatureL2NormBasedEvictionPolicy):
+                    training_id_eviction_trigger_count[i] = (
+                        policy_t.training_id_eviction_trigger_count
+                    )
                     l2_weight_thresholds[i] = policy_t.eviction_threshold
                     if eviction_strategy == -1 or eviction_strategy == 3:
                         eviction_strategy = 3
@@ -374,6 +392,9 @@ def _populate_zero_collision_tbe_params(
                             f"Do not support multiple eviction strategy in one tbe {eviction_strategy} and 3 for tables {table_names}"
                         )
                 elif isinstance(policy_t, CountTimestampMixedEvictionPolicy):
+                    training_id_eviction_trigger_count[i] = (
+                        policy_t.training_id_eviction_trigger_count
+                    )
                     counter_thresholds[i] = policy_t.eviction_threshold
                     counter_decay_rates[i] = policy_t.decay_rate
                     ttls_in_mins[i] = policy_t.eviction_ttl_mins
@@ -388,15 +409,15 @@ def _populate_zero_collision_tbe_params(
                         f"Unsupported eviction policy {policy_t} for table {table.name}"
                     )
         eviction_policy = EvictionPolicy(
-            eviction_trigger_mode=2,  # 2 means mem_util based eviction
+            eviction_trigger_mode=eviction_tirgger_mode,
             eviction_mem_threshold_gb=l2_cache_size,
             eviction_strategy=eviction_strategy,
             counter_thresholds=counter_thresholds,
             ttls_in_mins=ttls_in_mins,
             counter_decay_rates=counter_decay_rates,
             feature_score_counter_decay_rates=feature_score_counter_decay_rates,
-            max_training_id_num_per_table=max_training_id_num_per_table,
-            target_eviction_percent_per_table=target_eviction_percent_per_table,
+            training_id_eviction_trigger_count=training_id_eviction_trigger_count,
+            training_id_keep_count=training_id_keep_count,
             l2_weight_thresholds=l2_weight_thresholds,
             meta_header_lens=meta_header_lens,
         )
