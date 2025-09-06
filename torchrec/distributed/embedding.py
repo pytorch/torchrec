@@ -1067,7 +1067,6 @@ class ShardedEmbeddingCollection(
                             assert (
                                 weight_ids_sharded_t is not None
                                 and id_cnt_per_bucket_sharded_t is not None
-                                and metadata_sharded_t is not None
                             )
                             # The logic here assumes there is only one shard per table on any particular rank
                             # if there are cases each rank has >1 shards, we need to update here accordingly
@@ -1121,12 +1120,13 @@ class ShardedEmbeddingCollection(
                         destination,
                         virtual_table_sharded_t_map[table_name][1],
                     )
-                    update_destination(
-                        table_name,
-                        "metadata",
-                        destination,
-                        virtual_table_sharded_t_map[table_name][2],
-                    )
+                    if virtual_table_sharded_t_map[table_name][2] is not None:
+                        update_destination(
+                            table_name,
+                            "metadata",
+                            destination,
+                            virtual_table_sharded_t_map[table_name][2],
+                        )
 
         def _post_load_state_dict_hook(
             module: "ShardedEmbeddingCollection",
