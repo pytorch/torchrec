@@ -147,7 +147,6 @@ class RecMetricModule(nn.Module):
         throughput_metric (Optional[ThroughputMetric]): the ThroughputMetric.
         state_metrics (Optional[Dict[str, StateMetric]]): the dict of StateMetrics.
         compute_interval_steps (int): the intervals between two compute calls in the unit of batch number
-        memory_usage_limit_mb (float): [Unused] the memory usage limit for OOM check
 
     Call Args:
         Not supported.
@@ -194,8 +193,6 @@ class RecMetricModule(nn.Module):
         compute_interval_steps: int = 100,
         min_compute_interval: float = 0.0,
         max_compute_interval: float = float("inf"),
-        # Unused, but needed for backwards compatibility. TODO: Remove from callsites
-        memory_usage_limit_mb: float = 512,
     ) -> None:
         super().__init__()
         self.rec_tasks = rec_tasks if rec_tasks else []
