@@ -30,8 +30,6 @@ jobs:
         os:
           - linux.g5.12xlarge.nvidia.gpu
         python:
-          - version: "3.9"
-            tag: "py39"
           - version: "3.10"
             tag: "py310"
           - version: "3.11"
