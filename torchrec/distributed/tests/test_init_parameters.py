@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import cast, List, Optional, Union
+from typing import cast, Dict, List, Optional, Union
 
 import torch
 from hypothesis import given, settings, strategies as st, Verbosity
@@ -53,14 +53,29 @@ def initialize_and_test_parameters(
     rank: int,
     world_size: int,
     backend: str,
-    embedding_tables: Union[EmbeddingCollection, EmbeddingBagCollection],
+    table: Union[EmbeddingCollection, EmbeddingBagCollection],
+    state_dict: Dict[str, torch.Tensor],
+    device: torch.device,
     sharding_type: str,
     sharders: List[ModuleSharder[nn.Module]],
     table_name: str,
     local_size: Optional[int] = None,
 ) -> None:
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
-
+        # Initialize embedding bag on non-meta device
+        if isinstance(table, EmbeddingBagConfig):
+            embedding_tables = EmbeddingBagCollection(
+                tables=[table],
+                device=device,
+            )
+        elif isinstance(table, EmbeddingConfig):
+            embedding_tables = EmbeddingCollection(
+                tables=[table],
+                device=device,
+            )
+        else:
+            raise RuntimeError(f"unknown table type {type(table)}")
+        embedding_tables.load_state_dict(state_dict)
         module_sharding_plan = construct_module_sharding_plan(
             embedding_tables,
             per_param_sharding={
@@ -74,8 +89,6 @@ def initialize_and_test_parameters(
         model = DistributedModelParallel(
             module=embedding_tables,
             plan=ShardingPlan({"": module_sharding_plan}),
-            # pyre-fixme[6]: For 1st argument expected `ProcessGroup` but got
-            #  `Optional[ProcessGroup]`.
             env=ShardingEnv.from_process_group(ctx.pg),
             sharders=sharders,
             device=ctx.device,
@@ -111,8 +124,8 @@ def initialize_and_test_parameters(
 
             if ctx.rank == 0:
                 torch.testing.assert_close(
-                    none_throws(gathered_tensor).to("cpu"),
-                    embedding_tables.state_dict()[key],
+                    none_throws(gathered_tensor).cpu(),
+                    embedding_tables.state_dict()[key].cpu(),
                 )
         elif isinstance(model.state_dict()[key], torch.Tensor):
             torch.testing.assert_close(
@@ -153,33 +166,37 @@ class ParameterInitializationTest(MultiProcessTestBase):
                 ShardingType.COLUMN_WISE.value,
                 ShardingType.TABLE_WISE.value,
             ]
-        )
+        ),
+        device=st.sampled_from(
+            [
+                torch.device("cuda"),
+                torch.device("cpu"),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, deadline=None)
-    def test_initialize_parameters_ec(self, sharding_type: str) -> None:
+    def test_initialize_parameters_ec(
+        self, sharding_type: str, device: torch.device
+    ) -> None:
         world_size = 2
         backend = "nccl"
         table_name = "free_parameters"
 
         # Initialize embedding table on non-meta device, in this case cuda:0
-        embedding_tables = EmbeddingCollection(
-            tables=[
-                EmbeddingConfig(
-                    name=table_name,
-                    embedding_dim=64,
-                    num_embeddings=10,
-                    data_type=DataType.FP32,
-                )
-            ],
+        table = EmbeddingConfig(
+            name=table_name,
+            embedding_dim=64,
+            num_embeddings=10,
+            data_type=DataType.FP32,
         )
 
-        embedding_tables.load_state_dict(
-            {f"embeddings.{table_name}.weight": torch.randn(10, 64)}
-        )
+        state_dict = {f"embeddings.{table_name}.weight": torch.randn(10, 64)}
 
         self._run_multi_process_test(
             callable=initialize_and_test_parameters,
-            embedding_tables=embedding_tables,
+            table=table,
+            state_dict=state_dict,
+            device=device,
             sharding_type=sharding_type,
             sharders=[
                 cast(ModuleSharder[torch.nn.Module], EmbeddingCollectionSharder())
@@ -202,33 +219,35 @@ class ParameterInitializationTest(MultiProcessTestBase):
                 ShardingType.COLUMN_WISE.value,
                 ShardingType.TABLE_WISE.value,
             ]
-        )
+        ),
+        device=st.sampled_from(
+            [
+                torch.device("cuda"),
+                # torch.device("cpu"),
+            ]
+        ),
     )
     @settings(verbosity=Verbosity.verbose, deadline=None)
-    def test_initialize_parameters_ebc(self, sharding_type: str) -> None:
+    def test_initialize_parameters_ebc(
+        self, sharding_type: str, device: torch.device
+    ) -> None:
         world_size = 2
         backend = "nccl"
         table_name = "free_parameters"
-
-        # Initialize embedding bag on non-meta device, in this case cuda:0
-        embedding_tables = EmbeddingBagCollection(
-            tables=[
-                EmbeddingBagConfig(
-                    name=table_name,
-                    embedding_dim=64,
-                    num_embeddings=10,
-                    data_type=DataType.FP32,
-                )
-            ],
+        table = EmbeddingBagConfig(
+            name=table_name,
+            embedding_dim=64,
+            num_embeddings=10,
+            data_type=DataType.FP32,
         )
 
-        embedding_tables.load_state_dict(
-            {f"embedding_bags.{table_name}.weight": torch.randn(10, 64)}
-        )
+        state_dict = {f"embedding_bags.{table_name}.weight": torch.randn(10, 64)}
 
         self._run_multi_process_test(
             callable=initialize_and_test_parameters,
-            embedding_tables=embedding_tables,
+            table=table,
+            state_dict=state_dict,
+            device=device,
             sharding_type=sharding_type,
             sharders=[
                 cast(ModuleSharder[torch.nn.Module], EmbeddingBagCollectionSharder())
