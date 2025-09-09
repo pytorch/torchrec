@@ -63,8 +63,9 @@ def main():
         if entry["desired_cuda"] == "cu130":
             # fbgemm only supports cuda 12.6, 12.8 and 12.9
             continue
-        if entry["python_version"] == "3.14":
-            # it seems stuck `conda create myenv python=3.14 -c conda-forge`
+        if entry["python_version"] in ("3.14", "3.9"):
+            # stop python3.9 support, and will add python3.14 when it's ready
+            # https://devguide.python.org/versions/
             continue
         new_matrix_entries.append(entry)
 
