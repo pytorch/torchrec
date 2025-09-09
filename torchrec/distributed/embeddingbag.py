@@ -597,10 +597,7 @@ class ShardedEmbeddingBagCollection(
         if env.process_group and dist.get_backend(env.process_group) != "fake":
             self._initialize_torch_state()
 
-        if module.device not in ["meta", "cpu"] and module.device.type not in [
-            "meta",
-            "cpu",
-        ]:
+        if module.device != "meta" and module.device.type != "meta":
             self.load_state_dict(module.state_dict(), strict=False)
 
     @classmethod
