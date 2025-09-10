@@ -1109,15 +1109,7 @@ def _calculate_critical_path(best_plan: List[ShardingOption]) -> CriticalPathEst
     }
     rank_count = len({cast(int, shard.rank) for so in best_plan for shard in so.shards})
     sharding_types = list({so.sharding_type for so in best_plan})
-    adjustment_factor = 1
-    # Default bandwidth is 12.5 is used and closer to 40 is right for internode GTT
-    if (
-        rank_count > 8
-        and len(sharding_types) == 1
-        and sharding_types[0] == "column_wise"
-    ):
-        adjustment_factor = 3
-    comms_estimate = sum(comms_rank_agg.values()) / adjustment_factor
+    comms_estimate = sum(comms_rank_agg.values())
     comp_rank_agg = {
         outer_key: max(inner_dict.values())
         for outer_key, inner_dict in comp_data.items()
