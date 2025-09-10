@@ -43,6 +43,7 @@ class StableEmbeddingBagConfig:
     total_num_buckets: Optional[int] = None
     use_virtual_table: bool = False
     virtual_table_eviction_policy: Optional[VirtualTableEvictionPolicy] = None
+    enable_embedding_update: bool = False
     pooling: PoolingType = PoolingType.SUM
 
 
@@ -66,6 +67,9 @@ class StableEmbeddingConfig:
 
 class TestEmbeddingConfigSchema(unittest.TestCase):
     def test_embedding_bag_config(self) -> None:
+        import fbvscode
+
+        fbvscode.set_trace()
         self.assertTrue(
             is_signature_compatible(
                 inspect.signature(StableEmbeddingBagConfig.__init__),
