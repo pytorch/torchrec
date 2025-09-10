@@ -1075,6 +1075,40 @@ class ShardedModule(
         dist_input = self.input_dist(ctx, *input, **kwargs).wait().wait()
         return self.compute_and_output_dist(ctx, dist_input)
 
+    @abc.abstractmethod
+    def update(self, ctx: ShrdCtx, dist_input: CompIn) -> LazyAwaitable[None]:
+        """
+        Updates the sharded module with the given input.
+
+        Args:
+            ctx (ShrdCtx): sharding context.
+            dist_input (CompIn): distributed input.
+        """
+        pass
+
+    @abc.abstractmethod
+    def write_dist(
+        self, ctx: ShrdCtx, *input, **kwargs
+    ) -> Awaitable[Awaitable[CompIn]]:
+        pass
+
+    # TODO: May be move this to separate interface
+    # pyre-ignore[2]
+    def write(self, *input, **kwargs) -> None:
+        """
+        Executes the write dist and update steps.
+
+        Args:
+            *input: input.
+            **kwargs: keyword arguments.
+
+        Returns:
+            LazyAwaitable[Out]: awaitable of output from output dist.
+        """
+        ctx = self.create_context()
+        dist_input = self.write_dist(ctx, *input, **kwargs).wait().wait()
+        self.update(ctx, dist_input)
+
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for key, _ in self.named_parameters(prefix):
             yield key

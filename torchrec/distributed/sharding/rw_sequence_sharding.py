@@ -17,12 +17,15 @@ from torchrec.distributed.dist_data import (
 )
 from torchrec.distributed.embedding_lookup import (
     GroupedEmbeddingsLookup,
+    GroupedEmbeddingsUpdate,
     InferGroupedEmbeddingsLookup,
 )
 from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
+    BaseEmbeddingUpdate,
     BaseSparseFeaturesDist,
+    BaseSparseFeaturesWriteDist,
 )
 from torchrec.distributed.embedding_types import (
     BaseGroupedFeatureProcessor,
@@ -33,6 +36,7 @@ from torchrec.distributed.sharding.rw_sharding import (
     get_embedding_shard_metadata,
     InferRwSparseFeaturesDist,
     RwSparseFeaturesDist,
+    RwSparseFeaturesWriteDist,
 )
 from torchrec.distributed.sharding.sequence_sharding import (
     InferSequenceShardingContext,
@@ -161,6 +165,30 @@ class RwSequenceEmbeddingSharding(
             self._get_num_features(),
             device if device is not None else self._device,
             qcomm_codecs_registry=self.qcomm_codecs_registry,
+        )
+
+    def create_write_dist(
+        self, device: Optional[torch.device] = None
+    ) -> BaseSparseFeaturesWriteDist[KeyedJaggedTensor]:
+        num_features = self._get_num_writable_features()
+        feature_hash_sizes = self._get_writable_feature_hash_sizes()
+        return RwSparseFeaturesWriteDist(
+            # pyre-fixme[6]: For 1st param expected `ProcessGroup` but got
+            #  `Optional[ProcessGroup]`.
+            pg=self._pg,
+            num_features=num_features,
+            feature_hash_sizes=feature_hash_sizes,
+            device=device if device is not None else self._device,
+            is_sequence=True,
+        )
+
+    # pyre-ignore [14]
+    def create_update(
+        self,
+        grouped_embeddings_lookup: GroupedEmbeddingsLookup,
+    ) -> BaseEmbeddingUpdate[KeyedJaggedTensor]:
+        return GroupedEmbeddingsUpdate(
+            grouped_embeddings_lookup=grouped_embeddings_lookup,
         )
 
 
