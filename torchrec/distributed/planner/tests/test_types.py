@@ -419,8 +419,8 @@ def _test_hashing_consistency(
 
 
 class TestConsistentHashingBetweenProcesses(MultiProcessTestBase):
-
-    def test_hash_consistency(self) -> None:
+    # the proposal order might vary in github action so skip this test
+    def test_hash_consistency_disabled_in_oss_compatibility(self) -> None:
         # planner
         world_size = 2
         return_hash_dict = multiprocessing.Manager().dict()
