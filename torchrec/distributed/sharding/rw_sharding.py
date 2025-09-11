@@ -83,20 +83,23 @@ def get_embedding_shard_metadata(
         return expected_even_shard_sizes
 
     embed_sharding = []
-    for table in grouped_embedding_configs_per_rank[0][0].embedding_tables:
-        embed_sharding_per_feature = []
-        total_rows = 0
-        sizes = []
-        # pyre-ignore [16]: `Optional` has no attribute `shards_metadata`
-        for metadata in table.global_metadata.shards_metadata:
-            embed_sharding_per_feature.append(metadata.shard_offsets[0])
-            total_rows += metadata.shard_sizes[0]
-            sizes.append(metadata.shard_sizes[0])
-        embed_sharding_per_feature.append(total_rows)
-        embed_sharding.extend([embed_sharding_per_feature] * len(table.embedding_names))
-        expected_even_sizes = get_even_shard_sizes(total_rows, world_size)
-        if sizes != expected_even_sizes:
-            is_even_sharding = False
+    for group in grouped_embedding_configs_per_rank[0]:
+        for table in group.embedding_tables:
+            embed_sharding_per_feature = []
+            total_rows = 0
+            sizes = []
+            # pyre-ignore [16]: `Optional` has no attribute `shards_metadata`
+            for metadata in table.global_metadata.shards_metadata:
+                embed_sharding_per_feature.append(metadata.shard_offsets[0])
+                total_rows += metadata.shard_sizes[0]
+                sizes.append(metadata.shard_sizes[0])
+            embed_sharding_per_feature.append(total_rows)
+            embed_sharding.extend(
+                [embed_sharding_per_feature] * len(table.embedding_names)
+            )
+            expected_even_sizes = get_even_shard_sizes(total_rows, world_size)
+            if sizes != expected_even_sizes:
+                is_even_sharding = False
 
     return (embed_sharding, is_even_sharding)
 
