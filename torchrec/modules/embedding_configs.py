@@ -202,6 +202,9 @@ class CountBasedEvictionPolicy(VirtualTableEvictionPolicy):
     Count based eviction policy for virtual table.
     """
 
+    training_id_eviction_trigger_count: int = (
+        0  # max number of training ids per rank to trigger eviction
+    )
     eviction_threshold: int = (
         15  # eviction threshold for count based eviction policy. 0 means no eviction
     )
@@ -222,13 +225,17 @@ class FeatureScoreBasedEvictionPolicy(VirtualTableEvictionPolicy):
     """
 
     decay_rate: float = 0.99  # default decay by default #TODO: Change to real value
-    max_training_id_num_per_rank: int = 0  # max number of training ids per rank
-    target_eviction_percent: float = 0.0  # target eviction percent
+    training_id_eviction_trigger_count: int = (
+        0  # max number of training ids per rank to trigger eviction
+    )
+    training_id_keep_count: int = (
+        0  # number of training ids per rank to keep after eviction
+    )
     eviction_ttl_mins: int = (
         0  # if not 0, means we will use timestamp based policy but not feature score policy
     )
     max_inference_id_num_per_rank: int = (
-        0  # max number of inference ids per rank, default is max_training_id_num_per_rank
+        0  # max number of inference ids per rank, default is training_id_keep_count
     )
     inference_eviction_feature_score_threshold: Optional[float] = (
         None  # 0 means no eviction
@@ -241,7 +248,7 @@ class FeatureScoreBasedEvictionPolicy(VirtualTableEvictionPolicy):
         if self.inference_eviction_ttl_mins is None:
             self.inference_eviction_ttl_mins = self.eviction_ttl_mins
         if self.max_inference_id_num_per_rank == 0:
-            self.max_inference_id_num_per_rank = self.max_training_id_num_per_rank
+            self.max_inference_id_num_per_rank = self.training_id_keep_count
 
 
 @dataclass
@@ -250,6 +257,9 @@ class TimestampBasedEvictionPolicy(VirtualTableEvictionPolicy):
     Timestamp based eviction policy for virtual table.
     """
 
+    training_id_eviction_trigger_count: int = (
+        0  # max number of training ids per rank to trigger eviction
+    )
     eviction_ttl_mins: int = 24 * 60  # 1 day. 0 means no eviction
     inference_eviction_ttl_mins: Optional[int] = None  # 0 means no eviction
 
@@ -264,6 +274,9 @@ class CountTimestampMixedEvictionPolicy(VirtualTableEvictionPolicy):
     Count timestamp mixed eviction policy for virtual table.
     """
 
+    training_id_eviction_trigger_count: int = (
+        0  # max number of training ids per rank to trigger eviction
+    )
     eviction_threshold: int = (
         15  # eviction threshold for count based eviction policy. 0 means no eviction based on count
     )
@@ -291,6 +304,9 @@ class FeatureL2NormBasedEvictionPolicy(VirtualTableEvictionPolicy):
     Feature L2 norm based eviction policy for virtual table.
     """
 
+    training_id_eviction_trigger_count: int = (
+        0  # max number of training ids per rank to trigger eviction
+    )
     eviction_threshold: float = (
         0.0  # eviction threshold for feature l2 norm based eviction policy. 0.0 means no eviction
     )
