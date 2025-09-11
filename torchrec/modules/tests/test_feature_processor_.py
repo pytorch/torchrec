@@ -209,3 +209,43 @@ class PositionWeightedCollectionModuleTest(unittest.TestCase):
         self.assertTrue(
             all(param.is_meta for param in pwmc.position_weights_dict.values())
         )
+
+    def test_load_state_dict(self) -> None:
+        values = torch.tensor([10, 11, 12, 20, 21, 22])
+        lengths = torch.tensor([3, 3])
+        kjt = KeyedJaggedTensor(
+            keys=["feature1", "feature2"], values=values, lengths=lengths
+        )
+
+        # Step 1: Create module and observe initial state
+        max_feature_lengths = {"feature1": 3, "feature2": 3}
+        module = PositionWeightedModuleCollection(max_feature_lengths)
+
+        # Before checkpoint loading, position_weights_dict is a element-wise reference of position_weights
+        for f in ["feature1", "feature2"]:
+            self.assertIs(
+                module.position_weights[f],
+                module.position_weights_dict[f],
+            )
+
+        output = module(kjt)
+        expected = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        self.assertListEqual(output.weights().tolist(), expected)
+
+        # Step 2: Simulate checkpoint loading with assign=True
+        checkpoint = {
+            "position_weights.feature1": torch.tensor([2.0, 3.0, 4.0]),
+            "position_weights.feature2": torch.tensor([5.0, 6.0, 7.0]),
+        }
+        module.load_state_dict(checkpoint, strict=False, assign=True)
+
+        # After checkpoint loading, position_weights_dict is a element-wise reference of position_weights
+        for f in ["feature1", "feature2"]:
+            self.assertIs(
+                module.position_weights[f],
+                module.position_weights_dict[f],
+            )
+
+        output = module(kjt)
+        expected = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+        self.assertListEqual(output.weights().tolist(), expected)
