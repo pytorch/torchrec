@@ -47,7 +47,6 @@ from torchrec.distributed.embedding_types import (
     ShardingType,
 )
 from torchrec.distributed.fused_params import (
-    ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION,
     FUSED_PARAM_IS_SSD_TABLE,
     FUSED_PARAM_SSD_TABLE_LIST,
 )
@@ -91,6 +90,7 @@ from torchrec.distributed.utils import (
 from torchrec.modules.embedding_configs import (
     EmbeddingConfig,
     EmbeddingTableConfig,
+    FeatureScoreBasedEvictionPolicy,
     PoolingType,
 )
 from torchrec.modules.embedding_modules import (
@@ -422,18 +422,6 @@ class ShardedEmbeddingCollection(
         super().__init__(qcomm_codecs_registry=qcomm_codecs_registry)
         self._enable_feature_score_weight_accumulation: bool = False
 
-        if (
-            fused_params is not None
-            and ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION in fused_params
-        ):
-            self._enable_feature_score_weight_accumulation = cast(
-                bool, fused_params[ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION]
-            )
-            fused_params.pop(ENABLE_FEATURE_SCORE_WEIGHT_ACCUMULATION)
-            logger.info(
-                f"EC feature score weight accumulation enabled: {self._enable_feature_score_weight_accumulation}."
-            )
-
         self._module_fqn = module_fqn
         self._embedding_configs: List[EmbeddingConfig] = module.embedding_configs()
         self._table_names: List[str] = [
@@ -491,6 +479,18 @@ class ShardedEmbeddingCollection(
 
         self._has_uninitialized_input_dist: bool = True
         logger.info(f"EC index dedup enabled: {self._use_index_dedup}.")
+
+        for config in self._embedding_configs:
+            virtual_table_eviction_policy = config.virtual_table_eviction_policy
+            if virtual_table_eviction_policy is not None and isinstance(
+                virtual_table_eviction_policy, FeatureScoreBasedEvictionPolicy
+            ):
+                self._enable_feature_score_weight_accumulation = True
+                break
+
+        logger.info(
+            f"EC feature score weight accumulation enabled: {self._enable_feature_score_weight_accumulation}."
+        )
 
         # Get all fused optimizers and combine them.
         optims = []
