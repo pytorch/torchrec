@@ -1957,7 +1957,7 @@ class ZeroCollisionKeyValueEmbedding(
                 List[ShardedTensor],
                 List[ShardedTensor],
                 List[ShardedTensor],
-                List[ShardedTensor],
+                Optional[List[ShardedTensor]],
             ]
         ] = None
 
@@ -2126,26 +2126,31 @@ class ZeroCollisionKeyValueEmbedding(
             self._table_name_to_weight_count_per_rank,
             use_param_size_as_rows=True,
         )
-        metadata_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy,
-            metadata_list,  # pyre-ignore [6]
-            self._pg,
-            prefix,
-            self._table_name_to_weight_count_per_rank,
-        )
+        metadata_sharded_t_list = None
+        if metadata_list is not None:
+            metadata_sharded_t_list = create_virtual_sharded_tensors(
+                emb_table_config_copy,
+                metadata_list,
+                self._pg,
+                prefix,
+                self._table_name_to_weight_count_per_rank,
+            )
 
         assert (
             len(pmt_list)
             == len(weight_ids_list)  # pyre-ignore
             == len(bucket_cnt_list)  # pyre-ignore
-            == len(metadata_list)  # pyre-ignore
         )
         assert (
             len(pmt_sharded_t_list)
             == len(weight_id_sharded_t_list)
             == len(bucket_cnt_sharded_t_list)
-            == len(metadata_sharded_t_list)
         )
+        if metadata_list is not None:
+            assert metadata_sharded_t_list is not None
+            assert len(pmt_list) == len(metadata_list)
+            assert len(pmt_sharded_t_list) == len(metadata_sharded_t_list)
+
         self._split_weights_res = (
             pmt_sharded_t_list,
             weight_id_sharded_t_list,
@@ -2181,10 +2186,13 @@ class ZeroCollisionKeyValueEmbedding(
         for table_idx, pmt_sharded_t in enumerate(pmt_sharded_t_list):
             table_config = self._config.embedding_tables[table_idx]
             key = append_prefix(prefix, f"{table_config.name}")
+            metadata_sharded_t = None
+            if metadata_sharded_t_list is not None:
+                metadata_sharded_t = metadata_sharded_t_list[table_idx]
 
             yield key, pmt_sharded_t, weight_id_sharded_t_list[
                 table_idx
-            ], bucket_cnt_sharded_t_list[table_idx], metadata_sharded_t_list[table_idx]
+            ], bucket_cnt_sharded_t_list[table_idx], metadata_sharded_t
 
     def flush(self) -> None:
         """
@@ -2849,7 +2857,7 @@ class ZeroCollisionKeyValueEmbeddingBag(
                 List[ShardedTensor],
                 List[ShardedTensor],
                 List[ShardedTensor],
-                List[ShardedTensor],
+                Optional[List[ShardedTensor]],
             ]
         ] = None
 
@@ -3018,26 +3026,31 @@ class ZeroCollisionKeyValueEmbeddingBag(
             self._table_name_to_weight_count_per_rank,
             use_param_size_as_rows=True,
         )
-        metadata_sharded_t_list = create_virtual_sharded_tensors(
-            emb_table_config_copy,
-            metadata_list,  # pyre-ignore [6]
-            self._pg,
-            prefix,
-            self._table_name_to_weight_count_per_rank,
-        )
+        metadata_sharded_t_list = None
+        if metadata_list is not None:
+            metadata_sharded_t_list = create_virtual_sharded_tensors(
+                emb_table_config_copy,
+                metadata_list,
+                self._pg,
+                prefix,
+                self._table_name_to_weight_count_per_rank,
+            )
 
         assert (
             len(pmt_list)
             == len(weight_ids_list)  # pyre-ignore
             == len(bucket_cnt_list)  # pyre-ignore
-            == len(metadata_list)  # pyre-ignore
         )
         assert (
             len(pmt_sharded_t_list)
             == len(weight_id_sharded_t_list)
             == len(bucket_cnt_sharded_t_list)
-            == len(metadata_sharded_t_list)
         )
+        if metadata_list is not None:
+            assert metadata_sharded_t_list is not None
+            assert len(pmt_list) == len(metadata_list)
+            assert len(pmt_sharded_t_list) == len(metadata_sharded_t_list)
+
         self._split_weights_res = (
             pmt_sharded_t_list,
             weight_id_sharded_t_list,
@@ -3073,10 +3086,13 @@ class ZeroCollisionKeyValueEmbeddingBag(
         for table_idx, pmt_sharded_t in enumerate(pmt_sharded_t_list):
             table_config = self._config.embedding_tables[table_idx]
             key = append_prefix(prefix, f"{table_config.name}")
+            metadata_sharded_t = None
+            if metadata_sharded_t_list is not None:
+                metadata_sharded_t = metadata_sharded_t_list[table_idx]
 
             yield key, pmt_sharded_t, weight_id_sharded_t_list[
                 table_idx
-            ], bucket_cnt_sharded_t_list[table_idx], metadata_sharded_t_list[table_idx]
+            ], bucket_cnt_sharded_t_list[table_idx], metadata_sharded_t
 
     def flush(self) -> None:
         """
