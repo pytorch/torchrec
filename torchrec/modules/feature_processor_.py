@@ -10,11 +10,12 @@
 #!/usr/bin/env python3
 
 import abc
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 import torch
 
 from torch import nn
+from torch.nn.modules.module import _IncompatibleKeys
 
 from torchrec.pt2.checks import is_non_strict_exporting
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
@@ -232,3 +233,15 @@ class PositionWeightedModuleCollection(FeatureProcessorsCollection, CopyMixIn):
             self.position_weights_dict[k] = param
 
         return self
+
+    def load_state_dict(
+        self,
+        state_dict: Mapping[str, torch.Tensor],
+        strict: bool = True,
+        assign: bool = False,
+    ) -> _IncompatibleKeys:
+        result = super().load_state_dict(state_dict, strict, assign)
+        # Re-sync after loading
+        for k, param in self.position_weights.items():
+            self.position_weights_dict[k] = param
+        return result
