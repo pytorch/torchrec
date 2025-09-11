@@ -8,6 +8,7 @@
 # pyre-strict
 
 import copy
+import logging
 from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
 from functools import partial
@@ -109,6 +110,7 @@ from torchrec.modules.embedding_modules import (
 from torchrec.optim.fused import EmptyFusedOptimizer, FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 from torchrec.sparse.jagged_tensor import _to_offsets, KeyedJaggedTensor, KeyedTensor
+from torchrec.sparse.jagged_tensor_validator import validate_keyed_jagged_tensor
 from torchrec.sparse.tensor_dict import maybe_td_to_kjt
 
 try:
@@ -117,6 +119,9 @@ try:
     torch.ops.load_library("//deeplearning/fbgemm/fbgemm_gpu/codegen:index_select_ops")
 except OSError:
     pass
+
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _pin_and_move(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
@@ -1515,13 +1520,21 @@ class ShardedEmbeddingBagCollection(
             features = maybe_td_to_kjt(features, feature_keys)  # pyre-ignore[6]
         ctx.variable_batch_per_feature = features.variable_stride_per_key()
         ctx.inverse_indices = features.inverse_indices_or_none()
+
         if self._has_uninitialized_input_dist:
+            if torch._utils_internal.justknobs_check(
+                "pytorch/torchrec:enable_kjt_validation"
+            ):
+                logger.info("Validating input features...")
+                validate_keyed_jagged_tensor(features)
+
             self._create_input_dist(features.keys())
             self._has_uninitialized_input_dist = False
             if ctx.variable_batch_per_feature:
                 self._create_inverse_indices_permute_indices(ctx.inverse_indices)
             if self._has_mean_pooling_callback:
                 self._init_mean_pooling_callback(features.keys(), ctx.inverse_indices)
+
         with torch.no_grad():
             if self._has_features_permute:
                 features = features.permute(
