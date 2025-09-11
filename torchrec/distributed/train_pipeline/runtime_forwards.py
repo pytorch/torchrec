@@ -223,6 +223,7 @@ class InSyncEmbeddingPipelinedForward(EmbeddingPipelinedForward):
 class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
     """
     This pipeline is used in PrefetchTrainPipelineSparseDist
+    OR in TrainPipelineCustomizedOrderSparseDist, when prefetch is enabled but pipeline_embedding_lookup_fwd is disabled
     """
 
     def __init__(
@@ -265,6 +266,67 @@ class PrefetchPipelinedForward(BaseForward[PrefetchTrainPipelineContext]):
             ctx.record_stream(cur_stream)
 
         return self._module.compute_and_output_dist(ctx, data)
+
+
+class PrefetchEmbeddingPipelinedForward(PrefetchPipelinedForward):
+    """
+    This pipeline is used in TrainPipelineCustomizedOrderSparseDist when
+    prefetch is enabled and pipelined_sprase_lookup_fwd is enabled
+    compute_and_output_dist for batch N is called at the end of step N - 1
+    """
+
+    def __init__(
+        self,
+        name: str,
+        args: CallArgs,
+        module: ShardedModule,
+        context: PrefetchTrainPipelineContext,
+        prefetch_stream: Optional[torch.Stream] = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            args=args,
+            module=module,
+            context=context,
+            prefetch_stream=prefetch_stream,
+        )
+        self._compute_and_output_dist_awaitable: Optional[
+            Awaitable[Multistreamable]
+        ] = None
+
+    def compute_and_output_dist(self) -> None:
+        assert (
+            self._name in self._context.module_input_post_prefetch
+        ), "Invalid PrefetchEmbeddingPipelinedForward usage, please do not directly call model.forward()"
+        data = self._context.module_input_post_prefetch.pop(self._name)
+        ctx = self._context.module_contexts_post_prefetch.pop(self._name)
+
+        # Make sure that both result of input_dist and context
+        # are properly transferred to the current stream.
+        if self._stream is not None:
+            torch.get_device_module(self._device).current_stream().wait_stream(
+                self._stream
+            )
+            cur_stream = torch.get_device_module(self._device).current_stream()
+
+            assert isinstance(
+                data, (torch.Tensor, Multistreamable)
+            ), f"{type(data)} must implement Multistreamable interface"
+            data.record_stream(cur_stream)
+
+            ctx.record_stream(cur_stream)
+
+        self._compute_and_output_dist_awaitable = self._module.compute_and_output_dist(
+            ctx, data
+        )
+
+    # pyre-ignore [2, 24]
+    def __call__(self, *input, **kwargs) -> Awaitable:
+        if not self._compute_and_output_dist_awaitable:
+            raise Exception(
+                "compute_and_output_dist must be called before __call__",
+            )
+        return self._compute_and_output_dist_awaitable
 
 
 class KJTAllToAllForward:
