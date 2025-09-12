@@ -11,6 +11,7 @@ import os
 import unittest
 from collections import defaultdict
 from typing import Any, Callable, cast, Dict, List, Optional, OrderedDict, Tuple
+from unittest.mock import Mock, patch
 
 import numpy as np
 import torch
@@ -28,7 +29,10 @@ from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     EmbeddingTableConfig,
 )
-from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
+from torchrec.distributed.embeddingbag import (
+    logger as embeddingbag_logger,
+    ShardedEmbeddingBagCollection,
+)
 from torchrec.distributed.fused_embeddingbag import ShardedFusedEmbeddingBagCollection
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.planner import (
@@ -65,6 +69,7 @@ from torchrec.modules.embedding_configs import (
 from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.fused_embedding_modules import FusedEmbeddingBagCollection
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad
+from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.test_utils import get_free_port, seed_and_log
 
 
@@ -209,22 +214,7 @@ class ModelParallelSparseOnlyBase(unittest.TestCase):
         dist.destroy_process_group()
 
     def test_sharding_ebc_as_top_level(self) -> None:
-        embedding_dim = 128
-        num_embeddings = 256
-        ebc = EmbeddingBagCollection(
-            device=torch.device("meta"),
-            tables=[
-                EmbeddingBagConfig(
-                    name="large_table",
-                    embedding_dim=embedding_dim,
-                    num_embeddings=num_embeddings,
-                    feature_names=["my_feature"],
-                    pooling=PoolingType.SUM,
-                ),
-            ],
-        )
-
-        model = DistributedModelParallel(ebc, device=self.device)
+        model = self._create_sharded_model()
 
         self.assertTrue(isinstance(model.module, ShardedEmbeddingBagCollection))
 
@@ -249,6 +239,79 @@ class ModelParallelSparseOnlyBase(unittest.TestCase):
         model = DistributedModelParallel(ebc, device=self.device)
 
         self.assertTrue(isinstance(model.module, ShardedFusedEmbeddingBagCollection))
+
+    @patch("torch._utils_internal.justknobs_check")
+    def test_sharding_ebc_input_validation_enabled(self, mock_jk: Mock) -> None:
+        model = self._create_sharded_model()
+        kjt = KeyedJaggedTensor(
+            keys=["my_feature", "my_feature"],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+        )
+        mock_jk.return_value = True
+
+        with self.assertRaisesRegex(ValueError, "keys must be unique"):
+            model(kjt)
+        mock_jk.assert_called_once_with("pytorch/torchrec:enable_kjt_validation")
+
+    @patch("torch._utils_internal.justknobs_check")
+    def test_sharding_ebc_validate_input_only_once(self, mock_jk: Mock) -> None:
+        model = self._create_sharded_model()
+        kjt = KeyedJaggedTensor(
+            keys=["my_feature"],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+        ).to(self.device)
+        mock_jk.return_value = True
+
+        with self.assertLogs(embeddingbag_logger, level="INFO") as logs:
+            model(kjt)
+            model(kjt)
+            model(kjt)
+
+        mock_jk.assert_called_once_with("pytorch/torchrec:enable_kjt_validation")
+        matched_logs = list(
+            filter(lambda s: "Validating input features..." in s, logs.output)
+        )
+        self.assertEqual(1, len(matched_logs))
+
+    @patch("torch._utils_internal.justknobs_check")
+    def test_sharding_ebc_input_validation_disabled(self, mock_jk: Mock) -> None:
+        model = self._create_sharded_model()
+        kjt = KeyedJaggedTensor(
+            keys=["my_feature", "my_feature"],
+            values=torch.tensor([1, 2, 3, 4, 5]),
+            lengths=torch.tensor([1, 2, 0, 2]),
+            offsets=torch.tensor([0, 1, 3, 3, 5]),
+        ).to(self.device)
+        mock_jk.return_value = False
+
+        # Without KJT validation, input_dist will not raise exceptions
+        try:
+            model(kjt)
+        except ValueError:
+            self.fail("Input validation should not be enabled.")
+
+        mock_jk.assert_called_once_with("pytorch/torchrec:enable_kjt_validation")
+
+    def _create_sharded_model(
+        self, embedding_dim: int = 128, num_embeddings: int = 256
+    ) -> DistributedModelParallel:
+        ebc = EmbeddingBagCollection(
+            device=torch.device("meta"),
+            tables=[
+                EmbeddingBagConfig(
+                    name="large_table",
+                    embedding_dim=embedding_dim,
+                    num_embeddings=num_embeddings,
+                    feature_names=["my_feature"],
+                    pooling=PoolingType.SUM,
+                ),
+            ],
+        )
+        return DistributedModelParallel(ebc, device=self.device)
 
 
 class ModelParallelSingleRankBase(unittest.TestCase):

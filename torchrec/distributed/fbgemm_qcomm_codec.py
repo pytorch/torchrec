@@ -21,6 +21,7 @@ from fbgemm_gpu.quantize_comm import (
     QuantizationContext,
     QuantizedCommCodec as FbgemmQuantizedCommCodec,
 )
+from fbgemm_gpu.quantize_utils import RoundingMode
 from fbgemm_gpu.split_embedding_configs import SparseType
 from torchrec.distributed.types import CommOp, QuantizedCommCodec, QuantizedCommCodecs
 
@@ -70,6 +71,7 @@ class QCommsConfig:
     fp8_bwd_uses_143: Optional[bool] = False
     mx4_quantize_dim: Optional[int] = None
     mx4_quantize_dim_bwd: Optional[int] = None
+    mx4_rounding_mode: Optional[RoundingMode] = None
 
     def __post_init__(self) -> None:
         if (
@@ -119,10 +121,12 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
     codecs = QuantizedCommCodecs()
     if qcomms_config is not None:
         row_dim = None
+        rounding_mode = None
         if qcomms_config.forward_precision == CommType.FP8:
             row_dim = qcomms_config.fp8_quantize_dim
         elif qcomms_config.forward_precision == CommType.MX4:
             row_dim = qcomms_config.mx4_quantize_dim
+            rounding_mode = qcomms_config.mx4_rounding_mode
         codecs.forward = cast(
             QuantizedCommCodec[QuantizationContext],
             FbgemmQuantizedCommCodec(
@@ -132,6 +136,7 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                 loss_scale=qcomms_config.forward_loss_scale,
                 is_fwd=True,
                 row_dim=row_dim,
+                rounding_mode=rounding_mode,
             ),
         )
         row_dim_bwd = None
@@ -151,6 +156,7 @@ def get_qcomm_codecs(qcomms_config: Optional[QCommsConfig]) -> QuantizedCommCode
                 ),  # if fp8_bwd_uses_143 is True, bwd will use 1-4-3
                 # if fp8_bwd_uses_143 is False/None, bwd will use 1-5-2
                 row_dim=row_dim_bwd,
+                rounding_mode=rounding_mode,
             ),
         )
     return codecs
