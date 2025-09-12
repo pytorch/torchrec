@@ -29,7 +29,11 @@ from torchrec.distributed.planner.types import (
     Storage,
     Topology,
 )
-from torchrec.distributed.planner.utils import bytes_to_gb, reset_shard_rank
+from torchrec.distributed.planner.utils import (
+    bytes_to_gb,
+    mb_to_bytes,
+    reset_shard_rank,
+)
 from torchrec.distributed.types import ShardingType
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -55,6 +59,25 @@ def _get_uniform_sharding_options(
         if sharding_option.partition_by == PartitionByType.UNIFORM.value:
             uniform_sharding_options.append(sharding_option)
     return uniform_sharding_options
+
+
+def _get_shards_assignment(
+    sharding_options: List[ShardingOption],
+) -> List[List[Optional[int]]]:
+    assignment_per_option = []
+    for sharding_option in sharding_options:
+        assignment_per_option.append(sharding_option.get_shards_assignment())
+    return assignment_per_option
+
+
+def _apply_shards_assignment(
+    sharding_options: List[ShardingOption],
+    assignment_per_option: List[List[Optional[int]]],
+) -> None:
+    assert len(sharding_options) == len(assignment_per_option)
+    for sharding_option, assignment in zip(sharding_options, assignment_per_option):
+        for shard_id, rank in enumerate(assignment):
+            sharding_option.shards[shard_id].rank = rank
 
 
 @dataclass
@@ -171,6 +194,7 @@ class GreedyPerfPartitioner(Partitioner):
         self,
         proposal: List[ShardingOption],
         storage_constraint: Topology,
+        hbm_per_device: Optional[int] = None,
     ) -> List[ShardingOption]:
         """
         Places sharding options on topology based on each sharding option's
@@ -230,13 +254,27 @@ class GreedyPerfPartitioner(Partitioner):
             f"GreedyPerfPartitioner - sort_by: {self._sort_by}, balance_modules: {self._balance_modules}"
         )
 
-        _topology: Topology = copy.deepcopy(storage_constraint)
         minheap_devices: Optional[List[OrderedDeviceHardware]] = None
-        _host_level_devices = self._get_host_level_devices(_topology)
+
+        # Don't store the topology since topology cannot be changed
+        # the algorithm will only be modifying the device perf & storage sizes so copy them only
+        devices = [
+            DeviceHardware(
+                rank=d.rank,
+                storage=Storage(hbm=hbm_per_device or d.storage.hbm, ddr=d.storage.ddr),
+                perf=copy.deepcopy(d.perf),
+            )
+            for d in storage_constraint.devices
+        ]
+
+        host_level_devices = GreedyPerfPartitioner._get_host_level_devices(
+            storage_constraint, devices
+        )
 
         # first partition the uniform sharding options (RW & DP)
         uniform_sharding_options = _get_uniform_sharding_options(proposal)
-        self._uniform_partition(uniform_sharding_options, _topology.devices)
+
+        GreedyPerfPartitioner._uniform_partition(uniform_sharding_options, devices)
 
         # group the rest sharding options by colocation type (co-host, co-device, none)
         # and sort the groups by storage in reverse order
@@ -249,7 +287,7 @@ class GreedyPerfPartitioner(Partitioner):
                 sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.MULTI_HOST.value
             ):
-                self._multi_hosts_partition(sharding_option_group, _host_level_devices)
+                self._multi_hosts_partition(sharding_option_group, host_level_devices)
                 # _multi_hosts_partition invalidates minheap_devices, force rebuild before using
                 minheap_devices = None
 
@@ -257,7 +295,7 @@ class GreedyPerfPartitioner(Partitioner):
                 sharding_option_group.sharding_options[0].partition_by
                 == PartitionByType.HOST.value
             ):
-                self._cohost_partition(sharding_option_group, _host_level_devices)
+                self._cohost_partition(sharding_option_group, host_level_devices)
                 # _cohost_partition invalidates minheap_devices, force rebuild before using
                 minheap_devices = None
             elif (
@@ -266,7 +304,7 @@ class GreedyPerfPartitioner(Partitioner):
             ):
                 if minheap_devices is None:
                     minheap_devices = self._establish_minheap(
-                        _topology.devices, _topology.local_world_size
+                        devices, storage_constraint.local_world_size
                     )
                 assert (
                     len(sharding_option_group.sharding_options) == 1
@@ -279,8 +317,6 @@ class GreedyPerfPartitioner(Partitioner):
                 raise RuntimeError(
                     f"Unexpected sharding option group {sharding_option_group}"
                 )
-        # pyre-ignore [16]: `GreedyPerfPartitioner` has no attribute `_topology`.
-        self._topology: Topology = _topology
         return proposal
 
     @classmethod
@@ -432,7 +468,9 @@ class GreedyPerfPartitioner(Partitioner):
             sharding_option = sharding_option_group.sharding_options[0]
             try:
                 if sharding_option.sharding_type == ShardingType.GRID_SHARD.value:
-                    cls._uniform_partition([sharding_option], host_devices)
+                    GreedyPerfPartitioner._uniform_partition(
+                        [sharding_option], host_devices
+                    )
                 else:
                     raise PlannerError(
                         error_type=PlannerErrorType.PARTITION,
@@ -486,7 +524,9 @@ class GreedyPerfPartitioner(Partitioner):
                         sharding_option.sharding_type
                         == ShardingType.TABLE_ROW_WISE.value
                     ):
-                        cls._uniform_partition([sharding_option], host_devices)
+                        GreedyPerfPartitioner._uniform_partition(
+                            [sharding_option], host_devices
+                        )
                         # _uniform_partition invalidates minheap_devices, force rebuild
                         # before using
                         minheap_devices = None
@@ -521,20 +561,22 @@ class GreedyPerfPartitioner(Partitioner):
             message=f"can't find a host for sharding option group {sharding_option_group}",
         )
 
-    @classmethod
-    def _get_host_level_devices(cls, _topology: Topology) -> List[List[DeviceHardware]]:
-        num_hosts: int = _topology.world_size // _topology.local_world_size
+    @staticmethod
+    def _get_host_level_devices(
+        topology: Topology, all_devices: List[DeviceHardware]
+    ) -> List[List[DeviceHardware]]:
+        num_hosts: int = topology.world_size // topology.local_world_size
         host_level_devices: List[List[DeviceHardware]] = []
         for i in range(num_hosts):
-            devices_in_host = _topology.devices[
-                i * _topology.local_world_size : (i + 1) * _topology.local_world_size
+            devices_in_host = all_devices[
+                i * topology.local_world_size : (i + 1) * topology.local_world_size
             ]
             host_level_devices.append(devices_in_host)
         return host_level_devices
 
-    @classmethod
+    @staticmethod
     def _uniform_partition(
-        cls, sharding_options: List[ShardingOption], devices: List[DeviceHardware]
+        sharding_options: List[ShardingOption], devices: List[DeviceHardware]
     ) -> None:
         for sharding_option in sharding_options:
             if sharding_option.num_shards != len(devices):
@@ -543,16 +585,17 @@ class GreedyPerfPartitioner(Partitioner):
                     message=f"For a uniform partition, the number of shards ({sharding_option.num_shards}) must equal the number of devices ({len(devices)})",
                 )
             for i in range(len(devices)):
-                storage_needed = cast(Storage, sharding_option.shards[i].storage)
+                shard = sharding_option.shards[i]
+                storage_needed = cast(Storage, shard.storage)
                 if not storage_needed.fits_in(devices[i].storage):
                     raise PlannerError(
                         error_type=PlannerErrorType.PARTITION,
                         message=f"Shard of size {storage_needed} bytes does not fit on any rank. Device memory cap: {devices[i].storage}.",
                     )
                 else:
-                    sharding_option.shards[i].rank = devices[i].rank
+                    shard.rank = devices[i].rank
                     devices[i].storage -= storage_needed
-                    devices[i].perf += cast(Perf, sharding_option.shards[i].perf)
+                    devices[i].perf += cast(Perf, shard.perf)
 
 
 class MemoryBalancedPartitioner(Partitioner):
@@ -598,16 +641,15 @@ class MemoryBalancedPartitioner(Partitioner):
         _partitioner = GreedyPerfPartitioner(
             sort_by=SortBy.PERF, balance_modules=self._balance_modules
         )
-        # copying storage_constraint, since we modify it in place
-        _topology: Topology = copy.deepcopy(storage_constraint)
 
         # set up default plan to fall back on
-        default_plan = _partitioner.partition(proposal, _topology)
-        default_plan = copy.deepcopy(default_plan)
+        default_plan = _partitioner.partition(proposal, storage_constraint)
+        best_shard_assignment = _get_shards_assignment(default_plan)
+
         original_plan_perf = _perf_model.rate(default_plan)
 
         # compute shard and default plan HBM stats
-        hbm_by_rank = [0] * _topology.world_size
+        hbm_by_rank = [0] * storage_constraint.world_size
         hbm_requirement: int = 0
         max_shard_hbm: int = 0
         for sharding_option in default_plan:
@@ -626,7 +668,7 @@ class MemoryBalancedPartitioner(Partitioner):
         )
 
         # Lower bound for the search is the maximum of avg. HBM usage or the biggest shard
-        avg_hbm_usage: int = int(hbm_requirement / _topology.world_size)
+        avg_hbm_usage: int = int(hbm_requirement / storage_constraint.world_size)
         min_hbm_per_device: int = max(avg_hbm_usage, max_shard_hbm)
         logger.info(
             "Searching in the range (min_hbm_per_device, max_hbm_per_device): "
@@ -636,16 +678,19 @@ class MemoryBalancedPartitioner(Partitioner):
 
         # binary search with (min, max] setting
         search_count = 0
+        hbm_diff = mb_to_bytes(10)  # 10MB
         while (
             search_count < self._max_search_count
-            and min_hbm_per_device + 10 * 1024**2 < max_hbm_per_device  # 10MB
+            and min_hbm_per_device + hbm_diff < max_hbm_per_device
         ):
             search_count += 1
             reset_shard_rank(proposal)
             mid_hbm_per_device: int = (max_hbm_per_device + min_hbm_per_device) // 2
-            set_hbm_per_device(_topology, mid_hbm_per_device)
+
             try:
-                new_plan = _partitioner.partition(proposal, _topology)
+                new_plan = _partitioner.partition(
+                    proposal, storage_constraint, mid_hbm_per_device
+                )
                 new_plan_perf = _perf_model.rate(new_plan)
                 perf_diff = (
                     (new_plan_perf - original_plan_perf) / original_plan_perf
@@ -674,7 +719,7 @@ class MemoryBalancedPartitioner(Partitioner):
                         f"Found a more memory-balanced plan with {round(bytes_to_gb(mid_hbm_per_device), 3)} "
                         f"GB per device for embedding tables. The new plan is {perf_diff_str}"
                     )
-                    default_plan = copy.deepcopy(new_plan)
+                    best_shard_assignment = _get_shards_assignment(new_plan)
                     max_hbm_per_device = mid_hbm_per_device
             except PlannerError:
                 logger.info(
@@ -683,9 +728,5 @@ class MemoryBalancedPartitioner(Partitioner):
                 )
                 min_hbm_per_device = mid_hbm_per_device
 
+        _apply_shards_assignment(default_plan, best_shard_assignment)
         return default_plan
-
-
-def set_hbm_per_device(storage_constraint: Topology, hbm_per_device: int) -> None:
-    for device in storage_constraint.devices:
-        device.storage.hbm = hbm_per_device

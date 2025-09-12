@@ -624,6 +624,9 @@ class ShardingOption:
 
         return True
 
+    def get_shards_assignment(self) -> List[Optional[int]]:
+        return [shard.rank for shard in self.shards]
+
     def __hash__(self) -> int:
         return hash(
             (
