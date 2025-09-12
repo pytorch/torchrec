@@ -34,6 +34,10 @@ def gb_to_bytes(gb: float) -> int:
     return int(gb * 1024 * 1024 * 1024)
 
 
+def mb_to_bytes(mb: float) -> int:
+    return int(mb * 1024 * 1024)
+
+
 def prod(iterable: Iterable[int]) -> int:
     return reduce(operator.mul, iterable, 1)
 
