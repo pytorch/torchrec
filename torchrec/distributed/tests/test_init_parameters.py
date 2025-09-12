@@ -223,7 +223,7 @@ class ParameterInitializationTest(MultiProcessTestBase):
         device=st.sampled_from(
             [
                 torch.device("cuda"),
-                # torch.device("cpu"),
+                torch.device("cpu"),
             ]
         ),
     )
