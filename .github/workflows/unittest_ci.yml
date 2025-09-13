@@ -20,6 +20,15 @@ on:
       - .gitignore
       - "*.md"
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "Channel to use (release, nightly, test)"
+        required: true
+        type: choice
+        options:
+          - release
+          - nightly
+          - test
 
 jobs:
   build_test:
@@ -76,15 +85,22 @@ jobs:
         conda info
         python --version
         conda run -n build_binary python --version
+        if [[ "${{ inputs.channel }}" = "release" ]]; then
+          index_url=https://download.pytorch.org/whl/${{ matrix.cuda-tag }}
+        elif [ -z "${{ inputs.channel }}" ]; then
+          index_url=https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
+        else
+          index_url=https://download.pytorch.org/whl/${{ inputs.channel }}/${{ matrix.cuda-tag }}
+        fi
         conda run -n build_binary \
-          pip install torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
+          pip install torch --index-url $index_url
         conda run -n build_binary \
-          python -c "import torch"
+          python -c "import torch; print(torch.__version__)"
         echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
-          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
+          pip install fbgemm-gpu --index-url $index_url
         conda run -n build_binary \
           python -c "import fbgemm_gpu"
         echo "fbgemm_gpu succeeded"

@@ -5,6 +5,10 @@ name: CPU Unit Test CI
 
 on:
   push:
+    branches:
+      # only run tests on main branch & nightly; release should be triggered manually
+      - nightly
+      - main
     paths-ignore:
       - "docs/*"
       - "third_party/*"
@@ -16,6 +20,16 @@ on:
       - "third_party/*"
       - .gitignore
       - "*.md"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Channel to use for torch and fbgemm"
+        required: true
+        type: choice
+        options:
+          - release
+          - nightly
+          - test
 
 jobs:
   build_test:
@@ -60,15 +74,22 @@ jobs:
         conda info
         python --version
         conda run -n build_binary python --version
+        if [[ "${{ inputs.channel }}" = "release" ]]; then
+          index_url=https://download.pytorch.org/whl/cpu
+        elif [ -z "${{ inputs.channel }}" ]; then
+          index_url=https://download.pytorch.org/whl/nightly/cpu
+        else
+          index_url=https://download.pytorch.org/whl/${{ inputs.channel }}/cpu
+        fi
         conda run -n build_binary \
-          pip install torch --index-url https://download.pytorch.org/whl/nightly/cpu
+          pip install torch --index-url $index_url
         conda run -n build_binary \
           python -c "import torch"
         echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
-          pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/cpu
+          pip install fbgemm-gpu --index-url $index_url
         conda run -n build_binary \
           python -c "import fbgemm_gpu"
         echo "fbgemm_gpu succeeded"
