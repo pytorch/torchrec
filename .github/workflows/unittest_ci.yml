@@ -6,8 +6,12 @@ name: Unit Test CI
 on:
   push:
     branches:
+      # only run tests on main branch & nightly; release should be triggered manually
       - nightly
       - main
+    tags:
+      # Release candidate tags look like: v1.11.0-rc1
+      - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
     paths-ignore:
       - "docs/*"
       - "third_party/*"
@@ -75,14 +79,14 @@ jobs:
         conda run -n build_binary \
           pip install torch --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
         conda run -n build_binary \
-          python -c "import torch"
+          python -c "import torch; print(torch.__version__)"
         echo "torch succeeded"
         conda run -n build_binary \
           python -c "import torch.distributed"
         conda run -n build_binary \
           pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/nightly/${{ matrix.cuda-tag }}
         conda run -n build_binary \
-          python -c "import fbgemm_gpu"
+          python -c "import fbgemm_gpu; print(fbgemm_gpu.__version__)"
         echo "fbgemm_gpu succeeded"
         conda run -n build_binary \
           pip install -r requirements.txt

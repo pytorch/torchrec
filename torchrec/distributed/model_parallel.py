@@ -898,10 +898,10 @@ class DMPCollection(DistributedModelParallel):
                 # pyre-ignore[16]
                 ctx.sharded_module = self._sharder_map[ctx.module].sharded_module_type
 
-        consolidated_plan = copy.deepcopy(self._ctxs[0].plan)
+        consolidated_plan = self._ctxs[0].plan
         for ctx in self._ctxs[1:]:
             for key, val in ctx.plan.plan.items():
-                consolidated_plan.plan[key] = copy.deepcopy(val)
+                consolidated_plan.plan[key] = val
 
         logger.info(
             "[TorchRec 2D Parallel] Consolidated sharding plan:\n%s", consolidated_plan
