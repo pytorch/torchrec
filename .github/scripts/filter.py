@@ -60,7 +60,9 @@ def main():
     new_matrix_entries = []
 
     for entry in full_matrix["include"]:
-        if entry["desired_cuda"] == "cu129":
+        if entry["desired_cuda"] in ("cu118", "cu130"):
+            continue
+        if entry["python_version"] in ("3.14", "3.14t"):
             continue
         # pin the pytorch version to 2.8.0
         entry["stable_version"] = "2.8.0"

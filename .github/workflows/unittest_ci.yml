@@ -6,6 +6,7 @@ name: Unit Test CI
 on:
   push:
     branches:
+      # only run tests on main branch & nightly; release should be triggered manually
       - nightly
       - main
     paths-ignore:
@@ -35,12 +36,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cuda-tag: ["cu118", "cu126", "cu128"]
+        cuda-tag: ["cu126", "cu128", "cu129"]
         os:
           - linux.g5.12xlarge.nvidia.gpu
         python:
-          - version: "3.9"
-            tag: "py39"
           - version: "3.10"
             tag: "py310"
           - version: "3.11"

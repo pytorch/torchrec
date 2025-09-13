@@ -9,7 +9,16 @@
 export PYTORCH_CUDA_PKG=""
 export CONDA_ENV="build_binary"
 
-if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
+if [[ ${MATRIX_PYTHON_VERSION} = '3.14' ]]; then
+    exit 0 # fbgemm doesn't support python 3.14 so far
+    # conda currently doesn't support 3.14 unless using the forge channel
+    conda create -y -n "${CONDA_ENV}" python="3.14" -c conda-forge
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.14t' ]]; then
+    exit 0 # fbgemm doesn't support python 3.14 so far
+    # use conda-forge to install python3.14t
+    conda create -y -n "${CONDA_ENV}" python="3.14" python-freethreading -c conda-forge
+    conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
     # use conda-forge to install python3.13t
     conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
     conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
@@ -26,16 +35,15 @@ conda run -n "${CONDA_ENV}" python --version
 
 # figure out CUDA VERSION
 if [[ ${MATRIX_GPU_ARCH_TYPE} = 'cuda' ]]; then
-    if [[ ${MATRIX_GPU_ARCH_VERSION} = '11.8' ]]; then
-        export CUDA_VERSION="cu118"
-    elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.1' ]]; then
-        export CUDA_VERSION="cu121"
-    elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.6' ]]; then
+    if [[ ${MATRIX_GPU_ARCH_VERSION} = '12.6' ]]; then
         export CUDA_VERSION="cu126"
     elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.8' ]]; then
         export CUDA_VERSION="cu128"
+    elif [[ ${MATRIX_GPU_ARCH_VERSION} = '12.9' ]]; then
+        export CUDA_VERSION="cu129"
     else
-        export CUDA_VERSION="cu126"
+        echo "this release doesn't support cuda ${MATRIX_GPU_ARCH_VERSION}, exit"
+        exit 0
     fi
 else
     export CUDA_VERSION="cpu"
@@ -124,7 +132,10 @@ else
     fi
 fi
 
-if [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
+if [[ ${MATRIX_PYTHON_VERSION} = '3.14' ]]; then
+    # conda currently doesn't support 3.14 unless using the forge channel
+    conda create -y -n "${CONDA_ENV}" python="3.14" -c conda-forge
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
     exit 0  # fbgemm-gpu can't support python=3.13t in PYPI
     # use conda-forge to install python3.13t
     conda create -y -n "${CONDA_ENV}" python="3.13" python-freethreading -c conda-forge
