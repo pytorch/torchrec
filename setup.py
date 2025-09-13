@@ -29,8 +29,8 @@ def _get_version():
     else:
         with open(os.path.join(ROOT_DIR, "version.txt"), "r") as f:
             version = f.readline().strip()
-        if sha is not None and "OFFICIAL_RELEASE" not in os.environ:
-            version += "+" + sha[:7]
+        # if sha is not None and "OFFICIAL_RELEASE" not in os.environ:
+        #     version += "+" + sha[:7]
 
     if sha is None:
         sha = "Unknown"
@@ -111,7 +111,6 @@ def main(argv: List[str]) -> None:
             "Intended Audience :: Science/Research",
             "License :: OSI Approved :: BSD License",
             "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
