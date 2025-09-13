@@ -93,7 +93,7 @@ jobs:
           index_url=https://download.pytorch.org/whl/${{ inputs.channel }}/${{ matrix.cuda-tag }}
         fi
         conda run -n build_binary \
-          pip install torch --index-url $index_url
+          pip install torch==2.8.0 --index-url $index_url
         conda run -n build_binary \
           python -c "import torch; print(torch.__version__)"
         echo "torch succeeded"

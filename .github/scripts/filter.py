@@ -62,6 +62,8 @@ def main():
     for entry in full_matrix["include"]:
         if entry["desired_cuda"] == "cu129":
             continue
+        # pin the pytorch version to 2.8.0
+        entry["stable_version"] = "2.8.0"
         new_matrix_entries.append(entry)
 
     new_matrix = {"include": new_matrix_entries}

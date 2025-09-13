@@ -73,7 +73,7 @@ conda env config vars set -n ${CONDA_ENV}  \
 #     export PYTORCH_CUDA_PKG="pytorch-cuda=${MATRIX_GPU_ARCH_VERSION}"
 # fi
 
-conda run -n "${CONDA_ENV}" pip install torch --index-url "$PYTORCH_URL"
+conda run -n "${CONDA_ENV}" pip install torch==2.8.0 --index-url "$PYTORCH_URL"
 
 # install fbgemm
 conda run -n "${CONDA_ENV}" pip install fbgemm-gpu --index-url "$PYTORCH_URL"

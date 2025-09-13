@@ -82,7 +82,7 @@ jobs:
           index_url=https://download.pytorch.org/whl/${{ inputs.channel }}/cpu
         fi
         conda run -n build_binary \
-          pip install torch --index-url $index_url
+          pip install torch==2.8.0 --index-url $index_url
         conda run -n build_binary \
           python -c "import torch"
         echo "torch succeeded"
