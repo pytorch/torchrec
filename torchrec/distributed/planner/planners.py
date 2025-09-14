@@ -42,6 +42,7 @@ from torchrec.distributed.planner.types import (
     ParameterConstraints,
     Partitioner,
     PerfModel,
+    PlanDebugStats,
     PlannerError,
     PlannerErrorType,
     Proposer,
@@ -528,6 +529,10 @@ class EmbeddingShardingPlanner(EmbeddingPlannerBase):
                     enumerator=self._enumerator,
                     sharders=sharders,
                     debug=self._debug,
+                    debug_stats=PlanDebugStats(
+                        planner_type=self.__class__.__name__,
+                        timeout_seconds=self._timeout_seconds,
+                    ),
                 )
             return sharding_plan
         else:
