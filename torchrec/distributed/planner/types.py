@@ -998,6 +998,40 @@ class Stats(abc.ABC):
         ...
 
 
+class PlanLoader(abc.ABC):
+    """
+    Retrieves a pre-computed sharding plan from its stored location. This is useful in two scenarios:
+        1. To utilize a specific sharding plan that was previously computed and stored, saving the cost of re-generating the plan
+        2. To use a sharding plan from previous runs as a starting point for the next run, allowing for improvement over time.
+    """
+
+    @abc.abstractmethod
+    def load(
+        self,
+    ) -> Optional[Dict[int, ShardingOption]]:
+        """
+        Load sharding plan from its stored location.
+
+        Returns:
+            Dict[int, ShardingOption]: loaded sharding plan. key is hash of sharding option to map to sharding option with enumerated sharding option.
+        """
+        ...
+
+    @abc.abstractmethod
+    def plan_context_hash(
+        self,
+    ) -> Optional[str]:
+        """
+        Input context hash of a sharding plan.
+
+        Returns:
+            str: hash of sharding plan context.
+        """
+        ...
+
+    ...
+
+
 @dataclass
 class CriticalPathEstimate:
     comms_estimate: float
