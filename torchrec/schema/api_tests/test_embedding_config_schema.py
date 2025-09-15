@@ -43,7 +43,6 @@ class StableEmbeddingBagConfig:
     total_num_buckets: Optional[int] = None
     use_virtual_table: bool = False
     virtual_table_eviction_policy: Optional[VirtualTableEvictionPolicy] = None
-    enable_embedding_update: bool = False
     pooling: PoolingType = PoolingType.SUM
 
 

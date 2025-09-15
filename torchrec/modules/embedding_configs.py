@@ -370,7 +370,6 @@ class BaseEmbeddingConfig:
     total_num_buckets: Optional[int] = None
     use_virtual_table: bool = False
     virtual_table_eviction_policy: Optional[VirtualTableEvictionPolicy] = None
-    enable_embedding_update: bool = False
 
     def get_weight_init_max(self) -> float:
         if self.weight_init_max is None:

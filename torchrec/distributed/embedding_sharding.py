@@ -565,7 +565,6 @@ def group_tables(
                 ),
                 _prefetch_and_cached(table),
                 table.use_virtual_table if is_inference else None,
-                table.enable_embedding_update,
             )
             # micromanage the order of we traverse the groups to ensure backwards compatibility
             if grouping_key not in groups:
@@ -582,7 +581,6 @@ def group_tables(
                 _,
                 _,
                 use_virtual_table,
-                enable_embedding_update,
             ) = grouping_key
             grouped_tables = groups[grouping_key]
             # remove non-native fused params
@@ -604,7 +602,6 @@ def group_tables(
                     compute_kernel=compute_kernel_type,
                     embedding_tables=grouped_tables,
                     fused_params=per_tbe_fused_params,
-                    enable_embedding_update=enable_embedding_update,
                 )
             )
         return grouped_embedding_configs

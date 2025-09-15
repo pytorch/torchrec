@@ -251,7 +251,6 @@ class GroupedEmbeddingConfig:
     compute_kernel: EmbeddingComputeKernel
     embedding_tables: List[ShardedEmbeddingTable]
     fused_params: Optional[Dict[str, Any]] = None
-    enable_embedding_update: bool = False
 
     def feature_hash_sizes(self) -> List[int]:
         feature_hash_sizes = []
