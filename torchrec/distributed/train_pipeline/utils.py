@@ -361,6 +361,9 @@ def _rewrite_model(  # noqa C901
         model, context, pipeline_postproc, default_stream, dist_stream
     )
 
+    logger.info(
+        f"pipeline_postproc is {'enabled' if pipeline_postproc else 'disabled'}"
+    )
     for node in graph.nodes:
         # only work on the call_module node which is also a sharded module
         if node.op != "call_module" or node.target not in sharded_modules:
