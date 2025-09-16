@@ -345,9 +345,8 @@ class TwPooledEmbeddingDist(
             else None
         )
         self._emb_dim_per_rank_per_feature = emb_dim_per_rank_per_feature
-        self._dist: Optional[
-            Union[PooledEmbeddingsAllToAll, VariableBatchPooledEmbeddingsAllToAll]
-        ] = None
+        self._dist: Optional[PooledEmbeddingsAllToAll] = None
+        self._variable_dist: Optional[VariableBatchPooledEmbeddingsAllToAll] = None
 
     def forward(
         self,
@@ -371,7 +370,10 @@ class TwPooledEmbeddingDist(
         if sharding_ctx is None:
             return cast(PooledEmbeddingsAllToAll, self._dist)(local_embs)
         elif sharding_ctx.variable_batch_per_feature:
-            return cast(VariableBatchPooledEmbeddingsAllToAll, self._dist)(
+            assert (
+                self._variable_dist is not None
+            ), "variable batch dist is not initialized!"
+            return self._variable_dist(
                 local_embs,
                 batch_size_per_rank_per_feature=sharding_ctx.batch_size_per_rank_per_feature,
                 batch_size_per_feature_pre_a2a=sharding_ctx.batch_size_per_feature_pre_a2a,
@@ -386,21 +388,20 @@ class TwPooledEmbeddingDist(
         self, sharding_ctx: Optional[EmbeddingShardingContext] = None
     ) -> None:
         if sharding_ctx is not None and sharding_ctx.variable_batch_per_feature:
-            self._dist = VariableBatchPooledEmbeddingsAllToAll(
+            self._variable_dist = VariableBatchPooledEmbeddingsAllToAll(
                 pg=self._pg,
                 emb_dim_per_rank_per_feature=self._emb_dim_per_rank_per_feature,
                 device=self._device,
                 callbacks=None,
                 codecs=self._codecs,
             )
-        else:
-            self._dist = PooledEmbeddingsAllToAll(
-                pg=self._pg,
-                dim_sum_per_rank=self._dim_sum_per_rank,
-                device=self._device,
-                callbacks=self._callbacks,
-                codecs=self._codecs,
-            )
+        self._dist = PooledEmbeddingsAllToAll(
+            pg=self._pg,
+            dim_sum_per_rank=self._dim_sum_per_rank,
+            device=self._device,
+            callbacks=self._callbacks,
+            codecs=self._codecs,
+        )
 
 
 class TwPooledEmbeddingSharding(
