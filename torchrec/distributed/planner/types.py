@@ -638,6 +638,22 @@ class ShardingOption:
             )
         )
 
+    def storage_hash(self) -> int:
+        """
+        Hash needed to preserve sharding option uniquely based on input before
+        planning. This is needed to restore sharding option from the loaded plan.
+        Hash is computed based on the following attributes:
+            - fqn
+            - sharding_type
+            - compute_kernel
+            - column_wise_shard_dim
+        """
+        # Use BLAKE2b for deterministic hashing, constrained to 64-bit signed int range
+        hash_str = f"{self.fqn}|{self.sharding_type}|{self.compute_kernel}|{self.cache_load_factor}|{self.num_shards}"
+        hash_bytes = hashlib.blake2b(hash_str.encode("utf-8"), digest_size=7).digest()
+        hash_int = int.from_bytes(hash_bytes, byteorder="big")
+        return hash_int
+
     def __deepcopy__(
         self, memo: Optional[Dict[int, "ShardingOption"]]
     ) -> "ShardingOption":
@@ -780,6 +796,7 @@ class PlannerErrorType(Enum):
     PARTITION = "partition"
     OTHER = "other"
     PLANNER_INPUT_CONTEXT_MISMATCH = "planner_input_context_mismatch"
+    PLAN_LOADING_FAILED = "plan_loading_failed"
 
 
 class PlannerError(Exception):
@@ -944,6 +961,16 @@ class Partitioner(abc.ABC):
         ...
 
 
+@dataclass
+class PlanDebugStats:
+    """
+    Representation of debug stats associated with a sharding plan, used for logging.
+    """
+
+    planner_type: str
+    timeout_seconds: Optional[int]
+
+
 class Stats(abc.ABC):
     """
     Logs statistics related to the sharding plan.
@@ -964,11 +991,46 @@ class Stats(abc.ABC):
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         enumerator: Optional[Enumerator] = None,
         debug: bool = False,
+        debug_stats: Optional[PlanDebugStats] = None,
     ) -> None:
         """
         See class description
         """
         ...
+
+
+class PlanLoader(abc.ABC):
+    """
+    Retrieves a pre-computed sharding plan from its stored location. This is useful in two scenarios:
+        1. To utilize a specific sharding plan that was previously computed and stored, saving the cost of re-generating the plan
+        2. To use a sharding plan from previous runs as a starting point for the next run, allowing for improvement over time.
+    """
+
+    @abc.abstractmethod
+    def load(
+        self,
+    ) -> Optional[Dict[int, ShardingOption]]:
+        """
+        Load sharding plan from its stored location.
+
+        Returns:
+            Dict[int, ShardingOption]: loaded sharding plan. key is hash of sharding option to map to sharding option with enumerated sharding option.
+        """
+        ...
+
+    @abc.abstractmethod
+    def plan_context_hash(
+        self,
+    ) -> Optional[str]:
+        """
+        Input context hash of a sharding plan.
+
+        Returns:
+            str: hash of sharding plan context.
+        """
+        ...
+
+    ...
 
 
 @dataclass
@@ -991,6 +1053,16 @@ def hash_sha256_to_int(hashable_list: List[Any]) -> int:  # pyre-ignore
     return int(hash_digest, 16)
 
 
+def hash_sha256_str(hashable_list: List[Any]) -> str:  # pyre-ignore
+    """
+    Hashes the given data using SHA256 and returns the hash as an string
+    """
+    serialized_list = str(hashable_list).encode("utf-8")
+    hash_object = hashlib.sha256(serialized_list)
+    hash_digest = hash_object.hexdigest()
+    return hash_digest
+
+
 def hash_planner_context_inputs(
     topology: Topology,
     batch_size: int,
@@ -1000,6 +1072,48 @@ def hash_planner_context_inputs(
     # pyre-ignore
     hash_function: Callable[[List[Any]], int] = hash_sha256_to_int,
 ) -> int:
+    assert hasattr(
+        enumerator, "last_stored_search_space"
+    ), "This enumerator is not compatible with hashing"
+    assert (
+        enumerator.last_stored_search_space is not None  # pyre-ignore
+    ), "Unable to hash planner context without an enumerator that has a precomputed search space"
+    search_space = enumerator.last_stored_search_space
+    storage_reservation_policy = type(storage_reservation).__name__
+
+    assert (
+        storage_reservation._last_reserved_topology is not None  # pyre-ignore
+    ), "Unable to hash planner context without a storage reservation that has a precomputed topology"
+
+    hashable_list = [
+        topology,
+        batch_size,
+        [
+            [
+                shard_option.fqn,
+                shard_option.sharding_type,
+                shard_option.compute_kernel,
+                tuple(shard_option.shards),
+                shard_option.cache_params,
+            ]
+            for shard_option in search_space
+        ],
+        storage_reservation_policy,
+        storage_reservation._last_reserved_topology,
+        constraints.items() if constraints else None,
+    ]
+    return hash_function(hashable_list)
+
+
+def hash_planner_context_inputs_str(
+    topology: Topology,
+    batch_size: int,
+    enumerator: Enumerator,
+    storage_reservation: StorageReservation,
+    constraints: Optional[Dict[str, ParameterConstraints]],
+    # pyre-ignore
+    hash_function: Callable[[List[Any]], str] = hash_sha256_str,
+) -> str:
     assert hasattr(
         enumerator, "last_stored_search_space"
     ), "This enumerator is not compatible with hashing"

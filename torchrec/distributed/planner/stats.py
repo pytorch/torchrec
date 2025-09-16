@@ -40,6 +40,7 @@ from torchrec.distributed.planner.types import (
     Enumerator,
     ParameterConstraints,
     Perf,
+    PlanDebugStats,
     ShardingOption,
     Stats,
     Storage,
@@ -160,6 +161,7 @@ class EmbeddingStats(Stats):
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         enumerator: Optional[Enumerator] = None,
         debug: bool = True,
+        debug_stats: Optional[PlanDebugStats] = None,
     ) -> None:
         """
         Logs stats for a given sharding plan.
@@ -1138,5 +1140,6 @@ class NoopEmbeddingStats(Stats):
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         enumerator: Optional[Enumerator] = None,
         debug: bool = True,
+        debug_stats: Optional[PlanDebugStats] = None,
     ) -> None:
         pass
