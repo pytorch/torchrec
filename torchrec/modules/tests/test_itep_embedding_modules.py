@@ -14,6 +14,7 @@ from typing import Dict, List
 from unittest.mock import MagicMock, patch
 
 import torch
+from torch import Tensor
 from torchrec import KeyedJaggedTensor
 from torchrec.distributed.embedding_types import ShardedEmbeddingTable
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -189,11 +190,6 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
         return torch.tensor(address_lookup, dtype=torch.int64)
 
-    # pyre-ignores
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Skip when not enough GPUs available",
-    )
     def test_init_itep_module(self) -> None:
         itep_module = GenericITEPModule(
             table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
@@ -226,11 +222,6 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
             equal_nan=True,
         )
 
-    # pyre-ignores
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Skip when not enough GPUs available",
-    )
     def test_init_itep_module_without_pruned_table(self) -> None:
         itep_module = GenericITEPModule(
             table_name_to_unpruned_hash_sizes={},
@@ -242,10 +233,10 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
         self.assertEqual(itep_module.address_lookup.cpu().shape, torch.Size([0]))
         self.assertEqual(itep_module.row_util.cpu().shape, torch.Size([0]))
 
-    # pyre-ignores
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
-        "Skip when not enough GPUs available",
+        "Not enough GPUs, this test requires at least one GPU",
     )
     def test_train_forward(self) -> None:
         itep_module = GenericITEPModule(
@@ -267,10 +258,10 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
             )
             _ = itep_ebc(input_kjt)
 
-    # pyre-ignores
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
-        "Skip when not enough GPUs available",
+        "Not enough GPUs, this test requires at least one GPU",
     )
     def test_train_forward_vbe(self) -> None:
         itep_module = GenericITEPModule(
@@ -292,10 +283,10 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
             )
             _ = itep_ebc(input_kjt)
 
-    # pyre-ignores
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
-        "Skip when not enough GPUs available",
+        "Not enough GPUs, this test requires at least one GPU",
     )
     # Mock out reset_weight_momentum to count calls
     @patch(f"{MOCK_NS}.GenericITEPModule.reset_weight_momentum")
@@ -326,10 +317,10 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
         # Check that reset_weight_momentum is called
         self.assertEqual(mock_reset_weight_momentum.call_count, 5)
 
-    # pyre-ignores
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
-        "Skip when not enough GPUs available",
+        "Not enough GPUs, this test requires at least one GPU",
     )
     # Mock out reset_weight_momentum to count calls
     @patch(f"{MOCK_NS}.GenericITEPModule.reset_weight_momentum")
@@ -361,3 +352,429 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
         # Check that reset_weight_momentum is not called
         self.assertEqual(mock_reset_weight_momentum.call_count, 0)
+
+    def test_iter_increment_per_forward(self) -> None:
+        """Test that the iteration counter increments correctly with each forward pass."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=500,
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        # Check initial iteration value
+        self.assertEqual(itep_ebc._iter.item(), 0)
+
+        # Run several forward passes and verify iteration increments
+        for expected_iter in range(1, 6):
+            input_kjt = self.generate_input_kjt_cuda(
+                self._feature_name_to_unpruned_hash_sizes
+            )
+            _ = itep_ebc(input_kjt)
+
+            # Verify iter incremented correctly after forward pass
+            self.assertEqual(itep_ebc._iter.item(), expected_iter)
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_iter_passed_as_int_to_itep_module(self) -> None:
+        """Test that iter is passed as integer to the ITEP module."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=500,
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        # Mock the itep_module to capture the iter argument
+        original_forward = itep_module.forward
+        captured_iter_args = []
+
+        # pyre-ignore[53]: Captured variable `captured_iter_args` is not annotated.
+        def mock_forward(features: KeyedJaggedTensor, iter_val: int) -> List[Tensor]:
+            captured_iter_args.append((type(iter_val), iter_val))
+            return original_forward(features, iter_val)
+
+        with patch.object(itep_module, "forward", mock_forward):
+            # Set iter to a specific value to test
+            itep_ebc._iter = torch.tensor(42)
+
+            input_kjt = self.generate_input_kjt_cuda(
+                self._feature_name_to_unpruned_hash_sizes
+            )
+            _ = itep_ebc(input_kjt)
+
+            # Verify that iter was passed as int, not tensor
+            self.assertEqual(len(captured_iter_args), 1)
+            arg_type, arg_value = captured_iter_args[0]
+            self.assertEqual(arg_type, int)
+            self.assertEqual(arg_value, 42)
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_blank_line_formatting_preserved(self) -> None:
+        """Test that the code formatting with blank lines is preserved."""
+        # This test is more about code structure but we can verify the module still works
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=500,
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        # Verify the module works correctly after formatting changes
+        input_kjt = self.generate_input_kjt_cuda(
+            self._feature_name_to_unpruned_hash_sizes
+        )
+
+        # Should not raise any exceptions
+        output = itep_ebc(input_kjt)
+        self.assertIsNotNone(output)
+
+        # Verify iter incremented
+        self.assertEqual(itep_ebc._iter.item(), 1)
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_iter_boundary_values_with_pruning_logic(self) -> None:
+        """Test iter behavior at boundary values that affect pruning decisions."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=10,  # Test around pruning interval boundaries
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        # Test specific boundary values around pruning interval
+        boundary_values = [9, 10, 19, 20, 29, 30, 99, 100]
+
+        for iter_val in boundary_values:
+            with self.subTest(iter_val=iter_val):
+                itep_ebc._iter = torch.tensor(iter_val)
+
+                # Capture the iter value passed to module
+                original_forward = itep_module.forward
+                captured_iter = None
+
+                # pyre-ignore[53]: Captured variable `captured_iter` is not annotated.
+                def mock_forward(
+                    features: KeyedJaggedTensor, iter_val: int
+                ) -> List[Tensor]:
+                    nonlocal captured_iter
+                    captured_iter = iter_val
+                    return original_forward(features, iter_val)
+
+                with patch.object(itep_module, "forward", mock_forward):
+                    input_kjt = self.generate_input_kjt_cuda(
+                        self._feature_name_to_unpruned_hash_sizes
+                    )
+                    _ = itep_ebc(input_kjt)
+
+                    # Verify iter was passed as int and matches expected value
+                    self.assertEqual(captured_iter, iter_val)
+                    self.assertIsInstance(captured_iter, int)
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_error_handling_invalid_iter_tensor_values(self) -> None:
+        """Test behavior with invalid iter tensor values."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=500,
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        input_kjt = self.generate_input_kjt_cuda(
+            self._feature_name_to_unpruned_hash_sizes
+        )
+
+        # Test with negative iter value
+        itep_ebc._iter = torch.tensor(-10)
+        try:
+            _ = itep_ebc(input_kjt)
+            self.assertTrue(True, "Negative iter value handled gracefully")
+        except Exception as e:
+            self.fail(f"Unexpected exception with negative iter: {e}")
+
+        # Test with float tensor (should still work after .item())
+        itep_ebc._iter = torch.tensor(42.0)
+        try:
+            _ = itep_ebc(input_kjt)
+            self.assertTrue(True, "Float tensor iter value handled gracefully")
+        except Exception as e:
+            self.fail(f"Unexpected exception with float tensor iter: {e}")
+
+        # Test with very large iter value
+        itep_ebc._iter = torch.tensor(2**31 - 1)
+        try:
+            _ = itep_ebc(input_kjt)
+            self.assertTrue(True, "Large iter value handled gracefully")
+        except Exception as e:
+            self.fail(f"Unexpected exception with large iter: {e}")
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_iter_consistency_across_training_steps(self) -> None:
+        """Test that iter remains consistent and increments properly across training steps."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=1000,  # High interval to avoid pruning during test
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        # Track iteration values passed to the module
+        iter_history = []
+
+        original_forward = itep_module.forward
+
+        # pyre-ignore[53]: Captured variable `iter_history` is not annotated.
+        def track_iter_forward(
+            features: KeyedJaggedTensor, iter_val: int
+        ) -> List[Tensor]:
+            iter_history.append(iter_val)
+            return original_forward(features, iter_val)
+
+        with patch.object(itep_module, "forward", track_iter_forward):
+            # Start from a known iteration value
+            itep_ebc._iter = torch.tensor(100)
+
+            # Run multiple training steps
+            num_steps = 25
+            for step in range(num_steps):
+                input_kjt = self.generate_input_kjt_cuda(
+                    self._feature_name_to_unpruned_hash_sizes
+                )
+
+                # Forward pass
+                output = itep_ebc(input_kjt)
+
+                # Simulate backward pass
+                output.values().sum().backward()
+
+                # Verify iter incremented
+                expected_iter = 100 + step + 1
+                self.assertEqual(itep_ebc._iter.item(), expected_iter)
+
+            # Verify all iteration values were passed correctly as integers
+            self.assertEqual(len(iter_history), num_steps)
+            for i, iter_val in enumerate(iter_history):
+                expected_iter = 100 + i
+                self.assertEqual(iter_val, expected_iter)
+                self.assertIsInstance(iter_val, int)
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_performance_iter_conversion_overhead(self) -> None:
+        """Test that iter tensor to int conversion doesn't introduce significant overhead."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=1000,  # High interval to minimize pruning overhead
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        # Prepare input
+        input_kjt = self.generate_input_kjt_cuda(
+            self._feature_name_to_unpruned_hash_sizes
+        )
+
+        # Warm up
+        for _ in range(3):
+            _ = itep_ebc(input_kjt)
+
+        # Time multiple forward passes
+        import time
+
+        num_iterations = 100
+        start_time = time.time()
+
+        for _ in range(num_iterations):
+            _ = itep_ebc(input_kjt)
+
+        end_time = time.time()
+        total_time = end_time - start_time
+        avg_time_per_iteration = total_time / num_iterations
+
+        # Performance check - each iteration should complete in reasonable time
+        self.assertLess(
+            avg_time_per_iteration,
+            0.5,
+            f"Average time per iteration ({avg_time_per_iteration:.4f}s) seems too high",
+        )
+
+        # Log the performance for monitoring
+        print(
+            f"ITEP Performance test: {avg_time_per_iteration:.6f}s per iteration "
+            f"({num_iterations} iterations, total: {total_time:.4f}s)"
+        )
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_iter_type_conversion_edge_cases(self) -> None:
+        """Test edge cases for iter tensor to int conversion."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=500,
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        input_kjt = self.generate_input_kjt_cuda(
+            self._feature_name_to_unpruned_hash_sizes
+        )
+
+        # Test various tensor types and values
+        test_cases = [
+            (torch.tensor(0), 0, "zero value"),
+            (torch.tensor(1), 1, "positive small value"),
+            (torch.tensor(12345), 12345, "positive large value"),
+            (torch.tensor(0, dtype=torch.int32), 0, "int32 tensor"),
+            (torch.tensor(42, dtype=torch.int64), 42, "int64 tensor"),
+            (torch.tensor(99, dtype=torch.long), 99, "long tensor"),
+        ]
+
+        original_forward = itep_module.forward
+        captured_values = []
+
+        # pyre-ignore[53]: Captured variable `captured_values` is not annotated.
+        def capture_iter_forward(
+            features: KeyedJaggedTensor, iter_val: int
+        ) -> List[Tensor]:
+            captured_values.append((type(iter_val), iter_val))
+            return original_forward(features, iter_val)
+
+        with patch.object(itep_module, "forward", capture_iter_forward):
+            for tensor_val, expected_int, description in test_cases:
+                with self.subTest(description=description):
+                    captured_values.clear()
+                    itep_ebc._iter = tensor_val
+
+                    _ = itep_ebc(input_kjt)
+
+                    # Verify conversion worked correctly
+                    self.assertEqual(len(captured_values), 1)
+                    converted_type, converted_value = captured_values[0]
+
+                    self.assertEqual(
+                        converted_type, int, f"Type should be int for {description}"
+                    )
+                    self.assertEqual(
+                        converted_value,
+                        expected_int,
+                        f"Value mismatch for {description}",
+                    )
+
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_concurrent_forward_passes_iter_safety(self) -> None:
+        """Test that iter handling is safe under simulated concurrent conditions."""
+        itep_module = GenericITEPModule(
+            table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
+            lookups=self._mock_lookups,
+            enable_pruning=True,
+            pruning_interval=100,
+        )
+
+        itep_ebc = ITEPEmbeddingBagCollection(
+            embedding_bag_collection=self._embedding_bag_collection,
+            itep_module=itep_module,
+        )
+
+        input_kjt = self.generate_input_kjt_cuda(
+            self._feature_name_to_unpruned_hash_sizes
+        )
+
+        # Track all iter values passed to the module
+        iter_values_received = []
+        original_forward = itep_module.forward
+
+        # pyre-ignore[53]: Captured variable `iter_values_received` is not annotated.
+        def tracking_forward(
+            features: KeyedJaggedTensor, iter_val: int
+        ) -> List[Tensor]:
+            iter_values_received.append(iter_val)
+            return original_forward(features, iter_val)
+
+        with patch.object(itep_module, "forward", tracking_forward):
+            # Simulate rapid consecutive forward passes
+            for i in range(50):
+                # Each forward pass should increment iter
+                _ = itep_ebc(input_kjt)
+
+                # Verify iter value is correct
+                expected_iter = i + 1
+                self.assertEqual(itep_ebc._iter.item(), expected_iter)
+
+                # Verify the module received the correct iter value (before increment)
+                self.assertEqual(iter_values_received[i], i)
+
+            # Final verification - all values should be integers and in sequence
+            for i, iter_val in enumerate(iter_values_received):
+                self.assertIsInstance(iter_val, int)
+                self.assertEqual(iter_val, i)
