@@ -177,6 +177,10 @@ class ShardedITEPEmbeddingBagCollection(
         ctx: ITEPEmbeddingBagCollectionContext,
         dist_input: KJTList,
     ) -> List[torch.Tensor]:
+        # We need to explicitly move iter to CPU since it might be moved to GPU
+        # after __init__. This should be done once.
+        self._iter = self._iter.cpu()
+
         if not ctx.is_reindexed:
             dist_input = self._reindex(dist_input)
             ctx.is_reindexed = True
@@ -196,6 +200,10 @@ class ShardedITEPEmbeddingBagCollection(
     def compute_and_output_dist(
         self, ctx: ITEPEmbeddingBagCollectionContext, input: KJTList
     ) -> LazyAwaitable[KeyedTensor]:
+        # We need to explicitly move iter to CPU since it might be moved to GPU
+        # after __init__. This should be done once.
+        self._iter = self._iter.cpu()
+
         # Insert forward() function of GenericITEPModule into compute_and_output_dist()
         for i, (sharding, features) in enumerate(
             zip(
@@ -424,6 +432,10 @@ class ShardedITEPEmbeddingCollection(
         ctx: ITEPEmbeddingCollectionContext,
         dist_input: KJTList,
     ) -> List[torch.Tensor]:
+        # We need to explicitly move iter to CPU since it might be moved to GPU
+        # after __init__. This should be done once.
+        self._iter = self._iter.cpu()
+
         for i, (sharding, features) in enumerate(
             zip(
                 self._embedding_collection._sharding_type_to_sharding.keys(),
@@ -450,6 +462,10 @@ class ShardedITEPEmbeddingCollection(
     def compute_and_output_dist(
         self, ctx: ITEPEmbeddingCollectionContext, input: KJTList
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
+        # We need to explicitly move iter to CPU since it might be moved to GPU
+        # after __init__. This should be done once.
+        self._iter = self._iter.cpu()
+
         # Insert forward() function of GenericITEPModule into compute_and_output_dist()
         """ """
         for i, (sharding, features) in enumerate(
