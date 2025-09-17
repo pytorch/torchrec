@@ -796,6 +796,7 @@ class PlannerErrorType(Enum):
     PARTITION = "partition"
     OTHER = "other"
     PLANNER_INPUT_CONTEXT_MISMATCH = "planner_input_context_mismatch"
+    PLAN_LOADING_FAILED = "plan_loading_failed"
 
 
 class PlannerError(Exception):
