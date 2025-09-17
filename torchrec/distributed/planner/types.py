@@ -960,6 +960,16 @@ class Partitioner(abc.ABC):
         ...
 
 
+@dataclass
+class PlanDebugStats:
+    """
+    Representation of debug stats associated with a sharding plan, used for logging.
+    """
+
+    planner_type: str
+    timeout_seconds: Optional[int]
+
+
 class Stats(abc.ABC):
     """
     Logs statistics related to the sharding plan.
@@ -980,6 +990,7 @@ class Stats(abc.ABC):
         sharders: Optional[List[ModuleSharder[nn.Module]]] = None,
         enumerator: Optional[Enumerator] = None,
         debug: bool = False,
+        debug_stats: Optional[PlanDebugStats] = None,
     ) -> None:
         """
         See class description
@@ -1007,6 +1018,16 @@ def hash_sha256_to_int(hashable_list: List[Any]) -> int:  # pyre-ignore
     return int(hash_digest, 16)
 
 
+def hash_sha256_str(hashable_list: List[Any]) -> str:  # pyre-ignore
+    """
+    Hashes the given data using SHA256 and returns the hash as an string
+    """
+    serialized_list = str(hashable_list).encode("utf-8")
+    hash_object = hashlib.sha256(serialized_list)
+    hash_digest = hash_object.hexdigest()
+    return hash_digest
+
+
 def hash_planner_context_inputs(
     topology: Topology,
     batch_size: int,
@@ -1016,6 +1037,48 @@ def hash_planner_context_inputs(
     # pyre-ignore
     hash_function: Callable[[List[Any]], int] = hash_sha256_to_int,
 ) -> int:
+    assert hasattr(
+        enumerator, "last_stored_search_space"
+    ), "This enumerator is not compatible with hashing"
+    assert (
+        enumerator.last_stored_search_space is not None  # pyre-ignore
+    ), "Unable to hash planner context without an enumerator that has a precomputed search space"
+    search_space = enumerator.last_stored_search_space
+    storage_reservation_policy = type(storage_reservation).__name__
+
+    assert (
+        storage_reservation._last_reserved_topology is not None  # pyre-ignore
+    ), "Unable to hash planner context without a storage reservation that has a precomputed topology"
+
+    hashable_list = [
+        topology,
+        batch_size,
+        [
+            [
+                shard_option.fqn,
+                shard_option.sharding_type,
+                shard_option.compute_kernel,
+                tuple(shard_option.shards),
+                shard_option.cache_params,
+            ]
+            for shard_option in search_space
+        ],
+        storage_reservation_policy,
+        storage_reservation._last_reserved_topology,
+        constraints.items() if constraints else None,
+    ]
+    return hash_function(hashable_list)
+
+
+def hash_planner_context_inputs_str(
+    topology: Topology,
+    batch_size: int,
+    enumerator: Enumerator,
+    storage_reservation: StorageReservation,
+    constraints: Optional[Dict[str, ParameterConstraints]],
+    # pyre-ignore
+    hash_function: Callable[[List[Any]], str] = hash_sha256_str,
+) -> str:
     assert hasattr(
         enumerator, "last_stored_search_space"
     ), "This enumerator is not compatible with hashing"
