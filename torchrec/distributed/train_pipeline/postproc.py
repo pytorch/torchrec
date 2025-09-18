@@ -79,11 +79,13 @@ class PipelinedPostproc(torch.nn.Module):
         self._dist_stream = dist_stream
         if not default_stream:
             logger.warning(
-                f"Postproc module {fqn} has no default stream. This may cause race conditions and NaNs during training!"
+                f"Postproc module {fqn} has no default stream. "
+                "This may cause race conditions and NaNs during training!"
             )
         if not dist_stream:
             logger.warning(
-                f"Postproc module {fqn} has no dist stream. This may cause race conditions and NaNs during training!"
+                f"Postproc module {fqn} has no dist stream. "
+                "This may cause race conditions and NaNs during training!"
             )
 
         if self._dist_stream:
@@ -139,7 +141,9 @@ class PipelinedPostproc(torch.nn.Module):
         # Use input[0] as _start_data_dist only passes 1 arg
         args, kwargs = self._args.build_args_kwargs(input[0])
 
-        with record_function(f"## sdd_input_postproc {self._context.index} ##"):
+        with record_function(
+            f"## input_postproc {type(self.postproc_module)} {self._context.index} ##"
+        ):
             # should be no-op as we call this in dist stream
             with self._stream_context(self._dist_stream):
                 res = self._postproc_module(*args, **kwargs)
@@ -160,7 +164,11 @@ class PipelinedPostproc(torch.nn.Module):
                     PipelinedPostproc.recursive_record_stream(res, self._default_stream)
                 elif self._context.index == 0:
                     logger.warning(
-                        f"Result of postproc module {self._fqn} is of type {type(res)}. We currently expect it to be a Tensor, Pipelineable, Iterable, or Dict to handle memory safety. If your output is not of this type, please add support for it above. Otherwise you might run into NaNs or CUDA Illegal Memory issues during training!"
+                        f"Result of postproc module {self._fqn} is of type {type(res)}. "
+                        "We currently expect it to be a Tensor, Pipelineable, Iterable, "
+                        "or Dict to handle memory safety. If your output is not of this "
+                        "type, please add support for it above. Otherwise you might run "
+                        "into NaNs or CUDA Illegal Memory issues during training!"
                     )
 
             with self._stream_context(self._default_stream):
