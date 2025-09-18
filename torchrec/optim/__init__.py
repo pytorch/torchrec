@@ -38,6 +38,7 @@ from torchrec.optim.optimizers import (  # noqa
     SGD,
 )
 from torchrec.optim.rowwise_adagrad import RowWiseAdagrad  # noqa
+from torchrec.optim.semi_sync import SemisyncOptimizer  # noqa
 from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage  # noqa
 
 from . import (  # noqa  # noqa  # noqa  # noqa
