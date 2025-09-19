@@ -8,26 +8,19 @@
 # pyre-strict
 
 import unittest
-from typing import List, Optional
+from typing import List
 from unittest.mock import MagicMock
 
 import parameterized
 
 import torch
-from torch import nn
-
 from torchrec.distributed.train_pipeline.pipeline_context import TrainPipelineContext
-
 from torchrec.distributed.train_pipeline.tracing import (
-    _get_leaf_module_names,
     ArgInfo,
     ArgInfoStepFactory,
     CallArgs,
     NodeArgsHelper,
-    PipelinedPostproc,
-    Tracer,
 )
-from torchrec.distributed.types import NullShardedModuleContext, ShardedModule
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
