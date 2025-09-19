@@ -297,7 +297,7 @@ class TestJsonSerializer(unittest.TestCase):
         self.assertEqual(len(deserialized_out), len(eager_out))
         for deserialized, orginal in zip(deserialized_out, eager_out):
             self.assertEqual(deserialized.shape, orginal.shape)
-            self.assertTrue(torch.allclose(deserialized, orginal))
+            torch.testing.assert_close(deserialized, orginal)
 
     def test_serialize_deserialize_ebc_with_vbe_kjt(self) -> None:
         model = self.generate_model_for_vbe_kjt()
@@ -374,14 +374,14 @@ class TestJsonSerializer(unittest.TestCase):
         self.assertEqual(len(deserialized_out), len(eager_out))
         for deserialized, orginal in zip(deserialized_out, eager_out):
             self.assertEqual(deserialized.shape, orginal.shape)
-            self.assertTrue(torch.allclose(deserialized, orginal))
+            torch.testing.assert_close(deserialized, orginal)
 
         deserialized_out_2 = deserialized_model(kjt_2)
 
         self.assertEqual(len(deserialized_out_2), len(eager_out_2))
         for deserialized, orginal in zip(deserialized_out_2, eager_out_2):
             self.assertEqual(deserialized.shape, orginal.shape)
-            self.assertTrue(torch.allclose(deserialized, orginal))
+            torch.testing.assert_close(deserialized, orginal)
 
     def test_dynamic_shape_ebc_disabled_in_oss_compatibility(self) -> None:
         model = self.generate_model()
@@ -428,7 +428,61 @@ class TestJsonSerializer(unittest.TestCase):
 
         for i, tensor in enumerate(deserialized_out):
             self.assertEqual(eager_out[i].shape, tensor.shape)
-            assert torch.allclose(eager_out[i], tensor)
+            torch.testing.assert_close(eager_out[i], tensor)
+
+    def test_variable_batch_size_ebc_disabled_in_oss_compatibility(self) -> None:
+        model = self.generate_model()
+        feature1 = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 6]),  # batch size = 2
+        )
+
+        feature2 = KeyedJaggedTensor.from_offsets_sync(
+            keys=["f1", "f2", "f3"],
+            values=torch.tensor([0, 1, 2, 3, 2, 3, 4, 5, 6]),
+            offsets=torch.tensor([0, 2, 2, 3, 4, 5, 7, 8, 8, 9]),  # batch size = 3
+        )
+        eager_out1 = model(feature1)
+        eager_out2 = model(feature2)
+        # feature1.lengths()
+        # feature2.lengths()
+
+        # Serialize EBC with sample input (feature1, batch size = 2)
+        collection = mark_dynamic_kjt(feature1, variable_batch=True)
+        model, sparse_fqns = encapsulate_ir_modules(model, JsonSerializer)
+        ep = torch.export.export(
+            model,
+            (feature1,),
+            {},
+            dynamic_shapes=collection.dynamic_shapes(model, (feature1,)),
+            strict=False,
+            # Allows KJT to not be unflattened and run a forward on unflattened EP
+            preserve_module_call_signature=tuple(sparse_fqns),
+        )
+
+        # Run forward on ExportedProgram
+        ep_output1 = ep.module()(feature1)
+        ep_output2 = ep.module()(feature2)
+
+        # other asserts
+        for eager_out, ep_out in [(eager_out1, ep_output1), (eager_out2, ep_output2)]:
+            for a, b in zip(eager_out, ep_out):
+                self.assertEqual(a.shape, b.shape)
+
+        # Deserialize EBC
+        unflatten_ep = torch.export.unflatten(ep)
+        deserialized_model = decapsulate_ir_modules(unflatten_ep, JsonSerializer)
+        deserialized_model.load_state_dict(model.state_dict())
+
+        # Run forward on deserialized model
+        deserialized_out1 = deserialized_model(feature1)
+        deserialized_out2 = deserialized_model(feature2)
+
+        for e, d in ([eager_out1, deserialized_out1], [eager_out2, deserialized_out2]):
+            for a, b in zip(e, d):
+                self.assertEqual(a.shape, b.shape)
+                torch.testing.assert_close(a, b)
 
     def test_ir_emb_lookup_device(self) -> None:
         model = self.generate_model()
@@ -573,7 +627,7 @@ class TestJsonSerializer(unittest.TestCase):
         deserialized_out = deserialized_model(id_list_features)
         self.assertEqual(len(deserialized_out), len(eager_out))
         for x, y in zip(deserialized_out, eager_out):
-            self.assertTrue(torch.allclose(x, y))
+            torch.testing.assert_close(x, y)
 
     def test_regroup_as_dict_module(self) -> None:
         class Model(nn.Module):
