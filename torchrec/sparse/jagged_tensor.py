@@ -1066,7 +1066,7 @@ register_pytree_flatten_spec(JaggedTensor, _jt_flatten_spec)
 def _assert_tensor_has_no_elements_or_has_integers(
     tensor: Optional[torch.Tensor], tensor_name: str
 ) -> None:
-    if is_torchdynamo_compiling() or tensor is None:
+    if torch.compiler.is_compiling() or tensor is None:
         # Skipping the check tensor.numel() == 0 to not guard on pt2 symbolic shapes.
         # TODO(ivankobzarev): Use guard_size_oblivious to pass tensor.numel() == 0 once it is torch scriptable.
         return
