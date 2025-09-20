@@ -195,6 +195,7 @@ def mark_dynamic_kjt(
     kjt: KeyedJaggedTensor,
     shapes_collection: Optional[ShapesCollection] = None,
     variable_length: bool = False,
+    variable_batch: bool = False,
     vlen: Optional[DIM] = None,
     llen: Optional[DIM] = None,
 ) -> ShapesCollection:
@@ -211,10 +212,18 @@ def mark_dynamic_kjt(
     it will use the default name "vlen" for values, and "llen", "lofs" if variable length.
     A passed-in dynamic dim is useful if the dynamic dim is already used in other places.
 
+    variable batch size means the batch size is dynamic during different training iterations
+    the batch size for all features are the same within one iteration/batch. so it still follows
+    the correlation: len(lengths) == len(keys) * batch_size
+
+    in the variable length scenario, the batch size could be different for each feature within
+    the iteration/batch, so it doesn't follow the correlation: len(lengths) == len(keys) * batch_size
+
     Args:
         kjt (KeyedJaggedTensor): The KJT to make dynamic.
         shapes_collection (Optional[ShapesCollection]): The collection to update.
-        variable_length (bool): Whether the KJT is variable length.
+        variable_length (bool): Whether the KJT is variable length len(lengths) != len(keys) * batch_size
+        variable_batch (bool): Whether the KJT is variable batch size, len(lengths) == len(keys) * batch_size, it only works when variable_length is False.
         vlen (Optional[DIM]): The dynamic length for the values. If it's None, it will use the default name "vlen".
         llen (Optional[DIM]): The dynamic length for the lengths, it's only used when variable_length is true. If it's None, it will use the default name "llen".
         batch_size (Optional[DIM]): The dynamic length for the batch_size, it's only used when variable_length and mark_batch_size are both true.
@@ -245,6 +254,21 @@ def mark_dynamic_kjt(
             shapes_collection[kjt._lengths] = (llen,)
         if _has_dim(kjt._offsets):
             shapes_collection[kjt._offsets] = (llen + 1,)
+    elif variable_batch:
+        # variable batch size means the batch size is dynamic during different training iterations
+        # the batch size for all features are the same within one iteration/batch
+        #
+        # this is fundamentally different from variable length, where the batch size is different
+        # for each feature within one iteration/batch
+        #
+        # it's the user's responsibility to make sure that in a variable batch scenario,
+        # the argument variable_batch is only used when setting variable_length to False,
+        # otherwise it will lead to unexpected behavior with the dynamic shapes in torch.export
+        batch_size = _get_dim("batch_size")
+        if _has_dim(kjt._lengths):
+            shapes_collection[kjt._lengths] = (batch_size * len(kjt.keys()),)
+        if _has_dim(kjt._offsets):
+            shapes_collection[kjt._offsets] = (batch_size * len(kjt.keys()) + 1,)
     return shapes_collection
 
 
