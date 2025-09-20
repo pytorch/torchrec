@@ -190,6 +190,11 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
         return torch.tensor(address_lookup, dtype=torch.int64)
 
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
     def test_init_itep_module(self) -> None:
         itep_module = GenericITEPModule(
             table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
@@ -222,6 +227,11 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
             equal_nan=True,
         )
 
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
     def test_init_itep_module_without_pruned_table(self) -> None:
         itep_module = GenericITEPModule(
             table_name_to_unpruned_hash_sizes={},
@@ -353,6 +363,11 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
         # Check that reset_weight_momentum is not called
         self.assertEqual(mock_reset_weight_momentum.call_count, 0)
 
+    # pyre-ignore[56]: Pyre was not able to infer the type of argument
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
     def test_iter_increment_per_forward(self) -> None:
         """Test that the iteration counter increments correctly with each forward pass."""
         itep_module = GenericITEPModule(
