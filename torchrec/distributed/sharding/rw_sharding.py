@@ -223,6 +223,7 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                         total_num_buckets=info.embedding_config.total_num_buckets,
                         use_virtual_table=info.embedding_config.use_virtual_table,
                         virtual_table_eviction_policy=info.embedding_config.virtual_table_eviction_policy,
+                        enable_embedding_update=info.embedding_config.enable_embedding_update,
                     )
                 )
         return tables_per_rank
@@ -276,6 +277,20 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         feature_hash_sizes: List[int] = []
         for group_config in self._grouped_embedding_configs:
             feature_hash_sizes.extend(group_config.feature_hash_sizes())
+        return feature_hash_sizes
+
+    def _get_num_writable_features(self) -> int:
+        return sum(
+            group_config.num_features()
+            for group_config in self._grouped_embedding_configs
+            if group_config.enable_embedding_update
+        )
+
+    def _get_writable_feature_hash_sizes(self) -> List[int]:
+        feature_hash_sizes: List[int] = []
+        for group_config in self._grouped_embedding_configs:
+            if group_config.enable_embedding_update:
+                feature_hash_sizes.extend(group_config.feature_hash_sizes())
         return feature_hash_sizes
 
 
