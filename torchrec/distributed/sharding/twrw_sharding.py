@@ -472,18 +472,14 @@ class TwRwPooledEmbeddingDist(
             if qcomm_codecs_registry
             else None
         )
-        self._intra_dist: Optional[
-            Union[
-                PooledEmbeddingsReduceScatter,
-                VariableBatchPooledEmbeddingsReduceScatter,
-            ]
+        self._intra_dist: Optional[PooledEmbeddingsReduceScatter] = None
+        self._cross_dist: Optional[PooledEmbeddingsAllToAll] = None
+        self._variable_intra_dist: Optional[
+            VariableBatchPooledEmbeddingsReduceScatter
         ] = None
-        self._cross_dist: Optional[
-            Union[
-                PooledEmbeddingsAllToAll,
-                VariableBatchPooledEmbeddingsAllToAll,
-            ]
-        ] = None
+        self._variable_cross_dist: Optional[VariableBatchPooledEmbeddingsAllToAll] = (
+            None
+        )
 
     def forward(
         self,
@@ -514,13 +510,15 @@ class TwRwPooledEmbeddingDist(
                 sharding_ctx.batch_size_per_rank_per_feature,
             )
             rs_result = cast(
-                VariableBatchPooledEmbeddingsReduceScatter, self._intra_dist
+                VariableBatchPooledEmbeddingsReduceScatter, self._variable_intra_dist
             )(
                 local_embs,
                 batch_size_per_rank_per_feature=batch_size_per_feature_sum_by_cross_group,
                 embedding_dims=self._emb_dim_per_node_per_feature[current_node],
             ).wait()
-            return cast(VariableBatchPooledEmbeddingsAllToAll, self._cross_dist)(
+            return cast(
+                VariableBatchPooledEmbeddingsAllToAll, self._variable_cross_dist
+            )(
                 rs_result,
                 batch_size_per_rank_per_feature=batch_size_per_rank_per_feature_by_cross_group[
                     local_rank
@@ -615,28 +613,27 @@ class TwRwPooledEmbeddingDist(
         self, sharding_ctx: Optional[EmbeddingShardingContext] = None
     ) -> None:
         if sharding_ctx is not None and sharding_ctx.variable_batch_per_feature:
-            self._intra_dist = VariableBatchPooledEmbeddingsReduceScatter(
+            self._variable_intra_dist = VariableBatchPooledEmbeddingsReduceScatter(
                 pg=self._intra_pg,
                 codecs=self._intra_codecs,
             )
-            self._cross_dist = VariableBatchPooledEmbeddingsAllToAll(
+            self._variable_cross_dist = VariableBatchPooledEmbeddingsAllToAll(
                 pg=self._cross_pg,
                 emb_dim_per_rank_per_feature=self._emb_dim_per_node_per_feature,
                 device=self._device,
                 callbacks=None,  # don't pass permute callback, handle in LazyAwaitable
                 codecs=self._cross_codecs,
             )
-        else:
-            self._intra_dist = PooledEmbeddingsReduceScatter(
-                pg=self._intra_pg,
-                codecs=self._intra_codecs,
-            )
-            self._cross_dist = PooledEmbeddingsAllToAll(
-                pg=self._cross_pg,
-                dim_sum_per_rank=self._dim_sum_per_node,
-                device=self._device,
-                codecs=self._cross_codecs,
-            )
+        self._intra_dist = PooledEmbeddingsReduceScatter(
+            pg=self._intra_pg,
+            codecs=self._intra_codecs,
+        )
+        self._cross_dist = PooledEmbeddingsAllToAll(
+            pg=self._cross_pg,
+            dim_sum_per_rank=self._dim_sum_per_node,
+            device=self._device,
+            codecs=self._cross_codecs,
+        )
 
 
 class TwRwPooledEmbeddingSharding(
