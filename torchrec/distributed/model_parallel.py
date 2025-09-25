@@ -258,11 +258,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             device = torch.device("cpu")
         self.device: torch.device = device
 
-        if sharders is None:
-            sharders = get_default_sharders()
+        self.sharders: List[ModuleSharder[nn.modules.module.Module]] = (
+            get_default_sharders() if sharders is None else sharders
+        )
 
         self._sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
-            sharder.module_type: sharder for sharder in sharders
+            sharder.module_type: sharder for sharder in self.sharders
         }
 
         if data_parallel_wrapper is None:
@@ -279,9 +280,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             )
             pg = self._env.process_group
             if pg is not None:
-                plan = planner.collective_plan(module, sharders, pg)
+                plan = planner.collective_plan(module, self.sharders, pg)
             else:
-                plan = planner.plan(module, sharders)
+                plan = planner.plan(module, self.sharders)
         self._plan: ShardingPlan = plan
         self._dmp_wrapped_module: nn.Module = self._init_dmp(module)
         self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
