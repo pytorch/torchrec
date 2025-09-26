@@ -705,7 +705,10 @@ class EmbeddingStats(Stats):
             used_hbm_gb = bytes_to_gb(used_hbm[rank])
             used_hbm_ratio = (
                 used_hbm[rank] / ((1 - reserved_hbm_percent) * device.storage.hbm)
-                if topology.compute_device == "cuda"
+                if (
+                    topology.compute_device == "cuda"
+                    or topology.compute_device == "mtia"
+                )
                 and ((1 - reserved_hbm_percent) * device.storage.hbm) != 0
                 else 0
             )
