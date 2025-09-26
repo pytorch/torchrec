@@ -368,8 +368,12 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
                 # https://github.com/pytorch/pytorch/issues/122788
                 with record_function(f"## all2all_data:kjt {label} ##"):
                     if self._pg._get_backend_name() == "custom":
+                        if input_tensor.dim() == 2:
+                            output_size = [sum(output_split), input_tensor.size(1)]
+                        else:
+                            output_size = [sum(output_split)]
                         output_tensor = torch.empty(
-                            sum(output_split),
+                            output_size,
                             device=self._device,
                             dtype=input_tensor.dtype,
                         )
@@ -391,8 +395,12 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
                         )
                     self._output_tensors.append(output_tensor)
             else:
+                if input_tensor.dim() == 2:
+                    output_size = [sum(output_split), input_tensor.size(1)]
+                else:
+                    output_size = [sum(output_split)]
                 output_tensor = torch.empty(
-                    sum(output_split), device=self._device, dtype=input_tensor.dtype
+                    output_size, device=self._device, dtype=input_tensor.dtype
                 )
                 with record_function(f"## all2all_data:kjt {label} ##"):
                     awaitable = dist.all_to_all_single(
@@ -540,6 +548,113 @@ class KJTAllToAllSplitsAwaitable(Awaitable[KJTAllToAllTensorsAwaitable]):
             stagger=self._stagger,
             stride_per_rank=self._stride_per_rank,
         )
+
+
+class KJEAllToAll(nn.Module):
+    """
+    Redistributes `KeyedJaggedTensor` to a `ProcessGroup` according to splits.
+
+    Implementation utilizes AlltoAll collective as part of torch.distributed.
+
+    The input provides the necessary tensors, embedding weights and input splits to distribute.
+    The first collective call in `KJTAllToAllSplitsAwaitable` will transmit output
+    splits (to allocate correct space for tensors) and batch size per rank. The
+    following collective calls in `KJTAllToAllTensorsAwaitable` will transmit the actual
+    tensors asynchronously.
+    This module is used for embedding updates wherein input KJT weights are updated into the embedding tables.
+
+    Args:
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        splits (List[int]): List of len(pg.size()) which indicates how many features to
+            send to each pg.rank(). It is assumed the `KeyedJaggedTensor` is ordered by
+            destination rank. Same for all ranks.
+        stagger (int): stagger value to apply to recat tensor, see `_get_recat` function
+            for more detail.
+
+    Example::
+
+        keys=['A','B','C']
+        splits=[2,1]
+        kjeA2A = KJEAllToAll(pg, splits)
+        awaitable = kjeA2A(rank0_input)
+
+        # where:
+        # rank0_input is KeyedJaggedTensor holding
+
+        #         0           1           2
+        # 'A'    [A.V0]       None        [A.V1, A.V2]
+        # 'B'    None         [B.V0]      [B.V1]
+        # 'C'    [C.V0]       [C.V1]      None
+
+        # rank1_input is KeyedJaggedTensor holding
+
+        #         0           1           2
+        # 'A'     [A.V3]      [A.V4]      None
+        # 'B'     None        [B.V2]      [B.V3, B.V4]
+        # 'C'     [C.V2]      [C.V3]      None
+
+        Output is None since this is write operation but still awaitable for synchronization
+        awaitable.wait()
+
+        # where input after the distribution is :
+        # rank0
+
+        #         0           1           2           3           4           5
+        # 'A'     [A.V0]      None      [A.V1, A.V2]  [A.V3]      [A.V4]      None
+        # 'B'     None        [B.V0]    [B.V1]        None        [B.V2]      [B.V3, B.V4]
+
+        # rank1
+        #         0           1           2           3           4           5
+        # 'C'     [C.V0]      [C.V1]      None        [C.V2]      [C.V3]      None
+    """
+
+    def __init__(
+        self,
+        pg: dist.ProcessGroup,
+        splits: List[int],
+        stagger: int = 1,
+    ) -> None:
+        super().__init__()
+        torch._check(len(splits) == pg.size())
+        self._pg: dist.ProcessGroup = pg
+        self._splits = splits
+        self._splits_cumsum: List[int] = [0] + list(itertools.accumulate(splits))
+        self._stagger = stagger
+
+    def forward(
+        self, input: KeyedJaggedTensor
+    ) -> Awaitable[KJTAllToAllTensorsAwaitable]:
+        """
+        Sends input to relevant `ProcessGroup` ranks.
+
+        The first wait will get the output splits for the provided tensors and issue
+        tensors AlltoAll. The second wait will wait for the update.
+
+        Args:
+            input (KeyedJaggedTensor): `KeyedJaggedTensor` of values and weights to distribute.
+
+        Returns:
+            Awaitable[KJTAllToAllTensorsAwaitable]: awaitable of a `KJTAllToAllTensorsAwaitable`.
+        """
+
+        with torch.no_grad():
+            assert len(input.keys()) == sum(self._splits)
+            rank = dist.get_rank(self._pg)
+            local_keys = input.keys()[
+                self._splits_cumsum[rank] : self._splits_cumsum[rank + 1]
+            ]
+
+            return KJTAllToAllSplitsAwaitable(
+                pg=self._pg,
+                input=input,
+                splits=self._splits,
+                labels=input.dist_labels(),
+                tensor_splits=input.dist_splits(self._splits),
+                input_tensors=input.dist_tensors(),
+                keys=local_keys,
+                device=input.device(),
+                stagger=self._stagger,
+            )
 
 
 class KJTAllToAll(nn.Module):
