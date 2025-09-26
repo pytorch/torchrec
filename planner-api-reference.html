@@ -785,7 +785,8 @@ shard.</p></li>
 <li><p><strong>world_size</strong> (<em>int</em>) – the number of devices for all hosts.</p></li>
 <li><p><strong>local_world_size</strong> (<em>int</em>) – the number of the device for each host.</p></li>
 <li><p><strong>input_lengths</strong> (<em>List</em><em>[</em><em>float</em><em>]</em>) – the list of the average number of lookups of each
-input query feature.</p></li>
+input query feature. Also referred to as pooling_mean, and it’s equal to
+the pooling_factor * num_pooling.</p></li>
 <li><p><strong>input_data_type_size</strong> (<em>float</em>) – the data type size of the distributed
 data_parallel input.</p></li>
 <li><p><strong>table_data_type_size</strong> (<em>float</em>) – the data type size of the table.</p></li>
@@ -794,7 +795,8 @@ data_parallel input.</p></li>
 data_parallel input during forward communication.</p></li>
 <li><p><strong>bwd_comm_data_type_size</strong> (<em>float</em>) – the data type size of the distributed
 data_parallel input during backward communication.</p></li>
-<li><p><strong>num_poolings</strong> (<em>List</em><em>[</em><em>float</em><em>]</em>) – number of poolings per sample, typically 1.0.</p></li>
+<li><p><strong>num_poolings</strong> (<em>List</em><em>[</em><em>float</em><em>]</em>) – number of poolings per sample, typically 1.0 for
+non-EBF use cases. In EBF use cases, this is the number of events per sample.</p></li>
 <li><p><strong>hbm_mem_bw</strong> (<em>float</em>) – the bandwidth of the device HBM.</p></li>
 <li><p><strong>ddr_mem_bw</strong> (<em>float</em>) – the bandwidth of the system DDR memory.</p></li>
 <li><p><strong>hbm_to_ddr_bw</strong> (<em>float</em>) – the bandwidth between device HBM and system DDR.</p></li>
