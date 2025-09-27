@@ -299,7 +299,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
             world_size (int): the number of devices for all hosts.
             local_world_size (int): the number of the device for each host.
             input_lengths (List[float]): the list of the average number of lookups of each
-                input query feature.
+                input query feature. Also referred to as pooling_mean, and it's equal to
+                the pooling_factor * num_pooling.
             input_data_type_size (float): the data type size of the distributed
                 data_parallel input.
             table_data_type_size (float): the data type size of the table.
@@ -308,7 +309,8 @@ class EmbeddingPerfEstimator(ShardEstimator):
                 data_parallel input during forward communication.
             bwd_comm_data_type_size (float): the data type size of the distributed
                 data_parallel input during backward communication.
-            num_poolings (List[float]): number of poolings per sample, typically 1.0.
+            num_poolings (List[float]): number of poolings per sample, typically 1.0 for
+                non-EBF use cases. In EBF use cases, this is the number of events per sample.
             hbm_mem_bw (float): the bandwidth of the device HBM.
             ddr_mem_bw (float): the bandwidth of the system DDR memory.
             hbm_to_ddr_bw (float): the bandwidth between device HBM and system DDR.
