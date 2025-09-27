@@ -192,7 +192,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
     def test_init_itep_module(self) -> None:
@@ -245,7 +245,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_train_forward(self) -> None:
@@ -270,7 +270,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_train_forward_vbe(self) -> None:
@@ -295,7 +295,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     # Mock out reset_weight_momentum to count calls
@@ -329,7 +329,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     # Mock out reset_weight_momentum to count calls
@@ -365,7 +365,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
     def test_iter_increment_per_forward(self) -> None:
@@ -397,7 +397,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_iter_passed_as_int_to_itep_module(self) -> None:
@@ -440,7 +440,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_blank_line_formatting_preserved(self) -> None:
@@ -472,7 +472,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_iter_boundary_values_with_pruning_logic(self) -> None:
@@ -523,7 +523,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_error_handling_invalid_iter_tensor_values(self) -> None:
+    def test_error_handling_invalid_iter_tensor_values_cuda(self) -> None:
         """Test behavior with invalid iter tensor values."""
         itep_module = GenericITEPModule(
             table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
@@ -567,7 +567,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_iter_consistency_across_training_steps(self) -> None:
@@ -626,7 +626,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_performance_iter_conversion_overhead(self) -> None:
@@ -680,7 +680,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_iter_type_conversion_edge_cases(self) -> None:
@@ -744,7 +744,7 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
 
     # pyre-ignore[56]: Pyre was not able to infer the type of argument
     @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
+        torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
     def test_concurrent_forward_passes_iter_safety(self) -> None:
