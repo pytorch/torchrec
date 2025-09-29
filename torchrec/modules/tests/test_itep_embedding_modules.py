@@ -523,7 +523,9 @@ class TestITEPEmbeddingBagCollection(unittest.TestCase):
         torch.cuda.device_count() <= 1,
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_error_handling_invalid_iter_tensor_values_cuda(self) -> None:
+    def test_error_handling_invalid_iter_tensor_values_cuda_disabled_in_oss_compatibility(
+        self,
+    ) -> None:
         """Test behavior with invalid iter tensor values."""
         itep_module = GenericITEPModule(
             table_name_to_unpruned_hash_sizes=self._table_name_to_unpruned_hash_sizes,
