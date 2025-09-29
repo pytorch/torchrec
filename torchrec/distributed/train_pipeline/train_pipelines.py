@@ -67,7 +67,7 @@ from torchrec.distributed.train_pipeline.utils import (
     DataLoadingThread,
     use_context_for_postprocs,
 )
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import Awaitable, ParameterSharding
 from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.pt2.utils import default_pipeline_input_transformer
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -688,7 +688,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         # the input_dist of batches[0] has be invoked in previous iter. TODO: fact check
         self._wait_for_batch()
 
-        if len(self.batches) >= 2:
+        if len(self.batches) >= 2:  # at 4 - will be only 1 self.batches left?
             # invoke splits all_to_all comms (first part of input_dist)
             self.start_sparse_data_dist(self.batches[1], self.contexts[1])
 
@@ -726,6 +726,81 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             with record_function(f"## optimizer {self.contexts[0].index} ##"):
                 self._optimizer.step()
 
+        self.dequeue_batch()
+        return output
+
+    def progress_with_reshard(
+        self,
+        dataloader_iter: Iterator[In],
+        reshard_params: Dict[str, ParameterSharding],
+        sharded_module_fqn: Optional[str] = None,
+    ) -> Out:
+        """
+        As resharding will affect the tensor placements. Will temporarily undo pipeline overlap
+        """
+        # Assume pipeline batches are not empty:
+        # # attach the model just in case the user forgets to call it, especially when the user
+        # # pauses the pipeline.progress and detach the model for other purpose.
+        # if not self._model_attached:
+        #     self.attach(self._model)
+
+        # # fill the pipeline is only needed for the beginning when the pipeline (batches) is empty
+        # self.fill_pipeline(dataloader_iter)
+
+        # Assume not last batch
+        # # here is the expected stop after exhausting all batches
+        if not self.batches:
+            raise StopIteration
+        # import fbvscode
+
+        # fbvscode.set_trace()
+        # TODO: Remove once Bulk Eval migrated (needed for bwd compat, this class only)
+        self._set_module_context(self.contexts[0])
+
+        if self._model.training:
+            with record_function("## zero_grad ##"):
+                self._optimizer.zero_grad()
+
+        # wait for batches[0] being available on device, this should always be completed since
+        # the input_dist of batches[0] has be invoked in previous iter. TODO: fact check
+        self._wait_for_batch()
+
+        # But reshard after this.
+        # forward
+        with record_function("## forward ##"):
+            losses, output = self._model_fwd(self.batches[0])
+
+        if self._model.training:
+            # backward
+            self._backward(losses)
+
+            self.sync_embeddings(
+                self._model,
+                self._dmp_collection_sync_interval_batches,
+                self.contexts[0],
+            )
+
+            # update
+            with record_function("## optimizer ##"):
+                self._optimizer.step()
+
+        # Reshard
+        self._model.reshard(  # pyre-ignore
+            sharded_module_fqn=sharded_module_fqn,
+            changed_shard_to_params=reshard_params,
+        )
+
+        # Need to reshard before this.
+        if len(self.batches) >= 2:
+            # invoke splits all_to_all comms (first part of input_dist)
+            self.start_sparse_data_dist(self.batches[1], self.contexts[1])
+            # invoke data (values, lengths, etc.) all_to_all comms (second part of input_dist)
+            self.wait_sparse_data_dist(self.contexts[1])
+            # Assume _enqueue_batch_after_forward is True - current implementation
+        # self._enqueue_batch_after_forward not relevant here because - this has no pipelining
+        self.enqueue_batch(
+            dataloader_iter
+        )  # TODO: say for batch i+1, the enqueue batch was called in i-1 (which did not have resharded plan...)
         self.dequeue_batch()
         return output
 
