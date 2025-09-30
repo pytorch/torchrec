@@ -11,7 +11,7 @@
 import random
 import unittest
 
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional
 
 import hypothesis.strategies as st
 
@@ -30,7 +30,9 @@ from torchrec import (
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import ShardedEmbeddingBagCollection
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
-from torchrec.distributed.sharding.dynamic_sharding import output_sharding_plan_delta
+from torchrec.distributed.sharding.dynamic_sharding import (
+    output_sharding_plan_delta_single,
+)
 
 from torchrec.distributed.sharding_plan import (
     column_wise,
@@ -284,7 +286,7 @@ def _test_ebc_resharding(
             device=ctx.device,
         )
 
-        _, new_module_sharding_plan_delta = output_sharding_plan_delta(
+        _, new_module_sharding_plan_delta = output_sharding_plan_delta_single(
             module_sharding_plan, new_module_sharding_plan
         )
 
@@ -545,6 +547,7 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         data_type=st.sampled_from([DataType.FP16, DataType.FP32]),
         random_seed=st.integers(0, 1000),
         world_size=st.sampled_from([2, 4]),
+        skip_passing_resharding_fqn=st.booleans(),
     )
     @settings(verbosity=Verbosity.verbose, max_examples=8, deadline=None)
     def test_sharding(
@@ -556,6 +559,7 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
         data_type: DataType,
         random_seed: int,
         world_size: int,
+        skip_passing_resharding_fqn: bool,
     ) -> None:
         """
         Tests resharding from DMP module interface with conditional optimizer selection:
@@ -618,11 +622,12 @@ class MultiRankDMPDynamicShardingTest(ModelParallelTestShared):
             sharding_type=sharding_type_e,
             random_seed=random_seed,
             world_size=world_size,
+            skip_passing_resharding_fqn=skip_passing_resharding_fqn,
         )
 
 
 class SingleRankDynamicShardingUtilsTest(unittest.TestCase):
-    def test_output_sharding_plan_delta(self) -> None:
+    def test_output_sharding_plan_delta_single(self) -> None:
         """
         Tests output_sharding_plan_delta function
         """
@@ -673,7 +678,7 @@ class SingleRankDynamicShardingUtilsTest(unittest.TestCase):
             device_type="cuda" if torch.cuda.is_available() else "cpu",
         )
 
-        _, new_module_sharding_plan_delta = output_sharding_plan_delta(
+        _, new_module_sharding_plan_delta = output_sharding_plan_delta_single(
             module_sharding_plan, new_module_sharding_plan
         )
 
@@ -696,3 +701,86 @@ class SingleRankDynamicShardingUtilsTest(unittest.TestCase):
                 )
                 # NOTE there are other attributes to test for equivalence in ParameterSharding type
                 # but the ones included here are the most important.
+
+    def test_output_sharding_plans_delta(self) -> None:
+        """
+        Tests output_sharding_plan_delta_single with multiple tables and sharding types.
+        """
+        num_tables = 3
+        world_size = 4
+        data_type = DataType.FP32
+        embedding_dim = 16
+        num_embeddings = 8
+
+        # Generate random ranks for table-wise and column-wise sharding
+        # Table 0: Table-wise, Table 1: Column-wise, Table 2: Table-wise
+        ranks_per_tables = [1, 2, 1]
+        old_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+        new_ranks = generate_rank_placements(world_size, num_tables, ranks_per_tables)
+        # Ensure at least one table changes ranks
+        while new_ranks == old_ranks:
+            new_ranks = generate_rank_placements(
+                world_size, num_tables, ranks_per_tables
+            )
+
+        per_param_sharding = {}
+        new_per_param_sharding = {}
+
+        # Table 0: Table-wise, Table 1: Column-wise, Table 2: Table-wise
+        per_param_sharding[table_name(0)] = table_wise(rank=old_ranks[0][0])
+        per_param_sharding[table_name(1)] = column_wise(ranks=old_ranks[1])
+        per_param_sharding[table_name(2)] = table_wise(rank=old_ranks[2][0])
+
+        new_per_param_sharding[table_name(0)] = table_wise(rank=new_ranks[0][0])
+        new_per_param_sharding[table_name(1)] = column_wise(ranks=new_ranks[1])
+        new_per_param_sharding[table_name(2)] = table_wise(rank=new_ranks[2][0])
+
+        embedding_bag_config = generate_embedding_bag_config(
+            data_type, num_tables, embedding_dim, num_embeddings
+        )
+
+        module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding=per_param_sharding,
+            local_size=world_size,
+            world_size=world_size,
+            device_type="cuda" if torch.cuda.is_available() else "cpu",
+        )
+
+        new_module_sharding_plan = construct_module_sharding_plan(
+            EmbeddingBagCollection(tables=embedding_bag_config),
+            per_param_sharding=new_per_param_sharding,
+            local_size=world_size,
+            world_size=world_size,
+            device_type="cuda" if torch.cuda.is_available() else "cpu",
+        )
+
+        _, new_module_sharding_plan_delta = output_sharding_plan_delta_single(
+            module_sharding_plan, new_module_sharding_plan
+        )
+
+        # The delta should only contain tables whose sharding/ranks changed
+        for t_name, new_sharding in new_module_sharding_plan.items():
+            old_sharding = module_sharding_plan[t_name]
+            if (
+                new_sharding.ranks != old_sharding.ranks
+                or new_sharding.sharding_type != old_sharding.sharding_type
+                or new_sharding.compute_kernel != old_sharding.compute_kernel
+            ):
+                assert t_name in new_module_sharding_plan_delta
+                assert (
+                    new_module_sharding_plan_delta[t_name].ranks == new_sharding.ranks
+                )
+                assert (
+                    new_module_sharding_plan_delta[t_name].sharding_type
+                    == new_sharding.sharding_type
+                )
+                assert (
+                    new_module_sharding_plan_delta[t_name].compute_kernel
+                    == new_sharding.compute_kernel
+                )
+            else:
+                assert t_name not in new_module_sharding_plan_delta
+
+        # The delta should not contain more keys than the new plan
+        assert len(new_module_sharding_plan_delta) <= len(new_module_sharding_plan)

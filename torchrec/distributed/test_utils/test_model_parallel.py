@@ -249,6 +249,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
         lengths_dtype: torch.dtype = torch.int64,
         sharding_type: ShardingType = None,  # pyre-ignore
         random_seed: int = 0,
+        skip_passing_resharding_fqn: bool = False,
     ) -> None:
         """
         Tests the reshard API with dynamic_sharding_test, which creates 2 identical models
@@ -297,6 +298,7 @@ class ModelParallelTestShared(MultiProcessTestBase):
             lengths_dtype=lengths_dtype,
             random_seed=random_seed,
             sharding_type=sharding_type,
+            skip_passing_resharding_fqn=skip_passing_resharding_fqn,
         )
 
 

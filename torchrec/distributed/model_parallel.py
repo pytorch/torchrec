@@ -37,9 +37,9 @@ from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     DMPCollectionConfig,
     DMPCollectionContext,
+    EmbeddingModuleShardingPlan,
     EnumerableShardingSpec,
     ModuleSharder,
-    ParameterSharding,
     ShardedModule,
     ShardingEnv,
     ShardingEnv2D,
@@ -258,11 +258,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             device = torch.device("cpu")
         self.device: torch.device = device
 
-        if sharders is None:
-            sharders = get_default_sharders()
+        self.sharders: List[ModuleSharder[nn.modules.module.Module]] = (
+            get_default_sharders() if sharders is None else sharders
+        )
 
         self._sharder_map: Dict[Type[nn.Module], ModuleSharder[nn.Module]] = {
-            sharder.module_type: sharder for sharder in sharders
+            sharder.module_type: sharder for sharder in self.sharders
         }
 
         if data_parallel_wrapper is None:
@@ -279,9 +280,9 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             )
             pg = self._env.process_group
             if pg is not None:
-                plan = planner.collective_plan(module, sharders, pg)
+                plan = planner.collective_plan(module, self.sharders, pg)
             else:
-                plan = planner.plan(module, sharders)
+                plan = planner.plan(module, self.sharders)
         self._plan: ShardingPlan = plan
         self._dmp_wrapped_module: nn.Module = self._init_dmp(module)
         self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
@@ -668,11 +669,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
 
     def reshard(
         self,
-        sharded_module_fqn: str,
-        changed_shard_to_params: Dict[str, ParameterSharding],
-    ) -> None:
+        changed_shard_to_params: Dict[str, Tuple[float, EmbeddingModuleShardingPlan]],
+        sharded_module_fqn: Optional[str] = None,
+    ) -> float:
         """
         Reshards an already-sharded module in the DMP given a set of ParameterShardings to change placements.
+        Returns the data volume resharded
 
         This method allows you to dynamically change the sharding strategy for a specific module
         without recreating the entire DMP. It's particularly useful for:
@@ -721,21 +723,53 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             - After resharding, the optimizer state is maintained for the module
             - The sharding plan is updated to reflect the new configuration
         """
-        steps = sharded_module_fqn.split(".")
-        sharded_module = self.module
-        for s in steps:
-            sharded_module = getattr(sharded_module, s)
+        sharder = None
+        sharded_module = None
 
-        assert isinstance(sharded_module, ShardedModule)
-        assert changed_shard_to_params is not None
-        sharder_key = sharded_module.unsharded_module_type
-        sharder = self._sharder_map[sharder_key]
-        assert hasattr(
-            sharder, "reshard"
-        ), "reshard is not implemented for this sharder"
+        if sharded_module_fqn is None:
+            named_modules_queue = [("", self.module)]
+            while named_modules_queue:
+                child_path, child_module = named_modules_queue.pop(0)
+                if isinstance(child_module, ShardedModule):
+                    sharder_key = child_module.unsharded_module_type
+                    sharder = self._sharder_map.get(sharder_key, None)
+                if not sharder:
+                    for n, m in child_module.named_children():
+                        if child_path != "":
+                            named_modules_queue.append((child_path + "." + n, m))
+                        else:
+                            named_modules_queue.append((n, m))
+                    continue
+                if hasattr(sharder, "reshard"):
+                    sharded_module = child_module
+                    sharded_module_fqn = child_path
+                    break
+        else:  # Parse the fqn to identify module to be resharded
+            steps = sharded_module_fqn.split(".")
+            sharded_module = self.module
+            for s in steps:
+                sharded_module = getattr(sharded_module, s)
+
+            # TODO: consider sharding unsharded module
+            assert isinstance(
+                sharded_module, ShardedModule
+            ), "Given module is unsharded"
+            assert changed_shard_to_params is not None
+            sharder_key = sharded_module.unsharded_module_type
+            sharder = self._sharder_map[sharder_key]
+            assert hasattr(
+                sharder, "reshard"
+            ), "reshard is not implemented for this sharder"
+
+        assert sharder is not None, "Could not find sharder to reshard"
+        assert (
+            sharded_module is not None and sharded_module_fqn is not None
+        ), "Could not find sharded_module to reshard"
+        data_volume, delta_plan = changed_shard_to_params[sharded_module_fqn]
+
         sharded_module = sharder.reshard(  # pyre-ignore
             sharded_module,
-            changed_shard_to_params,
+            delta_plan,
             self._env,
             self.device,
         )
@@ -745,7 +779,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             self._dmp_wrapped_module.module  # pyre-ignore
         )
         self._plan.plan[sharded_module_fqn] = sharded_module.module_sharding_plan
-        return sharded_module
+        return data_volume
 
 
 class DMPCollection(DistributedModelParallel):

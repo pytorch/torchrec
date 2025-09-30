@@ -1722,7 +1722,7 @@ class ShardedEmbeddingBagCollection(
 
     def update_shards(
         self,
-        changed_sharding_params: Dict[str, ParameterSharding],  # NOTE: only delta
+        changed_sharding_params: EmbeddingModuleShardingPlan,  # NOTE: only delta
         env: ShardingEnv,
         device: Optional[torch.device],
     ) -> None:
@@ -1964,7 +1964,7 @@ class EmbeddingBagCollectionSharder(BaseEmbeddingSharder[EmbeddingBagCollection]
     def reshard(
         self,
         sharded_module: ShardedEmbeddingBagCollection,
-        changed_shard_to_params: Dict[str, ParameterSharding],
+        changed_shard_to_params: EmbeddingModuleShardingPlan,
         env: ShardingEnv,
         device: Optional[torch.device] = None,
     ) -> ShardedEmbeddingBagCollection:
