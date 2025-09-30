@@ -92,7 +92,7 @@ def main(argv: List[str]) -> None:
         description="TorchRec: Pytorch library for recommendation systems",
         long_description=readme,
         long_description_content_type="text/markdown",
-        url="https://github.com/pytorch/torchrec",
+        url="https://github.com/meta-pytorch/torchrec",
         license="BSD-3",
         keywords=[
             "pytorch",
