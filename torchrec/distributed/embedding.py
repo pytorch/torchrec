@@ -468,13 +468,19 @@ class ShardedEmbeddingCollection(
             for sharding_type, embedding_confings in sharding_type_to_sharding_infos.items()
         }
 
+        self.enable_embedding_update: bool = any(
+            config.enable_embedding_update for config in self._embedding_configs
+        )
         self._device = device
         self._input_dists: List[nn.Module] = []
+        self._write_dists: List[nn.Module] = []
         self._lookups: List[nn.Module] = []
+        self._updates: List[nn.Module] = []
         self._create_lookups()
         self._output_dists: List[nn.Module] = []
         self._create_output_dist()
 
+        self._write_splits: List[int] = []
         self._feature_splits: List[int] = []
         self._features_order: List[int] = []
 
@@ -631,6 +637,7 @@ class ShardedEmbeddingCollection(
                             total_num_buckets=config.total_num_buckets,
                             use_virtual_table=config.use_virtual_table,
                             virtual_table_eviction_policy=config.virtual_table_eviction_policy,
+                            enable_embedding_update=config.enable_embedding_update,
                         ),
                         param_sharding=parameter_sharding,
                         param=param,
@@ -1308,7 +1315,10 @@ class ShardedEmbeddingCollection(
 
     def _create_lookups(self) -> None:
         for sharding in self._sharding_type_to_sharding.values():
-            self._lookups.append(sharding.create_lookup())
+            lookup = sharding.create_lookup()
+            if self.enable_embedding_update and sharding.enable_embedding_update:
+                self._updates.append(sharding.create_update(lookup))
+            self._lookups.append(lookup)
 
     def _create_output_dist(
         self,
@@ -1626,6 +1636,40 @@ class ShardedEmbeddingCollection(
 
     def create_context(self) -> EmbeddingCollectionContext:
         return EmbeddingCollectionContext(sharding_contexts=[])
+
+    def _create_write_dist(self) -> None:
+        for sharding in self._sharding_type_to_sharding.values():
+            if sharding.enable_embedding_update:
+                self._write_dists.append(sharding.create_write_dist())
+                self._write_splits.append(sharding._get_num_writable_features())
+
+    # pyre-ignore [14]
+    def write_dist(
+        self, ctx: EmbeddingCollectionContext, embeddings: KeyedJaggedTensor
+    ) -> Awaitable[Awaitable[KJTList]]:
+        if not self.enable_embedding_update:
+            raise ValueError("enable_embedding_update is False for this collection")
+        if not self._write_dists:
+            self._create_write_dist()
+        with torch.no_grad():
+            embeddings_by_shards = embeddings.split(self._write_splits)
+            awaitables = []
+            for write_dist, embeddings in zip(self._write_dists, embeddings_by_shards):
+                awaitables.append(write_dist(embeddings))
+
+        return KJTListSplitsAwaitable(
+            awaitables,
+            ctx,
+            self._module_fqn,
+            list(self._sharding_type_to_sharding.keys()),
+        )
+
+    def update(self, ctx: EmbeddingCollectionContext, dist_input: KJTList) -> None:
+        for update, embeddings in zip(
+            self._updates,
+            dist_input,
+        ):
+            update(embeddings)
 
 
 class EmbeddingCollectionSharder(BaseEmbeddingSharder[EmbeddingCollection]):

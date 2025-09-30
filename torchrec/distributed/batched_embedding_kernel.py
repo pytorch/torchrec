@@ -1944,6 +1944,10 @@ class ZeroCollisionKeyValueEmbedding(
         assert (
             config.is_using_virtual_table
         ), "Try to create ZeroCollisionKeyValueEmbedding for non virtual tables"
+        assert embedding_cache_mode == config.enable_embedding_update, (
+            f"Embedding_cache kernel is {embedding_cache_mode} "
+            f"but embedding config has enable_embedding_update {config.enable_embedding_update}"
+        )
         for table in config.embedding_tables:
             assert table.local_cols % 4 == 0, (
                 f"table {table.name} has local_cols={table.local_cols} "

@@ -26,6 +26,7 @@ from torchrec.distributed.embedding_dim_bucketer import (
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingLookup,
+    BaseEmbeddingUpdate,
     BaseGroupedFeatureProcessor,
     EmbeddingComputeKernel,
     FeatureShardingMixIn,
@@ -42,7 +43,7 @@ from torchrec.distributed.types import (
     QuantizedCommCodecs,
     ShardMetadata,
 )
-from torchrec.distributed.utils import maybe_annotate_embedding_event
+from torchrec.distributed.utils import maybe_annotate_embedding_event, none_throws
 from torchrec.fx.utils import assert_fx_safe
 from torchrec.modules.embedding_configs import EmbeddingTableConfig
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
@@ -708,6 +709,77 @@ def _split(flat_list: List[T], splits: List[int]) -> List[List[T]]:
     ]
 
 
+def bucketize_embeddings_before_all2all_write(
+    kjt: KeyedJaggedTensor,
+    num_buckets: int,
+    block_sizes: torch.Tensor,
+    total_num_blocks: Optional[torch.Tensor] = None,
+    output_permute: bool = False,
+    bucketize_pos: bool = False,
+    block_bucketize_row_pos: Optional[List[torch.Tensor]] = None,
+    keep_original_indices: bool = False,
+) -> Tuple[KeyedJaggedTensor, Optional[torch.Tensor]]:
+    """
+    Bucketize embeddings before writing to HBM/DRAM.
+
+    Args:
+    """
+    num_features = len(kjt.keys())
+    assert_fx_safe(
+        block_sizes.numel() == num_features,
+        f"Expecting block sizes for {num_features} features, but {block_sizes.numel()} received.",
+    )
+
+    (
+        bucketized_lengths,
+        bucketized_indices,
+        bucketized_weights,
+        pos,
+        unbucketize_permute,
+    ) = torch.ops.fbgemm.block_bucketize_sparse_features_2d_weights(
+        lengths=kjt.lengths().view(-1),
+        indices=kjt.values(),
+        bucketize_pos=bucketize_pos,
+        sequence=output_permute,
+        block_sizes=_fx_wrap_tensor_to_device_dtype(block_sizes, kjt.values()),
+        total_num_blocks=(
+            _fx_wrap_tensor_to_device_dtype(total_num_blocks, kjt.values())
+            if total_num_blocks is not None
+            else None
+        ),
+        my_size=num_buckets,
+        weights=kjt.weights_or_none(),
+        weights_dim=(none_throws(kjt.weights_or_none()).size(1)),
+        batch_size_per_feature=_fx_wrap_batch_size_per_feature(kjt),
+        max_B=_fx_wrap_max_B(kjt),
+        block_bucketize_pos=(
+            [
+                _fx_wrap_tensor_to_device_dtype(pos, kjt.values())
+                for pos in block_bucketize_row_pos
+            ]
+            if block_bucketize_row_pos is not None
+            else None
+        ),
+        keep_orig_idx=keep_original_indices,
+    )
+    return (
+        KeyedJaggedTensor(
+            # duplicate keys will be resolved by AllToAll
+            keys=_fx_wrap_gen_list_n_times(kjt.keys(), num_buckets),
+            values=bucketized_indices,
+            weights=pos if bucketize_pos else bucketized_weights,
+            lengths=bucketized_lengths.view(-1),
+            offsets=None,
+            stride=_fx_wrap_stride(kjt),
+            stride_per_key_per_rank=_fx_wrap_stride_per_key_per_rank(kjt, num_buckets),
+            length_per_key=None,
+            offset_per_key=None,
+            index_per_key=None,
+        ),
+        unbucketize_permute,
+    )
+
+
 class KJTListSplitsAwaitable(Awaitable[Awaitable[KJTList]], Generic[C]):
     """
     Awaitable of Awaitable of KJTList.
@@ -958,6 +1030,24 @@ class BaseSparseFeaturesDist(abc.ABC, nn.Module, Generic[F]):
         pass
 
 
+class BaseSparseFeaturesWriteDist(abc.ABC, nn.Module, Generic[F]):
+    """
+    Converts input from data-parallel to model-parallel.
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        embeddings: F,
+    ) -> Union[Awaitable[Awaitable[F]], F]:
+        """
+        Writes the input embeddings to the embedding table.
+        Args:
+            embeddings (F): KJT containing ID values and weights as embeddings to write into the embedding table.
+        """
+        pass
+
+
 class BaseEmbeddingDist(abc.ABC, nn.Module, Generic[C, T, W]):
     """
     Converts output of EmbeddingLookup from model-parallel to data-parallel.
@@ -983,6 +1073,7 @@ class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
         self._qcomm_codecs_registry = qcomm_codecs_registry
+        self.enable_embedding_update: bool = False
 
     @property
     def qcomm_codecs_registry(self) -> Optional[Dict[str, QuantizedCommCodecs]]:
@@ -1010,6 +1101,20 @@ class EmbeddingSharding(abc.ABC, Generic[C, F, T, W], FeatureShardingMixIn):
         feature_processor: Optional[BaseGroupedFeatureProcessor] = None,
     ) -> BaseEmbeddingLookup[F, T]:
         pass
+
+    def create_write_dist(
+        self, device: Optional[torch.device] = None
+    ) -> BaseSparseFeaturesWriteDist[F]:
+        raise NotImplementedError()
+
+    def create_update(
+        self,
+        grouped_embeddings_lookup: BaseEmbeddingLookup[F, T],
+    ) -> BaseEmbeddingUpdate[F]:
+        raise NotImplementedError()
+
+    def _get_num_writable_features(self) -> int:
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def embedding_dims(self) -> List[int]:
