@@ -521,7 +521,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         Detaches the model from sparse data dist (SDD) pipeline. A user might want to get
         the original model back after training. The original model.forward was previously
         modified by the train pipeline. for more please see:
-        https://github.com/pytorch/torchrec/pull/2076
+        https://github.com/meta-pytorch/torchrec/pull/2076
 
         To use the pipeline after detaching the model, pipeline.attach(model)
         needs to be called.
@@ -547,7 +547,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
         should be used with detach function. these functions should only be used from user code,
         when user want to switch the train pipeline. for more please see:
-        https://github.com/pytorch/torchrec/pull/2076
+        https://github.com/meta-pytorch/torchrec/pull/2076
         """
         if model:
             self._model = model

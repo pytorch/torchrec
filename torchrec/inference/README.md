@@ -40,7 +40,7 @@ export FBGEMM_LIB=""
 Here, we generate the DLRM model in Torchscript and save it for model loading later on.
 
 ```
-git clone https://github.com/pytorch/torchrec.git
+git clone https://github.com/meta-pytorch/torchrec.git
 
 cd ~/torchrec/torchrec/inference/
 python3 dlrm_packager.py --output_path /tmp/model.pt

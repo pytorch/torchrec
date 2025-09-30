@@ -4,7 +4,7 @@ We evaluate the performance of two EmbeddingBagCollection modules:
 
 1. `EmbeddingBagCollection` (EBC) ([code](https://pytorch.org/torchrec/torchrec.modules.html#torchrec.modules.embedding_modules.EmbeddingBagCollection)): a simple module backed by [torch.nn.EmbeddingBag](https://pytorch.org/docs/stable/generated/torch.nn.EmbeddingBag.html).
 
-2. `FusedEmbeddingBagCollection` (Fused EBC) ([code](https://github.com/pytorch/torchrec/blob/main/torchrec/modules/fused_embedding_bag_collection.py#L299)): a module backed by [FBGEMM](https://github.com/pytorch/FBGEMM) kernels which enables more efficient, high-performance operations on embedding tables. It is equipped with a fused optimizer, and UVM caching/management that makes much larger memory available for GPUs.
+2. `FusedEmbeddingBagCollection` (Fused EBC) ([code](https://github.com/meta-pytorch/torchrec/blob/main/torchrec/modules/fused_embedding_bag_collection.py#L299)): a module backed by [FBGEMM](https://github.com/pytorch/FBGEMM) kernels which enables more efficient, high-performance operations on embedding tables. It is equipped with a fused optimizer, and UVM caching/management that makes much larger memory available for GPUs.
 
 
 ## Module architecture and running setup
@@ -24,7 +24,7 @@ Other setup includes:
 
 ## How to run
 
-After the installation of Torchrec (see "Binary" in the "Installation" section,  [link](https://github.com/pytorch/torchrec)), run the following command under the benchmark directory (/torchrec/torchrec/benchmarks):
+After the installation of Torchrec (see "Binary" in the "Installation" section,  [link](https://github.com/meta-pytorch/torchrec)), run the following command under the benchmark directory (/torchrec/torchrec/benchmarks):
 
 ```
 python ebc_benchmarks.py [--mode MODE] [--cpu_only]

@@ -121,4 +121,4 @@ jobs:
           s3-bucket: doc-previews
           if-no-files-found: error
           path: docs
-          s3-prefix: pytorch/torchrec/${{ github.event.pull_request.number }}
+          s3-prefix: meta-pytorch/torchrec/${{ github.event.pull_request.number }}
