@@ -59,7 +59,7 @@ Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html
 
 2. Clone TorchRec.
    ```
-   git clone --recursive https://github.com/pytorch/torchrec
+   git clone --recursive https://github.com/meta-pytorch/torchrec
    cd torchrec
    ```
 
@@ -108,7 +108,7 @@ Check out the [Getting Started](https://pytorch.org/torchrec/setup-torchrec.html
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/pytorch/torchrec/blob/main/CONTRIBUTING.md) for details about contributing to TorchRec!
+See [CONTRIBUTING.md](https://github.com/meta-pytorch/torchrec/blob/main/CONTRIBUTING.md) for details about contributing to TorchRec!
 
 ## Citation
 

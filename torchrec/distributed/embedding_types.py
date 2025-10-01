@@ -325,6 +325,19 @@ class BaseEmbeddingLookup(abc.ABC, nn.Module, Generic[F, T]):
         pass
 
 
+class BaseEmbeddingUpdate(abc.ABC, nn.Module, Generic[F]):
+    """
+    Interface implemented by different embedding implementations for updating the weights
+    """
+
+    @abc.abstractmethod
+    def forward(
+        self,
+        embeddings: F,
+    ) -> None:
+        pass
+
+
 class FeatureShardingMixIn:
     """
     Feature Sharding Interface to provide sharding-aware feature metadata.

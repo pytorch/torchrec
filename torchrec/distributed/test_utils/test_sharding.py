@@ -38,7 +38,7 @@ from torchrec.distributed.planner import (
     ParameterConstraints,
     Topology,
 )
-from torchrec.distributed.sharding.dynamic_sharding import output_sharding_plan_delta
+from torchrec.distributed.sharding.dynamic_sharding import output_sharding_plans_delta
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     get_sharding_constructor_from_type,
@@ -341,6 +341,7 @@ def dynamic_sharding_test(
     lengths_dtype: torch.dtype = torch.int64,
     sharding_type: ShardingType = None,  # pyre-ignore
     random_seed: int = 0,
+    skip_passing_resharding_fqn: bool = False,
 ) -> None:
     """
     Test case for dynamic sharding:
@@ -590,8 +591,8 @@ def dynamic_sharding_test(
             exclude_predfix="sparse.pooled_embedding_arch.embedding_modules._itp_iter",
         )
 
-        _, new_module_sharding_plan_delta = output_sharding_plan_delta(
-            plan.plan["sparse.ebc"], new_module_sharding_plan  # pyre-ignore
+        new_module_sharding_plan_delta = output_sharding_plans_delta(
+            plan.plan, plan_1.plan  # pyre-ignore
         )
 
         dense_m1_optim = KeyedOptimizerWrapper(
@@ -615,7 +616,10 @@ def dynamic_sharding_test(
             True,
         )
 
-        local_m1_dmp.reshard("sparse.ebc", new_module_sharding_plan_delta)
+        local_m1_dmp.reshard(
+            sharded_module_fqn=None if skip_passing_resharding_fqn else "sparse.ebc",
+            changed_shard_to_params=new_module_sharding_plan_delta,
+        )
 
         # Must recreate local_m1_opt, because current local_m1_opt is a copy of underlying fused_opt
 

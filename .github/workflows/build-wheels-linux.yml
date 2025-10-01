@@ -35,7 +35,7 @@ jobs:
     - name: Checkout torchrec repository
       uses: actions/checkout@v4
       with:
-        repository: pytorch/torchrec
+        repository: meta-pytorch/torchrec
     - name: Filter Generated Built Matrix
       id: filter
       env:
@@ -49,10 +49,10 @@ jobs:
         echo "matrix=${MATRIX_BLOB}" >> "${GITHUB_OUTPUT}"
   build:
     needs: filter-matrix
-    name: pytorch/torchrec
+    name: meta-pytorch/torchrec
     uses: pytorch/test-infra/.github/workflows/build_wheels_linux.yml@main
     with:
-      repository: pytorch/torchrec
+      repository: meta-pytorch/torchrec
       ref: ""
       test-infra-repository: pytorch/test-infra
       test-infra-ref: main

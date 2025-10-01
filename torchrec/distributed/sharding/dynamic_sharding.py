@@ -17,6 +17,7 @@ import torch.distributed as dist
 from torchrec.distributed.embedding_sharding import EmbeddingShardingInfo
 from torchrec.distributed.types import (
     EmbeddingModuleShardingPlan,
+    ModuleShardingPlan,
     ParameterSharding,
     ShardedModule,
     ShardedTensor,
@@ -869,7 +870,7 @@ def update_module_sharding_plan(
 
 
 # Utils
-def output_sharding_plan_delta(
+def output_sharding_plan_delta_single(
     old_plan: EmbeddingModuleShardingPlan,
     new_plan: EmbeddingModuleShardingPlan,
     return_data_volume: bool = False,
@@ -880,7 +881,7 @@ def output_sharding_plan_delta(
     have the same number of parameters/tables.
 
     This is useful for Dynamic Sharding since Resharding API takes in only the
-    ParameterSharding or shards that needs to be moved.
+    ParameterSharding or shards that needs to be moved. Takes in EmbeddingModuleShardingPlan.
     """
     assert len(old_plan) == len(new_plan)
     diff = EmbeddingModuleShardingPlan(
@@ -900,3 +901,29 @@ def output_sharding_plan_delta(
                 )  # Asumming float datatype
 
     return (data_volume, diff)
+
+
+def output_sharding_plans_delta(
+    old_plan: Dict[str, EmbeddingModuleShardingPlan],
+    new_plan: Dict[str, EmbeddingModuleShardingPlan],
+    return_data_volume: bool = False,
+) -> Dict[str, Tuple[float, EmbeddingModuleShardingPlan]]:
+    """
+    Compute and return a new sharding plan that is the delta
+    between new and old embedding module plans. Assumes that the old and new plan
+    have the same number of parameters/tables.
+
+    This is useful for Dynamic Sharding since Resharding API takes in only the
+    ParameterSharding or shards that needs to be moved. Takes in a Dict
+    which is the format of DMP sharding plans.
+    """
+    delta_plans: Dict[str, Tuple[float, EmbeddingModuleShardingPlan]] = {}
+    for key, plan in old_plan.items():
+        assert (
+            key in new_plan
+        ), f"Found mismatch between old and new plans, key: {key} not found in new plan"
+
+        delta_plans[key] = output_sharding_plan_delta_single(
+            plan, new_plan[key], return_data_volume
+        )
+    return delta_plans

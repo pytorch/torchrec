@@ -449,7 +449,7 @@ class SparseDataDistUtil(Generic[In]):
         ) -> None:
             # Note: tricky part - a bit delicate choreography between
             # StagedPipeline and this class
-            # (see https://github.com/pytorch/torchrec/pull/2239 for details)
+            # (see https://github.com/meta-pytorch/torchrec/pull/2239 for details)
             # wait_dist need to be called as post_forward hook
             # at the end of the batch N, so that the data is awaited
             # before start of the next batch.

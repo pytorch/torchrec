@@ -512,7 +512,8 @@ def table_wise(
 
 
 def row_wise(
-    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None
+    sizes_placement: Optional[Tuple[List[int], Union[str, List[str]]]] = None,
+    compute_kernel: Optional[str] = None,
 ) -> ParameterShardingGenerator:
     """
     Returns a generator of ParameterShardingPlan for `ShardingType::ROW_WISE` for construct_module_sharding_plan.
@@ -537,6 +538,10 @@ def row_wise(
             sizes_placement[1]
         ), "sizes_placement and device per placement (in case of sharding "
         "across HBM and CPU host) must have the same length"
+
+    compute_kernel = (
+        EmbeddingComputeKernel.QUANT.value if sizes_placement else compute_kernel
+    )
 
     def _parameter_sharding_generator(
         param: nn.Parameter,
@@ -598,9 +603,7 @@ def row_wise(
             device_type,
             sharder,
             placements=placements if sizes_placement else None,
-            compute_kernel=(
-                EmbeddingComputeKernel.QUANT.value if sizes_placement else None
-            ),
+            compute_kernel=compute_kernel,
         )
 
     return _parameter_sharding_generator

@@ -30,7 +30,7 @@ conda run -n "${CONDA_ENV}" python --version
 
 # Install pytorch, torchrec and fbgemm as per
 # installation instructions on following page
-# https://github.com/pytorch/torchrec#installations
+# https://github.com/meta-pytorch/torchrec#installations
 
 
 # figure out CUDA VERSION
