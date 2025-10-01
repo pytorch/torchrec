@@ -17,6 +17,7 @@ import torch.distributed as dist
 from torch.distributed._tensor.placement_types import Replicate, Shard
 from torchrec.distributed.dist_data import (
     EmbeddingsAllToOneReduce,
+    KJEAllToAll,
     KJTAllToAll,
     KJTOneToAll,
     PooledEmbeddingsReduceScatter,
@@ -30,6 +31,8 @@ from torchrec.distributed.embedding_sharding import (
     BaseEmbeddingDist,
     BaseEmbeddingLookup,
     BaseSparseFeaturesDist,
+    BaseSparseFeaturesWriteDist,
+    bucketize_embeddings_before_all2all_write,
     bucketize_kjt_before_all2all,
     bucketize_kjt_inference,
     EmbeddingSharding,
@@ -142,6 +145,10 @@ class BaseRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
         self._grouped_embedding_configs_per_rank = group_tables(sharded_tables_per_rank)
         self._grouped_embedding_configs: List[GroupedEmbeddingConfig] = (
             self._grouped_embedding_configs_per_rank[self._rank]
+        )
+        self.enable_embedding_update: bool = any(
+            grouped_config.enable_embedding_update
+            for grouped_config in self._grouped_embedding_configs
         )
 
         self._has_feature_processor: bool = False
@@ -588,6 +595,113 @@ class RwPooledEmbeddingSharding(
             qcomm_codecs_registry=self.qcomm_codecs_registry,
             embedding_dims=self.embedding_dims(),
         )
+
+
+class RwSparseFeaturesWriteDist(BaseSparseFeaturesWriteDist[KeyedJaggedTensor]):
+    """
+    Accepts sparse feature embedding weights in RW fashion and then redistributes with an AlltoAll
+    collective operation.
+
+    Args:
+        pg (dist.ProcessGroup): ProcessGroup for AlltoAll communication.
+        num_features (int): total number of features.
+        feature_hash_sizes (List[int]): hash sizes of features.
+        feature_total_num_buckets (Optional[List[int]]): total number of buckets, if provided will be >= world size.
+        device (Optional[torch.device]): device on which buffers will be allocated.
+        is_sequence (bool): if this is for a sequence embedding.
+        has_feature_processor (bool): existence of feature processor (ie. position
+            weighted features).
+
+    """
+
+    def __init__(
+        self,
+        pg: dist.ProcessGroup,
+        num_features: int,
+        feature_hash_sizes: List[int],
+        feature_total_num_buckets: Optional[List[int]] = None,
+        device: Optional[torch.device] = None,
+        is_sequence: bool = False,
+        keep_original_indices: bool = False,
+    ) -> None:
+        super().__init__()
+        self._world_size: int = pg.size()
+        self._num_features = num_features
+
+        feature_block_sizes: List[int] = []
+
+        for i, hash_size in enumerate(feature_hash_sizes):
+            block_divisor = self._world_size
+            if feature_total_num_buckets is not None:
+                assert feature_total_num_buckets[i] % self._world_size == 0
+                block_divisor = feature_total_num_buckets[i]
+            feature_block_sizes.append((hash_size + block_divisor - 1) // block_divisor)
+
+        self.register_buffer(
+            "_feature_block_sizes_tensor",
+            torch.tensor(
+                feature_block_sizes,
+                device=device,
+                dtype=torch.int64,
+            ),
+            persistent=False,
+        )
+        self._has_multiple_blocks_per_shard: bool = (
+            feature_total_num_buckets is not None
+        )
+        if self._has_multiple_blocks_per_shard:
+            self.register_buffer(
+                "_feature_total_num_blocks_tensor",
+                torch.tensor(
+                    [feature_total_num_buckets],
+                    device=device,
+                    dtype=torch.int64,
+                ),
+                persistent=False,
+            )
+
+        self._dist = KJEAllToAll(
+            pg=pg,
+            splits=[self._num_features] * self._world_size,
+        )
+        self._is_sequence = is_sequence
+        self.unbucketize_permute_tensor: Optional[torch.Tensor] = None
+        self._keep_original_indices = keep_original_indices
+
+    def forward(
+        self,
+        embeddings: KeyedJaggedTensor,
+    ) -> Awaitable[Awaitable[KeyedJaggedTensor]]:
+        """
+        Bucketizes sparse feature values into world size number of buckets and then
+        performs AlltoAll operation.
+
+        Args:
+            sparse_features (KeyedJaggedTensor): sparse features to bucketize and
+                redistribute.
+
+        Returns:
+            Awaitable[Awaitable[KeyedJaggedTensor]]: awaitable of awaitable of KeyedJaggedTensor.
+        """
+
+        (
+            bucketized_features,
+            self.unbucketize_permute_tensor,
+        ) = bucketize_embeddings_before_all2all_write(
+            embeddings,
+            num_buckets=self._world_size,
+            block_sizes=self._feature_block_sizes_tensor,
+            total_num_blocks=(
+                self._feature_total_num_blocks_tensor
+                if self._has_multiple_blocks_per_shard
+                else None
+            ),
+            output_permute=self._is_sequence,
+            bucketize_pos=False,
+            keep_original_indices=self._keep_original_indices,
+        )
+
+        return self._dist(bucketized_features)
 
 
 @overload
