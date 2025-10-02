@@ -8,19 +8,27 @@
 # pyre-strict
 
 import unittest
-from typing import cast
+from typing import cast, Dict
 from unittest.mock import patch
 
 import torch
 from hypothesis import given, settings, strategies as st
+
 from pyre_extensions import none_throws
 from torchrec.distributed.embedding_sharding import bucketize_kjt_before_all2all
-from torchrec.modules.embedding_configs import EmbeddingConfig
+from torchrec.modules.embedding_configs import (
+    DataType,
+    EmbeddingBagConfig,
+    EmbeddingConfig,
+    PoolingType,
+)
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 from torchrec.modules.hash_mc_evictions import (
     HashZchEvictionConfig,
     HashZchEvictionPolicyName,
 )
 from torchrec.modules.hash_mc_modules import HashZchManagedCollisionModule
+from torchrec.modules.mc_embedding_modules import ManagedCollisionEmbeddingBagCollection
 from torchrec.modules.mc_modules import (
     ManagedCollisionCollection,
     ManagedCollisionModule,
@@ -680,3 +688,241 @@ class TestMCH(unittest.TestCase):
         self.assertTrue(m._is_inference)
         self.assertTrue(m._eviction_policy_name is None)
         self.assertTrue(m._eviction_module is None)
+
+    # Pyre-ignore [56]: Pyre was not able to infer the type of argument `torch.cuda.device_count() < 1` to decorator factory `unittest.skipIf`
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_zch_hash_disable_fallback(self) -> None:
+        m = HashZchManagedCollisionModule(
+            zch_size=30,
+            device=torch.device("cuda"),
+            total_num_buckets=2,
+            eviction_policy_name=HashZchEvictionPolicyName.SINGLE_TTL_EVICTION,
+            eviction_config=HashZchEvictionConfig(
+                features=[],
+                single_ttl=10,
+            ),
+            max_probe=4,
+            disable_fallback=True,
+            start_bucket=1,
+            output_segments=[0, 10, 20],
+        )
+        jt = JaggedTensor(
+            values=torch.arange(0, 4, dtype=torch.int64, device="cuda"),
+            lengths=torch.tensor([1, 1, 1, 1], dtype=torch.int64, device="cuda"),
+        )
+        # Run once to insert ids
+        output0 = m.remap({"test": jt})
+        self.assertTrue(
+            torch.equal(
+                output0["test"].values(),
+                torch.tensor([8, 15, 11], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                output0["test"].lengths(),
+                torch.tensor([1, 1, 0, 1], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        m.reset_inference_mode()
+        jt = JaggedTensor(
+            values=torch.tensor([9, 0, 1, 4, 6, 8], dtype=torch.int64, device="cuda"),
+            lengths=torch.tensor([1, 1, 1, 1, 1, 1], dtype=torch.int64, device="cuda"),
+        )
+        # Run again in inference mode and only values 0 and 1 exist.
+        output1 = m.remap({"test": jt})
+        self.assertTrue(
+            torch.equal(
+                output1["test"].values(),
+                torch.tensor([8, 15], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                output1["test"].lengths(),
+                torch.tensor([0, 1, 1, 0, 0, 0], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+
+        m = HashZchManagedCollisionModule(
+            zch_size=10,
+            device=torch.device("cuda"),
+            total_num_buckets=2,
+            eviction_policy_name=HashZchEvictionPolicyName.SINGLE_TTL_EVICTION,
+            eviction_config=HashZchEvictionConfig(
+                features=[],
+                single_ttl=10,
+            ),
+            max_probe=4,
+            start_bucket=0,
+            output_segments=None,
+            disable_fallback=True,
+        )
+        jt = JaggedTensor(
+            values=torch.arange(0, 4, dtype=torch.int64, device="cuda"),
+            lengths=torch.tensor([1, 1, 1, 1], dtype=torch.int64, device="cuda"),
+        )
+        # Run once to insert ids
+        output0 = m.remap({"test": jt})
+        self.assertTrue(
+            torch.equal(
+                output0["test"].values(),
+                torch.tensor([3, 5, 4, 6], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                output0["test"].lengths(),
+                torch.tensor([1, 1, 1, 1], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        m.reset_inference_mode()
+        jt = JaggedTensor(
+            values=torch.tensor([9, 0, 1, 4, 6, 8], dtype=torch.int64, device="cuda"),
+            lengths=torch.tensor([1, 1, 1, 1, 1, 1], dtype=torch.int64, device="cuda"),
+        )
+        # Run again in inference mode and only values 0 and 1 exist.
+        output1 = m.remap({"test": jt})
+        self.assertTrue(
+            torch.equal(
+                output1["test"].values(),
+                torch.tensor([3, 5], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                output1["test"].lengths(),
+                torch.tensor([0, 1, 1, 0, 0, 0], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+
+    # Pyre-ignore [56]: Pyre was not able to infer the type of argument `torch.cuda.device_count() < 1` to decorator factory `unittest.skipIf`
+    @unittest.skipIf(
+        torch.cuda.device_count() < 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_zch_hash_zero_rows(self) -> None:
+        # When disabling fallback, for missed ids we should return zero rows in output embeddings.
+        mc_emb_configs = [
+            EmbeddingBagConfig(
+                num_embeddings=10,
+                embedding_dim=3,
+                name="table_0",
+                data_type=DataType.FP32,
+                feature_names=["table_0"],
+                pooling=PoolingType.SUM,
+                weight_init_max=None,
+                weight_init_min=None,
+                init_fn=None,
+                use_virtual_table=False,
+                virtual_table_eviction_policy=None,
+                total_num_buckets=1,
+            )
+        ]
+        mc_modules: Dict[str, ManagedCollisionModule] = {
+            "table_0": HashZchManagedCollisionModule(
+                zch_size=10,
+                device=torch.device("cuda"),
+                max_probe=512,
+                tb_logging_frequency=100,
+                name="table_0",
+                total_num_buckets=1,
+                eviction_config=None,
+                eviction_policy_name=None,
+                opt_in_prob=-1,
+                percent_reserved_slots=0,
+                disable_fallback=True,
+            )
+        }
+        mcebc = ManagedCollisionEmbeddingBagCollection(
+            EmbeddingBagCollection(
+                device=torch.device("cuda"),
+                tables=mc_emb_configs,
+                is_weighted=False,
+            ),
+            ManagedCollisionCollection(
+                managed_collision_modules=mc_modules,
+                embedding_configs=mc_emb_configs,
+            ),
+            return_remapped_features=True,
+        )
+        lengths = torch.tensor(
+            [1, 1, 1, 1, 1], dtype=torch.int64, device=torch.device("cuda")
+        )
+        values = torch.tensor(
+            [3, 4, 5, 6, 8],
+            dtype=torch.int64,
+            device=torch.device("cuda"),
+        )
+        features = KeyedJaggedTensor(
+            keys=["table_0"],
+            values=values,
+            lengths=lengths,
+        )
+        # Run once to insert ids
+        res = mcebc.forward(features)
+        # Pyre-ignore [6]: In call `torch._C._VariableFunctions.abs`, for 1st positional argument, expected `Tensor` but got `Union[JaggedTensor, Tensor]`
+        mask = torch.abs(res[0]["table_0"]) == 0
+        # For each row, check if all elements are True (i.e., close to zero)
+        row_mask = mask.all(dim=1)
+        # Get indices of zero rows
+        self.assertEqual(torch.nonzero(row_mask, as_tuple=False).squeeze().numel(), 0)
+        self.assertIsNotNone(res[1])
+        self.assertTrue(
+            torch.equal(
+                # Pyre-ignore [16]: Optional type has no attribute `__getitem__`.
+                res[1]["table_0"].values(),
+                torch.tensor([1, 2, 8, 9, 3], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                res[1]["table_0"].lengths(),
+                torch.tensor([1, 1, 1, 1, 1], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        # Pyre-ignore [29]: `typing.Union[torch._tensor.Tensor, torch.nn.modules.module.Module]` is not a function
+        mcebc._managed_collision_collection._managed_collision_modules[
+            "table_0"
+        ].reset_inference_mode()
+        lengths = torch.tensor(
+            [1, 1, 1, 1, 1, 1], dtype=torch.int64, device=torch.device("cuda")
+        )
+        values = torch.tensor(
+            [0, 4, 5, 1, 2, 8],
+            dtype=torch.int64,
+            device=torch.device("cuda"),
+        )
+        features = KeyedJaggedTensor(
+            keys=["table_0"],
+            values=values,
+            lengths=lengths,
+        )
+        # Run once to insert ids.
+        res = mcebc.forward(features)
+        self.assertTrue(
+            torch.equal(
+                res[1]["table_0"].values(),
+                torch.tensor([2, 8, 3], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        self.assertTrue(
+            torch.equal(
+                res[1]["table_0"].lengths(),
+                torch.tensor([0, 1, 1, 0, 0, 1], dtype=torch.int64, device="cuda:0"),
+            )
+        )
+        # Pyre-ignore [6]: In call `torch._C._VariableFunctions.abs`, for 1st positional argument, expected `Tensor` but got `Union[JaggedTensor, Tensor]`
+        mask = torch.abs(res[0]["table_0"]) == 0
+        # For each row, check if all elements are True (i.e., close to zero)
+        row_mask = mask.all(dim=1)
+        # Get indices of zero rows
+        self.assertTrue(
+            torch.equal(
+                torch.tensor([0, 3, 4], device="cuda:0"),
+                torch.nonzero(row_mask, as_tuple=False).squeeze(),
+            )
+        )

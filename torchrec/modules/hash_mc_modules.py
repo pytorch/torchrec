@@ -211,6 +211,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
         end_bucket: Optional[int] = None,
         opt_in_prob: int = -1,
         percent_reserved_slots: float = 0,
+        disable_fallback: bool = False,
     ) -> None:
         if output_segments is None:
             assert (
@@ -273,6 +274,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
                 self._eviction_policy_name is None
                 or self._eviction_policy_name != HashZchEvictionPolicyName.LRU_EVICTION
             ), "LRU eviction is not compatible with opt-in at this time"
+        self._disable_fallback: bool = disable_fallback
 
         if torch.jit.is_scripting() or self._is_inference or self._name is None:
             self._tb_logging_frequency = 0
@@ -284,6 +286,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
                 zch_size=self._zch_size,
                 frequency=self._tb_logging_frequency,
                 start_bucket=self._start_bucket,
+                disable_fallback=self._disable_fallback,
             )
         else:
             logger.info(
@@ -349,7 +352,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
             f"{self._buckets=}, {self._start_bucket=}, {self._end_bucket=}, "
             f"{self._output_global_offset_tensor=}, {self._output_segments=}, "
             f"{inference_dispatch_div_train_world_size=}, "
-            f"{self._opt_in_prob=}, {self._percent_reserved_slots=}"
+            f"{self._opt_in_prob=}, {self._percent_reserved_slots=}, {self._disable_fallback=}"
         )
 
     @property
@@ -525,7 +528,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
                     # Use self._is_inference to turn on writing to pinned
                     # CPU memory directly. But may not have perf benefit.
                     output_on_uvm=False,  # self._is_inference,
-                    disable_fallback=False,
+                    disable_fallback=self._disable_fallback,
                     _modulo_identity_DPRECATED=False,  # deprecated, always False
                     input_metadata=input_metadata,
                     eviction_threshold=eviction_threshold,
@@ -537,7 +540,12 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
 
                 # record the on-device remapped ids
                 self.table_name_on_device_remapped_ids_dict[name] = remapped_ids.clone()
-
+                lengths: torch.Tensor = feature.lengths()
+                if self._disable_fallback:
+                    # Only works on GPU when read only is true.
+                    hit_indices = remapped_ids != -1
+                    remapped_ids = remapped_ids[hit_indices]
+                    lengths = torch.masked_fill(lengths, ~hit_indices, 0)
                 if self._scalar_logger is not None:
                     assert identities_0 is not None
                     self._scalar_logger.update(
@@ -560,7 +568,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
 
                 remapped_features[name] = JaggedTensor(
                     values=remapped_ids,
-                    lengths=feature.lengths(),
+                    lengths=lengths,
                     offsets=feature.offsets(),
                     weights=feature.weights_or_none(),
                 )
@@ -623,6 +631,7 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
             eviction_config=self._eviction_config,
             opt_in_prob=self._opt_in_prob,
             percent_reserved_slots=self._percent_reserved_slots,
+            disable_fallback=self._disable_fallback,
         )
 
 

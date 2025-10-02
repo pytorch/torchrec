@@ -42,6 +42,7 @@ class ScalarLogger(torch.nn.Module):
         zch_size: int,
         frequency: int,
         start_bucket: int,
+        disable_fallback: bool,
         log_file_path: str = "",
     ) -> None:
         super().__init__()
@@ -56,6 +57,7 @@ class ScalarLogger(torch.nn.Module):
         self._zch_size: int = zch_size
         self._frequency: int = frequency
         self._start_bucket: int = start_bucket
+        self._disable_fallback: bool = disable_fallback
 
         self._dtype_checked: bool = False
         self._total_cnt: int = 0
@@ -114,7 +116,11 @@ class ScalarLogger(torch.nn.Module):
 
         self._insert_cnt += insert_cnt
         self._total_cnt += values.numel()
-        hits = torch.eq(remapped_identities_0, values)
+        if self._disable_fallback:
+            hits = torch.isin(remapped_identities_0, values)
+        else:
+            # Cannot use isin() as it is possible that cache miss falls back to another element in values.
+            hits = torch.eq(remapped_identities_0, values)
         hit_cnt = int(torch.sum(hits).item())
         self._hit_cnt += hit_cnt
         self._collision_cnt += values.numel() - hit_cnt - insert_cnt
