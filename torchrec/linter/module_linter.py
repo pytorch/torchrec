@@ -61,8 +61,8 @@ def get_function_args(node: ast.FunctionDef) -> Tuple[List[Any], List[Any]]:
     Returns:
         (non_optional_args, optional_args): named function args
     """
-    assert (
-        type(node) == ast.FunctionDef
+    assert isinstance(
+        node, ast.FunctionDef
     ), "Incorrect node type. Expected ast.FunctionDef, got {}".format(type(node))
     total_args = len(node.args.args)
     default_args = len(node.args.defaults)
@@ -95,15 +95,17 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
     Returns:
         None
     """
-    assert (
-        type(node) == ast.ClassDef
+    assert isinstance(
+        node, ast.ClassDef
     ), "Received invalid node type. Expected ClassDef, got: {}".format(type(node))
 
     is_TorchRec_module = False
     is_test_file = "tests" in python_path
     for base in node.bases:
         # For now only names and attributes are supported
-        if type(base) != ast.Name and type(base) != ast.Attribute:  # pragma: nocover
+        if not isinstance(base, ast.Name) and not isinstance(
+            base, ast.Attribute
+        ):  # pragma: nocover
             continue
 
         # We assume that TorchRec module has one of the following inheritance patterns:
@@ -164,7 +166,7 @@ def check_class_definition(python_path: str, node: ast.ClassDef) -> None:
     functions: Dict[str, Tuple[List[Any], List[Any]]] = {}
     function_sub_nodes = {}
     for sub_node in node.body:
-        if type(sub_node) == ast.FunctionDef:
+        if isinstance(sub_node, ast.FunctionDef):
             assert isinstance(sub_node, ast.FunctionDef)
             functions[sub_node.name] = get_function_args(sub_node)
             function_sub_nodes[sub_node.name] = sub_node
@@ -310,7 +312,7 @@ def linter_one_file(python_path: str) -> None:
     python_path = python_path.strip()
     try:
         for node in ast.parse(read_file(python_path)).body:
-            if type(node) == ast.ClassDef:
+            if isinstance(node, ast.ClassDef):
                 assert isinstance(node, ast.ClassDef)
                 check_class_definition(python_path, node)
     except SyntaxError as e:  # pragma: nocover
