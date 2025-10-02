@@ -10,6 +10,7 @@
 #!/usr/bin/env python3
 
 import abc
+import concurrent
 import logging
 import time
 from collections import defaultdict
@@ -56,7 +57,7 @@ from torchrec.metrics.output import OutputMetric
 from torchrec.metrics.precision import PrecisionMetric
 from torchrec.metrics.precision_session import PrecisionSessionMetric
 from torchrec.metrics.rauc import RAUCMetric
-from torchrec.metrics.rec_metric import RecMetric, RecMetricList
+from torchrec.metrics.rec_metric import RecMetric, RecMetricException, RecMetricList
 from torchrec.metrics.recall import RecallMetric
 from torchrec.metrics.recall_session import RecallSessionMetric
 from torchrec.metrics.scalar import ScalarMetric
@@ -485,6 +486,14 @@ class RecMetricModule(nn.Module):
             ]
             for name, buf in self.throughput_metric.named_buffers():  # pyre-ignore[16]
                 buf.copy_(states[name])
+
+    def shutdown(self) -> None:
+        logger.info("Initiating graceful shutdown...")
+
+    def async_compute(
+        self, future: concurrent.futures.Future[Dict[str, MetricValue]]
+    ) -> None:
+        raise RecMetricException("async_compute is not supported in RecMetricModule")
 
 
 def _generate_rec_metrics(
