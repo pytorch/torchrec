@@ -206,7 +206,7 @@ def are_sharded_ebc_modules_identical(
         val2 = getattr(module2, attr)
 
         assert type(val1) is type(val2)
-        if type(val1) is torch.Tensor:
+        if isinstance(val1, torch.Tensor):
             torch.testing.assert_close(val1, val2)
         else:
             assert val1 == val2
