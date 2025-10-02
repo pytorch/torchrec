@@ -6,8 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 # pyre-strict
-import sys
-from typing import Dict, Iterator, List, Optional, Union
+from typing import Dict, Iterator, List, Optional
 
 import torch
 import torch.nn as nn
@@ -29,7 +28,6 @@ from torchrec.modules.mc_embedding_modules import (
 from torchrec.modules.mc_modules import (
     DistanceLFU_EvictionPolicy,
     ManagedCollisionCollection,
-    ManagedCollisionModule,
     MCHManagedCollisionModule,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
