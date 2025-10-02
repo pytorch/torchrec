@@ -9,7 +9,6 @@
 
 import inspect
 import typing
-from typing import Any
 
 
 def _is_annot_compatible(prev: object, curr: object) -> bool:
