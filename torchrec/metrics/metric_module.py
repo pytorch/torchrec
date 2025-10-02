@@ -13,7 +13,7 @@ import abc
 import logging
 import time
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Sequence, Type, TypeVar, Union
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 import torch
 import torch.distributed as dist
