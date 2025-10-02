@@ -8,7 +8,7 @@
 # pyre-strict
 
 import unittest
-from typing import cast, List, Optional
+from typing import cast, Dict, List, Optional
 
 import torch
 from torch import nn
@@ -18,7 +18,7 @@ from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.planner.enumerators import EmbeddingEnumerator
 from torchrec.distributed.planner.perf_models import NoopPerfModel
-from torchrec.distributed.planner.planners import EmbeddingShardingPlanner
+from torchrec.distributed.planner.planners import EmbeddingShardingPlanner, extract_plan
 from torchrec.distributed.planner.proposers import EmbeddingOffloadScaleupProposer
 from torchrec.distributed.planner.stats import EmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
@@ -26,8 +26,10 @@ from torchrec.distributed.planner.storage_reservations import (
 )
 from torchrec.distributed.planner.types import (
     ParameterConstraints,
+    PlanLoader,
     PlannerError,
     PlannerErrorType,
+    Shard,
     ShardingOption,
     Topology,
 )
@@ -44,6 +46,7 @@ from torchrec.distributed.types import (
     ShardingPlan,
     ShardingType,
 )
+from torchrec.distributed.utils import none_throws
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
 
@@ -842,3 +845,420 @@ class TestAutoPlannerWithScaleupProposer(unittest.TestCase):
         self.assertTrue(
             any("Min HBM: 0.016 GB on ranks [0, 1]" in line for line in stats)
         )
+
+
+class MockPlanLoader(PlanLoader):
+    """Mock PlanLoader implementation for testing."""
+
+    def __init__(
+        self,
+        loaded_sharding_options: Optional[Dict[int, ShardingOption]] = None,
+        context_hash: Optional[str] = None,
+        plan_id: str = "test_plan_123",
+    ) -> None:
+        self._loaded_sharding_options = loaded_sharding_options
+        self._context_hash = context_hash
+        self._plan_id = plan_id
+
+    def load(self) -> Optional[Dict[int, ShardingOption]]:
+        return self._loaded_sharding_options
+
+    def plan_context_hash(self) -> Optional[str]:
+        return self._context_hash
+
+    def get_plan_id(self) -> str:
+        return self._plan_id
+
+
+class TestPlanLoaderIntegration(unittest.TestCase):
+    def setUp(self) -> None:
+        compute_device = "cuda"
+        self.topology = Topology(
+            world_size=2, hbm_cap=1024 * 1024 * 2, compute_device=compute_device
+        )
+        self.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(2)  # Reduced to 2 tables for simplicity
+        ]
+        self.constraints = {
+            "table_0": ParameterConstraints(
+                enforce_hbm=True,
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                ),
+                feature_names=self.tables[0].feature_names,
+            ),
+            "table_1": ParameterConstraints(
+                enforce_hbm=False,
+                stochastic_rounding=True,
+                feature_names=self.tables[1].feature_names,
+            ),
+        }
+        self.model = TestSparseNN(
+            tables=self.tables, sparse_device=torch.device("meta")
+        )
+
+    def test_plan_loader_with_valid_plan(self) -> None:
+        """Test EmbeddingShardingPlanner with PlanLoader that provides a valid plan."""
+        # First, create a planner without loader to generate a baseline plan
+        baseline_planner = EmbeddingShardingPlanner(
+            topology=self.topology, constraints=self.constraints
+        )
+        baseline_plan = baseline_planner.plan(
+            module=self.model, sharders=get_default_sharders()
+        )
+
+        # Extract the best plan from baseline planner
+        best_plan = baseline_planner._best_plan
+        self.assertIsNotNone(best_plan)
+
+        # Create loaded sharding options map from the best plan
+        loaded_sharding_options = {}
+        for so in best_plan:
+            # Modify the shards to simulate a loaded plan with different shard assignments
+            modified_shards = [
+                Shard(
+                    size=shard.size,
+                    offset=shard.offset,
+                    storage=shard.storage,
+                    perf=shard.perf,
+                    rank=(
+                        1 - shard.rank if shard.rank is not None else None
+                    ),  # Flip ranks
+                )
+                for shard in so.shards
+            ]
+            loaded_so = ShardingOption(
+                name=so.name,
+                tensor=so.tensor,
+                module=so.module,
+                input_lengths=so.input_lengths,
+                batch_size=so.batch_size,
+                compute_kernel=so.compute_kernel,
+                sharding_type=so.sharding_type,
+                partition_by=so.partition_by,
+                shards=modified_shards,
+                cache_params=so.cache_params,
+                enforce_hbm=so.enforce_hbm,
+                stochastic_rounding=so.stochastic_rounding,
+                bounds_check_mode=so.bounds_check_mode,
+                feature_names=so.feature_names,
+            )
+            loaded_sharding_options[so.storage_hash()] = loaded_so
+
+        # Create mock plan loader with matching context hash
+        context_hash = baseline_planner.hash_planner_context_inputs_str()
+        mock_loader = MockPlanLoader(
+            loaded_sharding_options=loaded_sharding_options,
+            context_hash=context_hash,
+        )
+
+        # Create planner with plan loader
+        planner_with_loader = EmbeddingShardingPlanner(
+            topology=self.topology,
+            constraints=self.constraints,
+            plan_loader=mock_loader,
+        )
+
+        # Plan with loader should use the loaded plan
+        loaded_plan = planner_with_loader.plan(
+            module=self.model, sharders=get_default_sharders()
+        )
+
+        # Verify the plan was loaded (should have flipped rank assignments)
+        self.assertIsNotNone(loaded_plan)
+        self.assertEqual(len(loaded_plan.plan), len(baseline_plan.plan))
+
+        # Check that ranks were actually flipped in the loaded plan
+        for module_name, module_plan in loaded_plan.plan.items():
+            baseline_module_plan = baseline_plan.plan[module_name]
+            for param_name, param_sharding in cast(
+                EmbeddingModuleShardingPlan, module_plan
+            ).items():
+                baseline_param_sharding = cast(
+                    EmbeddingModuleShardingPlan, baseline_module_plan
+                )[param_name]
+                # The ranks should be different (flipped) from baseline
+                self.assertNotEqual(param_sharding.ranks, baseline_param_sharding.ranks)
+
+    def test_plan_loader_with_context_mismatch(self) -> None:
+        """Test EmbeddingShardingPlanner with PlanLoader that has mismatched context hash."""
+        # Create mock plan loader with different context hash
+        mock_loader = MockPlanLoader(
+            loaded_sharding_options={},
+            context_hash="mismatched_hash",
+        )
+
+        # Create planner with plan loader
+        planner_with_loader = EmbeddingShardingPlanner(
+            topology=self.topology,
+            constraints=self.constraints,
+            plan_loader=mock_loader,
+        )
+
+        # Planning should raise PlannerError due to context mismatch
+        with self.assertRaises(PlannerError) as context:
+            planner_with_loader.plan(module=self.model, sharders=get_default_sharders())
+
+        self.assertEqual(
+            context.exception.error_type,
+            PlannerErrorType.PLANNER_INPUT_CONTEXT_MISMATCH,
+        )
+        self.assertIn("planner input mismatch", str(context.exception))
+
+    def test_plan_loader_with_no_loaded_options(self) -> None:
+        """Test EmbeddingShardingPlanner with PlanLoader that returns no loaded options."""
+        # First get the correct context hash
+        baseline_planner = EmbeddingShardingPlanner(
+            topology=self.topology, constraints=self.constraints
+        )
+        baseline_planner.plan(module=self.model, sharders=get_default_sharders())
+        context_hash = baseline_planner.hash_planner_context_inputs_str()
+
+        # Create mock plan loader with no loaded options but matching context
+        mock_loader = MockPlanLoader(
+            loaded_sharding_options=None,
+            context_hash=context_hash,
+        )
+
+        # Create planner with plan loader
+        planner_with_loader = EmbeddingShardingPlanner(
+            topology=self.topology,
+            constraints=self.constraints,
+            plan_loader=mock_loader,
+        )
+
+        # Planning should succeed and generate a new plan (no loading)
+        loaded_plan = planner_with_loader.plan(
+            module=self.model, sharders=get_default_sharders()
+        )
+
+        # Verify a plan was generated
+        self.assertIsNotNone(loaded_plan)
+        self.assertTrue(len(loaded_plan.plan) > 0)
+
+
+class TestExtractPlan(unittest.TestCase):
+    def setUp(self) -> None:
+        compute_device = "cuda"
+        self.topology = Topology(
+            world_size=2, hbm_cap=1024 * 1024 * 2, compute_device=compute_device
+        )
+        self.tables = [
+            EmbeddingBagConfig(
+                num_embeddings=100,
+                embedding_dim=64,
+                name="table_" + str(i),
+                feature_names=["feature_" + str(i)],
+            )
+            for i in range(4)
+        ]
+        self.constraints = {
+            "table_0": ParameterConstraints(
+                enforce_hbm=True,
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                ),
+                feature_names=self.tables[0].feature_names,
+            ),
+            "table_1": ParameterConstraints(
+                enforce_hbm=False,
+                stochastic_rounding=True,
+                feature_names=self.tables[1].feature_names,
+            ),
+            "table_2": ParameterConstraints(
+                bounds_check_mode=BoundsCheckMode.FATAL,
+                feature_names=self.tables[2].feature_names,
+            ),
+            "table_3": ParameterConstraints(
+                cache_params=CacheParams(
+                    algorithm=CacheAlgorithm.LFU,
+                    load_factor=0.1,
+                    reserved_memory=1.0,
+                    precision=DataType.FP16,
+                ),
+                feature_names=self.tables[3].feature_names,
+            ),
+        }
+        self.planner = EmbeddingShardingPlanner(
+            topology=self.topology, constraints=self.constraints
+        )
+        self.model = TestSparseNN(
+            tables=self.tables, sparse_device=torch.device("meta")
+        )
+        self.sharding_plan = self.planner.plan(
+            module=self.model, sharders=get_default_sharders()
+        )
+
+    def _create_loaded_sharding_options_map(
+        self, best_plan: List[ShardingOption]
+    ) -> Dict[int, ShardingOption]:
+        """Creates a loaded sharding options map from enumerated sharding options."""
+        loaded_map = {}
+        for so in best_plan:
+            sharding_options = ShardingOption(
+                name=so.name,
+                tensor=so.tensor,
+                module=so.module,
+                input_lengths=so.input_lengths,
+                sharding_type=so.sharding_type,
+                batch_size=so.batch_size,
+                partition_by=so.partition_by,
+                compute_kernel=so.compute_kernel,
+                shards=so.shards,
+                is_pooled=so.is_pooled,
+                feature_names=so.feature_names,
+                cache_params=so.cache_params,
+            )
+
+            loaded_map[so.storage_hash()] = sharding_options
+
+        return loaded_map
+
+    def test_extract_plan_success(self) -> None:
+        """Test successful extraction of plan."""
+        enumerated_plan = (
+            # pyre-ignore
+            self.planner._enumerator.last_stored_search_space
+        )
+        best_plan = none_throws(self.planner._best_plan)
+        loaded_sharding_options = self._create_loaded_sharding_options_map(best_plan)
+
+        result = extract_plan(enumerated_plan, loaded_sharding_options)
+
+        self.assertEqual(len(result), len(best_plan))
+
+        for i, result_so in enumerate(result):
+            expected_so = best_plan[i]
+            self.assertEqual(result_so.name, expected_so.name)
+            self.assertEqual(result_so.tensor.shape, expected_so.tensor.shape)
+            self.assertEqual(result_so.tensor.dtype, expected_so.tensor.dtype)
+            self.assertEqual(result_so.tensor.device, expected_so.tensor.device)
+            self.assertEqual(result_so.module, expected_so.module)
+            self.assertEqual(result_so.input_lengths, expected_so.input_lengths)
+            self.assertEqual(result_so.batch_size, expected_so.batch_size)
+            self.assertEqual(result_so.compute_kernel, expected_so.compute_kernel)
+            self.assertEqual(result_so.sharding_type, expected_so.sharding_type)
+            self.assertEqual(result_so.partition_by, expected_so.partition_by)
+            self.assertEqual(result_so.shards, expected_so.shards)
+            self.assertEqual(result_so.is_pooled, expected_so.is_pooled)
+            self.assertEqual(result_so.feature_names, expected_so.feature_names)
+            self.assertEqual(result_so.cache_params, expected_so.cache_params)
+
+    def test_extract_plan_duplicate_storage_hash_error(self) -> None:
+        """Test extract_plan failure when duplicate storage hashes exist."""
+        # Create search space with duplicate storage hashes by modifying sharding options
+        # to have the same storage hash
+        enumerated_plan = (
+            # pyre-ignore
+            self.planner._enumerator.last_stored_search_space
+        )
+        best_plan = none_throws(self.planner._best_plan)
+        loaded_sharding_options = self._create_loaded_sharding_options_map(best_plan)
+
+        # Create a search space with duplicate storage hashes by duplicating first option
+        duplicate_search_space = [
+            enumerated_plan[0],
+            enumerated_plan[0],
+        ]  # Same option twice
+
+        with self.assertRaises(PlannerError) as context:
+            extract_plan(duplicate_search_space, loaded_sharding_options)
+
+        self.assertEqual(
+            context.exception.error_type, PlannerErrorType.PLAN_LOADING_FAILED
+        )
+        self.assertIn("Found a duplicate storage hash", str(context.exception))
+
+    def test_extract_plan_empty_search_space(self) -> None:
+        """Test extract_plan with empty search space."""
+        result = extract_plan([], {})
+        self.assertEqual(result, [])
+
+    def test_extract_plan_empty_loaded_options(self) -> None:
+        """Test extract_plan with empty loaded options but non-empty search space."""
+        enumerated_plan = (
+            # pyre-ignore
+            self.planner._enumerator.last_stored_search_space
+        )
+
+        # When loaded options is empty, extract_plan should return empty list
+        # This is actually the correct behavior - no matching options means no extracted options
+        result = extract_plan(enumerated_plan, {})
+        self.assertEqual(result, [])
+
+    def test_extract_plan_excess_loaded_options(self) -> None:
+        """Test extract_plan when loaded options contain more entries than search space."""
+        enumerated_plan = (
+            # pyre-ignore
+            self.planner._enumerator.last_stored_search_space
+        )
+        best_plan = none_throws(self.planner._best_plan)
+        loaded_sharding_options = self._create_loaded_sharding_options_map(best_plan)
+
+        extra_so = ShardingOption(
+            name="extra_table",
+            tensor=torch.tensor([1, 2, 3], device=torch.device("meta")),
+            module=("extra_table.test", torch.nn.Module()),
+            input_lengths=[100],
+            batch_size=128,
+            compute_kernel="fused",
+            sharding_type=ShardingType.TABLE_WISE.value,
+            partition_by="uniform",
+            shards=[Shard(size=[100, 64], offset=[0, 0])],
+            feature_names=["extra_feature"],
+        )
+        loaded_sharding_options[99999] = extra_so  # Arbitrary hash that won't match
+
+        with self.assertRaises(PlannerError) as context:
+            extract_plan(enumerated_plan, loaded_sharding_options)
+
+        self.assertEqual(
+            context.exception.error_type, PlannerErrorType.PLAN_LOADING_FAILED
+        )
+        self.assertIn("not all search space is covered", str(context.exception))
+
+    def test_extract_plan_properties_preservation(self) -> None:
+        """Test that extract_plan preserves all non-shard properties from search space."""
+        enumerated_plan = (
+            # pyre-ignore
+            self.planner._enumerator.last_stored_search_space
+        )
+        best_plan = none_throws(self.planner._best_plan)
+        loaded_sharding_options = self._create_loaded_sharding_options_map(best_plan)
+
+        # Modify loaded options to have different shards but keep other properties
+        for loaded_so in loaded_sharding_options.values():
+            # Change the shard data to verify only shards are updated
+            loaded_so.shards = [
+                Shard(size=[200, 128], offset=[0, 0], rank=0)  # Different shard
+            ]
+
+        result = extract_plan(enumerated_plan, loaded_sharding_options)
+
+        # Verify that result has search space properties but loaded shards
+        for result_so in result:
+            # Find the matching search space option by storage hash
+            search_so = next(
+                so
+                for so in enumerated_plan
+                if so.storage_hash() == result_so.storage_hash()
+            )
+            loaded_so = loaded_sharding_options[result_so.storage_hash()]
+
+            # Properties from search space should be preserved
+            self.assertEqual(result_so.name, search_so.name)
+            self.assertEqual(result_so.compute_kernel, search_so.compute_kernel)
+            self.assertEqual(result_so.sharding_type, search_so.sharding_type)
+            self.assertEqual(result_so.batch_size, search_so.batch_size)
+            self.assertEqual(result_so.feature_names, search_so.feature_names)
+
+            # Shards should come from loaded options
+            self.assertEqual(result_so.shards, loaded_so.shards)
+            self.assertEqual(len(result_so.shards), 1)
+            self.assertEqual(result_so.shards[0].size, [200, 128])
