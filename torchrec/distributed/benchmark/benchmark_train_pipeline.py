@@ -21,7 +21,7 @@ Adding New Model Support:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Type, Union
+from typing import Dict, List, Optional, Type
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
@@ -29,13 +29,8 @@ from torch import nn
 from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
     BaseModelConfig,
     create_model_config,
-    DeepFMConfig,
-    DLRMConfig,
     generate_data,
     generate_pipeline,
-    TestSparseNNConfig,
-    TestTowerCollectionSparseNNConfig,
-    TestTowerSparseNNConfig,
 )
 from torchrec.distributed.benchmark.benchmark_utils import (
     benchmark_func,
