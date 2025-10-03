@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Any, Callable, cast, Dict, List, Optional, TypeVar, Union
+from typing import Any, Callable, cast, Dict, List, Optional, TypeVar
 
 import torch
 import torch.distributed as dist

@@ -9,7 +9,7 @@
 
 import argparse
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 import torch
 import torch.nn as nn

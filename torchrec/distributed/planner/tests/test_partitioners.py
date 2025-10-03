@@ -7,7 +7,6 @@
 
 # pyre-strict
 
-import copy
 import unittest
 from typing import cast, List
 from unittest.mock import MagicMock

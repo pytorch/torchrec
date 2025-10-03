@@ -272,7 +272,7 @@ class TestLazyModuleExtensionMixin(unittest.TestCase):
 
         @torch.no_grad()
         def init_weights(m: torch.nn.Module) -> None:
-            if type(m) == TestModule:
+            if isinstance(m, TestModule):
                 m.param.fill_(7.0)
 
         # Case 1: Running `.apply()` without running first forward pass to
