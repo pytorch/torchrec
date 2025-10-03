@@ -9,13 +9,12 @@
 import argparse
 import csv
 import json
-import logging
 import multiprocessing
 import os
 import sys
 import time
 
-from typing import cast, Dict, Iterator, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 
