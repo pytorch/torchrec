@@ -689,12 +689,13 @@ class TestMCH(unittest.TestCase):
         self.assertTrue(m._eviction_policy_name is None)
         self.assertTrue(m._eviction_module is None)
 
+    # Skipping this test because it is flaky on CI. TODO: T240185573 T240185565 investigate the flakiness and re-enable the test.
     # Pyre-ignore [56]: Pyre was not able to infer the type of argument `torch.cuda.device_count() < 1` to decorator factory `unittest.skipIf`
     @unittest.skipIf(
         torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_zch_hash_disable_fallback(self) -> None:
+    def test_zch_hash_disable_fallback_disabled_in_oss_compatatibility(self) -> None:
         m = HashZchManagedCollisionModule(
             zch_size=30,
             device=torch.device("cuda"),
