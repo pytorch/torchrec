@@ -447,6 +447,8 @@ class LazyAwaitable(Awaitable[W], metaclass=_LazyAwaitableMeta):
                 f"LazyAwaitable type {type(self)} has not been initialized properly, "
                 f"did you forget to call 'super()'?"
             )
+        elif name == "__setstate__":
+            return super().__getattr__(name)  # pyre-ignore [16]
 
         res = LazyAwaitable._wait_async(self)
         return getattr(res, name)

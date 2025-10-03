@@ -7,12 +7,13 @@
 
 # pyre-strict
 
+import pickle
 import unittest
 from typing import Dict
 
 import torch
 import torch.fx
-from torchrec.distributed.types import LazyAwaitable, LazyGetItemMixin
+from torchrec.distributed.types import LazyAwaitable, LazyGetItemMixin, LazyNoWait
 
 
 class NeedWait(LazyAwaitable[torch.Tensor]):
@@ -205,6 +206,12 @@ class TestLazyAwaitable(unittest.TestCase):
         gm = torch.fx.symbolic_trace(m)
         traced_res = gm(torch.ones(3, 4))
         self.assertTrue(torch.equal(traced_res, ref_res))
+
+    def test_awatiable_pickle(self) -> None:
+        awaitable = LazyNoWait(torch.randn(2, 3))
+        self.assertTrue(
+            torch.allclose(pickle.loads(pickle.dumps(awaitable))._obj, awaitable._obj)
+        )
 
     def test_lazy_wait_dict(self) -> None:
         class Model(torch.nn.Module):
