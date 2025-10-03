@@ -9,7 +9,7 @@
 
 import itertools
 import math
-from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, TypeVar
 
 import torch
 import torch.distributed as dist

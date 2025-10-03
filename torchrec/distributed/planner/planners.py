@@ -14,8 +14,6 @@ from functools import reduce
 from time import perf_counter
 from typing import Callable, cast, Dict, List, Optional, Tuple, Union
 
-import torch
-
 import torch.distributed as dist
 from torch import nn
 from torchrec.distributed.collective_utils import invoke_on_rank_and_broadcast_result
@@ -32,7 +30,7 @@ from torchrec.distributed.planner.proposers import (
     GridSearchProposer,
     UniformProposer,
 )
-from torchrec.distributed.planner.stats import EmbeddingStats, NoopEmbeddingStats
+from torchrec.distributed.planner.stats import EmbeddingStats
 from torchrec.distributed.planner.storage_reservations import (
     HeuristicalStorageReservation,
 )
