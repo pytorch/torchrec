@@ -695,7 +695,7 @@ class TestMCH(unittest.TestCase):
         torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least two GPUs",
     )
-    def test_zch_hash_disable_fallback_disabled_in_oss_compatatibility(self) -> None:
+    def test_zch_hash_disable_fallback_disabled_in_oss_compatibility(self) -> None:
         m = HashZchManagedCollisionModule(
             zch_size=30,
             device=torch.device("cuda"),
