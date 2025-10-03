@@ -460,6 +460,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
                 not is_torchdynamo_compiling()
             ), "Train Pipelines rely on cuda streams, which is not supported by Dynamo"
 
+        self._data_processing_executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix=f"data_processor_rank"
+        )
+
         # pyre-ignore
         self._stream_context = (
             torch.get_device_module(self._device).stream
@@ -619,7 +624,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         """
 
         # pipeline is already filled with max capacity (2)
-        if len(self.batches) >= 2:
+        if len(self.batches) >= 3:
             return
 
         # executes last batch in pipeline, when there is only one batch in the pipeline
@@ -648,8 +653,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             return
 
     def _data_processing_worker(self) -> None:
-        if len(self.batches) >= 2:
-            self.start_sparse_data_dist(self.batches[1], self.contexts[1], async_op=True)
+        if len(self.batches) >= 3:
+            self.start_sparse_data_dist(self.batches[2], self.contexts[2], async_op=True)
 
     def _wait_for_batch(self) -> None:
         batch_id = self.contexts[0].index if len(self.contexts) > 0 else "?"
@@ -701,7 +706,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
         with record_function(f"## forward {self.contexts[0].index} ##"):
             self._state = PipelineState.CALL_FWD
             losses, output = self._model_fwd(self.batches[0])
-
+        if len(self.batches) >= 2:
+            self.wait_sparse_data_dist(self.contexts[1])
         async_op = True
         if async_op == True:
             _data_processing_future = self._data_processing_executor.submit(
@@ -716,8 +722,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out]):
             self._backward(losses)
             if async_op == True:
                 _data_processing_future.result()
-            if len(self.batches) >= 2:
-                _fuse_input_dist_splits(self.contexts[1])
+            if len(self.batches) >= 3:
+                _fuse_input_dist_splits(self.contexts[2])
 
              # batch i+2
             self.enqueue_batch(dataloader_iter)
