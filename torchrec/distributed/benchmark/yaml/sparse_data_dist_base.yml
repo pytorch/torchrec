@@ -13,3 +13,17 @@ EmbeddingTablesConfig:
   num_unweighted_features: 100
   num_weighted_features: 100
   embedding_feature_dim: 128
+  additional_tables:
+    - - name: additional_tables_0_0
+        embedding_dim: 128
+        num_embeddings: 100_000
+        feature_names: ["additional_0_0"]
+      - name: additional_tables_0_1
+        embedding_dim: 128
+        num_embeddings: 100_000
+        feature_names: ["additional_0_1"]
+    - []
+    - - name: additional_tables_2_1
+        embedding_dim: 128
+        num_embeddings: 100_000
+        feature_names: ["additional_2_1"]
