@@ -39,7 +39,6 @@ from torchrec.distributed.benchmark.benchmark_utils import (
     CPUMemoryStats,
     generate_planner,
     generate_sharded_model_and_optimizer,
-    generate_tables,
     GPUMemoryStats,
 )
 from torchrec.distributed.comm import get_local_size
@@ -52,6 +51,7 @@ from torchrec.distributed.test_utils.multi_process import (
 )
 from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.distributed.test_utils.test_model import TestOverArchLarge
+from torchrec.distributed.test_utils.test_tables import EmbeddingTablesConfig
 from torchrec.distributed.train_pipeline import TrainPipeline
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -114,28 +114,6 @@ class RunOptions:
     sparse_momentum: Optional[float] = None
     sparse_weight_decay: Optional[float] = None
     export_stacks: bool = False
-
-
-@dataclass
-class EmbeddingTablesConfig:
-    """
-    Configuration for embedding tables.
-
-    This class defines the parameters for generating embedding tables with both weighted
-    and unweighted features.
-
-    Args:
-        num_unweighted_features (int): Number of unweighted features to generate.
-            Default is 100.
-        num_weighted_features (int): Number of weighted features to generate.
-            Default is 100.
-        embedding_feature_dim (int): Dimension of the embedding vectors.
-            Default is 128.
-    """
-
-    num_unweighted_features: int = 100
-    num_weighted_features: int = 100
-    embedding_feature_dim: int = 128
 
 
 @dataclass
@@ -206,11 +184,7 @@ def main(
     pipeline_config: PipelineConfig,
     model_config: Optional[BaseModelConfig] = None,
 ) -> None:
-    tables, weighted_tables = generate_tables(
-        num_unweighted_features=table_config.num_unweighted_features,
-        num_weighted_features=table_config.num_weighted_features,
-        embedding_feature_dim=table_config.embedding_feature_dim,
-    )
+    tables, weighted_tables, *_ = table_config.generate_tables()
 
     if model_config is None:
         model_config = create_model_config(
@@ -256,11 +230,7 @@ def run_pipeline(
     model_config: BaseModelConfig,
 ) -> BenchmarkResult:
 
-    tables, weighted_tables = generate_tables(
-        num_unweighted_features=table_config.num_unweighted_features,
-        num_weighted_features=table_config.num_weighted_features,
-        embedding_feature_dim=table_config.embedding_feature_dim,
-    )
+    tables, weighted_tables, *_ = table_config.generate_tables()
 
     benchmark_res_per_rank = run_multi_process_func(
         func=runner,

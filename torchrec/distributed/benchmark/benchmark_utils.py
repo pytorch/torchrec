@@ -381,55 +381,6 @@ def set_embedding_config(
     return embedding_configs, pooling_configs
 
 
-def generate_tables(
-    num_unweighted_features: int = 100,
-    num_weighted_features: int = 100,
-    embedding_feature_dim: int = 128,
-) -> Tuple[
-    List[EmbeddingBagConfig],
-    List[EmbeddingBagConfig],
-]:
-    """
-    Generate embedding bag configurations for both unweighted and weighted features.
-
-    This function creates two lists of EmbeddingBagConfig objects:
-    1. Unweighted tables: Named as "table_{i}" with feature names "feature_{i}"
-    2. Weighted tables: Named as "weighted_table_{i}" with feature names "weighted_feature_{i}"
-
-    For both types, the number of embeddings scales with the feature index,
-    calculated as max(i + 1, 100) * 1000.
-
-    Args:
-        num_unweighted_features (int): Number of unweighted features to generate.
-        num_weighted_features (int): Number of weighted features to generate.
-        embedding_feature_dim (int): Dimension of the embedding vectors.
-
-    Returns:
-        Tuple[List[EmbeddingBagConfig], List[EmbeddingBagConfig]]: A tuple containing
-        two lists - the first for unweighted embedding tables and the second for
-        weighted embedding tables.
-    """
-    tables = [
-        EmbeddingBagConfig(
-            num_embeddings=max(i + 1, 100) * 1000,
-            embedding_dim=embedding_feature_dim,
-            name="table_" + str(i),
-            feature_names=["feature_" + str(i)],
-        )
-        for i in range(num_unweighted_features)
-    ]
-    weighted_tables = [
-        EmbeddingBagConfig(
-            num_embeddings=max(i + 1, 100) * 1000,
-            embedding_dim=embedding_feature_dim,
-            name="weighted_table_" + str(i),
-            feature_names=["weighted_feature_" + str(i)],
-        )
-        for i in range(num_weighted_features)
-    ]
-    return tables, weighted_tables
-
-
 def generate_planner(
     planner_type: str,
     topology: Topology,
