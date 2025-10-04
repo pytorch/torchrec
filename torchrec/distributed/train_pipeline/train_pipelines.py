@@ -1302,7 +1302,7 @@ class TrainPipelineSemiSync(TrainPipelineSparseDist[In, Out]):
             del context
 
         if len(self.batches) >= 1 and not is_semi_sync:
-            torch.cuda.synchronize()  # needed to avoid race condition
+            torch.get_device_module().synchronize()  # needed to avoid race condition
             # pyre-ignore [6]
             self.start_embedding_lookup(self.batches[0], self.contexts[0])
 

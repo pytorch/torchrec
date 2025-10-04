@@ -17,7 +17,7 @@ from functools import partial
 from typing import List, Optional, Tuple
 
 import torch
-from torchrec.distributed.benchmark.benchmark_utils import (
+from torchrec.distributed.benchmark.benchmark_base import (
     BenchmarkResult,
     CompileMode,
     init_argparse_and_args,

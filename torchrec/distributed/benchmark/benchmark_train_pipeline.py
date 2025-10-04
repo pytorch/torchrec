@@ -26,21 +26,20 @@ from typing import Dict, List, Optional, Type
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch import nn
-from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
-    BaseModelConfig,
-    create_model_config,
-    generate_data,
-    generate_pipeline,
-)
-from torchrec.distributed.benchmark.benchmark_utils import (
+from torchrec.distributed.benchmark.benchmark_base import (
     benchmark_func,
     BenchmarkResult,
     cmd_conf,
     CPUMemoryStats,
+    GPUMemoryStats,
+)
+from torchrec.distributed.benchmark.benchmark_utils import (
+    BaseModelConfig,
+    create_model_config,
+    generate_data,
+    generate_pipeline,
     generate_planner,
     generate_sharded_model_and_optimizer,
-    generate_tables,
-    GPUMemoryStats,
 )
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -52,6 +51,7 @@ from torchrec.distributed.test_utils.multi_process import (
 )
 from torchrec.distributed.test_utils.test_input import ModelInput
 from torchrec.distributed.test_utils.test_model import TestOverArchLarge
+from torchrec.distributed.test_utils.test_tables import EmbeddingTablesConfig
 from torchrec.distributed.train_pipeline import TrainPipeline
 from torchrec.distributed.types import ShardingType
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
@@ -78,6 +78,7 @@ class RunOptions:
             Default is "kjt" (KeyedJaggedTensor).
         profile (str): Directory to save profiling results. If empty, profiling is disabled.
             Default is "" (disabled).
+        profile_name (str): Name of the profiling file. Default is pipeline classname.
         planner_type (str): Type of sharding planner to use. Options are:
             - "embedding": EmbeddingShardingPlanner (default)
             - "hetero": HeteroEmbeddingShardingPlanner
@@ -100,6 +101,7 @@ class RunOptions:
     compute_kernel: EmbeddingComputeKernel = EmbeddingComputeKernel.FUSED
     input_type: str = "kjt"
     profile: str = ""
+    profile_name: str = ""
     planner_type: str = "embedding"
     pooling_factors: Optional[List[float]] = None
     num_poolings: Optional[List[float]] = None
@@ -112,28 +114,6 @@ class RunOptions:
     sparse_momentum: Optional[float] = None
     sparse_weight_decay: Optional[float] = None
     export_stacks: bool = False
-
-
-@dataclass
-class EmbeddingTablesConfig:
-    """
-    Configuration for embedding tables.
-
-    This class defines the parameters for generating embedding tables with both weighted
-    and unweighted features.
-
-    Args:
-        num_unweighted_features (int): Number of unweighted features to generate.
-            Default is 100.
-        num_weighted_features (int): Number of weighted features to generate.
-            Default is 100.
-        embedding_feature_dim (int): Dimension of the embedding vectors.
-            Default is 128.
-    """
-
-    num_unweighted_features: int = 100
-    num_weighted_features: int = 100
-    embedding_feature_dim: int = 128
 
 
 @dataclass
@@ -196,103 +176,7 @@ class ModelSelectionConfig:
     over_arch_layer_sizes: List[int] = field(default_factory=lambda: [5, 1])
 
 
-@cmd_conf
-def main(
-    run_option: RunOptions,
-    table_config: EmbeddingTablesConfig,
-    model_selection: ModelSelectionConfig,
-    pipeline_config: PipelineConfig,
-    model_config: Optional[BaseModelConfig] = None,
-) -> None:
-    tables, weighted_tables = generate_tables(
-        num_unweighted_features=table_config.num_unweighted_features,
-        num_weighted_features=table_config.num_weighted_features,
-        embedding_feature_dim=table_config.embedding_feature_dim,
-    )
-
-    if model_config is None:
-        model_config = create_model_config(
-            model_name=model_selection.model_name,
-            batch_size=model_selection.batch_size,
-            batch_sizes=model_selection.batch_sizes,
-            num_float_features=model_selection.num_float_features,
-            feature_pooling_avg=model_selection.feature_pooling_avg,
-            use_offsets=model_selection.use_offsets,
-            dev_str=model_selection.dev_str,
-            long_kjt_indices=model_selection.long_kjt_indices,
-            long_kjt_offsets=model_selection.long_kjt_offsets,
-            long_kjt_lengths=model_selection.long_kjt_lengths,
-            pin_memory=model_selection.pin_memory,
-            embedding_groups=model_selection.embedding_groups,
-            feature_processor_modules=model_selection.feature_processor_modules,
-            max_feature_lengths=model_selection.max_feature_lengths,
-            over_arch_clazz=model_selection.over_arch_clazz,
-            postproc_module=model_selection.postproc_module,
-            zch=model_selection.zch,
-            hidden_layer_size=model_selection.hidden_layer_size,
-            deep_fm_dimension=model_selection.deep_fm_dimension,
-            dense_arch_layer_sizes=model_selection.dense_arch_layer_sizes,
-            over_arch_layer_sizes=model_selection.over_arch_layer_sizes,
-        )
-
-    # launch trainers
-    run_multi_process_func(
-        func=runner,
-        world_size=run_option.world_size,
-        tables=tables,
-        weighted_tables=weighted_tables,
-        run_option=run_option,
-        model_config=model_config,
-        pipeline_config=pipeline_config,
-    )
-
-
-def run_pipeline(
-    run_option: RunOptions,
-    table_config: EmbeddingTablesConfig,
-    pipeline_config: PipelineConfig,
-    model_config: BaseModelConfig,
-) -> BenchmarkResult:
-
-    tables, weighted_tables = generate_tables(
-        num_unweighted_features=table_config.num_unweighted_features,
-        num_weighted_features=table_config.num_weighted_features,
-        embedding_feature_dim=table_config.embedding_feature_dim,
-    )
-
-    benchmark_res_per_rank = run_multi_process_func(
-        func=runner,
-        world_size=run_option.world_size,
-        tables=tables,
-        weighted_tables=weighted_tables,
-        run_option=run_option,
-        model_config=model_config,
-        pipeline_config=pipeline_config,
-    )
-
-    # Combine results from all ranks into a single BenchmarkResult
-    # Use timing data from rank 0, combine memory stats from all ranks
-    world_size = run_option.world_size
-
-    total_benchmark_res = BenchmarkResult(
-        short_name=benchmark_res_per_rank[0].short_name,
-        gpu_elapsed_time=benchmark_res_per_rank[0].gpu_elapsed_time,
-        cpu_elapsed_time=benchmark_res_per_rank[0].cpu_elapsed_time,
-        gpu_mem_stats=[GPUMemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
-        cpu_mem_stats=[CPUMemoryStats(rank, 0) for rank in range(world_size)],
-        rank=0,
-    )
-
-    for res in benchmark_res_per_rank:
-        # Each rank's BenchmarkResult contains 1 GPU and 1 CPU memory measurement
-        if len(res.gpu_mem_stats) > 0:
-            total_benchmark_res.gpu_mem_stats[res.rank] = res.gpu_mem_stats[0]
-        if len(res.cpu_mem_stats) > 0:
-            total_benchmark_res.cpu_mem_stats[res.rank] = res.cpu_mem_stats[0]
-
-    return total_benchmark_res
-
-
+# single-rank runner
 def runner(
     rank: int,
     world_size: int,
@@ -406,7 +290,11 @@ def runner(
         pipeline.progress(iter(bench_inputs))
 
         result = benchmark_func(
-            name=type(pipeline).__name__,
+            name=(
+                type(pipeline).__name__
+                if run_option.profile_name == ""
+                else run_option.profile_name
+            ),
             bench_inputs=bench_inputs,  # pyre-ignore
             prof_inputs=bench_inputs,  # pyre-ignore
             num_benchmarks=5,
@@ -423,6 +311,97 @@ def runner(
             print(result)
 
         return result
+
+
+# a standalone function to run the benchmark in multi-process mode
+def run_pipeline(
+    run_option: RunOptions,
+    table_config: EmbeddingTablesConfig,
+    pipeline_config: PipelineConfig,
+    model_config: BaseModelConfig,
+) -> BenchmarkResult:
+
+    tables, weighted_tables, *_ = table_config.generate_tables()
+
+    benchmark_res_per_rank = run_multi_process_func(
+        func=runner,
+        world_size=run_option.world_size,
+        tables=tables,
+        weighted_tables=weighted_tables,
+        run_option=run_option,
+        model_config=model_config,
+        pipeline_config=pipeline_config,
+    )
+
+    # Combine results from all ranks into a single BenchmarkResult
+    # Use timing data from rank 0, combine memory stats from all ranks
+    world_size = run_option.world_size
+
+    total_benchmark_res = BenchmarkResult(
+        short_name=benchmark_res_per_rank[0].short_name,
+        gpu_elapsed_time=benchmark_res_per_rank[0].gpu_elapsed_time,
+        cpu_elapsed_time=benchmark_res_per_rank[0].cpu_elapsed_time,
+        gpu_mem_stats=[GPUMemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
+        cpu_mem_stats=[CPUMemoryStats(rank, 0) for rank in range(world_size)],
+        rank=0,
+    )
+
+    for res in benchmark_res_per_rank:
+        # Each rank's BenchmarkResult contains 1 GPU and 1 CPU memory measurement
+        if len(res.gpu_mem_stats) > 0:
+            total_benchmark_res.gpu_mem_stats[res.rank] = res.gpu_mem_stats[0]
+        if len(res.cpu_mem_stats) > 0:
+            total_benchmark_res.cpu_mem_stats[res.rank] = res.cpu_mem_stats[0]
+
+    return total_benchmark_res
+
+
+# command-line interface
+@cmd_conf
+def main(
+    run_option: RunOptions,
+    table_config: EmbeddingTablesConfig,
+    model_selection: ModelSelectionConfig,
+    pipeline_config: PipelineConfig,
+    model_config: Optional[BaseModelConfig] = None,
+) -> None:
+    tables, weighted_tables, *_ = table_config.generate_tables()
+
+    if model_config is None:
+        model_config = create_model_config(
+            model_name=model_selection.model_name,
+            batch_size=model_selection.batch_size,
+            batch_sizes=model_selection.batch_sizes,
+            num_float_features=model_selection.num_float_features,
+            feature_pooling_avg=model_selection.feature_pooling_avg,
+            use_offsets=model_selection.use_offsets,
+            dev_str=model_selection.dev_str,
+            long_kjt_indices=model_selection.long_kjt_indices,
+            long_kjt_offsets=model_selection.long_kjt_offsets,
+            long_kjt_lengths=model_selection.long_kjt_lengths,
+            pin_memory=model_selection.pin_memory,
+            embedding_groups=model_selection.embedding_groups,
+            feature_processor_modules=model_selection.feature_processor_modules,
+            max_feature_lengths=model_selection.max_feature_lengths,
+            over_arch_clazz=model_selection.over_arch_clazz,
+            postproc_module=model_selection.postproc_module,
+            zch=model_selection.zch,
+            hidden_layer_size=model_selection.hidden_layer_size,
+            deep_fm_dimension=model_selection.deep_fm_dimension,
+            dense_arch_layer_sizes=model_selection.dense_arch_layer_sizes,
+            over_arch_layer_sizes=model_selection.over_arch_layer_sizes,
+        )
+
+    # launch trainers
+    run_multi_process_func(
+        func=runner,
+        world_size=run_option.world_size,
+        tables=tables,
+        weighted_tables=weighted_tables,
+        run_option=run_option,
+        model_config=model_config,
+        pipeline_config=pipeline_config,
+    )
 
 
 if __name__ == "__main__":
