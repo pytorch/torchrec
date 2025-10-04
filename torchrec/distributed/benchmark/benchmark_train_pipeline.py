@@ -26,20 +26,20 @@ from typing import Dict, List, Optional, Type
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from torch import nn
-from torchrec.distributed.benchmark.benchmark_pipeline_utils import (
-    BaseModelConfig,
-    create_model_config,
-    generate_data,
-    generate_pipeline,
-)
-from torchrec.distributed.benchmark.benchmark_utils import (
+from torchrec.distributed.benchmark.benchmark_base import (
     benchmark_func,
     BenchmarkResult,
     cmd_conf,
     CPUMemoryStats,
+    GPUMemoryStats,
+)
+from torchrec.distributed.benchmark.benchmark_utils import (
+    BaseModelConfig,
+    create_model_config,
+    generate_data,
+    generate_pipeline,
     generate_planner,
     generate_sharded_model_and_optimizer,
-    GPUMemoryStats,
 )
 from torchrec.distributed.comm import get_local_size
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
@@ -176,95 +176,7 @@ class ModelSelectionConfig:
     over_arch_layer_sizes: List[int] = field(default_factory=lambda: [5, 1])
 
 
-@cmd_conf
-def main(
-    run_option: RunOptions,
-    table_config: EmbeddingTablesConfig,
-    model_selection: ModelSelectionConfig,
-    pipeline_config: PipelineConfig,
-    model_config: Optional[BaseModelConfig] = None,
-) -> None:
-    tables, weighted_tables, *_ = table_config.generate_tables()
-
-    if model_config is None:
-        model_config = create_model_config(
-            model_name=model_selection.model_name,
-            batch_size=model_selection.batch_size,
-            batch_sizes=model_selection.batch_sizes,
-            num_float_features=model_selection.num_float_features,
-            feature_pooling_avg=model_selection.feature_pooling_avg,
-            use_offsets=model_selection.use_offsets,
-            dev_str=model_selection.dev_str,
-            long_kjt_indices=model_selection.long_kjt_indices,
-            long_kjt_offsets=model_selection.long_kjt_offsets,
-            long_kjt_lengths=model_selection.long_kjt_lengths,
-            pin_memory=model_selection.pin_memory,
-            embedding_groups=model_selection.embedding_groups,
-            feature_processor_modules=model_selection.feature_processor_modules,
-            max_feature_lengths=model_selection.max_feature_lengths,
-            over_arch_clazz=model_selection.over_arch_clazz,
-            postproc_module=model_selection.postproc_module,
-            zch=model_selection.zch,
-            hidden_layer_size=model_selection.hidden_layer_size,
-            deep_fm_dimension=model_selection.deep_fm_dimension,
-            dense_arch_layer_sizes=model_selection.dense_arch_layer_sizes,
-            over_arch_layer_sizes=model_selection.over_arch_layer_sizes,
-        )
-
-    # launch trainers
-    run_multi_process_func(
-        func=runner,
-        world_size=run_option.world_size,
-        tables=tables,
-        weighted_tables=weighted_tables,
-        run_option=run_option,
-        model_config=model_config,
-        pipeline_config=pipeline_config,
-    )
-
-
-def run_pipeline(
-    run_option: RunOptions,
-    table_config: EmbeddingTablesConfig,
-    pipeline_config: PipelineConfig,
-    model_config: BaseModelConfig,
-) -> BenchmarkResult:
-
-    tables, weighted_tables, *_ = table_config.generate_tables()
-
-    benchmark_res_per_rank = run_multi_process_func(
-        func=runner,
-        world_size=run_option.world_size,
-        tables=tables,
-        weighted_tables=weighted_tables,
-        run_option=run_option,
-        model_config=model_config,
-        pipeline_config=pipeline_config,
-    )
-
-    # Combine results from all ranks into a single BenchmarkResult
-    # Use timing data from rank 0, combine memory stats from all ranks
-    world_size = run_option.world_size
-
-    total_benchmark_res = BenchmarkResult(
-        short_name=benchmark_res_per_rank[0].short_name,
-        gpu_elapsed_time=benchmark_res_per_rank[0].gpu_elapsed_time,
-        cpu_elapsed_time=benchmark_res_per_rank[0].cpu_elapsed_time,
-        gpu_mem_stats=[GPUMemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
-        cpu_mem_stats=[CPUMemoryStats(rank, 0) for rank in range(world_size)],
-        rank=0,
-    )
-
-    for res in benchmark_res_per_rank:
-        # Each rank's BenchmarkResult contains 1 GPU and 1 CPU memory measurement
-        if len(res.gpu_mem_stats) > 0:
-            total_benchmark_res.gpu_mem_stats[res.rank] = res.gpu_mem_stats[0]
-        if len(res.cpu_mem_stats) > 0:
-            total_benchmark_res.cpu_mem_stats[res.rank] = res.cpu_mem_stats[0]
-
-    return total_benchmark_res
-
-
+# single-rank runner
 def runner(
     rank: int,
     world_size: int,
@@ -399,6 +311,97 @@ def runner(
             print(result)
 
         return result
+
+
+# a standalone function to run the benchmark in multi-process mode
+def run_pipeline(
+    run_option: RunOptions,
+    table_config: EmbeddingTablesConfig,
+    pipeline_config: PipelineConfig,
+    model_config: BaseModelConfig,
+) -> BenchmarkResult:
+
+    tables, weighted_tables, *_ = table_config.generate_tables()
+
+    benchmark_res_per_rank = run_multi_process_func(
+        func=runner,
+        world_size=run_option.world_size,
+        tables=tables,
+        weighted_tables=weighted_tables,
+        run_option=run_option,
+        model_config=model_config,
+        pipeline_config=pipeline_config,
+    )
+
+    # Combine results from all ranks into a single BenchmarkResult
+    # Use timing data from rank 0, combine memory stats from all ranks
+    world_size = run_option.world_size
+
+    total_benchmark_res = BenchmarkResult(
+        short_name=benchmark_res_per_rank[0].short_name,
+        gpu_elapsed_time=benchmark_res_per_rank[0].gpu_elapsed_time,
+        cpu_elapsed_time=benchmark_res_per_rank[0].cpu_elapsed_time,
+        gpu_mem_stats=[GPUMemoryStats(rank, 0, 0, 0) for rank in range(world_size)],
+        cpu_mem_stats=[CPUMemoryStats(rank, 0) for rank in range(world_size)],
+        rank=0,
+    )
+
+    for res in benchmark_res_per_rank:
+        # Each rank's BenchmarkResult contains 1 GPU and 1 CPU memory measurement
+        if len(res.gpu_mem_stats) > 0:
+            total_benchmark_res.gpu_mem_stats[res.rank] = res.gpu_mem_stats[0]
+        if len(res.cpu_mem_stats) > 0:
+            total_benchmark_res.cpu_mem_stats[res.rank] = res.cpu_mem_stats[0]
+
+    return total_benchmark_res
+
+
+# command-line interface
+@cmd_conf
+def main(
+    run_option: RunOptions,
+    table_config: EmbeddingTablesConfig,
+    model_selection: ModelSelectionConfig,
+    pipeline_config: PipelineConfig,
+    model_config: Optional[BaseModelConfig] = None,
+) -> None:
+    tables, weighted_tables, *_ = table_config.generate_tables()
+
+    if model_config is None:
+        model_config = create_model_config(
+            model_name=model_selection.model_name,
+            batch_size=model_selection.batch_size,
+            batch_sizes=model_selection.batch_sizes,
+            num_float_features=model_selection.num_float_features,
+            feature_pooling_avg=model_selection.feature_pooling_avg,
+            use_offsets=model_selection.use_offsets,
+            dev_str=model_selection.dev_str,
+            long_kjt_indices=model_selection.long_kjt_indices,
+            long_kjt_offsets=model_selection.long_kjt_offsets,
+            long_kjt_lengths=model_selection.long_kjt_lengths,
+            pin_memory=model_selection.pin_memory,
+            embedding_groups=model_selection.embedding_groups,
+            feature_processor_modules=model_selection.feature_processor_modules,
+            max_feature_lengths=model_selection.max_feature_lengths,
+            over_arch_clazz=model_selection.over_arch_clazz,
+            postproc_module=model_selection.postproc_module,
+            zch=model_selection.zch,
+            hidden_layer_size=model_selection.hidden_layer_size,
+            deep_fm_dimension=model_selection.deep_fm_dimension,
+            dense_arch_layer_sizes=model_selection.dense_arch_layer_sizes,
+            over_arch_layer_sizes=model_selection.over_arch_layer_sizes,
+        )
+
+    # launch trainers
+    run_multi_process_func(
+        func=runner,
+        world_size=run_option.world_size,
+        tables=tables,
+        weighted_tables=weighted_tables,
+        run_option=run_option,
+        model_config=model_config,
+        pipeline_config=pipeline_config,
+    )
 
 
 if __name__ == "__main__":

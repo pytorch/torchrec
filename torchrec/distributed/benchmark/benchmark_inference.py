@@ -18,7 +18,7 @@ from typing import List, Tuple
 
 import torch
 
-from torchrec.distributed.benchmark.benchmark_utils import (
+from torchrec.distributed.benchmark.benchmark_base import (
     BenchmarkResult,
     CompileMode,
     DLRM_NUM_EMBEDDINGS_PER_FEATURE,
