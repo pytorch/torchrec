@@ -816,11 +816,15 @@ class ParameterSharding:
         bounds_check_mode (Optional[BoundsCheckMode]): bounds check mode.
         output_dtype (Optional[DataType]): output dtype.
         key_value_params (Optional[KeyValueParams]): key value params for SSD TBE or PS.
+        num_nodes (Optional[int]): number of nodes this table's rows are split
+            across; see `ParameterConstraints.num_nodes`.
 
     NOTE:
       ShardingType.TABLE_WISE - rank where this embedding is placed
       ShardingType.COLUMN_WISE - rank where the embedding shards are placed, seen as individual tables
-      ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed
+      ShardingType.TABLE_ROW_WISE  - first rank when this embedding is placed;
+        with num_nodes > 1, one rank per row block, positionally paired with
+        sharding_spec.shards
       ShardingType.ROW_WISE, ShardingType.DATA_PARALLEL - unused
 
     """
@@ -835,6 +839,7 @@ class ParameterSharding:
     bounds_check_mode: Optional[BoundsCheckMode] = None
     output_dtype: Optional[DataType] = None
     key_value_params: Optional[KeyValueParams] = None
+    num_nodes: Optional[int] = None
 
 
 class EmbeddingModuleShardingPlan(ModuleShardingPlan, Dict[str, ParameterSharding]):

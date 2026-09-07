@@ -131,6 +131,79 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             if group_config.has_feature_processor:
                 self._has_feature_processor = True
 
+    def _resolve_placement_ranks(
+        self,
+        table_name: str,
+        num_nodes: int,
+        plan_ranks: List[int],
+        num_shards: int,
+        table_node: int,
+    ) -> List[int]:
+        """
+        Ranks holding a table's row blocks: `ranks[i]` holds `shards[i]`.
+
+        A single-node table derives them from `table_node`: `_shard` only
+        ever read `ranks[0]`, so a plan may list just that one. A multi-node
+        table takes them from the plan, since the nodes it spans do not follow
+        from `table_node`.
+
+        Which of the two applies is declared by `num_nodes`, never inferred
+        from `len(ranks)`: the planner and the runtime size a node from
+        `Topology.intra_group_size` and `intra_and_cross_node_pg`, so a
+        rank-count test would self-activate whenever those disagree.
+        """
+        local_size = self._local_size
+        if num_nodes < 1:
+            raise ValueError(f"'{table_name}': num_nodes={num_nodes} must be >= 1.")
+
+        if num_nodes == 1:
+            if not self._is_2D_parallel and len(plan_ranks) > local_size:
+                raise ValueError(
+                    f"'{table_name}': the plan places it on {len(plan_ranks)} "
+                    f"ranks, more than the {local_size} in a node, but does "
+                    "not set num_nodes. The planner and the runtime disagree "
+                    "on how wide a node is."
+                )
+            if num_shards < local_size:
+                raise ValueError(
+                    f"'{table_name}': a single-node table needs at least one "
+                    f"shard per rank, but the plan has {num_shards} shards for "
+                    f"a node of {local_size} ranks."
+                )
+            return list(range(table_node * local_size, (table_node + 1) * local_size))
+
+        if self._is_2D_parallel:
+            raise ValueError(
+                f"'{table_name}': TABLE_ROW_WISE num_nodes={num_nodes} is not "
+                "supported under 2D parallelism."
+            )
+        if len(plan_ranks) != num_shards:
+            raise ValueError(
+                f"'{table_name}': a multi-node table pairs each rank with one "
+                f"row block, but the plan has {len(plan_ranks)} placement "
+                f"ranks for {num_shards} shards."
+            )
+        if len(plan_ranks) != num_nodes * local_size:
+            raise ValueError(
+                f"'{table_name}': num_nodes={num_nodes} needs "
+                f"{num_nodes * local_size} ranks at a node width of "
+                f"{local_size}, but the plan places it on {len(plan_ranks)}. "
+                "The planner and the runtime disagree on how wide a node is."
+            )
+        if len(set(plan_ranks)) != len(plan_ranks):
+            raise ValueError(
+                f"'{table_name}': placement ranks {plan_ranks} repeat a rank; "
+                "each row block needs its own."
+            )
+        nodes = {plan_rank // local_size for plan_rank in plan_ranks}
+        if len(nodes) != num_nodes:
+            raise ValueError(
+                f"'{table_name}': num_nodes={num_nodes} but its "
+                f"{len(plan_ranks)} ranks spread over {len(nodes)} nodes, so a "
+                "node holds only part of a row block."
+            )
+        return plan_ranks
+
     def _shard(
         self,
         sharding_infos: List[EmbeddingShardingInfo],
@@ -175,6 +248,22 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
             # pyrefly: ignore[missing-attribute]
             shards = info.param_sharding.sharding_spec.shards
 
+            table_name = info.embedding_config.name
+            num_nodes: int = info.param_sharding.num_nodes or 1
+            placement_ranks = self._resolve_placement_ranks(
+                table_name=table_name,
+                num_nodes=num_nodes,
+                # pyrefly: ignore[bad-argument-type]
+                plan_ranks=list(info.param_sharding.ranks),
+                num_shards=len(shards),
+                table_node=table_node,
+            )
+            if num_nodes > 1:
+                raise NotImplementedError(
+                    f"'{table_name}': TABLE_ROW_WISE num_nodes={num_nodes} is "
+                    "not supported by the runtime yet."
+                )
+
             # construct the global sharded_tensor_metadata
             global_metadata = ShardedTensorMetadata(
                 shards_metadata=shards,
@@ -200,11 +289,7 @@ class BaseTwRwEmbeddingSharding(EmbeddingSharding[C, F, T, W]):
                     stride=info.param.stride(),
                 )
 
-            for rank in range(
-                table_node * local_size,
-                (table_node + 1) * local_size,
-            ):
-                rank_idx = rank - (table_node * local_size)
+            for rank_idx, rank in enumerate(placement_ranks):
                 tables_per_rank[rank].append(
                     ShardedEmbeddingTable(
                         num_embeddings=info.embedding_config.num_embeddings,
