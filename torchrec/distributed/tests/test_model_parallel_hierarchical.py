@@ -9,14 +9,18 @@
 
 import os
 import unittest
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any, cast, Dict, Optional, Tuple, Type
 
 import torch
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from hypothesis import assume, given, Phase, settings, strategies as st, Verbosity
 from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.fbgemm_qcomm_codec import CommType, QCommsConfig
-from torchrec.distributed.planner import ParameterConstraints
+from torchrec.distributed.planner import (
+    EmbeddingShardingPlanner,
+    ParameterConstraints,
+    Topology,
+)
 from torchrec.distributed.test_utils.test_model import (
     TestSparseNN,
     TestTowerCollectionSparseNN,
@@ -28,7 +32,8 @@ from torchrec.distributed.test_utils.test_sharding import (
     SharderType,
     sharding_single_rank_test,
 )
-from torchrec.distributed.types import ShardingType
+from torchrec.distributed.types import EmbeddingModuleShardingPlan, ShardingType
+from torchrec.distributed.utils import none_throws
 from torchrec.modules.embedding_configs import PoolingType
 from torchrec.test_utils import skip_if_asan_class
 
@@ -526,4 +531,168 @@ class ModelParallelHierarchicalTest(ModelParallelTestShared):
             variable_batch_per_feature=variable_batch_per_feature,
             has_weighted_tables=False,
             global_constant_batch=global_constant_batch,
+        )
+
+    # The mixed placement most multi-node tests below run with.
+    MIXED_NUM_NODES: Dict[str, int] = {"table_0": 2, "table_3": 2}
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    def test_twrw_num_nodes_constraints_really_split(self) -> None:
+        """
+        Pins that `MIXED_NUM_NODES` actually splits those tables here.
+
+        A `num_nodes` that fails to reach the planner is indistinguishable
+        from single-node TABLE_ROW_WISE at runtime: the sharded model still builds
+        and still matches the unsharded reference. Without this, every
+        multi-node test below could pass while exercising nothing.
+        """
+        self._build_tables_and_groups()
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            embedding_groups=self.embedding_groups,
+            sparse_device=torch.device("meta"),
+            num_float_features=16,
+        )
+        planner = EmbeddingShardingPlanner(
+            topology=Topology(
+                world_size=4,
+                local_world_size=2,
+                compute_device="cuda",
+                ssd_cap=2 * 1024**4,
+            ),
+            constraints={
+                name: ParameterConstraints(num_nodes=num_nodes)
+                for name, num_nodes in self.MIXED_NUM_NODES.items()
+            },
+        )
+        plan = planner.plan(
+            module=model,
+            # pyrefly: ignore[bad-argument-type]
+            sharders=[
+                create_test_sharder(
+                    SharderType.EMBEDDING_BAG_COLLECTION.value,
+                    ShardingType.TABLE_ROW_WISE.value,
+                    EmbeddingComputeKernel.FUSED.value,
+                    device=torch.device("cuda"),
+                ),
+            ],
+        )
+        ebc_plan = cast(EmbeddingModuleShardingPlan, plan.plan["sparse.ebc"])
+
+        for name in self.MIXED_NUM_NODES:
+            parameter_sharding = ebc_plan[name]
+            self.assertEqual(
+                parameter_sharding.num_nodes, 2, f"{name} is not multi-node"
+            )
+            ranks = none_throws(parameter_sharding.ranks)
+            self.assertEqual(len(ranks), 4, f"{name} ranks: {ranks}")
+            # Both nodes, so the tests below actually reach the cross-node
+            # combine.
+            self.assertEqual({rank // 2 for rank in ranks}, {0, 1})
+
+        # The remaining tables stay on one node, so this exercises both
+        # placements in the same sharding instance.
+        for name in self.table_names:
+            if name in self.MIXED_NUM_NODES:
+                continue
+            parameter_sharding = ebc_plan[name]
+            self.assertIsNone(parameter_sharding.num_nodes, f"{name} opted in")
+            ranks = none_throws(parameter_sharding.ranks)
+            self.assertEqual(len({rank // 2 for rank in ranks}), 1, f"{name}: {ranks}")
+
+    def _test_twrw_num_nodes(
+        self,
+        num_nodes_by_table: Dict[str, int],
+        pooling: PoolingType = PoolingType.SUM,
+        variable_batch_size: bool = False,
+        variable_batch_per_feature: bool = False,
+    ) -> None:
+        """
+        Runs the TABLE_ROW_WISE suite with `num_nodes` set on some tables.
+
+        world_size=4, local_size=2, so there are two nodes and `num_nodes=2`
+        splits a table's rows across all four ranks. The shared harness scores
+        this against an unsharded reference after one SGD step, so it covers
+        bucketize routing, the input AlltoAll, the intra-node reduce-scatter,
+        the cross-node AlltoAll, summing the per-node partials, and the
+        gradients back through all of it.
+        """
+        self._test_sharding(
+            # pyrefly: ignore[bad-argument-type]
+            sharders=[
+                create_test_sharder(
+                    SharderType.EMBEDDING_BAG_COLLECTION.value,
+                    ShardingType.TABLE_ROW_WISE.value,
+                    EmbeddingComputeKernel.FUSED.value,
+                    device=torch.device("cuda"),
+                ),
+            ],
+            backend="nccl",
+            world_size=4,
+            local_size=2,
+            constraints={
+                name: ParameterConstraints(num_nodes=num_nodes)
+                for name, num_nodes in num_nodes_by_table.items()
+            },
+            variable_batch_size=variable_batch_size,
+            variable_batch_per_feature=variable_batch_per_feature,
+            has_weighted_tables=not variable_batch_per_feature,
+            pooling=pooling,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    def test_sharding_nccl_twrw_mixed_num_nodes(self) -> None:
+        # The case the design hinges on: multi-node and single-node tables in
+        # ONE sharding instance, sharing its collectives. `table_0` is also the
+        # shared-feature case, declaring `feature_0` alongside single-node
+        # `table_4`, so the two copies must stay apart or `table_4`'s ids take
+        # `table_0`'s bucket count.
+        self._test_twrw_num_nodes(self.MIXED_NUM_NODES)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    def test_sharding_nccl_twrw_all_num_nodes(self) -> None:
+        # Every unweighted table spans both nodes; weighted tables stay on one.
+        self._test_twrw_num_nodes(dict.fromkeys(self.table_names, 2))
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    def test_sharding_nccl_twrw_mixed_num_nodes_mean_pooling(self) -> None:
+        # TBE sums per rank and the reduce-scatter makes one partial per node.
+        # Mean pooling divides their combined value using the lengths from
+        # before bucketization.
+        self._test_twrw_num_nodes(self.MIXED_NUM_NODES, pooling=PoolingType.MEAN)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    def test_sharding_nccl_twrw_mixed_num_nodes_variable_batch(self) -> None:
+        # Batch varies per rank, but remains constant across features.
+        self._test_twrw_num_nodes(self.MIXED_NUM_NODES, variable_batch_size=True)
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 3,
+        "Not enough GPUs, this test requires at least four GPUs",
+    )
+    def test_sharding_nccl_twrw_mixed_num_nodes_variable_batch_per_feature(
+        self,
+    ) -> None:
+        # The only case reaching the variable-batch-per-feature combine;
+        # `variable_batch_size` alone uses the regular pooled-output path.
+        self._test_twrw_num_nodes(
+            self.MIXED_NUM_NODES,
+            variable_batch_size=True,
+            variable_batch_per_feature=True,
         )

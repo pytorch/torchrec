@@ -60,9 +60,9 @@ class ResolvePlacementRanksTest(unittest.TestCase):
     """
     Every rejection in `_resolve_placement_ranks`, plus the two accepted shapes.
 
-    It is the last check before a collective constructor: past it, a
-    contradictory `num_nodes` becomes a duplicate bucket destination or an
-    out-of-range rank inside an all-to-all, which hangs rather than raises.
+    It is the last check before the placement is used: past it, a contradictory
+    `num_nodes` becomes an `IndexError` in `_shard` or a duplicate bucket
+    destination that silently routes ids to the wrong row block.
     """
 
     def test_shard_and_rank_counts_must_match(self) -> None:
@@ -283,8 +283,9 @@ class ShardPlacementTest(unittest.TestCase):
         # One rank in the plan and four shards: all `_shard` ever read.
         info = _sharding_info("t", rows=400, dim=8, ranks=[4], num_shards=4)
         # pyrefly: ignore[bad-argument-type]
-        per_rank = sharder._shard([info])
+        per_rank, placement_ranks = sharder._shard([info])
 
+        self.assertEqual(placement_ranks["t"], [4, 5, 6, 7])
         placed = {r: t for r, t in enumerate(per_rank) if t}
         self.assertEqual(sorted(placed), [4, 5, 6, 7])
         self.assertEqual(
@@ -295,16 +296,28 @@ class ShardPlacementTest(unittest.TestCase):
             [0, 100, 200, 300],
         )
 
-    def test_multi_node_is_refused_until_the_forward_path_exists(self) -> None:
-        """The placement resolves, but nothing bucketizes ids across nodes or
-        sums the per-node partials yet."""
+    def test_multi_node_pairs_shards_with_the_plan_order(self) -> None:
+        """Row block `i` lands on `plan_ranks[i]`, in the planner's order."""
         sharder = _Sharder(world_size=8, local_size=4)
+        # Deliberately not ascending: node 1 before node 0.
+        ranks = [4, 5, 6, 7, 0, 1, 2, 3]
         info = _sharding_info(
-            "t", rows=800, dim=8, ranks=list(range(8)), num_shards=8, num_nodes=2
+            "t", rows=800, dim=8, ranks=ranks, num_shards=8, num_nodes=2
         )
-        with self.assertRaisesRegex(NotImplementedError, r"num_nodes=2"):
-            # pyrefly: ignore[bad-argument-type]
-            sharder._shard([info])
+        # pyrefly: ignore[bad-argument-type]
+        per_rank, placement_ranks = sharder._shard([info])
+
+        self.assertEqual(placement_ranks["t"], ranks)
+        # `ranks[i]` holds `shards[i]`, so rank 4 holds row block 0 and rank 0
+        # holds row block 4. Sorting the placement would swap them.
+        offsets = {
+            r: none_throws(t[0].local_metadata).shard_offsets[0]
+            for r, t in enumerate(per_rank)
+            if t
+        }
+        self.assertEqual(offsets[4], 0)
+        self.assertEqual(offsets[0], 400)
+        self.assertEqual(sorted(offsets.values()), [i * 100 for i in range(8)])
 
     def test_multi_node_shard_rank_mismatch_raises(self) -> None:
         """`_shard` surfaces the resolver's rejections rather than swallowing
