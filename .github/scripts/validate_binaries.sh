@@ -65,7 +65,14 @@ echo "Expected torch version: $EXPECTED_TORCH_VERSION.*"
 export PYTORCH_CUDA_PKG=""
 export CONDA_ENV="build_binary"
 
-if [[ ${MATRIX_PYTHON_VERSION} = '3.14t' ]]; then
+if [[ ${MATRIX_PYTHON_VERSION} = '3.15t' ]]; then
+    # use the conda-forge prerelease channel to install python3.15t
+    conda create -y -n "${CONDA_ENV}" --override-channels -c conda-forge/label/python_rc -c conda-forge python-freethreading=3.15
+    conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.15' ]]; then
+    # use the conda-forge prerelease channel to install python3.15
+    conda create -y -n "${CONDA_ENV}" --override-channels -c conda-forge/label/python_rc -c conda-forge python=3.15
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.14t' ]]; then
     # use conda-forge to install python3.14t
     conda create -y -n "${CONDA_ENV}" python-freethreading=3.14
     conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
@@ -181,7 +188,14 @@ if [[ ${MATRIX_CHANNEL} != 'release' ]]; then
     exit 0
 fi
 
-if [[ ${MATRIX_PYTHON_VERSION} = '3.14' ]]; then
+if [[ ${MATRIX_PYTHON_VERSION} = '3.15t' ]]; then
+    # use the conda-forge prerelease channel to install python3.15t
+    conda create -y -n "${CONDA_ENV}" --override-channels -c conda-forge/label/python_rc -c conda-forge python-freethreading=3.15
+    conda run -n "${CONDA_ENV}" python -c "import sys; print(f'python GIL enabled: {sys._is_gil_enabled()}')"
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.15' ]]; then
+    # use the conda-forge prerelease channel to install python3.15
+    conda create -y -n "${CONDA_ENV}" --override-channels -c conda-forge/label/python_rc -c conda-forge python=3.15
+elif [[ ${MATRIX_PYTHON_VERSION} = '3.14' ]]; then
     # conda currently doesn't support 3.14 unless using the forge channel
     conda create -y -n "${CONDA_ENV}" python="3.14" -c conda-forge
 elif [[ ${MATRIX_PYTHON_VERSION} = '3.13t' ]]; then
