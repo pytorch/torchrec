@@ -204,6 +204,7 @@ def to_sharding_plan(
             bounds_check_mode=sharding_option.bounds_check_mode,
             output_dtype=sharding_option.output_dtype,
             key_value_params=sharding_option.key_value_params,
+            num_nodes=sharding_option.num_nodes,
         )
         plan[sharding_option.path] = module_plan
     # pyrefly: ignore[bad-argument-type]
@@ -481,6 +482,7 @@ def extract_plan(
                     feature_names=so.feature_names,
                     output_dtype=so.output_dtype,
                     key_value_params=so.key_value_params,
+                    num_nodes=so.num_nodes,
                 )
             )
 
