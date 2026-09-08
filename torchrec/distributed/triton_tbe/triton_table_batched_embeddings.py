@@ -2270,6 +2270,17 @@ class TritonTBE(torch.autograd.Function):
         # Select kernel variants based on hardware
         _use_amd = is_amd()
 
+        # TMA bulk atomic reduce (cp.reduce.async.bulk.tensor) for the fused
+        # long-run partial-gradient accumulation. Blackwell-only, and only
+        # reachable on the fused path, which is itself gated above.
+        use_tma_reduce = has_tlx and not _use_amd and cfg.allow_tma_reduce
+        if use_tma_reduce:
+
+            def _alloc_fn(size: int, align: int, stream: int) -> torch.Tensor:
+                return torch.empty(size, dtype=torch.int8, device=weight.device)
+
+            triton.set_allocator(_alloc_fn)
+
         if weighted:
             # Weighted: 2-tier dispatch with sync-free _expand_long_runs
             # Kernel 1: short-run kernel (weighted)
@@ -2355,6 +2366,7 @@ class TritonTBE(torch.autograd.Function):
                     hash_size_cumsum,
                     momentum,
                     rows_cumsum,
+                    max_long_runs,
                     num_long_run_programs_t,
                     vbe_row_output_offsets,
                     vbe_B_offsets,
@@ -2368,7 +2380,9 @@ class TritonTBE(torch.autograd.Function):
                     num_warps=num_warps,
                     STOCHASTIC_ROUNDING=stochastic_rounding,
                     stochastic_rounding_seed=stochastic_rounding_seed,
+                    USE_TMA_REDUCE=use_tma_reduce,
                     vbe=vbe,
+                    BUFFER_SIZE=cfg.long_run_fused_buffer_size_weighted,
                 )
             else:
                 # Non-CLC path: separate grad accumulation + apply kernels
@@ -2521,6 +2535,7 @@ class TritonTBE(torch.autograd.Function):
                     hash_size_cumsum,
                     momentum,
                     rows_cumsum,
+                    max_long_runs,
                     num_long_run_programs_t,
                     vbe_row_output_offsets,
                     vbe_B_offsets,
@@ -2534,7 +2549,9 @@ class TritonTBE(torch.autograd.Function):
                     num_warps=num_warps,
                     STOCHASTIC_ROUNDING=stochastic_rounding,
                     stochastic_rounding_seed=stochastic_rounding_seed,
+                    USE_TMA_REDUCE=use_tma_reduce,
                     vbe=vbe,
+                    BUFFER_SIZE=cfg.long_run_fused_buffer_size_unweighted,
                 )
             else:
                 # Non-CLC path: separate grad accumulation + apply kernels

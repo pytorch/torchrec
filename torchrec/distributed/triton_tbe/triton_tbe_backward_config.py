@@ -62,6 +62,13 @@ class TbeBackwardConfig:
     long_run_accum_buffer_size_unweighted: int
     long_run_accum_buffer_size_weighted: int
 
+    # And again for the fused long-run kernels, which kept the historical
+    # 16/8 after the accum widths were tuned. On the only shape large enough
+    # to reach the fused path, narrowing to 2 is worth 12% (1.76 -> 1.97 vs
+    # CUDA TBE).
+    long_run_fused_buffer_size_unweighted: int
+    long_run_fused_buffer_size_weighted: int
+
     num_warps: int
 
     # Split the short-run tier into one launch per next_pow2(D) bucket so each
@@ -72,6 +79,13 @@ class TbeBackwardConfig:
     # Cluster Launch Control: Blackwell-only work stealing. Purely additive on
     # top of the portable path; also requires TLX to be importable.
     allow_clc: bool
+
+    # TMA bulk atomic reduce (cp.reduce.async.bulk.tensor) for the fused
+    # long-run partial-gradient accumulation, in place of tl.atomic_add.
+    # Blackwell-only and TLX-only, and only reachable on the fused long-run
+    # path -- which is itself gated on a very large lookup count, so this has
+    # no effect on shapes that stay on the two-kernel path.
+    allow_tma_reduce: bool
 
 
 # Blackwell (B200 / GB200). Measured on GB200 (triton-beta) against the
@@ -90,9 +104,12 @@ _BLACKWELL = TbeBackwardConfig(
     short_run_buffer_size_weighted=4,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
+    long_run_fused_buffer_size_unweighted=2,
+    long_run_fused_buffer_size_weighted=4,
     num_warps=1,
     enable_dim_bucketing=True,
     allow_clc=True,
+    allow_tma_reduce=True,
 )
 
 # Hopper (H100). UNTUNED: retains the historical grid. The Blackwell sweep found
@@ -109,9 +126,12 @@ _HOPPER = TbeBackwardConfig(
     short_run_buffer_size_weighted=4,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
+    long_run_fused_buffer_size_unweighted=2,
+    long_run_fused_buffer_size_weighted=4,
     num_warps=1,
     enable_dim_bucketing=True,
     allow_clc=False,
+    allow_tma_reduce=False,
 )
 
 # CDNA3 (MI300X). UNTUNED: retains the historical AMD grid.
@@ -125,9 +145,12 @@ _MI300X = TbeBackwardConfig(
     short_run_buffer_size_weighted=4,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
+    long_run_fused_buffer_size_unweighted=2,
+    long_run_fused_buffer_size_weighted=4,
     num_warps=1,
     enable_dim_bucketing=True,
     allow_clc=False,
+    allow_tma_reduce=False,
 )
 
 # CDNA4 (MI350X). UNTUNED: currently identical to MI300X.
@@ -141,9 +164,12 @@ _MI350X = TbeBackwardConfig(
     short_run_buffer_size_weighted=4,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
+    long_run_fused_buffer_size_unweighted=2,
+    long_run_fused_buffer_size_weighted=4,
     num_warps=1,
     enable_dim_bucketing=True,
     allow_clc=False,
+    allow_tma_reduce=False,
 )
 
 # Used when the device matches no known target: historical grid, no add-ons.
@@ -157,9 +183,12 @@ _PORTABLE_DEFAULT = TbeBackwardConfig(
     short_run_buffer_size_weighted=4,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
+    long_run_fused_buffer_size_unweighted=2,
+    long_run_fused_buffer_size_weighted=4,
     num_warps=1,
     enable_dim_bucketing=True,
     allow_clc=False,
+    allow_tma_reduce=False,
 )
 
 
