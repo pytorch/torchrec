@@ -107,6 +107,7 @@ class TritonOpConfig(BenchFuncConfig):
     num_profiles: int = 10
     seed: int = 42
     debug_mode: bool = False
+    run_warmup: bool = True
 
     def make_inputs(self, device: torch.device) -> Dict[str, Any]:
         """Build everything the benchmark consumes.
@@ -115,6 +116,9 @@ class TritonOpConfig(BenchFuncConfig):
         data generation never land in the measurement.
         """
         return {}
+
+    def validate_outputs(self, kwargs: Dict[str, Any]) -> None:
+        """Validate benchmark state after all timed and profiled iterations."""
 
 
 def _make_benchmark_kwargs(arg: TritonOpConfig, device: torch.device) -> Dict[str, Any]:
@@ -151,9 +155,10 @@ def single_rank_runner(
 
     # Warm up outside the measurement, then reconstruct inputs so mutating ops do not
     # turn a requested dirty-path measurement into a clean-path measurement.
-    warmup_kwargs = _make_benchmark_kwargs(arg, device)
-    bench_func([], **warmup_kwargs)
-    del warmup_kwargs
+    if arg.run_warmup:
+        warmup_kwargs = _make_benchmark_kwargs(arg, device)
+        bench_func([], **warmup_kwargs)
+        del warmup_kwargs
     torch.manual_seed(arg.seed)
     kwargs = _make_benchmark_kwargs(arg, device)
 
@@ -168,6 +173,7 @@ def single_rank_runner(
         **arg.benchmark_func_kwargs(name=name),
     )
 
+    arg.validate_outputs(kwargs)
     print(result)
 
 
@@ -428,6 +434,171 @@ def autotune_triton(
                 workload.length_bucket,
                 workload.dim_bucket,
             )
+
+
+######################## autotune restore_value demonstration ########################
+_AUTOTUNE_ADD_ONE_CONFIGS = [
+    triton.Config({"BLOCK_SIZE": 512}, num_warps=4),
+    triton.Config({"BLOCK_SIZE": 1024}, num_warps=4),
+    triton.Config({"BLOCK_SIZE": 4096}, num_warps=8),
+]
+
+
+# Triton TR001: autotune the pointwise tile size used for the mutation.
+@triton.autotune(
+    configs=_AUTOTUNE_ADD_ONE_CONFIGS,
+    key=["numel"],
+    restore_value=["values"],
+)
+@triton.jit
+def _autotune_add_one_with_restore_kernel(
+    values,
+    numel,
+    BLOCK_SIZE: tl.constexpr,
+) -> None:
+    offsets = tl.program_id(0).to(tl.int64) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < numel
+    value = tl.load(values + offsets, mask=mask)
+    tl.store(values + offsets, value + 1, mask=mask)
+
+
+# Triton TR001: use the same choices as the restore_value treatment.
+@triton.autotune(
+    configs=_AUTOTUNE_ADD_ONE_CONFIGS,
+    key=["numel"],
+)
+@triton.jit
+def _autotune_add_one_without_restore_kernel(
+    values,
+    numel,
+    BLOCK_SIZE: tl.constexpr,
+) -> None:
+    offsets = tl.program_id(0).to(tl.int64) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < numel
+    value = tl.load(values + offsets, mask=mask)
+    tl.store(values + offsets, value + 1, mask=mask)
+
+
+@dataclass
+class AutotuneRestoreValueState:
+    values: torch.Tensor
+    sample_indices: torch.Tensor
+    logical_invocations: int = 0
+
+
+def _read_autotune_restore_value_samples(
+    state: AutotuneRestoreValueState,
+) -> List[float]:
+    return state.values.index_select(0, state.sample_indices).cpu().tolist()
+
+
+def _trace_autotune_restore_value_samples(
+    state: AutotuneRestoreValueState,
+) -> None:
+    if not torch.autograd.profiler._is_profiler_enabled:
+        return
+
+    # The readback intentionally synchronizes only profiled iterations. Keeping it in
+    # a separate range makes the validation overhead explicit and excludes it from the
+    # autotune_restore_value timing range.
+    with record_function("## autotune_restore_value validation readback ##"):
+        observed = _read_autotune_restore_value_samples(state)
+    observed_label = ",".join(f"{value:g}" for value in observed)
+    with record_function(
+        "## autotune_restore_value validation result "
+        f"logical_invocations={state.logical_invocations} "
+        f"sample_values={observed_label} ##"
+    ):
+        pass
+
+
+@dataclass
+class AutotuneRestoreValueConfig(TritonOpConfig):
+    """Expose the correctness and memory cost of restoring a mutating input.
+
+    The default FP16 input is 12 GB, representative of an embedding table mutated by
+    TBE backward. Clearing the autotune cache before each outer iteration makes every
+    iteration exercise candidate benchmarking. Warmup is disabled so that disabling
+    retune_each_iteration shows one cold call followed by cached steady-state calls.
+    """
+
+    num_benchmarks: int = 0
+    memory_snapshot: bool = True
+    run_warmup: bool = False
+    numel: int = 6_000_000_000
+    restore_value: bool = True
+    retune_each_iteration: bool = True
+
+    def make_inputs(self, device: torch.device) -> Dict[str, Any]:
+        if self.numel <= 0:
+            raise ValueError("numel must be positive")
+        # Citrine C3: allocate the large input directly on its target GPU.
+        values = torch.zeros(self.numel, device=device, dtype=torch.float16)
+        sample_indices = torch.tensor(
+            [0, self.numel // 2, self.numel - 1],
+            device=device,
+        )
+        return {
+            "state": AutotuneRestoreValueState(
+                values=values,
+                sample_indices=sample_indices,
+            )
+        }
+
+    def validate_outputs(self, kwargs: Dict[str, Any]) -> None:
+        state = kwargs["state"]
+        assert isinstance(state, AutotuneRestoreValueState)
+        observed = _read_autotune_restore_value_samples(state)
+        expected = float(state.logical_invocations)
+        cache_is_warm_before_inputs = self.run_warmup and not self.retune_each_iteration
+        if self.restore_value or cache_is_warm_before_inputs:
+            if observed != [expected] * len(observed):
+                raise AssertionError(
+                    "restore_value failed to preserve one mutation per logical "
+                    f"invocation: expected {expected}, observed {observed}"
+                )
+        elif not all(value > expected for value in observed):
+            raise AssertionError(
+                "unrestored autotune did not expose candidate mutations: "
+                f"expected values above {expected}, observed {observed}"
+            )
+        logger.info(
+            "Validated autotune mutation count: logical=%d observed=%s",
+            state.logical_invocations,
+            observed,
+        )
+
+
+@register_benchmark(AutotuneRestoreValueConfig)
+def autotune_restore_value(
+    _batch_inputs: List[Dict[str, Any]],
+    state: AutotuneRestoreValueState,
+    restore_value: bool,
+    retune_each_iteration: bool,
+    **_kwargs: Dict[str, Any],
+) -> None:
+    kernel = (
+        _autotune_add_one_with_restore_kernel
+        if restore_value
+        else _autotune_add_one_without_restore_kernel
+    )
+    if retune_each_iteration:
+        kernel.cache.clear()
+
+    numel = state.values.numel()
+
+    def grid(meta: Dict[str, Any]) -> tuple[Any, ...]:
+        return (triton.cdiv(numel, meta["BLOCK_SIZE"]),)
+
+    with record_function(
+        "## autotune_restore_value "
+        f"bytes={state.values.nbytes} "
+        f"restore_value={restore_value} "
+        f"retune_each_iteration={retune_each_iteration} ##"
+    ):
+        kernel[grid](state.values, numel)
+    state.logical_invocations += 1
+    _trace_autotune_restore_value_samples(state)
 
 
 ############################### TBE bounds check configs ###############################
