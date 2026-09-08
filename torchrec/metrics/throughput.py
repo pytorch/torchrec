@@ -18,6 +18,7 @@ from typing import Any, Deque, Dict, List, Optional
 
 import torch
 import torch.nn as nn
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.distributed.utils import none_throws
 from torchrec.metrics.metrics_config import BatchSizeStage
 from torchrec.metrics.metrics_namespace import (
@@ -32,6 +33,7 @@ MAX_WINDOW_TS: int = 2 * 60 * 60  # 2 hours
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+@checkpoint_schema_stable("ThroughputMetric")
 class ThroughputMetric(nn.Module):
     """
     The module to calculate throughput. Throughput is defined as the trained examples
