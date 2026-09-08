@@ -48,6 +48,8 @@ from typing import (
 )
 
 import torch
+import torch.distributed as dist
+from torchrec.checkpoint.schema import registered_schema_stable_classes
 from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.auprc import AUPRCMetric
@@ -57,6 +59,8 @@ from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.calibration_with_recalibration import (
     RecalibratedCalibrationMetric,
 )
+from torchrec.metrics.cpu_comms_metric_module import CPUCommsRecMetricModule
+from torchrec.metrics.cpu_offloaded_metric_module import CPUOffloadedRecMetricModule
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.gauc import GAUCMetric
 from torchrec.metrics.hindsight_target_pr import HindsightTargetPRMetric
@@ -71,6 +75,7 @@ from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.ne_positive import NEPositiveMetric
 from torchrec.metrics.ne_with_recalibration import RecalibratedNEMetric
 from torchrec.metrics.nmse import NMSEMetric
+from torchrec.metrics.noop_metric_module import NoOpMetricModule
 from torchrec.metrics.num_missing_labels import NumMissingLabelsMetric
 from torchrec.metrics.num_positive_samples import NumPositiveSamplesMetric
 from torchrec.metrics.output import OutputMetric
@@ -92,6 +97,7 @@ from torchrec.metrics.unweighted_ne import UnweightedNEMetric
 from torchrec.metrics.weighted_avg import WeightedAvgMetric
 from torchrec.metrics.weighted_sum_predictions import WeightedSumPredictionsMetric
 from torchrec.metrics.xauc import XAUCMetric
+from torchrec.test_utils import init_process_group_single_rank
 
 
 # Path to the golden snapshot file
@@ -877,8 +883,88 @@ _CORE_SCHEMA_CASES: Tuple[_GoldenCase, ...] = (
     ),
 )
 
-# Child diffs extend this rather than editing the tuple above.
-_SCHEMA_CASES: Tuple[_GoldenCase, ...] = _CORE_SCHEMA_CASES
+
+def _module_fixture_kwargs() -> Dict[str, Any]:
+    """Construction args carrying one real metric.
+
+    An empty RecMetricList would produce an empty state_dict, and a golden entry
+    with no keys records nothing about the module's shape.
+    """
+    tasks = [create_test_task("task1")]
+    return {
+        "batch_size": 32,
+        "world_size": 1,
+        "rec_tasks": tasks,
+        "rec_metrics": RecMetricList(
+            [
+                NEMetric(
+                    world_size=1,
+                    my_rank=0,
+                    batch_size=32,
+                    tasks=tasks,
+                    compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+                    window_size=100,
+                )
+            ]
+        ),
+    }
+
+
+def _shutdown(module: torch.nn.Module) -> None:
+    """Release a CPUOffloadedRecMetricModule's worker threads.
+
+    Two threads plus an atexit hook per instance, and one case builds three.
+    shutdown() is idempotent.
+    """
+    # pyre-ignore[16]
+    module.shutdown()
+
+
+@contextlib.contextmanager
+def _single_rank_process_group() -> Iterator[None]:
+    """A process group for CPUOffloadedRecMetricModule's compute worker.
+
+    shutdown() wakes that worker, which calls dist.new_group and then re-raises
+    whatever it caught. So building a module without a group succeeds and its
+    teardown throws, which is why generation needs this as much as the tests do.
+
+    Only destroys a group it created, so a caller that brought its own keeps it.
+    """
+    created = not dist.is_initialized()
+    if created:
+        init_process_group_single_rank("gloo")
+    try:
+        yield
+    finally:
+        if created:
+            dist.destroy_process_group()
+
+
+# Enrolled with @checkpoint_schema_stable under these same ids. Not RecMetric
+# subclasses, so _discover_all_recmetric_subclasses cannot see them.
+_MODULE_SCHEMA_CASES: Tuple[_GoldenCase, ...] = (
+    _GoldenCase("noop_metric_module", NoOpMetricModule, "", NoOpMetricModule),
+    _GoldenCase(
+        "cpu_comms_rec_metric_module",
+        CPUCommsRecMetricModule,
+        "",
+        lambda: CPUCommsRecMetricModule(**_module_fixture_kwargs()),
+    ),
+    # state_dict() reads the comms tree and load_state_dict() writes the offloaded
+    # one, but both carry the same keys, so this pins the shape and not which tree
+    # a load reached. test_cpu_offloaded_metric_module covers the load direction.
+    _GoldenCase(
+        "cpu_offloaded_rec_metric_module",
+        CPUOffloadedRecMetricModule,
+        "",
+        lambda: CPUOffloadedRecMetricModule(
+            model_out_device=torch.device("cpu"), **_module_fixture_kwargs()
+        ),
+        cleanup=_shutdown,
+    ),
+)
+
+_SCHEMA_CASES: Tuple[_GoldenCase, ...] = _CORE_SCHEMA_CASES + _MODULE_SCHEMA_CASES
 
 
 class GoldenCaseTest(unittest.TestCase):
@@ -894,6 +980,14 @@ class GoldenCaseTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.golden_snapshot = load_golden_snapshot()
+
+    def setUp(self) -> None:
+        # Registered before any module is built, so under addCleanup's LIFO
+        # order the group is torn down last. Destroying it ahead of a module
+        # would make that module's shutdown throw.
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(_single_rank_process_group())
 
     @contextlib.contextmanager
     def _built(self, case: _GoldenCase) -> Iterator[torch.nn.Module]:
@@ -1105,6 +1199,35 @@ class RecMetricModuleBackwardCompatibilityTest(unittest.TestCase):
         # strict=True matches production. Under strict=False this test passes
         # even without the pop hook.
         fresh_module.load_state_dict(state_dict, strict=True)
+
+
+class SchemaStableCoverageTest(unittest.TestCase):
+    """The decorator registry and the case table must list the same ids.
+
+    A class decorated but absent from the table has no fixture and no golden
+    entry. An id in the table that nothing registers is covered by accident
+    rather than by declaration.
+
+    Neither can see a decorated class in a module that was never imported;
+    registration is import-bound. Adding a case forces the Buck dep, which is
+    what makes the class visible in the first place.
+    """
+
+    def test_registry_matches_case_table(self) -> None:
+        # Comparing the id sets alone would pass if two ids were swapped between
+        # classes, so compare the id-to-class mapping. Built by hand because a
+        # comprehension lets a second case under one id overwrite the first, and
+        # the duplicate-key check in the generator only sees id plus variant.
+        declared: Dict[str, Type[torch.nn.Module]] = {}
+        for case in _SCHEMA_CASES:
+            first = declared.setdefault(case.stable_id, case.expected_class)
+            self.assertIs(
+                first,
+                case.expected_class,
+                f"stable_id {case.stable_id!r} is claimed by two classes: "
+                f"{first.__name__} and {case.expected_class.__name__}.",
+            )
+        self.assertEqual(registered_schema_stable_classes(), declared)
 
 
 class MetricCoverageTest(unittest.TestCase):
@@ -1776,26 +1899,30 @@ def generate_schema_case_entries() -> Dict[str, Dict[str, Any]]:
 
     The comparison path fails rather than writing a missing entry, so this is
     the only way a new case gets one.
+
+    Owns the process group rather than leaving it to the caller: the tests get
+    one from setUp, and --update-golden runs outside unittest entirely.
     """
     entries: Dict[str, Dict[str, Any]] = {}
-    for case in _SCHEMA_CASES:
-        if case.key in entries:
-            raise ValueError(
-                f"Two cases share the key {case.key!r}. One would overwrite the "
-                "other's golden entry."
-            )
-        module = case.build()
-        try:
-            entries[case.key] = {
-                "metric_class": case.expected_class.__name__,
-                "variant": case.variant,
-                "state_dict_keys": sorted(module.state_dict().keys()),
-                "persistent_buffer_fqns": [],
-                "non_persistent_buffer_fqns": [],
-            }
-        finally:
-            if case.cleanup is not None:
-                case.cleanup(module)
+    with _single_rank_process_group():
+        for case in _SCHEMA_CASES:
+            if case.key in entries:
+                raise ValueError(
+                    f"Two cases share the key {case.key!r}. One would overwrite "
+                    "the other's golden entry."
+                )
+            module = case.build()
+            try:
+                entries[case.key] = {
+                    "metric_class": case.expected_class.__name__,
+                    "variant": case.variant,
+                    "state_dict_keys": sorted(module.state_dict().keys()),
+                    "persistent_buffer_fqns": [],
+                    "non_persistent_buffer_fqns": [],
+                }
+            finally:
+                if case.cleanup is not None:
+                    case.cleanup(module)
     return entries
 
 

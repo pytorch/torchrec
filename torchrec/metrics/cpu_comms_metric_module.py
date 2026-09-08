@@ -13,6 +13,7 @@ import torch.distributed as dist
 from torch import nn
 from torch.distributed.tensor import DeviceMesh
 from torch.profiler import record_function
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.metrics.metric_module import PreComputeStates, RecMetricModule
 from torchrec.metrics.metric_state_snapshot import MetricStateSnapshot
 from torchrec.metrics.rec_metric import (
@@ -25,6 +26,7 @@ from torchrec.metrics.rec_metric import (
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+@checkpoint_schema_stable("cpu_comms_rec_metric_module")
 class CPUCommsRecMetricModule(RecMetricModule):
     """
     A submodule of CPUOffloadedRecMetricModule.

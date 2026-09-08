@@ -62,6 +62,7 @@ except Exception:
                 pass
 
 
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.auprc import AUPRCMetric
@@ -196,6 +197,7 @@ class StateMetric(abc.ABC):
         pass
 
 
+@checkpoint_schema_stable("RecMetricModule")
 class RecMetricModule(nn.Module):
     r"""
     For the current recommendation models, we assume there will be three
