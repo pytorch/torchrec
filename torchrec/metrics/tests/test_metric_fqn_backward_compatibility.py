@@ -27,11 +27,15 @@ To update the golden snapshot after intentional changes:
 """
 
 import contextlib
+import copy
+import datetime
 import inspect
 import json
 import os
 import sys
+import tempfile
 import unittest
+import unittest.mock
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
@@ -42,6 +46,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Type,
@@ -369,18 +374,22 @@ def load_golden_snapshot() -> Dict[str, Dict[str, Any]]:
 
 
 def load_required_golden_snapshot() -> Dict[str, Dict[str, Any]]:
-    """The snapshot, for tests that say nothing useful without one.
+    """The snapshot, for callers that say nothing useful without one.
 
-    An empty file makes a set-difference check pass by having nothing to
+    A test comparing against an empty file passes by having nothing to
     compare, which reads as coverage.
+
+    Regeneration against an empty baseline is worse: every generated entry
+    looks brand new, so the addition and removal gates find nothing to object
+    to and the result becomes the baseline. Emptying this file is the cheapest
+    way to defeat them.
     """
     snapshot = load_golden_snapshot()
     if not snapshot:
         raise RuntimeError(
-            f"{GOLDEN_SNAPSHOT_PATH} is missing or empty. Run with "
-            "--update-golden to generate it.\n"
-            "Regenerating from a test would write whatever the code currently "
-            "produces, and each class knows only its own part of the file."
+            f"{GOLDEN_SNAPSHOT_PATH} is missing or empty. It is checked in, so "
+            "restore it from source control rather than writing a new one. A "
+            "regenerated baseline authorizes whatever the code produces today."
         )
     return snapshot
 
@@ -1057,6 +1066,214 @@ class SchemaStableCoverageTest(unittest.TestCase):
                 f"{first.__name__} and {case.expected_class.__name__}.",
             )
         self.assertEqual(registered_schema_stable_classes(), declared)
+
+
+class SchemaChangeTest(unittest.TestCase):
+    """Regenerating must not quietly bless a changed key set.
+
+    The comparison already fails on an added or removed key. The hole was the
+    escape hatch: --update-golden rewrote the file unconditionally, and the
+    failing test names that command, so silencing a real break took one step.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.golden_snapshot = load_golden_snapshot()
+
+    def test_unauthorized_addition_is_reported(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(unauthorized_additions(old, new), {"Thing": ["b"]})
+
+    def test_authorized_addition_is_allowed(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(
+            unauthorized_additions(old, new, (_make_record("Thing", "b"),)), {}
+        )
+
+    def test_a_brand_new_entry_needs_no_authorization(self) -> None:
+        old: Dict[str, Dict[str, Any]] = {}
+        new = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(unauthorized_additions(old, new), {})
+
+    def test_a_dropped_entry_is_reported(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new: Dict[str, Dict[str, Any]] = {}
+        self.assertEqual(removed_entries(old, new), ["Thing"])
+
+    def test_a_rename_that_adds_a_key_cannot_hide(self) -> None:
+        """The gap the addition check alone leaves open.
+
+        Renaming the class moves the entry to a new key, so the added state key
+        rides in under the brand-new exemption. Only the dropped old entry
+        gives it away.
+        """
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new = {"RenamedThing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(unauthorized_additions(old, new), {})
+        self.assertEqual(removed_entries(old, new), ["Thing"])
+
+    def test_unauthorized_removal_is_reported(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        new = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(unauthorized_removals(old, new), {"Thing": ["b"]})
+
+    def test_authorized_removal_is_allowed(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        new = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(
+            unauthorized_removals(old, new, (_make_removal("Thing", "b"),)), {}
+        )
+
+    def test_a_dropped_entry_is_left_to_removed_entries(self) -> None:
+        """Otherwise a rename reports every key twice, once per gate."""
+        old = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        new: Dict[str, Dict[str, Any]] = {}
+        self.assertEqual(unauthorized_removals(old, new), {})
+        self.assertEqual(removed_entries(old, new), ["Thing"])
+
+    def test_configured_records_are_not_stale(self) -> None:
+        """Both registries checked in one place, so neither can run empty.
+
+        Looping over the registries meant zero assertions while they are empty,
+        which reads as coverage. The detectors themselves are pinned by the
+        synthetic tests below.
+        """
+        self.assertEqual(stale_records(_SCHEMA_ADDITIONS, self.golden_snapshot), [])
+        self.assertEqual(
+            stale_removal_records(_SCHEMA_REMOVALS, self.golden_snapshot), []
+        )
+
+    def test_stale_removal_records_are_detected(self) -> None:
+        # Staleness inverts: the key must be gone, not present.
+        snapshot = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(
+            stale_removal_records((_make_removal("Thing", "b"),), snapshot), []
+        )
+        self.assertEqual(
+            stale_removal_records((_make_removal("Thing", "a"),), snapshot),
+            ["Thing still has key 'a'"],
+        )
+        self.assertEqual(
+            stale_removal_records((_make_removal("Gone", "a"),), snapshot),
+            ["Gone is not in the golden"],
+        )
+
+    def test_removal_record_fields_are_required(self) -> None:
+        for blank in ("", "   "):
+            with self.subTest(repr(blank)), self.assertRaises(ValueError):
+                _make_removal("Thing", "b", hook=blank)
+
+    def test_stale_records_are_detected(self) -> None:
+        # _SCHEMA_ADDITIONS is empty, so the check above passes without running
+        # anything. These pin the detector itself.
+        snapshot = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(stale_records((_make_record("Thing", "a"),), snapshot), [])
+        self.assertEqual(
+            stale_records((_make_record("Gone", "a"),), snapshot),
+            ["Gone is not in the golden"],
+        )
+        self.assertEqual(
+            stale_records((_make_record("Thing", "b"),), snapshot),
+            ["Thing has no key 'b'"],
+        )
+
+    def test_record_fields_are_required(self) -> None:
+        for blank in ("", "   "):
+            with self.subTest(repr(blank)), self.assertRaises(ValueError):
+                _make_record("Thing", "b", reason=blank)
+
+    def test_record_added_must_be_a_date(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be a datetime.date"):
+            # pyre-ignore[6]
+            _make_record("Thing", "b", added="2026-01-01")
+
+
+class GoldenRegenerationTest(unittest.TestCase):
+    """The gates on the real generate-validate-save path.
+
+    The tests above call the comparison helpers directly, which says nothing
+    about whether `update_golden_snapshot` consults them or writes anyway. Each
+    case here doctors a baseline, runs the whole path against a temporary file,
+    and requires that file to come back untouched.
+
+    The patch redirects where the snapshot is read and written. It replaces a
+    path, not a dependency, so the file I/O under test is real.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        # Building every case is the slow part, so pay it once and reuse the
+        # result as the baseline each case then doctors.
+        with _single_rank_process_group():
+            cls.current: Dict[str, Dict[str, Any]] = generate_golden_snapshot()
+            cls.current.update(generate_schema_case_entries())
+
+    @contextlib.contextmanager
+    def _baseline(self, snapshot: Dict[str, Dict[str, Any]]) -> Iterator[Path]:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "golden.json"
+            path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+            with unittest.mock.patch(
+                f"{__name__}.GOLDEN_SNAPSHOT_PATH", path
+            ), _single_rank_process_group():
+                yield path
+
+    def _assert_refused(self, baseline: Dict[str, Dict[str, Any]], reason: str) -> None:
+        with self._baseline(baseline) as path:
+            before = path.read_bytes()
+            with self.assertRaises((ValueError, RuntimeError)) as cm:
+                update_golden_snapshot()
+            self.assertIn(reason, str(cm.exception))
+            self.assertEqual(path.read_bytes(), before, "the golden was rewritten")
+
+    def _entry_holding_keys(self, baseline: Dict[str, Dict[str, Any]]) -> str:
+        """An entry with at least one state key.
+
+        Six entries legitimately have none, the AUC family among them, and they
+        sort first. Doctoring one of those changes nothing and the gate has
+        nothing to catch.
+        """
+        for key in sorted(baseline):
+            if baseline[key]["state_dict_keys"]:
+                return key
+        self.fail("no golden entry holds a state key")
+
+    def test_an_empty_baseline_is_refused(self) -> None:
+        self._assert_refused({}, "restore it from source control")
+
+    def test_an_unauthorized_addition_is_refused(self) -> None:
+        # Drop one key from one entry, so the live code looks like it added it.
+        baseline = copy.deepcopy(type(self).current)
+        key = self._entry_holding_keys(baseline)
+        baseline[key]["state_dict_keys"] = baseline[key]["state_dict_keys"][1:]
+        self._assert_refused(baseline, "add state_dict keys that nothing authorizes")
+
+    def test_an_unauthorized_removal_is_refused(self) -> None:
+        baseline = copy.deepcopy(type(self).current)
+        key = self._entry_holding_keys(baseline)
+        baseline[key]["state_dict_keys"] = baseline[key]["state_dict_keys"] + [
+            "a_key_the_code_no_longer_produces"
+        ]
+        self._assert_refused(baseline, "drop state_dict keys that nothing authorizes")
+
+    def test_a_dropped_entry_is_refused(self) -> None:
+        baseline = copy.deepcopy(type(self).current)
+        baseline["AnEntryTheCodeNoLongerProduces"] = {
+            "metric_class": "Gone",
+            "variant": "",
+            "state_dict_keys": [],
+            "persistent_buffer_fqns": [],
+            "non_persistent_buffer_fqns": [],
+        }
+        self._assert_refused(baseline, "remove golden entries")
+
+    def test_an_unchanged_baseline_is_rewritten_identically(self) -> None:
+        with self._baseline(type(self).current) as path:
+            before = path.read_bytes()
+            update_golden_snapshot()
+            self.assertEqual(path.read_bytes(), before)
 
 
 class MetricCoverageTest(unittest.TestCase):
@@ -1776,6 +1993,225 @@ def generate_schema_case_entries() -> Dict[str, Dict[str, Any]]:
     return entries
 
 
+@dataclass(frozen=True)
+class _SchemaChange:
+    """What every deliberate change to a golden entry has to say.
+
+    Neither record changes behavior. Both are review gates and a paper trail,
+    and the subclass field naming the migration is the one that matters.
+    """
+
+    golden_key: str
+    state_key: str
+    reason: str
+    owner: str
+
+    def _validate(self, extra_text: Tuple[str, ...], date_field: str) -> None:
+        for name in ("golden_key", "state_key", "reason", "owner") + extra_text:
+            value = getattr(self, name)
+            if not value or not value.strip():
+                raise ValueError(
+                    f"{type(self).__name__}.{name} must be non-empty "
+                    f"({self.state_key!r} on {self.golden_key!r})"
+                )
+        # The annotation alone does not stop a string, and a string date sorts
+        # and compares wrong without ever raising.
+        when = getattr(self, date_field)
+        if not isinstance(when, datetime.date):
+            raise ValueError(
+                f"{type(self).__name__}.{date_field} must be a datetime.date, "
+                f"got {type(when).__name__}"
+            )
+
+
+@dataclass(frozen=True)
+class _SchemaAddition(_SchemaChange):
+    """An intentional new state_dict key on a class that already has a golden entry.
+
+    Additions are the direction a module hook cannot repair. DCP validates that
+    every model FQN exists in checkpoint metadata before load_state_dict runs,
+    so a checkpoint written before the key existed is rejected by the planner,
+    ahead of any hook. Adding one persistent buffer to RecMetricModule has
+    already taken down production training this way.
+
+    `rollout` names how checkpoints that predate the key are handled, usually
+    LoadOverride.allow_missing_fqns.
+    """
+
+    rollout: str
+    added: datetime.date
+
+    def __post_init__(self) -> None:
+        self._validate(("rollout",), "added")
+
+
+@dataclass(frozen=True)
+class _SchemaRemoval(_SchemaChange):
+    """A state_dict key dropped from a class that keeps its golden entry.
+
+    Removals break a narrower set of loads than additions. torchmetrics pops
+    the keys it still declares, so a key it no longer declares reaches
+    nn.Module's strict check unclaimed and raises. DCP and the legacy client
+    build the load dict from the model, so the leftover key is never requested
+    there. Only a checkpoint-derived load reads it back, which today means
+    transfer learning.
+
+    `hook` names what pops the key for checkpoints that still carry it.
+    """
+
+    hook: str
+    removed: datetime.date
+
+    def __post_init__(self) -> None:
+        self._validate(("hook",), "removed")
+
+
+# Every deliberate addition to an existing golden entry. Regenerating the
+# snapshot refuses to write an added key that is not listed here.
+_SCHEMA_ADDITIONS: Tuple[_SchemaAddition, ...] = ()
+
+# The same, for keys dropped from an entry that survives.
+_SCHEMA_REMOVALS: Tuple[_SchemaRemoval, ...] = ()
+
+
+def _make_record(golden_key: str, state_key: str, **overrides: Any) -> _SchemaAddition:
+    """A filled-in record, so tests can vary the one field they care about."""
+    fields: Dict[str, Any] = {
+        "golden_key": golden_key,
+        "state_key": state_key,
+        "reason": "test",
+        "rollout": "test",
+        "owner": "test",
+        "added": datetime.date(2026, 1, 1),
+    }
+    fields.update(overrides)
+    return _SchemaAddition(**fields)
+
+
+def _make_removal(golden_key: str, state_key: str, **overrides: Any) -> _SchemaRemoval:
+    """The removal-side twin of _make_record."""
+    fields: Dict[str, Any] = {
+        "golden_key": golden_key,
+        "state_key": state_key,
+        "reason": "test",
+        "hook": "test",
+        "owner": "test",
+        "removed": datetime.date(2026, 1, 1),
+    }
+    fields.update(overrides)
+    return _SchemaRemoval(**fields)
+
+
+def _unclaimed_delta(
+    source: Dict[str, Dict[str, Any]],
+    target: Dict[str, Dict[str, Any]],
+    records: Sequence[_SchemaChange],
+) -> Dict[str, List[str]]:
+    """For entries both snapshots hold, keys in `source` absent from `target`.
+
+    Keys a record claims are dropped from the result. Entries missing from
+    either side are skipped, so a brand-new or dropped entry is somebody else's
+    problem.
+    """
+    claimed: Dict[str, Set[str]] = {}
+    for record in records:
+        claimed.setdefault(record.golden_key, set()).add(record.state_key)
+
+    offenders: Dict[str, List[str]] = {}
+    for golden_key, entry in source.items():
+        if golden_key not in target:
+            continue
+        delta = set(entry["state_dict_keys"]) - set(
+            target[golden_key]["state_dict_keys"]
+        )
+        unclaimed = sorted(delta - claimed.get(golden_key, set()))
+        if unclaimed:
+            offenders[golden_key] = unclaimed
+    return offenders
+
+
+def unauthorized_additions(
+    old: Dict[str, Dict[str, Any]],
+    new: Dict[str, Dict[str, Any]],
+    records: Sequence[_SchemaAddition] = (),
+) -> Dict[str, List[str]]:
+    """Keys that regeneration would add without a matching _SchemaAddition.
+
+    Entries absent from `old` are skipped. A genuinely new class or case has no
+    baseline to break, so its first snapshot needs no authorization. Pair this
+    with removed_entries, which is what stops a rename from reaching that
+    exemption while also adding a key.
+    """
+    return _unclaimed_delta(source=new, target=old, records=records)
+
+
+def unauthorized_removals(
+    old: Dict[str, Dict[str, Any]],
+    new: Dict[str, Dict[str, Any]],
+    records: Sequence[_SchemaRemoval] = (),
+) -> Dict[str, List[str]]:
+    """Keys that regeneration would drop without a matching _SchemaRemoval.
+
+    Entries absent from `new` are skipped, because removed_entries already
+    refuses those outright.
+    """
+    return _unclaimed_delta(source=old, target=new, records=records)
+
+
+def removed_entries(
+    old: Dict[str, Dict[str, Any]], new: Dict[str, Dict[str, Any]]
+) -> List[str]:
+    """Golden entries that regeneration would drop.
+
+    A METRICS_TO_TEST key is built from `__name__`, so renaming a metric moves
+    its entry. The old one disappears and the replacement looks brand new, so a
+    rename that also adds a state key would walk straight through the addition
+    gate. Case-table keys are hand-written ids and do not move on a rename,
+    which is what those ids are for.
+
+    Losing an entry is rare and always worth a look, so this refuses rather
+    than asking for a record.
+    """
+    return sorted(set(old) - set(new))
+
+
+def stale_records(
+    records: Sequence[_SchemaAddition], snapshot: Dict[str, Dict[str, Any]]
+) -> List[str]:
+    """Addition records naming a key the snapshot does not hold.
+
+    A record for a key that never landed, or that was later removed, is a claim
+    nobody can check.
+    """
+    stale: List[str] = []
+    for record in records:
+        entry = snapshot.get(record.golden_key)
+        if entry is None:
+            stale.append(f"{record.golden_key} is not in the golden")
+        elif record.state_key not in entry["state_dict_keys"]:
+            stale.append(f"{record.golden_key} has no key {record.state_key!r}")
+    return stale
+
+
+def stale_removal_records(
+    records: Sequence[_SchemaRemoval], snapshot: Dict[str, Dict[str, Any]]
+) -> List[str]:
+    """Removal records whose key came back.
+
+    Staleness inverts here. An addition record points at a key that must now be
+    present; a removal record points at one that must now be absent. Re-adding
+    the key leaves a record excusing a removal that no longer happened.
+    """
+    stale: List[str] = []
+    for record in records:
+        entry = snapshot.get(record.golden_key)
+        if entry is None:
+            stale.append(f"{record.golden_key} is not in the golden")
+        elif record.state_key in entry["state_dict_keys"]:
+            stale.append(f"{record.golden_key} still has key {record.state_key!r}")
+    return stale
+
+
 def update_golden_snapshot() -> None:
     print("Generating golden snapshot...")
     snapshot = generate_golden_snapshot()
@@ -1787,6 +2223,52 @@ def update_golden_snapshot() -> None:
             "One generator would overwrite the other."
         )
     snapshot.update(case_entries)
+
+    # Not load_golden_snapshot: an absent file reads as {}, which turns every
+    # generated entry into a brand-new one and silences all three gates below.
+    previous = load_required_golden_snapshot()
+
+    dropped = removed_entries(previous, snapshot)
+    if dropped:
+        raise ValueError(
+            f"Regenerating would remove golden entries: {dropped}.\n"
+            "No record authorizes this, deliberately. If the removal is right, "
+            f"delete those entries from {GOLDEN_SNAPSHOT_PATH.name} by hand and "
+            "run again, in the same diff that renames or drops the class. The "
+            "hand edit is the acknowledgement.\n"
+            "If it is not right, a case lost its coverage and the table needs "
+            "the row back."
+        )
+
+    dropped_keys = unauthorized_removals(previous, snapshot, _SCHEMA_REMOVALS)
+    if dropped_keys:
+        detail = "\n".join(
+            f"  {key}: {sorted(keys)}" for key, keys in sorted(dropped_keys.items())
+        )
+        raise ValueError(
+            "Regenerating would drop state_dict keys that nothing authorizes:\n"
+            f"{detail}\n"
+            "A checkpoint written before the removal still carries the key. "
+            "Loads built from the model never ask for it, but a "
+            "checkpoint-derived load reads it back, finds nobody claiming it, "
+            "and raises. Add a _SchemaRemoval for each, naming the hook that "
+            "pops it."
+        )
+
+    offenders = unauthorized_additions(previous, snapshot, _SCHEMA_ADDITIONS)
+    if offenders:
+        detail = "\n".join(
+            f"  {key}: {sorted(keys)}" for key, keys in sorted(offenders.items())
+        )
+        raise ValueError(
+            "Regenerating would add state_dict keys that nothing authorizes:\n"
+            f"{detail}\n"
+            "An added key makes every older checkpoint unloadable, and no "
+            "module hook can repair that: the planner rejects the load before "
+            "any hook runs. Add a _SchemaAddition for each, naming the reason, "
+            "the rollout plan for existing checkpoints, and an owner."
+        )
+
     save_golden_snapshot(snapshot)
     print(f"Golden snapshot saved to {GOLDEN_SNAPSHOT_PATH}")
     print(f"Total metrics captured: {len(snapshot)}")
