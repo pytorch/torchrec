@@ -13,9 +13,11 @@ triton table batched embedding bag with sum reduction mode
 import logging
 import math
 import os
+import sys
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import accumulate
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import torch
 import triton  # @manual
@@ -30,6 +32,7 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training_common import (  # n
     generate_vbe_metadata,
 )
 from triton.language.core import constexpr  # @manual
+from triton_kernels.specialize import specialize
 
 has_tlx = True
 try:
@@ -47,6 +50,8 @@ from torchrec.distributed.triton_tbe.triton_tbe_backward_long_run_fused import (
 )
 from torchrec.distributed.triton_tbe.triton_tbe_backward_utils import (
     _expand_long_runs,
+    _get_weight_row_ptrs_for_update,
+    _load_weight_row,
     _stochastic_rounding_store,
     OPTIM_TYPE_TO_INT,
 )
@@ -72,12 +77,129 @@ from ads_mkl.ops.triton.amd.triton_table_batched_embeddings import (  # noqa: F8
 )
 
 
+@lru_cache(maxsize=None)
+def _specialize_weight_ptrs(kernel: Any, num_weight_ptrs: int) -> Any:
+    module = sys.modules[__name__]
+    name = f"{kernel.__name__}_{num_weight_ptrs}_weight_ptrs"
+    specialized_kernel = specialize(
+        kernel,
+        module,
+        constants={},
+        tuples={
+            "weight_ptrs": tuple(
+                f"weight_ptr_{weight_ptr}" for weight_ptr in range(num_weight_ptrs)
+            )
+        },
+        name=name,
+    )
+    setattr(module, name, specialized_kernel)
+    return specialized_kernel
+
+
+@lru_cache(maxsize=None)
+def _specialize_chunked_weight_ptrs(kernel: Any, num_weight_ptrs: int) -> Any:
+    module = sys.modules[__name__]
+    name = f"{kernel.__name__}_{num_weight_ptrs}_chunked_weight_ptrs"
+    weight_ptr_names = tuple(
+        f"weight_ptr_{weight_ptr}" for weight_ptr in range(num_weight_ptrs)
+    )
+    weight_ptr_address_names = tuple(
+        f"weight_ptr_address_{weight_ptr}" for weight_ptr in range(num_weight_ptrs)
+    )
+    specialized_kernel = specialize(
+        kernel,
+        module,
+        constants={},
+        tuples={
+            "weight_ptrs": weight_ptr_names,
+            "weight_ptr_addresses": weight_ptr_address_names,
+        },
+        name=name,
+        do_not_specialize=weight_ptr_address_names,
+    )
+    setattr(module, name, specialized_kernel)
+    return specialized_kernel
+
+
 def lengths_to_offsets(lengths: List[int], keep_last: bool = False) -> List[int]:
     assert len(lengths) > 0
     offsets = [0] + list(accumulate(lengths))
     if not keep_last:
         offsets.pop()
     return offsets
+
+
+def _feature_weight_chunk_metadata(
+    table_sizes: Sequence[int],
+    feature_table_map: Sequence[int],
+    weight_chunk_starts: Sequence[int],
+    weight_chunk_sizes: Sequence[int],
+) -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+    table_starts = lengths_to_offsets(list(table_sizes))
+    chunk_ends = tuple(
+        chunk_start + chunk_size
+        for chunk_start, chunk_size in zip(weight_chunk_starts, weight_chunk_sizes)
+    )
+    table_chunk_metadata = []
+    for table_start, table_size in zip(table_starts, table_sizes):
+        table_end = table_start + table_size
+        direct_chunk = -1
+        chunk_relative_table_offset = 0
+        for chunk, (chunk_start, chunk_end) in enumerate(
+            zip(weight_chunk_starts, chunk_ends)
+        ):
+            if chunk_start <= table_start and table_end <= chunk_end:
+                direct_chunk = chunk
+                chunk_relative_table_offset = table_start - chunk_start
+                break
+        if direct_chunk < 0:
+            split_boundaries = tuple(
+                (chunk, chunk_start)
+                for chunk, chunk_start in enumerate(weight_chunk_starts[1:], 1)
+                if table_start < chunk_start < table_end
+            )
+            if len(split_boundaries) == 1:
+                right_chunk, split_boundary = split_boundaries[0]
+                direct_chunk = -(right_chunk + 1)
+                chunk_relative_table_offset = split_boundary
+        table_chunk_metadata.append((direct_chunk, chunk_relative_table_offset))
+
+    return (
+        tuple(table_chunk_metadata[table][0] for table in feature_table_map),
+        tuple(table_chunk_metadata[table][1] for table in feature_table_map),
+    )
+
+
+def _feature_ranges_for_process_mode(
+    feature_ranges: Sequence[Tuple[int, int]],
+    feature_weight_chunk_ids: Sequence[int],
+    process_mode: int,
+) -> Tuple[Tuple[int, int], ...]:
+    result = []
+    for feature_start, feature_end in feature_ranges:
+        while feature_start < feature_end:
+            chunk = feature_weight_chunk_ids[feature_start]
+            matches_mode = (
+                (process_mode == 0 and chunk >= 0)
+                or (process_mode == 1 and chunk < -1)
+                or (process_mode >= 2 and chunk == -1)
+            )
+            if not matches_mode:
+                feature_start += 1
+                continue
+            matching_end = feature_start + 1
+            while matching_end < feature_end:
+                chunk = feature_weight_chunk_ids[matching_end]
+                if (
+                    (process_mode == 0 and chunk < 0)
+                    or (process_mode == 1 and chunk >= -1)
+                    or (process_mode >= 2 and chunk != -1)
+                ):
+                    break
+                matching_end += 1
+            result.append((feature_start, matching_end))
+            feature_start = matching_end
+    return tuple(result)
 
 
 @dataclass(frozen=True)
@@ -153,11 +275,410 @@ def _load_checked_index(
 
 
 @triton.jit
+def _select_weight_ptr_address(weight_ptr_addresses, chunk_id):
+    address = weight_ptr_addresses[0]
+    for chunk in tl.static_range(1, len(weight_ptr_addresses)):
+        address = tl.where(
+            chunk_id == chunk,
+            weight_ptr_addresses[chunk],
+            address,
+        )
+    return address
+
+
+@triton.jit
+def _load_runtime_weight_row(
+    reference_weight_ptr,
+    weight_ptr_addresses,
+    weight_chunk_starts_ptr,
+    split_weight_row_starts: tl.constexpr,
+    logical_row_start,
+    col_offsets,
+    mask,
+    NUM_WEIGHT_CHUNKS: tl.constexpr,
+):
+    is_split_row = False
+    for split_row in tl.static_range(0, len(split_weight_row_starts)):
+        split_row_start = tl.full((), split_weight_row_starts[split_row], tl.int64)
+        is_split_row |= logical_row_start == split_row_start
+
+    if is_split_row:
+        logical_offsets = logical_row_start + col_offsets
+        chunk_ids = tl.zeros(col_offsets.shape, dtype=tl.int32)
+        for chunk in tl.static_range(1, NUM_WEIGHT_CHUNKS):
+            chunk_start = tl.load(weight_chunk_starts_ptr + chunk)
+            chunk_ids += (logical_offsets >= chunk_start).to(tl.int32)
+        chunk_starts = tl.load(
+            weight_chunk_starts_ptr + chunk_ids,
+            mask=mask,
+            other=0,
+        )
+        addresses = _select_weight_ptr_address(
+            weight_ptr_addresses,
+            chunk_ids,
+        )
+        weight_ptrs = addresses.to(
+            tl.pointer_type(reference_weight_ptr.dtype.element_ty)
+        )
+        row = tl.load(
+            weight_ptrs + logical_offsets - chunk_starts,
+            mask=mask,
+            other=0,
+        )
+    else:
+        chunk_id = 0
+        for chunk in tl.static_range(1, NUM_WEIGHT_CHUNKS):
+            chunk_start = tl.load(weight_chunk_starts_ptr + chunk)
+            chunk_id += (logical_row_start >= chunk_start).to(tl.int32)
+        chunk_start = tl.load(weight_chunk_starts_ptr + chunk_id)
+        address = _select_weight_ptr_address(weight_ptr_addresses, chunk_id)
+        weight_ptr = address.to(tl.pointer_type(reference_weight_ptr.dtype.element_ty))
+        row = tl.load(
+            weight_ptr + logical_row_start - chunk_start + col_offsets,
+            mask=mask,
+            other=0,
+        )
+    return row
+
+
+@triton.jit
+def _load_adjacent_weight_row(
+    weight_ptr,
+    next_weight_ptr,
+    chunk_start,
+    chunk_end,
+    logical_row_start,
+    embedding_dim,
+    col_offsets,
+    mask,
+    ROWS_MAY_CROSS_BOUNDARIES: tl.constexpr,
+):
+    if ROWS_MAY_CROSS_BOUNDARIES:
+        row_crosses_boundary = logical_row_start + embedding_dim > chunk_end
+        if row_crosses_boundary:
+            logical_offsets = logical_row_start + col_offsets
+            use_next_chunk = logical_offsets >= chunk_end
+            chunk_starts = tl.where(use_next_chunk, chunk_end, chunk_start)
+            selected_weight_ptrs = tl.where(
+                use_next_chunk,
+                next_weight_ptr,
+                weight_ptr,
+            )
+            row = tl.load(
+                selected_weight_ptrs + logical_offsets - chunk_starts,
+                mask=mask,
+                other=0,
+            )
+        else:
+            row = tl.load(
+                weight_ptr + logical_row_start - chunk_start + col_offsets,
+                mask=mask,
+                other=0,
+            )
+    else:
+        row = tl.load(
+            weight_ptr + logical_row_start - chunk_start + col_offsets,
+            mask=mask,
+            other=0,
+        )
+    return row
+
+
+@triton.jit
+def _load_runtime_single_boundary_weight_row(
+    weight_ptrs,
+    weight_ptr_addresses,
+    weight_chunk_starts: tl.constexpr,
+    weight_chunk_starts_ptr,
+    logical_row_start,
+    embedding_dim,
+    col_offsets,
+    mask,
+    NUM_WEIGHT_CHUNKS: tl.constexpr,
+    ROWS_MAY_CROSS_BOUNDARIES: tl.constexpr,
+):
+    if NUM_WEIGHT_CHUNKS == 8:
+        chunk_start_4 = tl.full((), weight_chunk_starts[4], tl.int64)
+        if logical_row_start >= chunk_start_4:
+            chunk_start_6 = tl.full((), weight_chunk_starts[6], tl.int64)
+            if logical_row_start >= chunk_start_6:
+                chunk_start_7 = tl.full((), weight_chunk_starts[7], tl.int64)
+                if logical_row_start >= chunk_start_7:
+                    row = tl.load(
+                        weight_ptrs[7]
+                        + logical_row_start
+                        - chunk_start_7
+                        + col_offsets,
+                        mask=mask,
+                        other=0,
+                    )
+                else:
+                    row = _load_adjacent_weight_row(
+                        weight_ptrs[6],
+                        weight_ptrs[7],
+                        chunk_start_6,
+                        chunk_start_7,
+                        logical_row_start,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        ROWS_MAY_CROSS_BOUNDARIES,
+                    )
+            else:
+                chunk_start_5 = tl.full((), weight_chunk_starts[5], tl.int64)
+                if logical_row_start >= chunk_start_5:
+                    row = _load_adjacent_weight_row(
+                        weight_ptrs[5],
+                        weight_ptrs[6],
+                        chunk_start_5,
+                        chunk_start_6,
+                        logical_row_start,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        ROWS_MAY_CROSS_BOUNDARIES,
+                    )
+                else:
+                    row = _load_adjacent_weight_row(
+                        weight_ptrs[4],
+                        weight_ptrs[5],
+                        chunk_start_4,
+                        chunk_start_5,
+                        logical_row_start,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        ROWS_MAY_CROSS_BOUNDARIES,
+                    )
+        else:
+            chunk_start_2 = tl.full((), weight_chunk_starts[2], tl.int64)
+            if logical_row_start >= chunk_start_2:
+                chunk_start_3 = tl.full((), weight_chunk_starts[3], tl.int64)
+                if logical_row_start >= chunk_start_3:
+                    row = _load_adjacent_weight_row(
+                        weight_ptrs[3],
+                        weight_ptrs[4],
+                        chunk_start_3,
+                        chunk_start_4,
+                        logical_row_start,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        ROWS_MAY_CROSS_BOUNDARIES,
+                    )
+                else:
+                    row = _load_adjacent_weight_row(
+                        weight_ptrs[2],
+                        weight_ptrs[3],
+                        chunk_start_2,
+                        chunk_start_3,
+                        logical_row_start,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        ROWS_MAY_CROSS_BOUNDARIES,
+                    )
+            else:
+                chunk_start_1 = tl.full((), weight_chunk_starts[1], tl.int64)
+                if logical_row_start >= chunk_start_1:
+                    row = _load_adjacent_weight_row(
+                        weight_ptrs[1],
+                        weight_ptrs[2],
+                        chunk_start_1,
+                        chunk_start_2,
+                        logical_row_start,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        ROWS_MAY_CROSS_BOUNDARIES,
+                    )
+                else:
+                    chunk_start = tl.full((), 0, tl.int64)
+                    row = _load_adjacent_weight_row(
+                        weight_ptrs[0],
+                        weight_ptrs[1],
+                        chunk_start,
+                        chunk_start_1,
+                        logical_row_start,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        ROWS_MAY_CROSS_BOUNDARIES,
+                    )
+    else:
+        chunk_id = 0
+        for chunk in tl.static_range(1, NUM_WEIGHT_CHUNKS):
+            next_chunk_start = tl.load(weight_chunk_starts_ptr + chunk)
+            chunk_id += (logical_row_start >= next_chunk_start).to(tl.int32)
+        chunk_start = tl.load(weight_chunk_starts_ptr + chunk_id)
+        address = _select_weight_ptr_address(weight_ptr_addresses, chunk_id)
+        has_next_chunk = chunk_id + 1 < NUM_WEIGHT_CHUNKS
+        chunk_end = tl.load(
+            weight_chunk_starts_ptr + chunk_id + 1,
+            mask=has_next_chunk,
+            other=logical_row_start + embedding_dim,
+        )
+        next_address = _select_weight_ptr_address(
+            weight_ptr_addresses,
+            tl.minimum(chunk_id + 1, NUM_WEIGHT_CHUNKS - 1),
+        )
+        row_crosses_boundary = logical_row_start + embedding_dim > chunk_end
+        if row_crosses_boundary:
+            logical_offsets = logical_row_start + col_offsets
+            use_next_chunk = logical_offsets >= chunk_end
+            chunk_starts = tl.where(use_next_chunk, chunk_end, chunk_start)
+            addresses = tl.where(use_next_chunk, next_address, address)
+            selected_weight_ptrs = addresses.to(
+                tl.pointer_type(weight_ptrs[0].dtype.element_ty)
+            )
+            row = tl.load(
+                selected_weight_ptrs + logical_offsets - chunk_starts,
+                mask=mask,
+                other=0,
+            )
+        else:
+            weight_ptr = address.to(tl.pointer_type(weight_ptrs[0].dtype.element_ty))
+            row = tl.load(
+                weight_ptr + logical_row_start - chunk_start + col_offsets,
+                mask=mask,
+                other=0,
+            )
+    return row
+
+
+@triton.jit
+def _load_single_split_weight_row(
+    reference_weight_ptr,
+    weight_ptr_addresses,
+    weight_chunk_starts_ptr,
+    encoded_chunk,
+    split_boundary,
+    logical_row_start,
+    embedding_dim,
+    col_offsets,
+    mask,
+):
+    left_chunk = -encoded_chunk - 2
+    left_chunk_start = tl.load(weight_chunk_starts_ptr + left_chunk)
+    right_chunk_start = tl.load(weight_chunk_starts_ptr + left_chunk + 1)
+    left_address = _select_weight_ptr_address(weight_ptr_addresses, left_chunk)
+    right_address = _select_weight_ptr_address(
+        weight_ptr_addresses,
+        left_chunk + 1,
+    )
+    row_crosses_boundary = (logical_row_start < split_boundary) & (
+        logical_row_start + embedding_dim > split_boundary
+    )
+    if row_crosses_boundary:
+        logical_offsets = logical_row_start + col_offsets
+        addresses = tl.where(
+            logical_offsets < split_boundary,
+            left_address,
+            right_address,
+        )
+        chunk_starts = tl.where(
+            logical_offsets < split_boundary,
+            left_chunk_start,
+            right_chunk_start,
+        )
+        weight_ptrs = addresses.to(
+            tl.pointer_type(reference_weight_ptr.dtype.element_ty)
+        )
+        row = tl.load(
+            weight_ptrs + logical_offsets - chunk_starts,
+            mask=mask,
+            other=0,
+        )
+    else:
+        use_right_chunk = logical_row_start >= split_boundary
+        address = tl.where(use_right_chunk, right_address, left_address)
+        chunk_start = tl.where(
+            use_right_chunk,
+            right_chunk_start,
+            left_chunk_start,
+        )
+        weight_ptr = address.to(tl.pointer_type(reference_weight_ptr.dtype.element_ty))
+        row = tl.load(
+            weight_ptr + logical_row_start - chunk_start + col_offsets,
+            mask=mask,
+            other=0,
+        )
+    return row
+
+
+@triton.jit
+def _load_partitioned_feature_weight_row(
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
+    weight_ptr_addresses,
+    weight_chunk_starts_ptr,
+    direct_weight_ptr,
+    direct_table_offset,
+    table_offset,
+    row_idx,
+    embedding_dim,
+    col_offsets,
+    mask,
+    feature_chunk_id,
+    PROCESS_MODE: tl.constexpr,
+):
+    if PROCESS_MODE == 0:
+        row = tl.load(
+            direct_weight_ptr
+            + direct_table_offset
+            + row_idx * embedding_dim
+            + col_offsets,
+            mask=mask,
+            other=0,
+        )
+    elif PROCESS_MODE == 1:
+        row = _load_single_split_weight_row(
+            weight_ptrs[0],
+            weight_ptr_addresses,
+            weight_chunk_starts_ptr,
+            feature_chunk_id,
+            direct_table_offset,
+            table_offset + row_idx * embedding_dim,
+            embedding_dim,
+            col_offsets,
+            mask,
+        )
+    elif PROCESS_MODE == 2:
+        row = _load_runtime_single_boundary_weight_row(
+            weight_ptrs,
+            weight_ptr_addresses,
+            weight_chunk_starts,
+            weight_chunk_starts_ptr,
+            table_offset + row_idx * embedding_dim,
+            embedding_dim,
+            col_offsets,
+            mask,
+            len(weight_chunk_starts),
+            True,
+        )
+    else:
+        row = _load_runtime_weight_row(
+            weight_ptrs[0],
+            weight_ptr_addresses,
+            weight_chunk_starts_ptr,
+            split_weight_row_starts,
+            table_offset + row_idx * embedding_dim,
+            col_offsets,
+            mask,
+            len(weight_chunk_starts),
+        )
+    return row
+
+
+@triton.jit
 def table_batched_embedding_bag_forward_weighted_kernel(
     output_ptr,
     indices_ptr,
     offsets_ptr,
-    weight_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
     table_offsets_ptr,
     embedding_dims_ptr,
     embedding_offsets_ptr,
@@ -174,7 +695,7 @@ def table_batched_embedding_bag_forward_weighted_kernel(
     vbe: tl.constexpr = False,
     info_B_num_bits=0,
     info_B_mask=0,
-) -> None:
+):
 
     b_t = tl.program_id(0).to(tl.int64)
 
@@ -199,7 +720,7 @@ def table_batched_embedding_bag_forward_weighted_kernel(
     col_offsets = tl.arange(0, BLOCK_SIZE)
     mask = col_offsets < embedding_dim
     accumulator_dtype: tl.constexpr = (
-        tl.float64 if weight_ptr.dtype.element_ty == tl.float32 else tl.float32
+        tl.float64 if weight_ptrs[0].dtype.element_ty == tl.float32 else tl.float32
     )
     bag_output = tl.zeros((BLOCK_SIZE,), dtype=accumulator_dtype)
 
@@ -214,20 +735,38 @@ def table_batched_embedding_bag_forward_weighted_kernel(
         row_idx_2 = tl.load(indices_ptr + idx + 2)
         row_idx_3 = tl.load(indices_ptr + idx + 3)
 
-        row_start_ptr_0 = weight_ptr + table_offset + row_idx_0 * embedding_dim
-        row_start_ptr_1 = weight_ptr + table_offset + row_idx_1 * embedding_dim
-        row_start_ptr_2 = weight_ptr + table_offset + row_idx_2 * embedding_dim
-        row_start_ptr_3 = weight_ptr + table_offset + row_idx_3 * embedding_dim
-
-        row_ptrs_0 = row_start_ptr_0 + col_offsets
-        row_ptrs_1 = row_start_ptr_1 + col_offsets
-        row_ptrs_2 = row_start_ptr_2 + col_offsets
-        row_ptrs_3 = row_start_ptr_3 + col_offsets
-
-        row_0 = tl.load(row_ptrs_0, mask=mask, other=0)
-        row_1 = tl.load(row_ptrs_1, mask=mask, other=0)
-        row_2 = tl.load(row_ptrs_2, mask=mask, other=0)
-        row_3 = tl.load(row_ptrs_3, mask=mask, other=0)
+        row_0 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_0 * embedding_dim,
+            col_offsets,
+            mask,
+        )
+        row_1 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_1 * embedding_dim,
+            col_offsets,
+            mask,
+        )
+        row_2 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_2 * embedding_dim,
+            col_offsets,
+            mask,
+        )
+        row_3 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_3 * embedding_dim,
+            col_offsets,
+            mask,
+        )
 
         idx_weight_0 = tl.load(per_sample_weights_ptr + idx + 0)
         idx_weight_1 = tl.load(per_sample_weights_ptr + idx + 1)
@@ -245,9 +784,14 @@ def table_batched_embedding_bag_forward_weighted_kernel(
 
     for idx in range(endn, end):
         row_idx = tl.load(indices_ptr + idx)
-        row_start_ptr = weight_ptr + table_offset + row_idx * embedding_dim
-        row_ptrs = row_start_ptr + col_offsets
-        row = tl.load(row_ptrs, mask=mask, other=0)
+        row = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx * embedding_dim,
+            col_offsets,
+            mask,
+        )
 
         idx_weight = tl.load(per_sample_weights_ptr + idx)
         # Explicitly convert to float32 before accumulating
@@ -271,7 +815,9 @@ def table_batched_embedding_bag_grad_per_sample_weights_kernel(  # noqa: TR001
     dout_ptr,
     indices_ptr,
     offsets_ptr,
-    weight_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
     table_offsets_ptr,
     embedding_dims_ptr,
     embedding_offsets_ptr,
@@ -321,25 +867,37 @@ def table_batched_embedding_bag_grad_per_sample_weights_kernel(  # noqa: TR001
         row_idx_1 = tl.load(indices_ptr + idx + 1)
         row_idx_2 = tl.load(indices_ptr + idx + 2)
         row_idx_3 = tl.load(indices_ptr + idx + 3)
-        row_0 = tl.load(
-            weight_ptr + table_offset + row_idx_0 * embedding_dim + col_offsets,
-            mask=mask,
-            other=0,
+        row_0 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_0 * embedding_dim,
+            col_offsets,
+            mask,
         )
-        row_1 = tl.load(
-            weight_ptr + table_offset + row_idx_1 * embedding_dim + col_offsets,
-            mask=mask,
-            other=0,
+        row_1 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_1 * embedding_dim,
+            col_offsets,
+            mask,
         )
-        row_2 = tl.load(
-            weight_ptr + table_offset + row_idx_2 * embedding_dim + col_offsets,
-            mask=mask,
-            other=0,
+        row_2 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_2 * embedding_dim,
+            col_offsets,
+            mask,
         )
-        row_3 = tl.load(
-            weight_ptr + table_offset + row_idx_3 * embedding_dim + col_offsets,
-            mask=mask,
-            other=0,
+        row_3 = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx_3 * embedding_dim,
+            col_offsets,
+            mask,
         )
         # Triton TR005: accumulate dot products in FP32.
         grad_per_sample_weight_0 = tl.sum(row_0.to(tl.float32) * dout_row, axis=0)
@@ -353,10 +911,13 @@ def table_batched_embedding_bag_grad_per_sample_weights_kernel(  # noqa: TR001
 
     for idx in range(full_end, end):
         row_idx = tl.load(indices_ptr + idx)
-        row = tl.load(
-            weight_ptr + table_offset + row_idx * embedding_dim + col_offsets,
-            mask=mask,
-            other=0,
+        row = _load_weight_row(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            table_offset + row_idx * embedding_dim,
+            col_offsets,
+            mask,
         )
         grad_per_sample_weight = tl.sum(row.to(tl.float32) * dout_row, axis=0)
         tl.store(grad_per_sample_weights_ptr + idx, grad_per_sample_weight)
@@ -619,6 +1180,545 @@ def table_batched_embedding_bag_forward_unweighted_kernel(
 
 
 @triton.jit
+# Triton TR001: BLOCK_SIZE is fixed by the embedding width.
+def table_batched_embedding_bag_forward_unweighted_single_boundary_kernel(  # noqa: C901, TR001
+    output_ptr,
+    indices_ptr,
+    offsets_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    weight_ptr_addresses,
+    weight_chunk_starts_ptr,
+    table_offsets_ptr,
+    embedding_dims_ptr,
+    embedding_offsets_ptr,
+    feature_table_map_ptr,
+    rows_cumsum_ptr,
+    bounds_check_warning_ptr,
+    row_output_offsets_ptr,
+    B_offsets_ptr,
+    total_embedding_dim: tl.constexpr,
+    B,
+    T: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+    ROWS_MAY_CROSS_BOUNDARIES: tl.constexpr = True,
+    vbe: tl.constexpr = False,
+    FEATURE_START: tl.constexpr = 0,
+    FEATURE_END: tl.constexpr = -1,
+    BAGS_PER_PROGRAM: tl.constexpr = 1,
+    FUSED_BOUNDS_CHECK: tl.constexpr = False,
+):
+    base_b = tl.program_id(0).to(tl.int64) * BAGS_PER_PROGRAM
+    col_offsets = tl.arange(0, BLOCK_SIZE)
+    warning_count = 0
+
+    feature_end: tl.constexpr = T if FEATURE_END < 0 else FEATURE_END
+    for t in range(FEATURE_START, feature_end):
+        table_idx = tl.load(feature_table_map_ptr + t)
+        table_offset = tl.load(table_offsets_ptr + table_idx)
+        embedding_dim = tl.load(embedding_dims_ptr + t)
+        embedding_offset = tl.load(embedding_offsets_ptr + t)
+        if FUSED_BOUNDS_CHECK:
+            num_rows = tl.load(rows_cumsum_ptr + table_idx + 1) - tl.load(
+                rows_cumsum_ptr + table_idx
+            )
+
+        if vbe:
+            B_start = tl.load(B_offsets_ptr + t).to(tl.int64)
+            B_end = tl.load(B_offsets_ptr + t + 1).to(tl.int64)
+            B_t = B_end - B_start
+
+        for bag_slot in tl.static_range(0, BAGS_PER_PROGRAM):
+            b = base_b + bag_slot
+            if vbe:
+                b_t = B_start + b
+                in_bounds = b < B_t
+            else:
+                b_t = t * B + b
+                in_bounds = b < B
+
+            if in_bounds:
+                start = tl.load(offsets_ptr + b_t)
+                end = tl.load(offsets_ptr + b_t + 1)
+                mask = col_offsets < embedding_dim
+                accumulator_dtype: tl.constexpr = (
+                    tl.float64
+                    if weight_ptrs[0].dtype.element_ty == tl.float32
+                    else tl.float32
+                )
+                bag_output = tl.zeros((BLOCK_SIZE,), dtype=accumulator_dtype)
+
+                if ROWS_MAY_CROSS_BOUNDARIES:
+                    for idx in range(start, end):
+                        row_idx, invalid = _load_checked_index(
+                            indices_ptr,
+                            idx,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        if FUSED_BOUNDS_CHECK:
+                            warning_count += invalid.to(tl.int32)
+                        row = _load_runtime_single_boundary_weight_row(
+                            weight_ptrs,
+                            weight_ptr_addresses,
+                            weight_chunk_starts,
+                            weight_chunk_starts_ptr,
+                            table_offset + row_idx * embedding_dim,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            len(weight_chunk_starts),
+                            True,
+                        )
+                        bag_output += row.to(tl.float32)
+                else:
+                    step: tl.constexpr = 2
+                    ns = (end - start) // step
+                    endn = start + step * ns
+                    for idx in range(start, endn, step):
+                        row_idx_0, invalid_0 = _load_checked_index(
+                            indices_ptr,
+                            idx,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        row_idx_1, invalid_1 = _load_checked_index(
+                            indices_ptr,
+                            idx + 1,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        if FUSED_BOUNDS_CHECK:
+                            warning_count += invalid_0.to(tl.int32) + invalid_1.to(
+                                tl.int32
+                            )
+                        row_0 = _load_runtime_single_boundary_weight_row(
+                            weight_ptrs,
+                            weight_ptr_addresses,
+                            weight_chunk_starts,
+                            weight_chunk_starts_ptr,
+                            table_offset + row_idx_0 * embedding_dim,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            len(weight_chunk_starts),
+                            ROWS_MAY_CROSS_BOUNDARIES,
+                        )
+                        row_1 = _load_runtime_single_boundary_weight_row(
+                            weight_ptrs,
+                            weight_ptr_addresses,
+                            weight_chunk_starts,
+                            weight_chunk_starts_ptr,
+                            table_offset + row_idx_1 * embedding_dim,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            len(weight_chunk_starts),
+                            ROWS_MAY_CROSS_BOUNDARIES,
+                        )
+                        bag_output += row_0.to(tl.float32) + row_1.to(tl.float32)
+
+                    for idx in range(endn, end):
+                        row_idx, invalid = _load_checked_index(
+                            indices_ptr,
+                            idx,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        if FUSED_BOUNDS_CHECK:
+                            warning_count += invalid.to(tl.int32)
+                        row = _load_runtime_single_boundary_weight_row(
+                            weight_ptrs,
+                            weight_ptr_addresses,
+                            weight_chunk_starts,
+                            weight_chunk_starts_ptr,
+                            table_offset + row_idx * embedding_dim,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            len(weight_chunk_starts),
+                            ROWS_MAY_CROSS_BOUNDARIES,
+                        )
+                        bag_output += row.to(tl.float32)
+
+                if vbe:
+                    output_row_ptrs = (
+                        output_ptr + tl.load(row_output_offsets_ptr + b_t) + col_offsets
+                    )
+                else:
+                    output_row_ptrs = (
+                        output_ptr
+                        + b * total_embedding_dim
+                        + embedding_offset
+                        + col_offsets
+                    )
+                tl.store(output_row_ptrs, bag_output.to(tl.float32), mask=mask)
+
+    if FUSED_BOUNDS_CHECK and warning_count > 0:
+        tl.atomic_add(bounds_check_warning_ptr, warning_count.to(tl.int64))
+
+
+@triton.jit
+def table_batched_embedding_bag_forward_unweighted_chunked_kernel(  # noqa: C901, TR001
+    output_ptr,
+    indices_ptr,
+    offsets_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
+    weight_ptr_addresses,
+    weight_chunk_starts_ptr,
+    feature_weight_chunk_ids_ptr,
+    feature_chunk_relative_table_offsets_ptr,
+    table_offsets_ptr,
+    embedding_dims_ptr,
+    embedding_offsets_ptr,
+    feature_table_map_ptr,
+    rows_cumsum_ptr,
+    bounds_check_warning_ptr,
+    row_output_offsets_ptr,
+    B_offsets_ptr,
+    total_embedding_dim: tl.constexpr,
+    B,
+    T: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+    vbe: tl.constexpr = False,
+    FEATURE_START: tl.constexpr = 0,
+    FEATURE_END: tl.constexpr = -1,
+    BAGS_PER_PROGRAM: tl.constexpr = 1,
+    UNROLL8: tl.constexpr = False,
+    FUSED_BOUNDS_CHECK: tl.constexpr = False,
+    PROCESS_MODE: tl.constexpr = 0,
+):
+    base_b = tl.program_id(0).to(tl.int64) * BAGS_PER_PROGRAM
+    col_offsets = tl.arange(0, BLOCK_SIZE)
+    warning_count = 0
+
+    feature_end: tl.constexpr = T if FEATURE_END < 0 else FEATURE_END
+    for t in range(FEATURE_START, feature_end):
+        table_idx = tl.load(feature_table_map_ptr + t)
+        table_offset = tl.load(table_offsets_ptr + table_idx)
+        if PROCESS_MODE == 0:
+            feature_chunk_id = tl.load(feature_weight_chunk_ids_ptr + t)
+            process_feature = feature_chunk_id >= 0
+            direct_address = _select_weight_ptr_address(
+                weight_ptr_addresses,
+                tl.maximum(feature_chunk_id, 0),
+            )
+            direct_weight_ptr = direct_address.to(
+                tl.pointer_type(weight_ptrs[0].dtype.element_ty)
+            )
+            direct_table_offset = tl.load(feature_chunk_relative_table_offsets_ptr + t)
+        elif PROCESS_MODE == 1:
+            feature_chunk_id = tl.load(feature_weight_chunk_ids_ptr + t)
+            process_feature = True
+            direct_weight_ptr = weight_ptrs[0]
+            direct_table_offset = tl.load(feature_chunk_relative_table_offsets_ptr + t)
+        else:
+            feature_chunk_id = -1
+            process_feature = True
+            direct_weight_ptr = weight_ptrs[0]
+            direct_table_offset = 0
+        embedding_dim = tl.load(embedding_dims_ptr + t)
+        embedding_offset = tl.load(embedding_offsets_ptr + t)
+        if FUSED_BOUNDS_CHECK:
+            num_rows = tl.load(rows_cumsum_ptr + table_idx + 1) - tl.load(
+                rows_cumsum_ptr + table_idx
+            )
+
+        if vbe:
+            B_start = tl.load(B_offsets_ptr + t).to(tl.int64)
+            B_end = tl.load(B_offsets_ptr + t + 1).to(tl.int64)
+            B_t = B_end - B_start
+
+        for bag_slot in tl.static_range(0, BAGS_PER_PROGRAM):
+            b = base_b + bag_slot
+            if vbe:
+                b_t = B_start + b
+                in_bounds = (b < B_t) & process_feature
+            else:
+                b_t = t * B + b
+                in_bounds = (b < B) & process_feature
+
+            if in_bounds:
+                start = tl.load(offsets_ptr + b_t)
+                end = tl.load(offsets_ptr + b_t + 1)
+                mask = col_offsets < embedding_dim
+                accumulator_dtype: tl.constexpr = (
+                    tl.float64
+                    if weight_ptrs[0].dtype.element_ty == tl.float32
+                    else tl.float32
+                )
+                bag_output = tl.zeros((BLOCK_SIZE,), dtype=accumulator_dtype)
+
+                step: tl.constexpr = 8 if UNROLL8 else 4
+                ns = (end - start) // step
+                endn = start + step * ns
+
+                for idx in range(start, endn, step):
+                    row_idx_0, invalid_0 = _load_checked_index(
+                        indices_ptr,
+                        idx + 0,
+                        num_rows if FUSED_BOUNDS_CHECK else 0,
+                        True,
+                        FUSED_BOUNDS_CHECK,
+                    )
+                    row_idx_1, invalid_1 = _load_checked_index(
+                        indices_ptr,
+                        idx + 1,
+                        num_rows if FUSED_BOUNDS_CHECK else 0,
+                        True,
+                        FUSED_BOUNDS_CHECK,
+                    )
+                    row_idx_2, invalid_2 = _load_checked_index(
+                        indices_ptr,
+                        idx + 2,
+                        num_rows if FUSED_BOUNDS_CHECK else 0,
+                        True,
+                        FUSED_BOUNDS_CHECK,
+                    )
+                    row_idx_3, invalid_3 = _load_checked_index(
+                        indices_ptr,
+                        idx + 3,
+                        num_rows if FUSED_BOUNDS_CHECK else 0,
+                        True,
+                        FUSED_BOUNDS_CHECK,
+                    )
+                    if FUSED_BOUNDS_CHECK:
+                        warning_count += (
+                            invalid_0.to(tl.int32)
+                            + invalid_1.to(tl.int32)
+                            + invalid_2.to(tl.int32)
+                            + invalid_3.to(tl.int32)
+                        )
+                    if UNROLL8:
+                        row_idx_4, invalid_4 = _load_checked_index(
+                            indices_ptr,
+                            idx + 4,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        row_idx_5, invalid_5 = _load_checked_index(
+                            indices_ptr,
+                            idx + 5,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        row_idx_6, invalid_6 = _load_checked_index(
+                            indices_ptr,
+                            idx + 6,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        row_idx_7, invalid_7 = _load_checked_index(
+                            indices_ptr,
+                            idx + 7,
+                            num_rows if FUSED_BOUNDS_CHECK else 0,
+                            True,
+                            FUSED_BOUNDS_CHECK,
+                        )
+                        if FUSED_BOUNDS_CHECK:
+                            warning_count += (
+                                invalid_4.to(tl.int32)
+                                + invalid_5.to(tl.int32)
+                                + invalid_6.to(tl.int32)
+                                + invalid_7.to(tl.int32)
+                            )
+                    row_0 = _load_partitioned_feature_weight_row(
+                        weight_ptrs,
+                        weight_chunk_starts,
+                        split_weight_row_starts,
+                        weight_ptr_addresses,
+                        weight_chunk_starts_ptr,
+                        direct_weight_ptr,
+                        direct_table_offset,
+                        table_offset,
+                        row_idx_0,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        feature_chunk_id,
+                        PROCESS_MODE,
+                    )
+                    row_1 = _load_partitioned_feature_weight_row(
+                        weight_ptrs,
+                        weight_chunk_starts,
+                        split_weight_row_starts,
+                        weight_ptr_addresses,
+                        weight_chunk_starts_ptr,
+                        direct_weight_ptr,
+                        direct_table_offset,
+                        table_offset,
+                        row_idx_1,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        feature_chunk_id,
+                        PROCESS_MODE,
+                    )
+                    row_2 = _load_partitioned_feature_weight_row(
+                        weight_ptrs,
+                        weight_chunk_starts,
+                        split_weight_row_starts,
+                        weight_ptr_addresses,
+                        weight_chunk_starts_ptr,
+                        direct_weight_ptr,
+                        direct_table_offset,
+                        table_offset,
+                        row_idx_2,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        feature_chunk_id,
+                        PROCESS_MODE,
+                    )
+                    row_3 = _load_partitioned_feature_weight_row(
+                        weight_ptrs,
+                        weight_chunk_starts,
+                        split_weight_row_starts,
+                        weight_ptr_addresses,
+                        weight_chunk_starts_ptr,
+                        direct_weight_ptr,
+                        direct_table_offset,
+                        table_offset,
+                        row_idx_3,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        feature_chunk_id,
+                        PROCESS_MODE,
+                    )
+                    if UNROLL8:
+                        row_4 = _load_partitioned_feature_weight_row(
+                            weight_ptrs,
+                            weight_chunk_starts,
+                            split_weight_row_starts,
+                            weight_ptr_addresses,
+                            weight_chunk_starts_ptr,
+                            direct_weight_ptr,
+                            direct_table_offset,
+                            table_offset,
+                            row_idx_4,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            feature_chunk_id,
+                            PROCESS_MODE,
+                        )
+                        row_5 = _load_partitioned_feature_weight_row(
+                            weight_ptrs,
+                            weight_chunk_starts,
+                            split_weight_row_starts,
+                            weight_ptr_addresses,
+                            weight_chunk_starts_ptr,
+                            direct_weight_ptr,
+                            direct_table_offset,
+                            table_offset,
+                            row_idx_5,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            feature_chunk_id,
+                            PROCESS_MODE,
+                        )
+                        row_6 = _load_partitioned_feature_weight_row(
+                            weight_ptrs,
+                            weight_chunk_starts,
+                            split_weight_row_starts,
+                            weight_ptr_addresses,
+                            weight_chunk_starts_ptr,
+                            direct_weight_ptr,
+                            direct_table_offset,
+                            table_offset,
+                            row_idx_6,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            feature_chunk_id,
+                            PROCESS_MODE,
+                        )
+                        row_7 = _load_partitioned_feature_weight_row(
+                            weight_ptrs,
+                            weight_chunk_starts,
+                            split_weight_row_starts,
+                            weight_ptr_addresses,
+                            weight_chunk_starts_ptr,
+                            direct_weight_ptr,
+                            direct_table_offset,
+                            table_offset,
+                            row_idx_7,
+                            embedding_dim,
+                            col_offsets,
+                            mask,
+                            feature_chunk_id,
+                            PROCESS_MODE,
+                        )
+                    bag_output += (
+                        row_0.to(tl.float32)
+                        + row_1.to(tl.float32)
+                        + row_2.to(tl.float32)
+                        + row_3.to(tl.float32)
+                    )
+                    if UNROLL8:
+                        bag_output += (
+                            row_4.to(tl.float32)
+                            + row_5.to(tl.float32)
+                            + row_6.to(tl.float32)
+                            + row_7.to(tl.float32)
+                        )
+
+                for idx in range(endn, end):
+                    row_idx, invalid = _load_checked_index(
+                        indices_ptr,
+                        idx,
+                        num_rows if FUSED_BOUNDS_CHECK else 0,
+                        True,
+                        FUSED_BOUNDS_CHECK,
+                    )
+                    if FUSED_BOUNDS_CHECK:
+                        warning_count += invalid.to(tl.int32)
+                    row = _load_partitioned_feature_weight_row(
+                        weight_ptrs,
+                        weight_chunk_starts,
+                        split_weight_row_starts,
+                        weight_ptr_addresses,
+                        weight_chunk_starts_ptr,
+                        direct_weight_ptr,
+                        direct_table_offset,
+                        table_offset,
+                        row_idx,
+                        embedding_dim,
+                        col_offsets,
+                        mask,
+                        feature_chunk_id,
+                        PROCESS_MODE,
+                    )
+                    bag_output += row.to(tl.float32)
+
+                if vbe:
+                    row_output_offset = tl.load(row_output_offsets_ptr + b_t)
+                    output_row_ptrs = output_ptr + row_output_offset + col_offsets
+                else:
+                    output_row_ptrs = (
+                        output_ptr
+                        + b * total_embedding_dim
+                        + embedding_offset
+                        + col_offsets
+                    )
+                tl.store(output_row_ptrs, bag_output.to(tl.float32), mask=mask)
+
+    if FUSED_BOUNDS_CHECK and warning_count > 0:
+        tl.atomic_add(bounds_check_warning_ptr, warning_count.to(tl.int64))
+
+
+@triton.jit
 def table_batched_embedding_bag_forward_small_table_kernel(
     output_ptr,
     histogram_counts_ptr,
@@ -785,7 +1885,9 @@ def triton_tbe_backward_histogram_apply_rowwise_adagrad(
 @triton.jit
 def triton_tbe_backward_short_run_unweighted(
     dout_ptr,
-    weight_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
     infos_sorted_ptr,
     sorted_linear_indices_run_ptr,
     sorted_linear_indices_cumulative_run_lengths_ptr,
@@ -815,7 +1917,7 @@ def triton_tbe_backward_short_run_unweighted(
     stochastic_rounding_seed,
     vbe: tl.constexpr = False,
     BUFFER_SIZE: tl.constexpr = 2,
-) -> None:
+):
     """Backward kernel for short runs only. Each program handles one short run."""
     col_offsets = tl.arange(0, BLOCK_SIZE)
     # Gather width, tuned per target in TbeBackwardConfig. Each buffered row
@@ -934,8 +2036,15 @@ def triton_tbe_backward_short_run_unweighted(
 
             index_offset = tl.load(hash_size_cumsum_ptr + t)
             row_idx = linear_index - index_offset
-            row_start_ptr = weight_ptr + table_offset + row_idx * embedding_dim
-            row_ptrs = row_start_ptr + col_offsets
+            logical_row_start = table_offset + row_idx * embedding_dim
+            row_ptrs = _get_weight_row_ptrs_for_update(
+                weight_ptrs,
+                weight_chunk_starts,
+                split_weight_row_starts,
+                logical_row_start,
+                col_offsets,
+                mask,
+            )
             row = tl.load(row_ptrs, mask=col_offsets < embedding_dim, other=0).to(
                 tl.float32
             )
@@ -978,7 +2087,9 @@ def triton_tbe_backward_short_run_unweighted(
 @triton.jit
 def triton_tbe_backward_short_run_weighted(
     dout_ptr,
-    weight_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
     infos_sorted_ptr,
     sorted_linear_indices_run_ptr,
     sorted_linear_indices_cumulative_run_lengths_ptr,
@@ -1009,7 +2120,7 @@ def triton_tbe_backward_short_run_weighted(
     stochastic_rounding_seed,
     vbe: tl.constexpr = False,
     BUFFER_SIZE: tl.constexpr = 4,
-) -> None:
+):
     """Backward kernel for short runs only (weighted). Each program handles one short run."""
     col_offsets = tl.arange(0, BLOCK_SIZE)
     # Gather width, tuned per target in TbeBackwardConfig.
@@ -1130,8 +2241,15 @@ def triton_tbe_backward_short_run_weighted(
 
             index_offset = tl.load(hash_size_cumsum_ptr + t)
             row_idx = linear_index - index_offset
-            row_start_ptr = weight_ptr + table_offset + row_idx * embedding_dim
-            row_ptrs = row_start_ptr + col_offsets
+            logical_row_start = table_offset + row_idx * embedding_dim
+            row_ptrs = _get_weight_row_ptrs_for_update(
+                weight_ptrs,
+                weight_chunk_starts,
+                split_weight_row_starts,
+                logical_row_start,
+                col_offsets,
+                mask,
+            )
             row = tl.load(row_ptrs, mask=col_offsets < embedding_dim, other=0).to(
                 tl.float32
             )
@@ -1414,7 +2532,9 @@ def triton_tbe_backward_long_run_grad_accum_unweighted(
 
 @triton.jit
 def triton_tbe_backward_long_run_apply_unweighted(
-    weight_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
     temp_grad_buffer_ptr,
     sorted_linear_indices_run_ptr,
     sorted_linear_indices_cumulative_run_lengths_ptr,
@@ -1435,7 +2555,7 @@ def triton_tbe_backward_long_run_apply_unweighted(
     info_B_mask,
     STOCHASTIC_ROUNDING: tl.constexpr,
     stochastic_rounding_seed,
-) -> None:
+):
     """
     One program per long run. Reads the accumulated gradient from the temp
     buffer and applies the optimizer update to the embedding row.
@@ -1471,8 +2591,15 @@ def triton_tbe_backward_long_run_apply_unweighted(
     # Load embedding row
     index_offset = tl.load(hash_size_cumsum_ptr + t)
     row_idx = linear_index - index_offset
-    row_start_ptr = weight_ptr + table_offset + row_idx * embedding_dim
-    row_ptrs = row_start_ptr + col_offsets
+    logical_row_start = table_offset + row_idx * embedding_dim
+    row_ptrs = _get_weight_row_ptrs_for_update(
+        weight_ptrs,
+        weight_chunk_starts,
+        split_weight_row_starts,
+        logical_row_start,
+        col_offsets,
+        mask,
+    )
     row = tl.load(row_ptrs, mask=mask, other=0)
 
     row_update = row - learning_rate * grad_original
@@ -1554,7 +2681,21 @@ class TritonTBE(torch.autograd.Function):
         bwd_bucket_block_sizes: Tuple[int, ...] = (),
         bwd_feature_bucket_id: Optional[torch.Tensor] = None,
         bwd_bucket_rows: Tuple[int, ...] = (),
+        weight_ptrs: Tuple[torch.Tensor, ...] = (),
+        weight_chunk_starts: Tuple[int, ...] = (),
+        split_weight_row_starts: Tuple[int, ...] = (),
+        feature_weight_chunk_ids: Tuple[int, ...] = (),
+        feature_chunk_relative_table_offsets: Tuple[int, ...] = (),
+        weight_chunk_starts_tensor: Optional[torch.Tensor] = None,
+        feature_weight_chunk_ids_tensor: Optional[torch.Tensor] = None,
+        feature_chunk_relative_table_offsets_tensor: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
+        assert weight_ptrs
+        assert weight_chunk_starts
+        assert weight_chunk_starts_tensor is not None
+        assert feature_weight_chunk_ids_tensor is not None
+        assert feature_chunk_relative_table_offsets_tensor is not None
+
         # VBE support: use pre-computed metadata if available, otherwise compute
         vbe = batch_size_per_feature_per_rank is not None
         if vbe:
@@ -1702,7 +2843,7 @@ class TritonTBE(torch.autograd.Function):
         ctx.save_for_backward(
             indices,
             offsets,
-            weight,
+            weight_ptrs[0],
             table_offsets,
             embedding_dims,
             embedding_offsets,
@@ -1711,11 +2852,15 @@ class TritonTBE(torch.autograd.Function):
             vbe_row_output_offsets,
             vbe_B_offsets,
             vbe_b_t_map,
+            *weight_ptrs[1:],
             *histogram_counts,
             histogram_counts_invalid,
         )
 
         ctx.total_embedding_dim = total_embedding_dim
+        ctx.num_weight_ptrs = len(weight_ptrs)
+        ctx.weight_chunk_starts = weight_chunk_starts
+        ctx.split_weight_row_starts = split_weight_row_starts
         ctx.total_hash_size_bits = total_hash_size_bits
         ctx.B = B
         ctx.T = T
@@ -1792,31 +2937,54 @@ class TritonTBE(torch.autograd.Function):
         B_offsets_ptr = vbe_B_offsets
 
         if weighted:
-            fwd_kernel = (
-                _amd_fwd_weighted_kernel
-                if is_amd()
-                else table_batched_embedding_bag_forward_weighted_kernel
-            )
-            fwd_kernel[(total_B,)](
-                output,
-                indices,
-                offsets,
-                weight,
-                table_offsets,
-                embedding_dims,
-                embedding_offsets,
-                feature_table_map,
-                per_sample_weights,
-                row_output_offsets_ptr,
-                b_t_map_ptr,
-                total_embedding_dim,
-                B,
-                BLOCK_SIZE=block_size,
-                vbe=vbe,
-                info_B_num_bits=info_B_num_bits,
-                info_B_mask=info_B_mask,
-                num_warps=num_warps,
-            )
+            if is_amd():
+                _amd_fwd_weighted_kernel[(total_B,)](
+                    output,
+                    indices,
+                    offsets,
+                    weight,
+                    table_offsets,
+                    embedding_dims,
+                    embedding_offsets,
+                    feature_table_map,
+                    per_sample_weights,
+                    row_output_offsets_ptr,
+                    b_t_map_ptr,
+                    total_embedding_dim,
+                    B,
+                    BLOCK_SIZE=block_size,
+                    vbe=vbe,
+                    info_B_num_bits=info_B_num_bits,
+                    info_B_mask=info_B_mask,
+                    num_warps=num_warps,
+                )
+            else:
+                forward_weighted_kernel = _specialize_weight_ptrs(
+                    table_batched_embedding_bag_forward_weighted_kernel,
+                    len(weight_ptrs),
+                )
+                forward_weighted_kernel[(total_B,)](
+                    output,
+                    indices,
+                    offsets,
+                    *weight_ptrs,
+                    weight_chunk_starts,
+                    split_weight_row_starts,
+                    table_offsets,
+                    embedding_dims,
+                    embedding_offsets,
+                    feature_table_map,
+                    per_sample_weights,
+                    row_output_offsets_ptr,
+                    b_t_map_ptr,
+                    total_embedding_dim,
+                    B,
+                    BLOCK_SIZE=block_size,
+                    vbe=vbe,
+                    info_B_num_bits=info_B_num_bits,
+                    info_B_mask=info_B_mask,
+                    num_warps=num_warps,
+                )
         else:
             empty_histogram_counts = torch.empty(
                 0, device=weight.device, dtype=torch.float16
@@ -1920,6 +3088,8 @@ class TritonTBE(torch.autograd.Function):
                         else 1
                     )
                 )
+                if len(weight_ptrs) > 1 and bags_per_program == 2:
+                    bags_per_program = 4
                 feature_ranges = []
                 feature_start = 0
                 for feature in sorted(set(optimized_histogram_features)):
@@ -1928,36 +3098,173 @@ class TritonTBE(torch.autograd.Function):
                     feature_start = feature + 1
                 if feature_start < T:
                     feature_ranges.append((feature_start, T))
-                for feature_start, feature_end in feature_ranges:
-                    if feature_start >= feature_end:
-                        continue
-                    table_batched_embedding_bag_forward_unweighted_kernel[
-                        (triton.cdiv(B, bags_per_program),)
-                    ](
-                        output,
-                        indices,
-                        offsets,
-                        weight,
-                        table_offsets,
-                        embedding_dims,
-                        embedding_offsets,
-                        feature_table_map,
-                        rows_cumsum,
-                        bounds_check_warning_ptr,
-                        row_output_offsets_ptr,
-                        B_offsets_ptr,
-                        total_embedding_dim,
-                        B,
-                        T,
-                        BLOCK_SIZE=block_size,
-                        vbe=vbe,
-                        FEATURE_START=feature_start,
-                        FEATURE_END=feature_end,
-                        BAGS_PER_PROGRAM=bags_per_program,
-                        UNROLL8=bags_per_program == 2,
-                        FUSED_BOUNDS_CHECK=fused_bounds_check,
-                        num_warps=num_warps,
+                if len(weight_ptrs) == 1:
+                    for feature_start, feature_end in feature_ranges:
+                        if feature_start >= feature_end:
+                            continue
+                        table_batched_embedding_bag_forward_unweighted_kernel[
+                            (triton.cdiv(B, bags_per_program),)
+                        ](
+                            output,
+                            indices,
+                            offsets,
+                            weight_ptrs[0],
+                            table_offsets,
+                            embedding_dims,
+                            embedding_offsets,
+                            feature_table_map,
+                            rows_cumsum,
+                            bounds_check_warning_ptr,
+                            row_output_offsets_ptr,
+                            B_offsets_ptr,
+                            total_embedding_dim,
+                            B,
+                            T,
+                            BLOCK_SIZE=block_size,
+                            vbe=vbe,
+                            FEATURE_START=feature_start,
+                            FEATURE_END=feature_end,
+                            BAGS_PER_PROGRAM=bags_per_program,
+                            UNROLL8=bags_per_program == 2,
+                            FUSED_BOUNDS_CHECK=fused_bounds_check,
+                            num_warps=num_warps,
+                        )
+                else:
+                    weight_ptr_addresses = tuple(
+                        weight_ptr.data_ptr() for weight_ptr in weight_ptrs
                     )
+                    forward_chunked_kernel = _specialize_chunked_weight_ptrs(
+                        table_batched_embedding_bag_forward_unweighted_chunked_kernel,
+                        len(weight_ptrs),
+                    )
+                    forward_single_boundary_kernel = _specialize_chunked_weight_ptrs(
+                        table_batched_embedding_bag_forward_unweighted_single_boundary_kernel,
+                        len(weight_ptrs),
+                    )
+                    process_mode_ranges: List[Tuple[int, Sequence[Tuple[int, int]]]]
+                    process_mode_ranges = []
+                    if any(chunk >= 0 for chunk in feature_weight_chunk_ids):
+                        num_direct_features = sum(
+                            chunk >= 0 for chunk in feature_weight_chunk_ids
+                        )
+                        direct_ranges = (
+                            _feature_ranges_for_process_mode(
+                                feature_ranges,
+                                feature_weight_chunk_ids,
+                                0,
+                            )
+                            if num_direct_features * 2 <= len(feature_weight_chunk_ids)
+                            else feature_ranges
+                        )
+                        process_mode_ranges.append((0, direct_ranges))
+                    if any(chunk < -1 for chunk in feature_weight_chunk_ids):
+                        process_mode_ranges.append(
+                            (
+                                1,
+                                _feature_ranges_for_process_mode(
+                                    feature_ranges,
+                                    feature_weight_chunk_ids,
+                                    1,
+                                ),
+                            )
+                        )
+                    if -1 in feature_weight_chunk_ids:
+                        single_boundary_rows = all(
+                            chunk_end - chunk_start >= block_size
+                            for chunk_start, chunk_end in zip(
+                                weight_chunk_starts,
+                                weight_chunk_starts[1:],
+                            )
+                        )
+                        general_process_mode = 2 if single_boundary_rows else 3
+                        process_mode_ranges.append(
+                            (
+                                general_process_mode,
+                                _feature_ranges_for_process_mode(
+                                    feature_ranges,
+                                    feature_weight_chunk_ids,
+                                    general_process_mode,
+                                ),
+                            )
+                        )
+                    for process_mode, process_feature_ranges in process_mode_ranges:
+                        for (
+                            process_feature_start,
+                            process_feature_end,
+                        ) in process_feature_ranges:
+                            if process_mode == 2:
+                                single_boundary_bags_per_program = 1
+                                forward_single_boundary_kernel[
+                                    (triton.cdiv(B, single_boundary_bags_per_program),)
+                                ](
+                                    output,
+                                    indices,
+                                    offsets,
+                                    *weight_ptrs,
+                                    weight_chunk_starts,
+                                    *weight_ptr_addresses,
+                                    weight_chunk_starts_tensor,
+                                    table_offsets,
+                                    embedding_dims,
+                                    embedding_offsets,
+                                    feature_table_map,
+                                    rows_cumsum,
+                                    bounds_check_warning_ptr,
+                                    row_output_offsets_ptr,
+                                    B_offsets_ptr,
+                                    total_embedding_dim,
+                                    B,
+                                    T,
+                                    BLOCK_SIZE=block_size,
+                                    ROWS_MAY_CROSS_BOUNDARIES=bool(
+                                        split_weight_row_starts
+                                    ),
+                                    vbe=vbe,
+                                    FEATURE_START=process_feature_start,
+                                    FEATURE_END=process_feature_end,
+                                    BAGS_PER_PROGRAM=single_boundary_bags_per_program,
+                                    FUSED_BOUNDS_CHECK=fused_bounds_check,
+                                    num_warps=num_warps,
+                                    num_stages=2,
+                                )
+                                continue
+                            process_bags_per_program = (
+                                1 if process_mode == 2 else bags_per_program
+                            )
+                            forward_chunked_kernel[
+                                (triton.cdiv(B, process_bags_per_program),)
+                            ](
+                                output,
+                                indices,
+                                offsets,
+                                *weight_ptrs,
+                                weight_chunk_starts,
+                                split_weight_row_starts,
+                                *weight_ptr_addresses,
+                                weight_chunk_starts_tensor,
+                                feature_weight_chunk_ids_tensor,
+                                feature_chunk_relative_table_offsets_tensor,
+                                table_offsets,
+                                embedding_dims,
+                                embedding_offsets,
+                                feature_table_map,
+                                rows_cumsum,
+                                bounds_check_warning_ptr,
+                                row_output_offsets_ptr,
+                                B_offsets_ptr,
+                                total_embedding_dim,
+                                B,
+                                T,
+                                BLOCK_SIZE=block_size,
+                                vbe=vbe,
+                                FEATURE_START=process_feature_start,
+                                FEATURE_END=process_feature_end,
+                                BAGS_PER_PROGRAM=process_bags_per_program,
+                                UNROLL8=process_bags_per_program == 2,
+                                FUSED_BOUNDS_CHECK=fused_bounds_check,
+                                PROCESS_MODE=process_mode,
+                                num_warps=num_warps,
+                            )
 
         # Record a CUDA event to mark forward kernel completion.
         # This is needed for synchronization before NCCL collectives.
@@ -1973,6 +3280,7 @@ class TritonTBE(torch.autograd.Function):
         dout = dout.contiguous()
 
         saved_tensors = ctx.saved_tensors
+        num_weight_ptrs = ctx.num_weight_ptrs
         (
             indices,
             offsets,
@@ -1986,10 +3294,20 @@ class TritonTBE(torch.autograd.Function):
             vbe_B_offsets,
             vbe_b_t_map,
         ) = saved_tensors[:11]
+        additional_weight_ptrs_end = 11 + num_weight_ptrs - 1
+        weight_ptrs = (
+            weight,
+            *saved_tensors[11:additional_weight_ptrs_end],
+        )
+        histogram_tensor_start = additional_weight_ptrs_end
         saved_histogram_plans = ctx.saved_histogram_plans
         num_saved_histograms = len(saved_histogram_plans)
-        histogram_counts = saved_tensors[11 : 11 + num_saved_histograms]
-        histogram_counts_invalid = saved_tensors[11 + num_saved_histograms]
+        histogram_counts = saved_tensors[
+            histogram_tensor_start : histogram_tensor_start + num_saved_histograms
+        ]
+        histogram_counts_invalid = saved_tensors[
+            histogram_tensor_start + num_saved_histograms
+        ]
 
         total_hash_size_bits = ctx.total_hash_size_bits
         total_embedding_dim = ctx.total_embedding_dim
@@ -2001,6 +3319,8 @@ class TritonTBE(torch.autograd.Function):
         momentum = ctx.momentum
         rows_cumsum = ctx.rows_cumsum
         block_size = ctx.block_size
+        weight_chunk_starts = ctx.weight_chunk_starts
+        split_weight_row_starts = ctx.split_weight_row_starts
 
         stochastic_rounding = ctx.stochastic_rounding
         vbe = ctx.vbe
@@ -2017,12 +3337,18 @@ class TritonTBE(torch.autograd.Function):
             grad_per_sample_weights = torch.empty_like(per_sample_weights)
             total_B = offsets.numel() - 1
             if total_B > 0:
-                table_batched_embedding_bag_grad_per_sample_weights_kernel[(total_B,)](
+                grad_per_sample_weights_kernel = _specialize_weight_ptrs(
+                    table_batched_embedding_bag_grad_per_sample_weights_kernel,
+                    len(weight_ptrs),
+                )
+                grad_per_sample_weights_kernel[(total_B,)](
                     grad_per_sample_weights,
                     dout,
                     indices,
                     offsets,
-                    weight,
+                    *weight_ptrs,
+                    weight_chunk_starts,
+                    split_weight_row_starts,
                     table_offsets,
                     embedding_dims,
                     embedding_offsets,
@@ -2269,6 +3595,11 @@ class TritonTBE(torch.autograd.Function):
 
         # Select kernel variants based on hardware
         _use_amd = is_amd()
+        bwd_weight_args = (
+            (weight,)
+            if _use_amd
+            else (*weight_ptrs, weight_chunk_starts, split_weight_row_starts)
+        )
 
         # TMA bulk atomic reduce (cp.reduce.async.bulk.tensor) for the fused
         # long-run partial-gradient accumulation. Blackwell-only, and only
@@ -2287,7 +3618,10 @@ class TritonTBE(torch.autograd.Function):
             bwd_short_w = (
                 _amd_bwd_short_weighted
                 if _use_amd
-                else triton_tbe_backward_short_run_weighted
+                else _specialize_weight_ptrs(
+                    triton_tbe_backward_short_run_weighted,
+                    len(weight_ptrs),
+                )
             )
             for _b, _bucket_bs in enumerate(
                 bucket_block_sizes if use_dim_buckets else (block_size,)
@@ -2305,7 +3639,7 @@ class TritonTBE(torch.autograd.Function):
                 _bucket_grid = min(short_run_grid_size, max(bucket_caps[_b], 1))
                 bwd_short_w[(_bucket_grid,)](
                     dout,
-                    weight,
+                    *bwd_weight_args,
                     infos_sorted,
                     sorted_linear_indices_run,
                     sorted_linear_indices_cumulative_run_lengths,
@@ -2344,9 +3678,11 @@ class TritonTBE(torch.autograd.Function):
                 # CLC path: fused long-run grad accumulation + optimizer apply
                 # CLC Path is exclusive to CUDA B200+.
                 grad_accum_counter = programs_per_long_run.clone()
-                triton_tbe_backward_long_run_fused_weighted[
-                    (long_accum_or_fused_grid_size,)
-                ](
+                fused_weighted_kernel = _specialize_weight_ptrs(
+                    triton_tbe_backward_long_run_fused_weighted,
+                    len(weight_ptrs),
+                )
+                fused_weighted_kernel[(long_accum_or_fused_grid_size,)](
                     dout,
                     infos_sorted,
                     long_run_program_seg_starts,
@@ -2357,7 +3693,9 @@ class TritonTBE(torch.autograd.Function):
                     embedding_dims,
                     embedding_offsets,
                     sorted_per_sample_weights,
-                    weight,
+                    *weight_ptrs,
+                    weight_chunk_starts,
+                    split_weight_row_starts,
                     sorted_linear_indices_run,
                     sorted_linear_indices_cumulative_run_lengths,
                     long_run_original_ids,
@@ -2426,10 +3764,13 @@ class TritonTBE(torch.autograd.Function):
                 bwd_long_apply = (
                     _amd_bwd_long_apply
                     if _use_amd
-                    else triton_tbe_backward_long_run_apply_unweighted
+                    else _specialize_weight_ptrs(
+                        triton_tbe_backward_long_run_apply_unweighted,
+                        len(weight_ptrs),
+                    )
                 )
                 bwd_long_apply[(long_apply_grid_size,)](
-                    weight,
+                    *bwd_weight_args,
                     temp_grad_buffer,
                     sorted_linear_indices_run,
                     sorted_linear_indices_cumulative_run_lengths,
@@ -2458,7 +3799,10 @@ class TritonTBE(torch.autograd.Function):
             bwd_short_uw = (
                 _amd_bwd_short_unweighted
                 if _use_amd
-                else triton_tbe_backward_short_run_unweighted
+                else _specialize_weight_ptrs(
+                    triton_tbe_backward_short_run_unweighted,
+                    len(weight_ptrs),
+                )
             )
             for _b, _bucket_bs in enumerate(
                 bucket_block_sizes if use_dim_buckets else (block_size,)
@@ -2476,7 +3820,7 @@ class TritonTBE(torch.autograd.Function):
                 _bucket_grid = min(short_run_grid_size, max(bucket_caps[_b], 1))
                 bwd_short_uw[(_bucket_grid,)](
                     dout,
-                    weight,
+                    *bwd_weight_args,
                     infos_sorted,
                     sorted_linear_indices_run,
                     sorted_linear_indices_cumulative_run_lengths,
@@ -2514,9 +3858,11 @@ class TritonTBE(torch.autograd.Function):
                 # CLC path: fused long-run grad accumulation + optimizer apply
                 # CLC Path is exclusive to CUDA B200+.
                 grad_accum_counter = programs_per_long_run.clone()
-                triton_tbe_backward_long_run_fused_unweighted[
-                    (long_accum_or_fused_grid_size,)
-                ](
+                fused_unweighted_kernel = _specialize_weight_ptrs(
+                    triton_tbe_backward_long_run_fused_unweighted,
+                    len(weight_ptrs),
+                )
+                fused_unweighted_kernel[(long_accum_or_fused_grid_size,)](
                     dout,
                     infos_sorted,
                     long_run_program_seg_starts,
@@ -2526,7 +3872,9 @@ class TritonTBE(torch.autograd.Function):
                     grad_accum_counter,
                     embedding_dims,
                     embedding_offsets,
-                    weight,
+                    *weight_ptrs,
+                    weight_chunk_starts,
+                    split_weight_row_starts,
                     sorted_linear_indices_run,
                     sorted_linear_indices_cumulative_run_lengths,
                     long_run_original_ids,
@@ -2595,10 +3943,13 @@ class TritonTBE(torch.autograd.Function):
                 bwd_long_apply = (
                     _amd_bwd_long_apply
                     if _use_amd
-                    else triton_tbe_backward_long_run_apply_unweighted
+                    else _specialize_weight_ptrs(
+                        triton_tbe_backward_long_run_apply_unweighted,
+                        len(weight_ptrs),
+                    )
                 )
                 bwd_long_apply[(long_apply_grid_size,)](
-                    weight,
+                    *bwd_weight_args,
                     temp_grad_buffer,
                     sorted_linear_indices_run,
                     sorted_linear_indices_cumulative_run_lengths,
@@ -2623,10 +3974,11 @@ class TritonTBE(torch.autograd.Function):
                 )
         # Debug logging after backward kernel
         if os.environ.get("TRITON_TBE_DEBUG"):
+            debug_weight = weight_ptrs[0]
             print("[TritonTBE backward] Backward kernel completed")
             print(
-                f"[TritonTBE backward] weight after: min={weight.min().item():.4f}, max={weight.max().item():.4f}, "
-                f"has_nan={torch.isnan(weight).any().item()}, has_inf={torch.isinf(weight).any().item()}"
+                f"[TritonTBE backward] first weight chunk after: min={debug_weight.min().item():.4f}, max={debug_weight.max().item():.4f}, "
+                f"has_nan={torch.isnan(debug_weight).any().item()}, has_inf={torch.isinf(debug_weight).any().item()}"
             )
             print("[TritonTBE backward] ===== BACKWARD PASS END =====")
 
@@ -2638,6 +3990,19 @@ class TritonTableBatchedEmbeddingBags(torch.nn.Module):
     # CUDA event to track forward kernel completion for stream synchronization.
     # This is used to ensure proper ordering with NCCL collectives.
     _forward_event: Optional[torch.cuda.Event]
+
+    def _allocate_weight(
+        self,
+        total_weight_size: int,
+        weights_precision: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        return torch.empty(
+            [total_weight_size],
+            dtype=weights_precision,
+            device=device,
+            requires_grad=True,
+        )
 
     def __init__(
         self,
@@ -2745,11 +4110,32 @@ class TritonTableBatchedEmbeddingBags(torch.nn.Module):
             bucket_rows[bucket_index[max(32, triton.next_power_of_2(dim))]] += rows
         self._bwd_bucket_rows: Tuple[int, ...] = tuple(bucket_rows)
         total_weight_size = sum(table_sizes)
-        self.weight = torch.empty(
-            [total_weight_size],
-            dtype=weights_precision,
+        (
+            self._feature_weight_chunk_ids,
+            self._feature_chunk_relative_table_offsets,
+        ) = _feature_weight_chunk_metadata(
+            table_sizes,
+            feature_table_map,
+            (0,),
+            (total_weight_size,),
+        )
+        self.weight = self._allocate_weight(
+            total_weight_size,
+            weights_precision,
+            device,
+        )
+        self._weight_chunk_starts_tensor = torch.tensor(
+            (0,), dtype=torch.int64, device=device
+        )
+        self._feature_weight_chunk_ids_tensor = torch.tensor(
+            self._feature_weight_chunk_ids,
+            dtype=torch.int32,
             device=device,
-            requires_grad=True,
+        )
+        self._feature_chunk_relative_table_offsets_tensor = torch.tensor(
+            self._feature_chunk_relative_table_offsets,
+            dtype=torch.int64,
+            device=device,
         )
 
         self.output_dtype = (
@@ -2945,6 +4331,33 @@ class TritonTableBatchedEmbeddingBags(torch.nn.Module):
         per_sample_weights: Optional[torch.Tensor] = None,
         batch_size_per_feature_per_rank: Optional[List[List[int]]] = None,
     ) -> torch.Tensor:
+        return self._forward(
+            indices,
+            offsets,
+            per_sample_weights,
+            batch_size_per_feature_per_rank,
+            weight_ptrs=(self.weight,),
+            weight_chunk_starts=(0,),
+            split_weight_row_starts=(),
+            feature_weight_chunk_ids=self._feature_weight_chunk_ids,
+            feature_chunk_relative_table_offsets=(
+                self._feature_chunk_relative_table_offsets
+            ),
+        )
+
+    def _forward(
+        self,
+        indices: torch.Tensor,
+        offsets: torch.Tensor,
+        per_sample_weights: Optional[torch.Tensor],
+        batch_size_per_feature_per_rank: Optional[List[List[int]]],
+        *,
+        weight_ptrs: Tuple[torch.Tensor, ...],
+        weight_chunk_starts: Tuple[int, ...],
+        split_weight_row_starts: Tuple[int, ...],
+        feature_weight_chunk_ids: Tuple[int, ...],
+        feature_chunk_relative_table_offsets: Tuple[int, ...],
+    ) -> torch.Tensor:
         # Input type casting
         if indices.dtype != offsets.dtype:
             offsets = offsets.to(dtype=indices.dtype)
@@ -3075,6 +4488,14 @@ class TritonTableBatchedEmbeddingBags(torch.nn.Module):
             self._bwd_bucket_block_sizes,
             self._bwd_feature_bucket_id,
             self._bwd_bucket_rows,
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            feature_weight_chunk_ids,
+            feature_chunk_relative_table_offsets,
+            self._weight_chunk_starts_tensor,
+            self._feature_weight_chunk_ids_tensor,
+            self._feature_chunk_relative_table_offsets_tensor,
         )
 
     def split_embedding_weights(self) -> List[torch.Tensor]:
@@ -3177,6 +4598,183 @@ class TritonTableBatchedEmbeddingBags(torch.nn.Module):
                 stream if stream is not None else torch.cuda.current_stream()
             )
             target_stream.wait_event(self._forward_event)
+
+
+class ChunkedTritonTableBatchedEmbeddingBags(TritonTableBatchedEmbeddingBags):
+    """Triton TBE variant operating on caller-owned flattened weight chunks."""
+
+    def _allocate_weight(
+        self,
+        total_weight_size: int,
+        weights_precision: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        return torch.empty(
+            [0],
+            dtype=weights_precision,
+            device=device,
+            requires_grad=True,
+        )
+
+    def __init__(
+        self,
+        embedding_specs: List[Tuple[int, int]],
+        feature_table_map: Optional[List[int]] = None,
+        weights_precision: torch.dtype = torch.float32,
+        output_dtype: Optional[torch.dtype] = torch.float32,
+        stochastic_rounding: bool = True,
+        learning_rate: float = 0.01,
+        eps: float = 0.1,
+        optimizer: OptimType = OptimType.EXACT_SGD,
+        device: Optional[torch.device] = None,
+        hoist_transpose_to_forward: bool = False,
+        bag_size_hints: Optional[List[int]] = None,
+        fused_bounds_check: bool = False,
+        *,
+        weight_chunk_sizes: Sequence[int],
+    ) -> None:
+        if is_amd():
+            raise NotImplementedError("Chunked Triton TBE does not support AMD")
+        if bag_size_hints is not None:
+            raise NotImplementedError(
+                "Chunked Triton TBE does not support bag_size_hints"
+            )
+
+        super().__init__(
+            embedding_specs=embedding_specs,
+            feature_table_map=feature_table_map,
+            weights_precision=weights_precision,
+            output_dtype=output_dtype,
+            stochastic_rounding=stochastic_rounding,
+            learning_rate=learning_rate,
+            eps=eps,
+            optimizer=optimizer,
+            device=device,
+            hoist_transpose_to_forward=hoist_transpose_to_forward,
+            bag_size_hints=None,
+            fused_bounds_check=fused_bounds_check,
+        )
+
+        chunk_sizes = tuple(weight_chunk_sizes)
+        if not chunk_sizes:
+            raise ValueError("weight_chunk_sizes must not be empty")
+        if any(size <= 0 for size in chunk_sizes):
+            raise ValueError("weight_chunk_sizes must contain only positive values")
+
+        total_weight_size = sum(rows * dim for rows, dim in embedding_specs)
+        if sum(chunk_sizes) != total_weight_size:
+            raise ValueError(
+                "weight_chunk_sizes must sum to the flattened weight size "
+                f"{total_weight_size}, got {sum(chunk_sizes)}"
+            )
+
+        self.weight_chunk_sizes: Tuple[int, ...] = chunk_sizes
+        self.weight_chunk_starts: Tuple[int, ...] = tuple(
+            lengths_to_offsets(list(chunk_sizes))
+        )
+        table_sizes = tuple(rows * dim for rows, dim in embedding_specs)
+        (
+            self._feature_weight_chunk_ids,
+            self._feature_chunk_relative_table_offsets,
+        ) = _feature_weight_chunk_metadata(
+            table_sizes,
+            self.feature_table_map,
+            self.weight_chunk_starts,
+            self.weight_chunk_sizes,
+        )
+        split_weight_row_starts: set[int] = set()
+        table_start = 0
+        for rows, dim in embedding_specs:
+            table_end = table_start + rows * dim
+            for chunk_start in self.weight_chunk_starts[1:]:
+                if table_start < chunk_start < table_end:
+                    column = (chunk_start - table_start) % dim
+                    if column != 0:
+                        split_weight_row_starts.add(chunk_start - column)
+            table_start = table_end
+        self.split_weight_row_starts: Tuple[int, ...] = tuple(
+            sorted(split_weight_row_starts)
+        )
+        self._weight_chunk_starts_tensor = torch.tensor(
+            self.weight_chunk_starts,
+            dtype=torch.int64,
+            device=self.weight.device,
+        )
+        self._feature_weight_chunk_ids_tensor = torch.tensor(
+            self._feature_weight_chunk_ids,
+            dtype=torch.int32,
+            device=self.weight.device,
+        )
+        self._feature_chunk_relative_table_offsets_tensor = torch.tensor(
+            self._feature_chunk_relative_table_offsets,
+            dtype=torch.int64,
+            device=self.weight.device,
+        )
+
+    def _validate_weight_chunks(
+        self,
+        weight_chunks: Sequence[torch.Tensor],
+    ) -> Tuple[torch.Tensor, ...]:
+        chunks = tuple(weight_chunks)
+        if len(chunks) != len(self.weight_chunk_sizes):
+            raise ValueError(
+                f"Expected {len(self.weight_chunk_sizes)} weight chunks, "
+                f"got {len(chunks)}"
+            )
+
+        for chunk_index, (chunk, expected_size) in enumerate(
+            zip(chunks, self.weight_chunk_sizes)
+        ):
+            if chunk.dim() != 1:
+                raise ValueError(f"Weight chunk {chunk_index} must be one-dimensional")
+            if chunk.numel() != expected_size:
+                raise ValueError(
+                    f"Weight chunk {chunk_index} must contain {expected_size} "
+                    f"elements, got {chunk.numel()}"
+                )
+            if chunk.dtype != self.weight.dtype:
+                raise ValueError(
+                    f"Weight chunk {chunk_index} must have dtype {self.weight.dtype}, "
+                    f"got {chunk.dtype}"
+                )
+            if chunk.device != self.weight.device:
+                raise ValueError(
+                    f"Weight chunk {chunk_index} must be on {self.weight.device}, "
+                    f"got {chunk.device}"
+                )
+            if not chunk.is_contiguous():
+                raise ValueError(f"Weight chunk {chunk_index} must be contiguous")
+
+        return chunks
+
+    def forward(
+        self,
+        indices: torch.Tensor,
+        offsets: torch.Tensor,
+        per_sample_weights: Optional[torch.Tensor] = None,
+        batch_size_per_feature_per_rank: Optional[List[List[int]]] = None,
+        *,
+        weight_chunks: Sequence[torch.Tensor],
+    ) -> torch.Tensor:
+        chunks = self._validate_weight_chunks(weight_chunks)
+        return self._forward(
+            indices,
+            offsets,
+            per_sample_weights,
+            batch_size_per_feature_per_rank,
+            weight_ptrs=chunks,
+            weight_chunk_starts=self.weight_chunk_starts,
+            split_weight_row_starts=self.split_weight_row_starts,
+            feature_weight_chunk_ids=self._feature_weight_chunk_ids,
+            feature_chunk_relative_table_offsets=(
+                self._feature_chunk_relative_table_offsets
+            ),
+        )
+
+    def split_embedding_weights(self) -> List[torch.Tensor]:
+        raise NotImplementedError(
+            "Chunked Triton TBE cannot return one view per embedding table"
+        )
 
 
 @triton.jit

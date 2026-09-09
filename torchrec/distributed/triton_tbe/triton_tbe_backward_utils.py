@@ -19,6 +19,151 @@ OPTIM_TYPE_TO_INT: dict[OptimType, int] = {
 
 
 @triton.jit
+def _get_weight_ptr(
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    logical_offset,
+):
+    weight_ptr = weight_ptrs[0] + logical_offset
+    for chunk in tl.static_range(1, len(weight_chunk_starts)):
+        chunk_start = tl.full((), weight_chunk_starts[chunk], tl.int64)
+        weight_ptr = tl.where(
+            logical_offset >= chunk_start,
+            weight_ptrs[chunk] + logical_offset - chunk_start,
+            weight_ptr,
+        )
+    return weight_ptr
+
+
+@triton.jit
+def _get_weight_row_start_ptr(
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    logical_row_start,
+):
+    if len(weight_chunk_starts) == 8:
+        chunk_start_4 = tl.full((), weight_chunk_starts[4], tl.int64)
+        if logical_row_start >= chunk_start_4:
+            chunk_start_6 = tl.full((), weight_chunk_starts[6], tl.int64)
+            if logical_row_start >= chunk_start_6:
+                chunk_start_7 = tl.full((), weight_chunk_starts[7], tl.int64)
+                if logical_row_start >= chunk_start_7:
+                    row_start_ptr = weight_ptrs[7] + logical_row_start - chunk_start_7
+                else:
+                    row_start_ptr = weight_ptrs[6] + logical_row_start - chunk_start_6
+            else:
+                chunk_start_5 = tl.full((), weight_chunk_starts[5], tl.int64)
+                if logical_row_start >= chunk_start_5:
+                    row_start_ptr = weight_ptrs[5] + logical_row_start - chunk_start_5
+                else:
+                    row_start_ptr = weight_ptrs[4] + logical_row_start - chunk_start_4
+        else:
+            chunk_start_2 = tl.full((), weight_chunk_starts[2], tl.int64)
+            if logical_row_start >= chunk_start_2:
+                chunk_start_3 = tl.full((), weight_chunk_starts[3], tl.int64)
+                if logical_row_start >= chunk_start_3:
+                    row_start_ptr = weight_ptrs[3] + logical_row_start - chunk_start_3
+                else:
+                    row_start_ptr = weight_ptrs[2] + logical_row_start - chunk_start_2
+            else:
+                chunk_start_1 = tl.full((), weight_chunk_starts[1], tl.int64)
+                if logical_row_start >= chunk_start_1:
+                    row_start_ptr = weight_ptrs[1] + logical_row_start - chunk_start_1
+                else:
+                    row_start_ptr = weight_ptrs[0] + logical_row_start
+    else:
+        row_start_ptr = _get_weight_ptr(
+            weight_ptrs,
+            weight_chunk_starts,
+            logical_row_start,
+        )
+    return row_start_ptr
+
+
+@triton.jit
+def _get_weight_row_ptrs(
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
+    logical_row_start,
+    col_offsets,
+    mask,
+):
+    is_split_row = False
+    for split_row in tl.static_range(0, len(split_weight_row_starts)):
+        split_row_start = tl.full((), split_weight_row_starts[split_row], tl.int64)
+        is_split_row |= logical_row_start == split_row_start
+
+    if is_split_row:
+        row_ptrs = _get_weight_ptr(
+            weight_ptrs,
+            weight_chunk_starts,
+            logical_row_start + col_offsets,
+        )
+    else:
+        row_start_ptr = _get_weight_row_start_ptr(
+            weight_ptrs,
+            weight_chunk_starts,
+            logical_row_start,
+        )
+        row_ptrs = row_start_ptr + col_offsets
+    return row_ptrs
+
+
+@triton.jit
+def _get_weight_row_ptrs_for_update(
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
+    logical_row_start,
+    col_offsets,
+    mask,
+):
+    is_split_row = False
+    for split_row in tl.static_range(0, len(split_weight_row_starts)):
+        split_row_start = tl.full((), split_weight_row_starts[split_row], tl.int64)
+        is_split_row |= logical_row_start == split_row_start
+
+    if is_split_row:
+        row_ptrs = _get_weight_ptr(
+            weight_ptrs,
+            weight_chunk_starts,
+            logical_row_start + col_offsets,
+        )
+    else:
+        row_start_ptr = _get_weight_row_start_ptr(
+            weight_ptrs,
+            weight_chunk_starts,
+            logical_row_start,
+        )
+        row_ptrs = row_start_ptr + col_offsets
+    return row_ptrs
+
+
+@triton.jit
+def _load_weight_row(
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
+    logical_row_start,
+    col_offsets,
+    mask,
+):
+    if len(weight_chunk_starts) == 1:
+        row_ptrs = weight_ptrs[0] + logical_row_start + col_offsets
+    else:
+        row_ptrs = _get_weight_row_ptrs(
+            weight_ptrs,
+            weight_chunk_starts,
+            split_weight_row_starts,
+            logical_row_start,
+            col_offsets,
+            mask,
+        )
+    return tl.load(row_ptrs, mask=mask, other=0)
+
+
+@triton.jit
 def _stochastic_rounding_store(
     ptr,
     val,
