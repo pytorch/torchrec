@@ -53,6 +53,7 @@ def triton_tbe_backward_long_run_fused_weighted(
     BLOCK_SIZE: tl.constexpr,
     info_B_num_bits,
     info_B_mask,
+    ENABLE_TRITON_TBE_OPTIMIZATIONS: tl.constexpr,
     STOCHASTIC_ROUNDING: tl.constexpr,
     stochastic_rounding_seed,
     USE_TMA_REDUCE: tl.constexpr = False,
@@ -65,7 +66,7 @@ def triton_tbe_backward_long_run_fused_weighted(
     applies the optimizer update — eliminating a separate apply kernel launch.
     """
     col_offsets = tl.arange(0, BLOCK_SIZE)
-    buffer_size: tl.constexpr = BUFFER_SIZE
+    buffer_size: tl.constexpr = BUFFER_SIZE if ENABLE_TRITON_TBE_OPTIMIZATIONS else 16
     buffer_offsets = tl.arange(0, buffer_size)
 
     clc_phase_producer = 1
@@ -278,6 +279,7 @@ def triton_tbe_backward_long_run_fused_unweighted(
     BLOCK_SIZE: tl.constexpr,
     info_B_num_bits,
     info_B_mask,
+    ENABLE_TRITON_TBE_OPTIMIZATIONS: tl.constexpr,
     STOCHASTIC_ROUNDING: tl.constexpr,
     stochastic_rounding_seed,
     USE_TMA_REDUCE: tl.constexpr = False,
@@ -290,7 +292,7 @@ def triton_tbe_backward_long_run_fused_unweighted(
     the optimizer update — eliminating a separate apply kernel launch.
     """
     col_offsets = tl.arange(0, BLOCK_SIZE)
-    buffer_size: tl.constexpr = BUFFER_SIZE
+    buffer_size: tl.constexpr = BUFFER_SIZE if ENABLE_TRITON_TBE_OPTIMIZATIONS else 16
     buffer_offsets = tl.arange(0, buffer_size)
 
     clc_phase_producer = 1
