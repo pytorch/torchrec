@@ -26,15 +26,36 @@ To update the golden snapshot after intentional changes:
     python -m torchrec.metrics.tests.test_metric_fqn_backward_compatibility --update-golden
 """
 
+import contextlib
+import copy
+import datetime
 import inspect
 import json
 import os
 import sys
+import tempfile
 import unittest
+import unittest.mock
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Type
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+)
 
 import torch
+import torch.distributed as dist
+from torchrec.checkpoint.schema import schema_id_of
 from torchrec.metrics.accuracy import AccuracyMetric
 from torchrec.metrics.auc import AUCMetric
 from torchrec.metrics.auprc import AUPRCMetric
@@ -44,6 +65,8 @@ from torchrec.metrics.calibration import CalibrationMetric
 from torchrec.metrics.calibration_with_recalibration import (
     RecalibratedCalibrationMetric,
 )
+from torchrec.metrics.cpu_comms_metric_module import CPUCommsRecMetricModule
+from torchrec.metrics.cpu_offloaded_metric_module import CPUOffloadedRecMetricModule
 from torchrec.metrics.ctr import CTRMetric
 from torchrec.metrics.gauc import GAUCMetric
 from torchrec.metrics.hindsight_target_pr import HindsightTargetPRMetric
@@ -58,6 +81,7 @@ from torchrec.metrics.ne import NEMetric
 from torchrec.metrics.ne_positive import NEPositiveMetric
 from torchrec.metrics.ne_with_recalibration import RecalibratedNEMetric
 from torchrec.metrics.nmse import NMSEMetric
+from torchrec.metrics.noop_metric_module import NoOpMetricModule
 from torchrec.metrics.num_missing_labels import NumMissingLabelsMetric
 from torchrec.metrics.num_positive_samples import NumPositiveSamplesMetric
 from torchrec.metrics.output import OutputMetric
@@ -79,6 +103,21 @@ from torchrec.metrics.unweighted_ne import UnweightedNEMetric
 from torchrec.metrics.weighted_avg import WeightedAvgMetric
 from torchrec.metrics.weighted_sum_predictions import WeightedSumPredictionsMetric
 from torchrec.metrics.xauc import XAUCMetric
+from torchrec.modules.hash_mc_evictions import (
+    HashZchEvictionConfig,
+    HashZchEvictionPolicyName,
+)
+from torchrec.modules.hash_mc_modules import HashZchManagedCollisionModule
+from torchrec.modules.keyed_jagged_tensor_pool import KeyedJaggedTensorPool
+from torchrec.modules.mc_modules import (
+    DistanceLFU_EvictionPolicy,
+    LFU_EvictionPolicy,
+    LRU_EvictionPolicy,
+    MCHEvictionPolicy,
+    MCHManagedCollisionModule,
+)
+from torchrec.modules.tensor_pool import TensorPool
+from torchrec.test_utils import init_process_group_single_rank
 
 
 # Path to the golden snapshot file
@@ -110,88 +149,83 @@ def create_test_task(
     )
 
 
+def build_metric(
+    metric_class: Type[RecMetric],
+    compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+    task_names: Optional[List[str]] = None,
+    use_tensor_task: bool = False,
+    use_session_task: bool = False,
+    **kwargs: Any,
+) -> RecMetric:
+    """One metric under the fixed configuration every golden entry is taken at.
+
+    Callers used to build the metric once to read its state_dict keys and again
+    to read its buffers, which doubled the construction work and let the two
+    reads drift apart.
+    """
+    if task_names is None:
+        task_names = ["test_task"]
+
+    tasks = [
+        create_test_task(
+            name,
+            with_tensor_name=use_tensor_task,
+            with_session_metric_def=use_session_task,
+        )
+        for name in task_names
+    ]
+
+    return metric_class(
+        world_size=1,
+        my_rank=0,
+        batch_size=32,
+        tasks=tasks,
+        compute_mode=compute_mode,
+        window_size=100,
+        fused_update_limit=0,
+        **kwargs,
+    )
+
+
 def extract_state_dict_keys(
     metric_class: Type[RecMetric],
     compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-    task_names: Optional[List[str]] = None,
-    use_tensor_task: bool = False,
-    use_session_task: bool = False,
     **kwargs: Any,
 ) -> List[str]:
-    if task_names is None:
-        task_names = ["test_task"]
-
-    tasks = [
-        create_test_task(
-            name,
-            with_tensor_name=use_tensor_task,
-            with_session_metric_def=use_session_task,
-        )
-        for name in task_names
-    ]
-
-    metric = metric_class(
-        world_size=1,
-        my_rank=0,
-        batch_size=32,
-        tasks=tasks,
-        compute_mode=compute_mode,
-        window_size=100,
-        fused_update_limit=0,
-        **kwargs,
+    return sorted(
+        build_metric(metric_class, compute_mode, **kwargs).state_dict().keys()
     )
 
-    state_dict = metric.state_dict()
-    return sorted(state_dict.keys())
 
+def buffer_fqns(module: torch.nn.Module) -> Tuple[List[str], List[str]]:
+    """Buffer names split by whether they reach the state_dict.
 
-def extract_named_buffer_fqns(
-    metric_class: Type[RecMetric],
-    compute_mode: RecComputeMode = RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-    task_names: Optional[List[str]] = None,
-    use_tensor_task: bool = False,
-    use_session_task: bool = False,
-    **kwargs: Any,
-) -> Tuple[List[str], List[str]]:
-    if task_names is None:
-        task_names = ["test_task"]
-
-    tasks = [
-        create_test_task(
-            name,
-            with_tensor_name=use_tensor_task,
-            with_session_metric_def=use_session_task,
-        )
-        for name in task_names
-    ]
-
-    metric = metric_class(
-        world_size=1,
-        my_rank=0,
-        batch_size=32,
-        tasks=tasks,
-        compute_mode=compute_mode,
-        window_size=100,
-        fused_update_limit=0,
-        **kwargs,
-    )
-
-    all_buffer_fqns = [name for name, _ in metric.named_buffers()]
-    state_dict_keys = set(metric.state_dict().keys())
-
-    persistent = []
-    non_persistent = []
-
-    for fqn in all_buffer_fqns:
-        is_persistent = any(
-            fqn == key or key.endswith(fqn) or fqn in key for key in state_dict_keys
-        )
-        if is_persistent:
-            persistent.append(fqn)
-        else:
-            non_persistent.append(fqn)
-
+    A buffer is in the state_dict exactly when it is persistent and not None,
+    so membership answers both questions. The earlier version matched a buffer
+    name against any state key containing it, which called a buffer persistent
+    on a coincidental substring.
+    """
+    saved = set(module.state_dict().keys())
+    persistent: List[str] = []
+    non_persistent: List[str] = []
+    for name, value in module.named_buffers():
+        if value is None:
+            continue
+        (persistent if name in saved else non_persistent).append(name)
     return sorted(persistent), sorted(non_persistent)
+
+
+def mark_state(module: torch.nn.Module) -> Dict[str, torch.Tensor]:
+    """Give every state entry a distinct value, then snapshot what was written.
+
+    Two freshly built modules start identical, so a round trip that loads one
+    into the other and compares passes whether or not the load did anything.
+    Marking first is what makes the comparison mean something.
+    """
+    state = module.state_dict()
+    for i, key in enumerate(sorted(state)):
+        state[key].fill_(i + 1)
+    return copy.deepcopy(state)
 
 
 def get_metric_snapshot_key(
@@ -212,13 +246,9 @@ METRICS_TO_TEST: List[
     Tuple[Type[RecMetric], List[RecComputeMode], Dict[str, Any], List[str]]
 ] = [
     # Core metrics with persistent state
+    # include_logloss only gates which metrics _compute reports, so it adds no
+    # state and produced an entry identical to the default one above.
     (NEMetric, [RecComputeMode.UNFUSED_TASKS_COMPUTATION], {}, [""]),
-    (
-        NEMetric,
-        [RecComputeMode.UNFUSED_TASKS_COMPUTATION],
-        {"include_logloss": True},
-        ["with_logloss"],
-    ),
     (CalibrationMetric, [RecComputeMode.UNFUSED_TASKS_COMPUTATION], {}, [""]),
     (CTRMetric, [RecComputeMode.UNFUSED_TASKS_COMPUTATION], {}, [""]),
     (MSEMetric, [RecComputeMode.UNFUSED_TASKS_COMPUTATION], {}, [""]),
@@ -315,43 +345,6 @@ METRICS_TO_TEST: List[
 ]
 
 
-def generate_golden_snapshot() -> Dict[str, Dict[str, Any]]:
-    """
-    Generate a complete golden snapshot of all metrics.
-
-    Returns:
-        Dictionary mapping metric keys to their FQN information.
-    """
-    snapshot: Dict[str, Dict[str, Any]] = {}
-
-    for metric_class, compute_modes, kwargs, variants in METRICS_TO_TEST:
-        for compute_mode in compute_modes:
-            for variant in variants:
-                try:
-                    key = get_metric_snapshot_key(metric_class, compute_mode, variant)
-                    state_dict_keys = extract_state_dict_keys(
-                        metric_class, compute_mode, **kwargs
-                    )
-                    persistent_fqns, non_persistent_fqns = extract_named_buffer_fqns(
-                        metric_class, compute_mode, **kwargs
-                    )
-
-                    snapshot[key] = {
-                        "metric_class": metric_class.__name__,
-                        "compute_mode": compute_mode.name,
-                        "variant": variant,
-                        "state_dict_keys": state_dict_keys,
-                        "persistent_buffer_fqns": persistent_fqns,
-                        "non_persistent_buffer_fqns": non_persistent_fqns,
-                    }
-                except Exception as e:
-                    # pyrefly: ignore[unbound-name]
-                    print(f"Warning: Failed to generate snapshot for {key}: {e}")
-                    continue
-
-    return snapshot
-
-
 def load_golden_snapshot() -> Dict[str, Dict[str, Any]]:
     if not GOLDEN_SNAPSHOT_PATH.exists():
         return {}
@@ -359,355 +352,31 @@ def load_golden_snapshot() -> Dict[str, Dict[str, Any]]:
         return json.load(f)
 
 
+def load_required_golden_snapshot() -> Dict[str, Dict[str, Any]]:
+    """The snapshot, for callers that say nothing useful without one.
+
+    A test comparing against an empty file passes by having nothing to
+    compare, which reads as coverage.
+
+    Regeneration against an empty baseline is worse: every generated entry
+    looks brand new, so the addition and removal gates find nothing to object
+    to and the result becomes the baseline. Emptying this file is the cheapest
+    way to defeat them.
+    """
+    snapshot = load_golden_snapshot()
+    if not snapshot:
+        raise RuntimeError(
+            f"{GOLDEN_SNAPSHOT_PATH} is missing or empty. It is checked in, so "
+            "restore it from source control rather than writing a new one. A "
+            "regenerated baseline authorizes whatever the code produces today."
+        )
+    return snapshot
+
+
 def save_golden_snapshot(snapshot: Dict[str, Dict[str, Any]]) -> None:
     with open(GOLDEN_SNAPSHOT_PATH, "w") as f:
         json.dump(snapshot, f, indent=2, sort_keys=True)
         f.write("\n")
-
-
-class MetricFQNBackwardCompatibilityTest(unittest.TestCase):
-    """
-    Test suite for metric FQN backward compatibility.
-
-    These tests ensure that changes to metrics don't break checkpoint loading
-    by verifying that:
-    1. No persistent buffer FQNs are removed
-    2. No state_dict keys are removed
-
-    New additions are allowed as long as they have proper load_state_dict hooks
-    """
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.golden_snapshot = load_golden_snapshot()
-        if not cls.golden_snapshot:
-            print("No golden snapshot found. Generating initial snapshot...")
-            cls.golden_snapshot = generate_golden_snapshot()
-            save_golden_snapshot(cls.golden_snapshot)
-            print(f"Golden snapshot saved to {GOLDEN_SNAPSHOT_PATH}")
-        cls.current_snapshot = None
-
-    def _check_metric_compatibility(
-        self,
-        metric_class: Type[RecMetric],
-        compute_mode: RecComputeMode,
-        variant: str = "",
-        **kwargs: Any,
-    ) -> None:
-        """
-        Check a single metric for backward compatibility with DCP CheckpointClient.
-
-        This test simulates what happens when a new model version (with potentially
-        new state_dict keys) tries to load an old checkpoint:
-
-        1. REMOVED keys: Old checkpoint has keys that new model doesn't expect.
-           - This typically works fine (load_state_dict ignores extra keys)
-           - But indicates the metric structure changed unexpectedly
-
-        2. ADDED keys: New model has keys that old checkpoint doesn't have.
-           - This BREAKS DCP CheckpointClient! The client validates that ALL model
-             FQNs exist in the checkpoint metadata before loading.
-           - Raises InvalidParamQualNameException at the DCP level.
-
-        Raises assertion error if incompatible changes are detected.
-        """
-        key = get_metric_snapshot_key(metric_class, compute_mode, variant)
-
-        if key not in self.golden_snapshot:
-            self.skipTest(
-                f"No golden snapshot for {key}. Run with --update-golden to create."
-            )
-
-        baseline = self.golden_snapshot[key]
-
-        current_state_dict_keys = set(
-            extract_state_dict_keys(metric_class, compute_mode, **kwargs)
-        )
-        current_persistent_fqns, _ = extract_named_buffer_fqns(
-            metric_class, compute_mode, **kwargs
-        )
-        current_persistent_fqns_set = set(current_persistent_fqns)
-
-        baseline_state_dict_keys = set(baseline["state_dict_keys"])
-        baseline_persistent_fqns = set(baseline["persistent_buffer_fqns"])
-
-        removed_keys = baseline_state_dict_keys - current_state_dict_keys
-        if removed_keys:
-            self.fail(
-                f"BREAKING CHANGE in {key}: state_dict keys removed: {sorted(removed_keys)}. "
-                "This will cause old checkpoints to fail loading. "
-                "If this is intentional, update the golden snapshot."
-            )
-
-        removed_fqns = baseline_persistent_fqns - current_persistent_fqns_set
-        if removed_fqns:
-            self.fail(
-                f"BREAKING CHANGE in {key}: persistent buffer FQNs removed: {sorted(removed_fqns)}. "
-                "This will cause old checkpoints to fail loading. "
-                "If this is intentional, update the golden snapshot."
-            )
-
-        added_keys = current_state_dict_keys - baseline_state_dict_keys
-        added_fqns = current_persistent_fqns_set - baseline_persistent_fqns
-
-        if added_keys or added_fqns:
-            has_backward_compat = self._verify_backward_compatibility(
-                metric_class, compute_mode, added_keys, **kwargs
-            )
-
-            if not has_backward_compat:
-                self.fail(
-                    f"BREAKING CHANGE in {key}: state_dict keys added: {sorted(added_keys)}.\n"
-                    "This will cause DCP CheckpointClient to fail with InvalidParamQualNameException "
-                    "when loading old checkpoints (the client validates that ALL model FQNs exist "
-                    "in checkpoint metadata before loading).\n\n"
-                    "To fix:\n"
-                    "1. Make the new state non-persistent (use persistent=False in add_state)\n"
-                    "2. OR coordinate with trainers to enable allow_partial_load for metrics\n"
-                    "3. OR run with --update-golden if this change is intentional and coordinated"
-                )
-
-    def _verify_backward_compatibility(
-        self,
-        metric_class: Type[RecMetric],
-        compute_mode: RecComputeMode,
-        added_keys: Set[str],
-        **kwargs: Any,
-    ) -> bool:
-        """
-        Check if added state_dict keys are backward compatible.
-
-        Note: While torchmetrics.Metric handles missing keys gracefully at the
-        PyTorch load_state_dict level (keeping default values), this does NOT
-        help at the DCP CheckpointClient level. The DCP client validates FQNs
-        BEFORE calling load_state_dict, so it fails before PyTorch hooks run.
-
-        For added keys, we always return False to require explicit acknowledgment:
-        1. Confirm the change is intentional
-        2. Verify coordination with trainer teams
-        3. Update the golden snapshot with --update-golden
-
-        Returns:
-            True if no added keys (backward compatible)
-            False if there are added keys (requires developer acknowledgment)
-        """
-        # If there are added keys, require user to update golden snapshot
-        return len(added_keys) == 0
-
-    def test_ne_metric_unfused(self) -> None:
-        self._check_metric_compatibility(
-            NEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_ne_metric_fused(self) -> None:
-        self._check_metric_compatibility(
-            NEMetric, RecComputeMode.FUSED_TASKS_COMPUTATION
-        )
-
-    def test_ne_metric_with_logloss(self) -> None:
-        self._check_metric_compatibility(
-            NEMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            variant="with_logloss",
-            include_logloss=True,
-        )
-
-    def test_calibration_metric_unfused(self) -> None:
-        self._check_metric_compatibility(
-            CalibrationMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_calibration_metric_fused(self) -> None:
-        self._check_metric_compatibility(
-            CalibrationMetric, RecComputeMode.FUSED_TASKS_COMPUTATION
-        )
-
-    def test_ctr_metric(self) -> None:
-        self._check_metric_compatibility(
-            CTRMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_mse_metric(self) -> None:
-        self._check_metric_compatibility(
-            MSEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_mse_metric_with_r_squared(self) -> None:
-        self._check_metric_compatibility(
-            MSEMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            variant="with_r_squared",
-            include_r_squared=True,
-        )
-
-    def test_mae_metric(self) -> None:
-        self._check_metric_compatibility(
-            MAEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_weighted_avg_metric_unfused(self) -> None:
-        self._check_metric_compatibility(
-            WeightedAvgMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_weighted_avg_metric_fused(self) -> None:
-        self._check_metric_compatibility(
-            WeightedAvgMetric, RecComputeMode.FUSED_TASKS_COMPUTATION
-        )
-
-    def test_accuracy_metric(self) -> None:
-        self._check_metric_compatibility(
-            AccuracyMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_precision_metric(self) -> None:
-        self._check_metric_compatibility(
-            PrecisionMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_recall_metric(self) -> None:
-        self._check_metric_compatibility(
-            RecallMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_tower_qps_metric(self) -> None:
-        self._check_metric_compatibility(
-            TowerQPSMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_nmse_metric(self) -> None:
-        self._check_metric_compatibility(
-            NMSEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_average_metric(self) -> None:
-        self._check_metric_compatibility(
-            AverageMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_hindsight_target_pr_metric(self) -> None:
-        self._check_metric_compatibility(
-            HindsightTargetPRMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_auc_metric(self) -> None:
-        self._check_metric_compatibility(
-            AUCMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_auprc_metric(self) -> None:
-        self._check_metric_compatibility(
-            AUPRCMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_rauc_metric(self) -> None:
-        self._check_metric_compatibility(
-            RAUCMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_gauc_metric(self) -> None:
-        self._check_metric_compatibility(
-            GAUCMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_ndcg_metric(self) -> None:
-        self._check_metric_compatibility(
-            NDCGMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_xauc_metric(self) -> None:
-        self._check_metric_compatibility(
-            XAUCMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_scalar_metric(self) -> None:
-        self._check_metric_compatibility(
-            ScalarMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_tensor_weighted_avg_metric(self) -> None:
-        self._check_metric_compatibility(
-            TensorWeightedAvgMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            variant="",
-            use_tensor_task=True,
-        )
-
-    def test_cali_free_ne_metric(self) -> None:
-        self._check_metric_compatibility(
-            CaliFreeNEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_ne_positive_metric(self) -> None:
-        self._check_metric_compatibility(
-            NEPositiveMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_serving_ne_metric(self) -> None:
-        self._check_metric_compatibility(
-            ServingNEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_unweighted_ne_metric(self) -> None:
-        self._check_metric_compatibility(
-            UnweightedNEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_recalibrated_ne_metric(self) -> None:
-        self._check_metric_compatibility(
-            RecalibratedNEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_serving_calibration_metric(self) -> None:
-        self._check_metric_compatibility(
-            ServingCalibrationMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_recalibrated_calibration_metric(self) -> None:
-        self._check_metric_compatibility(
-            RecalibratedCalibrationMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_output_metric(self) -> None:
-        self._check_metric_compatibility(
-            OutputMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
-        )
-
-    def test_multiclass_recall_metric(self) -> None:
-        self._check_metric_compatibility(
-            MulticlassRecallMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            number_of_classes=3,
-        )
-
-    def test_multi_label_precision_metric(self) -> None:
-        self._check_metric_compatibility(
-            MultiLabelPrecisionMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            num_labels=1,
-        )
-
-    def test_segmented_ne_metric(self) -> None:
-        self._check_metric_compatibility(
-            SegmentedNEMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            num_groups=2,
-            grouping_keys="test_task-grouping",
-        )
-
-    def test_precision_session_metric(self) -> None:
-        self._check_metric_compatibility(
-            PrecisionSessionMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            use_session_task=True,
-        )
-
-    def test_recall_session_metric(self) -> None:
-        self._check_metric_compatibility(
-            RecallSessionMetric,
-            RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            use_session_task=True,
-        )
 
 
 class MetricStateSnapshotTest(unittest.TestCase):
@@ -736,7 +405,7 @@ class MetricStateSnapshotTest(unittest.TestCase):
             **kwargs,
         )
 
-        initial_state = original.state_dict()
+        initial_state = mark_state(original)
 
         restored = metric_class(
             world_size=1,
@@ -777,139 +446,549 @@ class MetricStateSnapshotTest(unittest.TestCase):
         self._test_metric_state_roundtrip(WeightedAvgMetric)
 
 
-# Golden snapshot keys for ThroughputMetric and RecMetricModule
-THROUGHPUT_SNAPSHOT_KEY = "ThroughputMetric"
-THROUGHPUT_WITH_STAGES_SNAPSHOT_KEY = "ThroughputMetric_with_batch_size_stages"
-REC_METRIC_MODULE_SNAPSHOT_KEY = "RecMetricModule"
-REC_METRIC_MODULE_WITH_THROUGHPUT_KEY = "RecMetricModule_with_throughput"
+# Fixture values for the golden cases.
+_THROUGHPUT_BATCH_SIZE_STAGES: List[BatchSizeStage] = [
+    BatchSizeStage(batch_size=32, max_iters=100),
+    BatchSizeStage(batch_size=64, max_iters=None),
+]
 
 
-class ThroughputMetricBackwardCompatibilityTest(unittest.TestCase):
+def _make_throughput_metric(
+    batch_size_stages: Optional[List[BatchSizeStage]] = None,
+) -> ThroughputMetric:
+    return ThroughputMetric(
+        batch_size=32,
+        world_size=1,
+        window_seconds=100,
+        warmup_steps=10,
+        batch_size_stages=batch_size_stages,
+    )
+
+
+def _make_rec_metric_module(
+    throughput_metric: Optional[ThroughputMetric] = None,
+) -> RecMetricModule:
+    return RecMetricModule(
+        **_module_fixture_kwargs(),
+        throughput_metric=throughput_metric,
+    )
+
+
+@dataclass(frozen=True)
+class _GoldenCase:
+    """One golden snapshot: which entry it is, and how to build it.
+
+    The builder is self-contained, so a case cannot be paired with another
+    case's configuration. `stable_id` is written by hand rather than derived
+    from the class, so moving a file does not silently change the key and
+    abandon the entry it used to match.
     """
-    Test suite for ThroughputMetric FQN backward compatibility.
 
-    ThroughputMetric is an nn.Module (not RecMetric) with its own state_dict structure.
+    # Lowercase snake_case, deliberately not the class name. The id is the
+    # golden file's key, so it has to survive a class rename untouched.
+    stable_id: str
+    expected_class: Type[torch.nn.Module]
+    variant: str
+    build: Callable[[], torch.nn.Module]
+    # Called on every module this case builds. A case whose module owns threads
+    # or other process state declares how to release it.
+    cleanup: Optional[Callable[[torch.nn.Module], None]] = None
+
+    @property
+    def key(self) -> str:
+        return f"{self.stable_id}_{self.variant}" if self.variant else self.stable_id
+
+
+_REC_METRIC_MODULE_DEFAULT = _GoldenCase(
+    "rec_metric_module", RecMetricModule, "", _make_rec_metric_module
+)
+
+_CORE_SCHEMA_CASES: Tuple[_GoldenCase, ...] = (
+    _GoldenCase("throughput_metric", ThroughputMetric, "", _make_throughput_metric),
+    _GoldenCase(
+        "throughput_metric",
+        ThroughputMetric,
+        "with_batch_size_stages",
+        lambda: _make_throughput_metric(_THROUGHPUT_BATCH_SIZE_STAGES),
+    ),
+    _REC_METRIC_MODULE_DEFAULT,
+    _GoldenCase(
+        "rec_metric_module",
+        RecMetricModule,
+        "with_throughput",
+        lambda: _make_rec_metric_module(_make_throughput_metric()),
+    ),
+)
+
+
+def _module_fixture_kwargs() -> Dict[str, Any]:
+    """Construction args shared by every RecMetricModule case.
+
+    One real metric, because an empty RecMetricList produces an empty
+    state_dict. Shared so the enrolled modules keep describing comparable
+    shapes.
     """
+    tasks = [create_test_task("task1")]
+    return {
+        "batch_size": 32,
+        "world_size": 1,
+        "rec_tasks": tasks,
+        "rec_metrics": RecMetricList(
+            [
+                NEMetric(
+                    world_size=1,
+                    my_rank=0,
+                    batch_size=32,
+                    tasks=tasks,
+                    compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+                    window_size=100,
+                )
+            ]
+        ),
+    }
+
+
+def _shutdown(module: torch.nn.Module) -> None:
+    """Release a CPUOffloadedRecMetricModule's worker threads.
+
+    Two threads plus an atexit hook per instance, and one case builds three.
+    shutdown() is idempotent.
+    """
+    # pyre-ignore[16]
+    module.shutdown()
+
+
+@contextlib.contextmanager
+def _single_rank_process_group() -> Iterator[None]:
+    """A process group for CPUOffloadedRecMetricModule's compute worker.
+
+    shutdown() wakes that worker, which calls dist.new_group and then re-raises
+    whatever it caught. So building a module without a group succeeds and its
+    teardown throws, which is why generation needs this as much as the tests do.
+
+    Only destroys a group it created, so a caller that brought its own keeps it.
+    """
+    created = not dist.is_initialized()
+    if created:
+        init_process_group_single_rank("gloo")
+    try:
+        yield
+    finally:
+        if created:
+            dist.destroy_process_group()
+
+
+def _make_mch_module(policy: MCHEvictionPolicy) -> MCHManagedCollisionModule:
+    return MCHManagedCollisionModule(
+        zch_size=64,
+        device=torch.device("cpu"),
+        eviction_interval=2,
+        eviction_policy=policy,
+    )
+
+
+def _make_hash_zch_module(**overrides: Any) -> HashZchManagedCollisionModule:
+    return HashZchManagedCollisionModule(
+        zch_size=64,
+        device=torch.device("cpu"),
+        total_num_buckets=4,
+        **overrides,
+    )
+
+
+# Enrolled with @checkpoint_schema_stable under these same ids. Not RecMetric
+# subclasses, so _discover_all_recmetric_subclasses cannot see them.
+_MODULE_SCHEMA_CASES: Tuple[_GoldenCase, ...] = (
+    _GoldenCase("noop_metric_module", NoOpMetricModule, "", NoOpMetricModule),
+    _GoldenCase(
+        "cpu_comms_rec_metric_module",
+        CPUCommsRecMetricModule,
+        "",
+        lambda: CPUCommsRecMetricModule(**_module_fixture_kwargs()),
+    ),
+    # state_dict() reads the comms tree and load_state_dict() writes the offloaded
+    # one, but both carry the same keys, so this pins the shape and not which tree
+    # a load reached. test_cpu_offloaded_metric_module covers the load direction.
+    _GoldenCase(
+        "cpu_offloaded_rec_metric_module",
+        CPUOffloadedRecMetricModule,
+        "",
+        lambda: CPUOffloadedRecMetricModule(
+            model_out_device=torch.device("cpu"), **_module_fixture_kwargs()
+        ),
+        cleanup=_shutdown,
+    ),
+    # torchrec.modules containers holding real register_buffer state. Unlike the
+    # metrics above, a key here can actually go missing or unexpected on a load.
+    # Buffer names come from the policy's metadata_info, so the key set is
+    # policy-dependent. DistanceLFU is the union of the other two, which means
+    # it alone would not catch a change isolated to one policy's declaration.
+    _GoldenCase(
+        "mch_managed_collision_module",
+        MCHManagedCollisionModule,
+        "",
+        lambda: _make_mch_module(DistanceLFU_EvictionPolicy()),
+    ),
+    _GoldenCase(
+        "mch_managed_collision_module",
+        MCHManagedCollisionModule,
+        "lfu",
+        lambda: _make_mch_module(LFU_EvictionPolicy()),
+    ),
+    _GoldenCase(
+        "mch_managed_collision_module",
+        MCHManagedCollisionModule,
+        "lru",
+        lambda: _make_mch_module(LRU_EvictionPolicy()),
+    ),
+    _GoldenCase(
+        "tensor_pool",
+        TensorPool,
+        "",
+        lambda: TensorPool(
+            pool_size=16, dim=4, dtype=torch.float, device=torch.device("cpu")
+        ),
+    ),
+    # enable_uvm gives this class a third and fourth shape, neither covered
+    # here. Its UVM lookups need CUDA, and this target is CPU only. Both are
+    # also unloadable today: the UVM lookups register neither `key_lengths` nor,
+    # for int64, `values`, while _load_from_state_dict reads both. A case would
+    # record that shape without exposing the break, since the load only runs
+    # once a key is added. Fixing the load is separate work.
+    _GoldenCase(
+        "keyed_jagged_tensor_pool",
+        KeyedJaggedTensorPool,
+        "",
+        lambda: KeyedJaggedTensorPool(
+            pool_size=16,
+            feature_max_lengths={"f1": 2},
+            device=torch.device("cpu"),
+        ),
+    ),
+    # is_weighted adds a "weights" key; both directions are pinned.
+    _GoldenCase(
+        "keyed_jagged_tensor_pool",
+        KeyedJaggedTensorPool,
+        "weighted",
+        lambda: KeyedJaggedTensorPool(
+            pool_size=16,
+            feature_max_lengths={"f1": 2},
+            is_weighted=True,
+            device=torch.device("cpu"),
+        ),
+    ),
+    _GoldenCase(
+        "hash_zch_managed_collision_module",
+        HashZchManagedCollisionModule,
+        "",
+        _make_hash_zch_module,
+    ),
+    # persist_hash_zch_bucket=False drops the bucket buffer from state_dict. It
+    # exists to warm-load checkpoints written before that buffer did, so both
+    # shapes are real and both are pinned.
+    _GoldenCase(
+        "hash_zch_managed_collision_module",
+        HashZchManagedCollisionModule,
+        "without_bucket_buffer",
+        lambda: _make_hash_zch_module(persist_hash_zch_bucket=False),
+    ),
+    # Without an eviction policy the metadata buffer registers as None, and a
+    # None buffer is left out of state_dict. Production builds these with a
+    # policy, so the default case above pins a shape production does not use.
+    _GoldenCase(
+        "hash_zch_managed_collision_module",
+        HashZchManagedCollisionModule,
+        "with_eviction",
+        lambda: _make_hash_zch_module(
+            eviction_policy_name=HashZchEvictionPolicyName.SINGLE_TTL_EVICTION,
+            eviction_config=HashZchEvictionConfig(features=[], single_ttl=1),
+        ),
+    ),
+    # track_id_freq adds _hash_zch_runtime_meta, which write_runtime_meta_dim
+    # also adds. The two are mutually exclusive, so one case covers the key.
+    _GoldenCase(
+        "hash_zch_managed_collision_module",
+        HashZchManagedCollisionModule,
+        "with_runtime_meta",
+        lambda: _make_hash_zch_module(track_id_freq=True),
+    ),
+    # Eviction and runtime metadata compose, and test_mc_embedding_write builds
+    # exactly this pair. Which policy is chosen does not change the key set,
+    # only whether one is set at all, so this pins the combination.
+    _GoldenCase(
+        "hash_zch_managed_collision_module",
+        HashZchManagedCollisionModule,
+        "with_eviction_and_runtime_meta",
+        lambda: _make_hash_zch_module(
+            eviction_policy_name=HashZchEvictionPolicyName.LRU_EVICTION,
+            eviction_config=HashZchEvictionConfig(features=[], single_ttl=-1),
+            track_id_freq=True,
+        ),
+    ),
+)
+
+# Enrolled with @checkpoint_schema_stable, so the registry knows them.
+_ENROLLED_CASES: Tuple[_GoldenCase, ...] = _CORE_SCHEMA_CASES + _MODULE_SCHEMA_CASES
+
+
+def _metric_cases() -> Tuple[_GoldenCase, ...]:
+    """One case per METRICS_TO_TEST row.
+
+    The id comes from get_metric_snapshot_key rather than a second copy of its
+    formula, so the two cannot drift. Metrics are not decorated, which is why
+    they stay out of _ENROLLED_CASES: the registry has nothing to say about
+    them.
+    """
+    return tuple(
+        _GoldenCase(
+            stable_id=get_metric_snapshot_key(metric_class, compute_mode),
+            expected_class=metric_class,
+            variant=variant,
+            build=partial(build_metric, metric_class, compute_mode, **kwargs),
+        )
+        for metric_class, compute_modes, kwargs, variants in METRICS_TO_TEST
+        for compute_mode in compute_modes
+        for variant in variants
+    )
+
+
+_SCHEMA_CASES: Tuple[_GoldenCase, ...] = _ENROLLED_CASES + _metric_cases()
+
+
+class _ModuleWithKnownKeys(torch.nn.Module):
+    """Two buffers and nothing else, so a test can state the exact key set."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("alpha", torch.zeros(1))
+        self.register_buffer("beta", torch.zeros(1))
+
+
+_KNOWN_KEYS_CASE = _GoldenCase(
+    "known_keys_probe", _ModuleWithKnownKeys, "", _ModuleWithKnownKeys
+)
+
+
+def _agreeing_entry(**overrides: Any) -> Dict[str, Any]:
+    """The entry `_KNOWN_KEYS_CASE` expects, with any field replaced."""
+    entry: Dict[str, Any] = {
+        "metric_class": _ModuleWithKnownKeys.__name__,
+        "variant": _KNOWN_KEYS_CASE.variant,
+        "state_dict_keys": ["alpha", "beta"],
+        "persistent_buffer_fqns": [],
+        "non_persistent_buffer_fqns": [],
+    }
+    entry.update(overrides)
+    return entry
+
+
+class GoldenCaseTest(unittest.TestCase):
+    """Compares each golden case against its recorded entry.
+
+    Checking the stored metadata matters as much as the keys. Comparing one
+    case against another's baseline can otherwise pass: the extra keys look
+    like an addition, and the addition check loads them away.
+    """
+
+    golden_snapshot: Dict[str, Dict[str, Any]]
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.golden_snapshot = load_golden_snapshot()
+        cls.golden_snapshot = load_required_golden_snapshot()
 
-    def _create_throughput_metric(
-        self, with_batch_size_stages: bool = False
-    ) -> ThroughputMetric:
-        from torchrec.metrics.metrics_config import BatchSizeStage
+    def setUp(self) -> None:
+        # Registered before any module is built, so under addCleanup's LIFO
+        # order the group is torn down last. Destroying it ahead of a module
+        # would make that module's shutdown throw.
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(_single_rank_process_group())
 
-        batch_size_stages = None
-        if with_batch_size_stages:
-            batch_size_stages = [
-                BatchSizeStage(batch_size=32, max_iters=100),
-                BatchSizeStage(batch_size=64, max_iters=None),
-            ]
+    @contextlib.contextmanager
+    def _built(self, case: _GoldenCase) -> Iterator[torch.nn.Module]:
+        module = case.build()
+        try:
+            yield module
+        finally:
+            if case.cleanup is not None:
+                case.cleanup(module)
 
-        return ThroughputMetric(
-            batch_size=32,
-            world_size=1,
-            window_seconds=100,
-            warmup_steps=10,
-            batch_size_stages=batch_size_stages,
+    def _check_case(self, case: _GoldenCase) -> None:
+        with self._built(case) as module:
+            self.assertIs(type(module), case.expected_class)
+
+            if case.key not in self.golden_snapshot:
+                self.fail(
+                    f"No golden entry for {case.key}. Run with --update-golden "
+                    "to create it. Writing one here would bless whatever the "
+                    "code currently produces, and concurrent tests writing the "
+                    "whole file at once corrupt it."
+                )
+
+            entry = self.golden_snapshot[case.key]
+            self.assertEqual(
+                entry["metric_class"],
+                case.expected_class.__name__,
+                f"Golden entry {case.key} was written by a different class.",
+            )
+            self.assertEqual(
+                entry["variant"],
+                case.variant,
+                f"Golden entry {case.key} was written by a different variant.",
+            )
+
+            current_keys = set(module.state_dict().keys())
+
+        baseline_keys = set(entry["state_dict_keys"])
+
+        removed = baseline_keys - current_keys
+        if removed:
+            self.fail(
+                f"BREAKING CHANGE in {case.key}: state_dict keys removed: "
+                f"{sorted(removed)}."
+            )
+
+        added = current_keys - baseline_keys
+        if not added:
+            return
+
+        self.fail(
+            f"BREAKING CHANGE in {case.key}: state_dict keys added: "
+            f"{sorted(added)}.\n"
+            "DCP validates every model FQN against checkpoint metadata before "
+            "load_state_dict runs, so the planner rejects a checkpoint written "
+            "before these keys existed. Loading one in process proves nothing: "
+            "state torchmetrics holds by setattr is invisible to the strict "
+            "check and still demanded by the planner."
         )
 
-    def _get_state_dict_keys(self, with_batch_size_stages: bool = False) -> List[str]:
-        metric = self._create_throughput_metric(with_batch_size_stages)
-        return sorted(metric.state_dict().keys())
+    def test_golden_cases(self) -> None:
+        for case in _SCHEMA_CASES:
+            with self.subTest(case.key):
+                self._check_case(case)
 
-    def test_throughput_metric_compatibility(self) -> None:
-        key = THROUGHPUT_SNAPSHOT_KEY
+    def test_metadata_mismatch_is_rejected(self) -> None:
+        """The stored metric_class and variant must match the case asking.
 
-        if key not in self.golden_snapshot:
-            current_keys = self._get_state_dict_keys(with_batch_size_stages=False)
-            self.golden_snapshot[key] = {
-                "metric_class": "ThroughputMetric",
-                "variant": "",
-                "state_dict_keys": current_keys,
-                "persistent_buffer_fqns": [],
-                "non_persistent_buffer_fqns": [],
-            }
-            save_golden_snapshot(self.golden_snapshot)
-            return
+        Without this, a case can compare against an entry another case wrote:
+        the extra keys read as an addition and the addition check loads them
+        away. Injecting each mismatch pins both guards, which are otherwise
+        only exercised when the golden is already wrong.
+        """
+        for field_name, wrong_value in (
+            ("metric_class", "SomeOtherClass"),
+            ("variant", "some_other_variant"),
+        ):
+            with self.subTest(field_name):
+                # Writing to self hides the class attribute instead of
+                # changing it. The real snapshot is safe, so del is enough.
+                self.golden_snapshot = {
+                    _KNOWN_KEYS_CASE.key: _agreeing_entry(**{field_name: wrong_value})
+                }
+                try:
+                    with self.assertRaisesRegex(
+                        AssertionError, "written by a different"
+                    ):
+                        self._check_case(_KNOWN_KEYS_CASE)
+                finally:
+                    del self.golden_snapshot
 
-        baseline = self.golden_snapshot[key]
-        current_keys = set(self._get_state_dict_keys(with_batch_size_stages=False))
-        baseline_keys = set(baseline["state_dict_keys"])
+    def test_key_drift_is_rejected(self) -> None:
+        """Checks that the drift check works.
 
-        removed_keys = baseline_keys - current_keys
-        if removed_keys:
+        `_check_case` fails two ways: a golden key the module lost, or a module
+        key the golden lacks. Neither fires in a green run. This test makes
+        both fire.
+        """
+        for label, keys, expected in (
+            ("removed", ["alpha", "beta", "gamma"], "state_dict keys removed"),
+            ("added", ["alpha"], "state_dict keys added"),
+        ):
+            with self.subTest(label):
+                self.golden_snapshot = {
+                    _KNOWN_KEYS_CASE.key: _agreeing_entry(state_dict_keys=keys)
+                }
+                try:
+                    with self.assertRaisesRegex(AssertionError, expected):
+                        self._check_case(_KNOWN_KEYS_CASE)
+                finally:
+                    del self.golden_snapshot
+
+    def test_no_orphaned_golden_entries(self) -> None:
+        """Every golden entry must belong to something that checks it.
+
+        An entry nobody claims is dead weight that still looks like coverage.
+        That happens when a metric is dropped from METRICS_TO_TEST, or a case is
+        removed, and the entry is left behind. Metric rows are cases now, so
+        the case table is the only thing this consults.
+        """
+        expected = {case.key for case in _SCHEMA_CASES}
+        orphans = sorted(set(self.golden_snapshot) - expected)
+        if orphans:
             self.fail(
-                f"BREAKING CHANGE in {key}: state_dict keys removed: {sorted(removed_keys)}. "
-                "This will cause old checkpoints to fail loading."
+                f"Golden entries that no test claims: {orphans}.\n"
+                "Either restore whatever used to check them, or delete the "
+                "entries."
             )
 
-        added_keys = current_keys - baseline_keys
-        if added_keys:
-            if not self._verify_backward_compatibility(added_keys):
-                self.fail(
-                    f"BREAKING CHANGE in {key}: state_dict keys added: {sorted(added_keys)}. "
-                    "Implement load_state_dict hooks to handle missing keys."
+    def test_case_keys_are_unique(self) -> None:
+        keys = [case.key for case in _SCHEMA_CASES]
+        self.assertEqual(sorted(keys), sorted(set(keys)))
+
+    def test_one_class_per_stable_id(self) -> None:
+        """A stable id names one class, however many variants it has.
+
+        The key carries the variant, so two classes could share an id and still
+        keep distinct keys. Anything that maps id to class would then silently
+        keep whichever row it read last.
+        """
+        classes_by_id: Dict[str, Set[Type[torch.nn.Module]]] = {}
+        for case in _SCHEMA_CASES:
+            classes_by_id.setdefault(case.stable_id, set()).add(case.expected_class)
+
+        for stable_id, classes in classes_by_id.items():
+            with self.subTest(stable_id):
+                self.assertEqual(
+                    len(classes),
+                    1,
+                    f"{stable_id} is claimed by "
+                    f"{sorted(c.__name__ for c in classes)}.",
                 )
 
-    def test_throughput_metric_with_stages_compatibility(self) -> None:
-        key = THROUGHPUT_WITH_STAGES_SNAPSHOT_KEY
+    def test_cases_for_same_id_have_distinct_key_sets(self) -> None:
+        """Every case under one id must snapshot a different key set.
 
-        if key not in self.golden_snapshot:
-            current_keys = self._get_state_dict_keys(with_batch_size_stages=True)
-            self.golden_snapshot[key] = {
-                "metric_class": "ThroughputMetric",
-                "variant": "with_batch_size_stages",
-                "state_dict_keys": current_keys,
-                "persistent_buffer_fqns": [],
-                "non_persistent_buffer_fqns": [],
-            }
-            save_golden_snapshot(self.golden_snapshot)
-            return
-
-        baseline = self.golden_snapshot[key]
-        current_keys = set(self._get_state_dict_keys(with_batch_size_stages=True))
-        baseline_keys = set(baseline["state_dict_keys"])
-
-        removed_keys = baseline_keys - current_keys
-        if removed_keys:
-            self.fail(
-                f"BREAKING CHANGE in {key}: state_dict keys removed: {sorted(removed_keys)}. "
-                "This will cause old checkpoints to fail loading."
-            )
-
-        added_keys = current_keys - baseline_keys
-        if added_keys:
-            if not self._verify_backward_compatibility(added_keys, with_stages=True):
-                self.fail(
-                    f"BREAKING CHANGE in {key}: state_dict keys added: {sorted(added_keys)}. "
-                    "Implement load_state_dict hooks to handle missing keys."
+        The unnamed case counts too, so this catches a named variant whose
+        builder forgot the argument that distinguishes it. The key and the
+        stored metadata both agree with themselves in that case; only the
+        resulting shape disagrees.
+        """
+        by_id: Dict[str, List[FrozenSet[str]]] = {}
+        for case in _SCHEMA_CASES:
+            with self._built(case) as module:
+                by_id.setdefault(case.stable_id, []).append(
+                    frozenset(module.state_dict().keys())
                 )
 
-    def _verify_backward_compatibility(
-        self, added_keys: Set[str], with_stages: bool = False
-    ) -> bool:
-        try:
-            metric = self._create_throughput_metric(with_batch_size_stages=with_stages)
-            state_dict = metric.state_dict()
-            old_checkpoint = {
-                k: v for k, v in state_dict.items() if k not in added_keys
-            }
+        for stable_id, entries in by_id.items():
+            with self.subTest(stable_id):
+                self.assertEqual(
+                    len(set(entries)),
+                    len(entries),
+                    f"{stable_id} has {len(entries)} cases but "
+                    f"{len(set(entries))} distinct key sets. One builder is carrying "
+                    "another's configuration.",
+                )
 
-            fresh_metric = self._create_throughput_metric(
-                with_batch_size_stages=with_stages
-            )
-            fresh_metric.load_state_dict(old_checkpoint, strict=True)
-            return True
-        except Exception:
-            return False
+
+class ThroughputMetricBackwardCompatibilityTest(unittest.TestCase):
+    """Round-trip checks for ThroughputMetric that are not golden comparisons."""
 
     def test_throughput_metric_state_roundtrip(self) -> None:
-        metric = self._create_throughput_metric()
-        initial_state = metric.state_dict()
+        metric = _make_throughput_metric()
+        initial_state = mark_state(metric)
 
-        fresh_metric = self._create_throughput_metric()
+        fresh_metric = _make_throughput_metric()
         fresh_metric.load_state_dict(initial_state, strict=True)
 
         restored_state = fresh_metric.state_dict()
@@ -924,152 +1003,13 @@ class ThroughputMetricBackwardCompatibilityTest(unittest.TestCase):
 
 
 class RecMetricModuleBackwardCompatibilityTest(unittest.TestCase):
-    """
-    Test suite for RecMetricModule FQN backward compatibility.
-
-    RecMetricModule is a container that holds RecMetrics, ThroughputMetric, and StateMetrics.
-    """
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        """Load the golden snapshot."""
-        cls.golden_snapshot = load_golden_snapshot()
-
-    def _create_rec_metric_module(
-        self, with_throughput: bool = False, with_metrics: bool = True
-    ) -> RecMetricModule:
-        tasks = [create_test_task("task1")]
-
-        rec_metrics = None
-        if with_metrics:
-            ne_metric = NEMetric(
-                world_size=1,
-                my_rank=0,
-                batch_size=32,
-                tasks=tasks,
-                compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-                window_size=100,
-            )
-            rec_metrics = RecMetricList([ne_metric])
-
-        throughput_metric = None
-        if with_throughput:
-            throughput_metric = ThroughputMetric(
-                batch_size=32,
-                world_size=1,
-                window_seconds=100,
-                warmup_steps=10,
-            )
-
-        return RecMetricModule(
-            batch_size=32,
-            world_size=1,
-            rec_tasks=tasks,
-            rec_metrics=rec_metrics,
-            throughput_metric=throughput_metric,
-        )
-
-    def _get_state_dict_keys(
-        self, with_throughput: bool = False, with_metrics: bool = True
-    ) -> List[str]:
-        module = self._create_rec_metric_module(
-            with_throughput=with_throughput, with_metrics=with_metrics
-        )
-        return sorted(module.state_dict().keys())
-
-    def test_rec_metric_module_compatibility(self) -> None:
-        key = REC_METRIC_MODULE_SNAPSHOT_KEY
-
-        if key not in self.golden_snapshot:
-            current_keys = self._get_state_dict_keys(with_throughput=False)
-            self.golden_snapshot[key] = {
-                "metric_class": "RecMetricModule",
-                "variant": "",
-                "state_dict_keys": current_keys,
-                "persistent_buffer_fqns": [],
-                "non_persistent_buffer_fqns": [],
-            }
-            save_golden_snapshot(self.golden_snapshot)
-            return
-
-        baseline = self.golden_snapshot[key]
-        current_keys = set(self._get_state_dict_keys(with_throughput=False))
-        baseline_keys = set(baseline["state_dict_keys"])
-
-        removed_keys = baseline_keys - current_keys
-        if removed_keys:
-            self.fail(
-                f"BREAKING CHANGE in {key}: state_dict keys removed: {sorted(removed_keys)}."
-            )
-
-        added_keys = current_keys - baseline_keys
-        if added_keys:
-            if not self._verify_backward_compatibility(
-                added_keys, with_throughput=False
-            ):
-                self.fail(
-                    f"BREAKING CHANGE in {key}: state_dict keys added: {sorted(added_keys)}. "
-                    "Implement load_state_dict hooks to handle missing keys."
-                )
-
-    def test_rec_metric_module_with_throughput_compatibility(self) -> None:
-        key = REC_METRIC_MODULE_WITH_THROUGHPUT_KEY
-
-        if key not in self.golden_snapshot:
-            current_keys = self._get_state_dict_keys(with_throughput=True)
-            self.golden_snapshot[key] = {
-                "metric_class": "RecMetricModule",
-                "variant": "with_throughput",
-                "state_dict_keys": current_keys,
-                "persistent_buffer_fqns": [],
-                "non_persistent_buffer_fqns": [],
-            }
-            save_golden_snapshot(self.golden_snapshot)
-            return
-
-        baseline = self.golden_snapshot[key]
-        current_keys = set(self._get_state_dict_keys(with_throughput=True))
-        baseline_keys = set(baseline["state_dict_keys"])
-
-        removed_keys = baseline_keys - current_keys
-        if removed_keys:
-            self.fail(
-                f"BREAKING CHANGE in {key}: state_dict keys removed: {sorted(removed_keys)}."
-            )
-
-        added_keys = current_keys - baseline_keys
-        if added_keys:
-            if not self._verify_backward_compatibility(
-                added_keys, with_throughput=True
-            ):
-                self.fail(
-                    f"BREAKING CHANGE in {key}: state_dict keys added: {sorted(added_keys)}. "
-                    "Implement load_state_dict hooks to handle missing keys."
-                )
-
-    def _verify_backward_compatibility(
-        self, added_keys: Set[str], with_throughput: bool = False
-    ) -> bool:
-        try:
-            module = self._create_rec_metric_module(with_throughput=with_throughput)
-            state_dict = module.state_dict()
-            old_checkpoint = {
-                k: v for k, v in state_dict.items() if k not in added_keys
-            }
-
-            fresh_module = self._create_rec_metric_module(
-                with_throughput=with_throughput
-            )
-            fresh_module.load_state_dict(old_checkpoint, strict=True)
-            return True
-        except Exception:
-            return False
+    """Round-trip checks for RecMetricModule that are not golden comparisons."""
 
     def test_rec_metric_module_state_roundtrip(self) -> None:
-        module = self._create_rec_metric_module(with_throughput=True)
-        initial_state = module.state_dict()
+        module = _make_rec_metric_module(_make_throughput_metric())
+        initial_state = mark_state(module)
 
-        fresh_module = self._create_rec_metric_module(with_throughput=True)
+        fresh_module = _make_rec_metric_module(_make_throughput_metric())
         fresh_module.load_state_dict(initial_state, strict=True)
 
         restored_state = fresh_module.state_dict()
@@ -1083,13 +1023,241 @@ class RecMetricModuleBackwardCompatibilityTest(unittest.TestCase):
             )
 
     def test_rec_metric_module_backward_compat_trained_batches(self) -> None:
-        module = self._create_rec_metric_module()
+        module = _make_rec_metric_module()
         state_dict = module.state_dict()
 
         state_dict["_trained_batches"] = torch.tensor(100)
 
-        fresh_module = self._create_rec_metric_module()
-        fresh_module.load_state_dict(state_dict, strict=False)
+        fresh_module = _make_rec_metric_module()
+        # strict=True matches production. Under strict=False this test passes
+        # even without the pop hook.
+        fresh_module.load_state_dict(state_dict, strict=True)
+
+
+class SchemaStableCoverageTest(unittest.TestCase):
+    """Every enrolled case and the class it names must agree on the id.
+
+    The case row is what enrolls a class. The mark on the class is what says
+    which id its golden entry is filed under. If they disagree, the row checks
+    an entry the class never claimed.
+    """
+
+    def test_each_case_class_carries_its_id(self) -> None:
+        for case in _ENROLLED_CASES:
+            with self.subTest(case.key):
+                self.assertEqual(
+                    schema_id_of(case.expected_class),
+                    case.stable_id,
+                    f"{case.expected_class.__name__} is not marked with "
+                    f"{case.stable_id!r}. Add @checkpoint_schema_stable to the "
+                    "class, or correct the id on the row.",
+                )
+
+
+class SchemaChangeTest(unittest.TestCase):
+    """Regenerating must not quietly bless a changed key set.
+
+    The comparison already fails on an added or removed key. The hole was the
+    escape hatch: --update-golden rewrote the file unconditionally, and the
+    failing test names that command, so silencing a real break took one step.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.golden_snapshot = load_golden_snapshot()
+
+    def test_unauthorized_addition_is_reported(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(unauthorized_additions(old, new), {"Thing": ["b"]})
+
+    def test_authorized_addition_is_allowed(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(
+            unauthorized_additions(old, new, (_make_record("Thing", "b"),)), {}
+        )
+
+    def test_a_brand_new_entry_needs_no_authorization(self) -> None:
+        old: Dict[str, Dict[str, Any]] = {}
+        new = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(unauthorized_additions(old, new), {})
+
+    def test_a_dropped_entry_is_reported(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new: Dict[str, Dict[str, Any]] = {}
+        self.assertEqual(removed_entries(old, new), ["Thing"])
+
+    def test_a_rename_that_adds_a_key_cannot_hide(self) -> None:
+        """The gap the addition check alone leaves open.
+
+        Renaming the class moves the entry to a new key, so the added state key
+        rides in under the brand-new exemption. Only the dropped old entry
+        gives it away.
+        """
+        old = {"Thing": {"state_dict_keys": ["a"]}}
+        new = {"RenamedThing": {"state_dict_keys": ["a", "b"]}}
+        self.assertEqual(unauthorized_additions(old, new), {})
+        self.assertEqual(removed_entries(old, new), ["Thing"])
+
+    def test_unauthorized_removal_is_reported(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        new = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(unauthorized_removals(old, new), {"Thing": ["b"]})
+
+    def test_authorized_removal_is_allowed(self) -> None:
+        old = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        new = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(
+            unauthorized_removals(old, new, (_make_removal("Thing", "b"),)), {}
+        )
+
+    def test_a_dropped_entry_is_left_to_removed_entries(self) -> None:
+        """Otherwise a rename reports every key twice, once per gate."""
+        old = {"Thing": {"state_dict_keys": ["a", "b"]}}
+        new: Dict[str, Dict[str, Any]] = {}
+        self.assertEqual(unauthorized_removals(old, new), {})
+        self.assertEqual(removed_entries(old, new), ["Thing"])
+
+    def test_configured_records_are_not_stale(self) -> None:
+        """Both registries checked in one place, so neither can run empty.
+
+        Looping over the registries meant zero assertions while they are empty,
+        which reads as coverage. The detectors themselves are pinned by the
+        synthetic tests below.
+        """
+        self.assertEqual(stale_records(_SCHEMA_ADDITIONS, self.golden_snapshot), [])
+        self.assertEqual(
+            stale_removal_records(_SCHEMA_REMOVALS, self.golden_snapshot), []
+        )
+
+    def test_stale_removal_records_are_detected(self) -> None:
+        # Staleness inverts: the key must be gone, not present.
+        snapshot = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(
+            stale_removal_records((_make_removal("Thing", "b"),), snapshot), []
+        )
+        self.assertEqual(
+            stale_removal_records((_make_removal("Thing", "a"),), snapshot),
+            ["Thing still has key 'a'"],
+        )
+        self.assertEqual(
+            stale_removal_records((_make_removal("Gone", "a"),), snapshot),
+            ["Gone is not in the golden"],
+        )
+
+    def test_removal_record_fields_are_required(self) -> None:
+        for blank in ("", "   "):
+            with self.subTest(repr(blank)), self.assertRaises(ValueError):
+                _make_removal("Thing", "b", hook=blank)
+
+    def test_stale_records_are_detected(self) -> None:
+        # _SCHEMA_ADDITIONS is empty, so the check above passes without running
+        # anything. These pin the detector itself.
+        snapshot = {"Thing": {"state_dict_keys": ["a"]}}
+        self.assertEqual(stale_records((_make_record("Thing", "a"),), snapshot), [])
+        self.assertEqual(
+            stale_records((_make_record("Gone", "a"),), snapshot),
+            ["Gone is not in the golden"],
+        )
+        self.assertEqual(
+            stale_records((_make_record("Thing", "b"),), snapshot),
+            ["Thing has no key 'b'"],
+        )
+
+    def test_record_fields_are_required(self) -> None:
+        for blank in ("", "   "):
+            with self.subTest(repr(blank)), self.assertRaises(ValueError):
+                _make_record("Thing", "b", reason=blank)
+
+    def test_record_added_must_be_a_date(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be a datetime.date"):
+            # pyre-ignore[6]
+            _make_record("Thing", "b", added="2026-01-01")
+
+
+class GoldenRegenerationTest(unittest.TestCase):
+    """The gates on the real generate-validate-save path.
+
+    The tests above call the comparison helpers directly, which says nothing
+    about whether `update_golden_snapshot` consults them or writes anyway. Each
+    case here doctors a baseline, runs the whole path against a temporary file,
+    and requires that file to come back untouched.
+
+    The patch redirects where the snapshot is read and written. It replaces a
+    path, not a dependency, so the file I/O under test is real.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        # Building every case is the slow part, so pay it once and reuse the
+        # result as the baseline each case then doctors.
+        cls.current: Dict[str, Dict[str, Any]] = generate_schema_case_entries()
+
+    @contextlib.contextmanager
+    def _baseline(self, snapshot: Dict[str, Dict[str, Any]]) -> Iterator[Path]:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "golden.json"
+            path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+            with unittest.mock.patch(
+                f"{__name__}.GOLDEN_SNAPSHOT_PATH", path
+            ), _single_rank_process_group():
+                yield path
+
+    def _assert_refused(self, baseline: Dict[str, Dict[str, Any]], reason: str) -> None:
+        with self._baseline(baseline) as path:
+            before = path.read_bytes()
+            with self.assertRaises((ValueError, RuntimeError)) as cm:
+                update_golden_snapshot()
+            self.assertIn(reason, str(cm.exception))
+            self.assertEqual(path.read_bytes(), before, "the golden was rewritten")
+
+    def _entry_holding_keys(self, baseline: Dict[str, Dict[str, Any]]) -> str:
+        """An entry with at least one state key.
+
+        Six entries legitimately have none, the AUC family among them, and they
+        sort first. Doctoring one of those changes nothing and the gate has
+        nothing to catch.
+        """
+        for key in sorted(baseline):
+            if baseline[key]["state_dict_keys"]:
+                return key
+        self.fail("no golden entry holds a state key")
+
+    def test_an_empty_baseline_is_refused(self) -> None:
+        self._assert_refused({}, "restore it from source control")
+
+    def test_an_unauthorized_addition_is_refused(self) -> None:
+        # Drop one key from one entry, so the live code looks like it added it.
+        baseline = copy.deepcopy(type(self).current)
+        key = self._entry_holding_keys(baseline)
+        baseline[key]["state_dict_keys"] = baseline[key]["state_dict_keys"][1:]
+        self._assert_refused(baseline, "add state_dict keys that nothing authorizes")
+
+    def test_an_unauthorized_removal_is_refused(self) -> None:
+        baseline = copy.deepcopy(type(self).current)
+        key = self._entry_holding_keys(baseline)
+        baseline[key]["state_dict_keys"] = baseline[key]["state_dict_keys"] + [
+            "a_key_the_code_no_longer_produces"
+        ]
+        self._assert_refused(baseline, "drop state_dict keys that nothing authorizes")
+
+    def test_a_dropped_entry_is_refused(self) -> None:
+        baseline = copy.deepcopy(type(self).current)
+        baseline["AnEntryTheCodeNoLongerProduces"] = {
+            "metric_class": "Gone",
+            "variant": "",
+            "state_dict_keys": [],
+            "persistent_buffer_fqns": [],
+            "non_persistent_buffer_fqns": [],
+        }
+        self._assert_refused(baseline, "remove golden entries")
+
+    def test_an_unchanged_baseline_is_rewritten_identically(self) -> None:
+        with self._baseline(type(self).current) as path:
+            before = path.read_bytes()
+            update_golden_snapshot()
+            self.assertEqual(path.read_bytes(), before)
 
 
 class MetricCoverageTest(unittest.TestCase):
@@ -1103,7 +1271,8 @@ class MetricCoverageTest(unittest.TestCase):
     # Metrics that are intentionally excluded from testing (with reason)
     EXCLUDED_METRICS: Dict[str, str] = {
         # Add metrics here that should be excluded, with a reason
-        # e.g., "SomeMetric": "deprecated, will be removed in next release",
+        # Keys are qualified, matching what the coverage check compares.
+        # e.g., "torchrec.metrics.foo.SomeMetric": "deprecated, removed next release",
     }
 
     @unittest.skipIf(
@@ -1111,13 +1280,26 @@ class MetricCoverageTest(unittest.TestCase):
         "concurrent.futures._base.Future is type but not a class",
     )
     def test_all_recmetrics_are_covered(self) -> None:
+        # Qualified, not bare __name__: two classes sharing a name collapse to
+        # one string and let the unlisted one ride in on the other's coverage.
         discovered_metrics: Set[str] = {
-            cls.__name__ for cls in _discover_all_recmetric_subclasses()
+            _qualified(cls) for cls in _discover_all_recmetric_subclasses()
         }
+        self.assertTrue(
+            discovered_metrics, "discovery found no RecMetric subclasses at all"
+        )
 
         covered_metrics: Set[str] = {
-            metric_class.__name__ for metric_class, _, _, _ in METRICS_TO_TEST
+            _qualified(metric_class) for metric_class, _, _, _ in METRICS_TO_TEST
         }
+
+        # A row naming a class the walk cannot see means the table reaches
+        # outside torchrec.metrics, which is where comparing names misleads.
+        self.assertEqual(
+            covered_metrics - discovered_metrics,
+            set(),
+            "METRICS_TO_TEST names classes that discovery does not find",
+        )
 
         missing_metrics = (
             discovered_metrics - covered_metrics - set(self.EXCLUDED_METRICS.keys())
@@ -1128,9 +1310,9 @@ class MetricCoverageTest(unittest.TestCase):
                 f"The following RecMetric subclasses are not covered by backward "
                 f"compatibility tests: {sorted(missing_metrics)}.\n\n"
                 f"To fix this:\n"
-                f"1. Add the metric to METRICS_TO_TEST in this file\n"
-                f"2. Add a corresponding test_<metric>_metric() method\n"
-                f"3. Run the tests to generate the golden snapshot\n\n"
+                f"1. Add a METRICS_TO_TEST row. The check runs from the table, "
+                f"so the row is the whole registration.\n"
+                f"2. Run with --update-golden to write its entry.\n\n"
                 f"If the metric should be excluded, add it to EXCLUDED_METRICS with a reason."
             )
 
@@ -1298,8 +1480,16 @@ _THROUGHPUT_COMMON_KWARGS: Dict[str, Any] = {
 _cached_recmetric_subclasses: Optional[Set[Type[RecMetric]]] = None
 
 
+def _qualified(cls: type) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
 def _discover_all_recmetric_subclasses() -> Set[Type[RecMetric]]:
-    """Discover all RecMetric subclasses in torchrec.metrics."""
+    """Every RecMetric subclass in torchrec.metrics.
+
+    A module that would not import used to be skipped in silence. All 51
+    modules import today, so a failure here is news rather than noise.
+    """
     global _cached_recmetric_subclasses
     if _cached_recmetric_subclasses is not None:
         return _cached_recmetric_subclasses
@@ -1310,20 +1500,34 @@ def _discover_all_recmetric_subclasses() -> Set[Type[RecMetric]]:
     import torchrec.metrics
 
     subclasses: Set[Type[RecMetric]] = set()
+    failures: List[str] = []
     for _, module_name, _ in pkgutil.iter_modules(torchrec.metrics.__path__):
         try:
             module = importlib.import_module(f"torchrec.metrics.{module_name}")
-            for attr_name in dir(module):
-                attr = getattr(module, attr_name)
-                if (
-                    isinstance(attr, type)
-                    and issubclass(attr, RecMetric)
-                    and attr is not RecMetric
-                    and not attr_name.startswith("_")
-                ):
-                    subclasses.add(attr)
-        except ImportError:
+        except Exception as e:
+            failures.append(
+                f"  torchrec.metrics.{module_name}: {type(e).__name__}: {e}"
+            )
             continue
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, RecMetric)
+                and attr is not RecMetric
+                and not attr_name.startswith("_")
+            ):
+                subclasses.add(attr)
+
+    if failures:
+        detail = "\n".join(failures)
+        raise RuntimeError(
+            f"Could not import every torchrec.metrics module:\n{detail}\n"
+            "A module skipped here hides its metrics from the coverage check, "
+            "which asserts discovery is a subset of the table. Anything that "
+            "shrinks discovery makes that assertion easier to satisfy."
+        )
+
     _cached_recmetric_subclasses = subclasses
     return subclasses
 
@@ -1656,7 +1860,7 @@ class DCPCheckpointClientSimulationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.golden_snapshot = load_golden_snapshot()
+        cls.golden_snapshot = load_required_golden_snapshot()
 
     def _simulate_dcp_fqn_validation(
         self,
@@ -1695,7 +1899,10 @@ class DCPCheckpointClientSimulationTest(unittest.TestCase):
             NEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION
         )
         if key not in self.golden_snapshot:
-            self.skipTest(f"No golden snapshot for {key}")
+            self.fail(
+                f"No golden entry for {key}. This simulation needs one; run "
+                "with --update-golden."
+            )
 
         current_fqns = set(
             extract_state_dict_keys(NEMetric, RecComputeMode.UNFUSED_TASKS_COMPUTATION)
@@ -1714,27 +1921,16 @@ class DCPCheckpointClientSimulationTest(unittest.TestCase):
             )
 
     def test_rec_metric_module_dcp_validation(self) -> None:
-        key = REC_METRIC_MODULE_SNAPSHOT_KEY
+        key = _REC_METRIC_MODULE_DEFAULT.key
         if key not in self.golden_snapshot:
-            self.skipTest(f"No golden snapshot for {key}")
+            self.fail(
+                f"No golden entry for {key}. This simulation needs one; run "
+                "with --update-golden."
+            )
 
-        tasks = [create_test_task("task1")]
-        ne_metric = NEMetric(
-            world_size=1,
-            my_rank=0,
-            batch_size=32,
-            tasks=tasks,
-            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-            window_size=100,
-        )
-        rec_metrics = RecMetricList([ne_metric])
-
-        module = RecMetricModule(
-            batch_size=32,
-            world_size=1,
-            rec_tasks=tasks,
-            rec_metrics=rec_metrics,
-        )
+        # Built by the same builder that wrote the entry above, so the two
+        # cannot drift into comparing differently configured modules.
+        module = _REC_METRIC_MODULE_DEFAULT.build()
 
         current_fqns = set(module.state_dict().keys())
         checkpoint_fqns = set(self.golden_snapshot[key]["state_dict_keys"])
@@ -1753,9 +1949,321 @@ class DCPCheckpointClientSimulationTest(unittest.TestCase):
             )
 
 
+def generate_schema_case_entries() -> Dict[str, Dict[str, Any]]:
+    """Golden entries for the _SCHEMA_CASES table.
+
+    The comparison path fails rather than writing a missing entry, so this is
+    the only way a new case gets one.
+
+    Every case must build. Skipping one that raises would write a file missing
+    that entry, and the write still succeeds, so a partial snapshot replaces a
+    good one. Failures are collected rather than raised on the first, so one
+    run names every broken case.
+
+    Owns the process group rather than leaving it to the caller: the tests get
+    one from setUp, and --update-golden runs outside unittest entirely.
+    """
+    entries: Dict[str, Dict[str, Any]] = {}
+    failures: List[str] = []
+    with _single_rank_process_group():
+        for case in _SCHEMA_CASES:
+            if case.key in entries:
+                raise ValueError(
+                    f"Two cases share the key {case.key!r}. One would overwrite "
+                    "the other's golden entry."
+                )
+            try:
+                module = case.build()
+            except Exception as e:
+                failures.append(f"  {case.key}: {type(e).__name__}: {e}")
+                continue
+            try:
+                persistent, non_persistent = buffer_fqns(module)
+                entries[case.key] = {
+                    "metric_class": case.expected_class.__name__,
+                    "variant": case.variant,
+                    "state_dict_keys": sorted(module.state_dict().keys()),
+                    "persistent_buffer_fqns": persistent,
+                    "non_persistent_buffer_fqns": non_persistent,
+                }
+            finally:
+                if case.cleanup is not None:
+                    case.cleanup(module)
+
+    if failures:
+        detail = "\n".join(failures)
+        raise RuntimeError(f"Could not build every golden case:\n{detail}")
+    return entries
+
+
+@dataclass(frozen=True)
+class _SchemaChange:
+    """What every deliberate change to a golden entry has to say.
+
+    Neither record changes behavior. Both are review gates and a paper trail,
+    and the subclass field naming the migration is the one that matters.
+    """
+
+    golden_key: str
+    state_key: str
+    reason: str
+    owner: str
+
+    def _validate(self, extra_text: Tuple[str, ...], date_field: str) -> None:
+        for name in ("golden_key", "state_key", "reason", "owner") + extra_text:
+            value = getattr(self, name)
+            if not value or not value.strip():
+                raise ValueError(
+                    f"{type(self).__name__}.{name} must be non-empty "
+                    f"({self.state_key!r} on {self.golden_key!r})"
+                )
+        # The annotation alone does not stop a string, and a string date sorts
+        # and compares wrong without ever raising.
+        when = getattr(self, date_field)
+        if not isinstance(when, datetime.date):
+            raise ValueError(
+                f"{type(self).__name__}.{date_field} must be a datetime.date, "
+                f"got {type(when).__name__}"
+            )
+
+
+@dataclass(frozen=True)
+class _SchemaAddition(_SchemaChange):
+    """An intentional new state_dict key on a class that already has a golden entry.
+
+    Additions are the direction a module hook cannot repair. DCP validates that
+    every model FQN exists in checkpoint metadata before load_state_dict runs,
+    so a checkpoint written before the key existed is rejected by the planner,
+    ahead of any hook. Adding one persistent buffer to RecMetricModule has
+    already taken down production training this way.
+
+    `rollout` names how checkpoints that predate the key are handled, usually
+    LoadOverride.allow_missing_fqns.
+    """
+
+    rollout: str
+    added: datetime.date
+
+    def __post_init__(self) -> None:
+        self._validate(("rollout",), "added")
+
+
+@dataclass(frozen=True)
+class _SchemaRemoval(_SchemaChange):
+    """A state_dict key dropped from a class that keeps its golden entry.
+
+    Removals break a narrower set of loads than additions. torchmetrics pops
+    the keys it still declares, so a key it no longer declares reaches
+    nn.Module's strict check unclaimed and raises. DCP and the legacy client
+    build the load dict from the model, so the leftover key is never requested
+    there. Only a checkpoint-derived load reads it back, which today means
+    transfer learning.
+
+    `hook` names what pops the key for checkpoints that still carry it.
+    """
+
+    hook: str
+    removed: datetime.date
+
+    def __post_init__(self) -> None:
+        self._validate(("hook",), "removed")
+
+
+# Every deliberate addition to an existing golden entry. Regenerating the
+# snapshot refuses to write an added key that is not listed here.
+_SCHEMA_ADDITIONS: Tuple[_SchemaAddition, ...] = ()
+
+# The same, for keys dropped from an entry that survives.
+_SCHEMA_REMOVALS: Tuple[_SchemaRemoval, ...] = ()
+
+
+def _make_record(golden_key: str, state_key: str, **overrides: Any) -> _SchemaAddition:
+    """A filled-in record, so tests can vary the one field they care about."""
+    fields: Dict[str, Any] = {
+        "golden_key": golden_key,
+        "state_key": state_key,
+        "reason": "test",
+        "rollout": "test",
+        "owner": "test",
+        "added": datetime.date(2026, 1, 1),
+    }
+    fields.update(overrides)
+    return _SchemaAddition(**fields)
+
+
+def _make_removal(golden_key: str, state_key: str, **overrides: Any) -> _SchemaRemoval:
+    """The removal-side twin of _make_record."""
+    fields: Dict[str, Any] = {
+        "golden_key": golden_key,
+        "state_key": state_key,
+        "reason": "test",
+        "hook": "test",
+        "owner": "test",
+        "removed": datetime.date(2026, 1, 1),
+    }
+    fields.update(overrides)
+    return _SchemaRemoval(**fields)
+
+
+def _unclaimed_delta(
+    source: Dict[str, Dict[str, Any]],
+    target: Dict[str, Dict[str, Any]],
+    records: Sequence[_SchemaChange],
+) -> Dict[str, List[str]]:
+    """For entries both snapshots hold, keys in `source` absent from `target`.
+
+    Keys a record claims are dropped from the result. Entries missing from
+    either side are skipped, so a brand-new or dropped entry is somebody else's
+    problem.
+    """
+    claimed: Dict[str, Set[str]] = {}
+    for record in records:
+        claimed.setdefault(record.golden_key, set()).add(record.state_key)
+
+    offenders: Dict[str, List[str]] = {}
+    for golden_key, entry in source.items():
+        if golden_key not in target:
+            continue
+        delta = set(entry["state_dict_keys"]) - set(
+            target[golden_key]["state_dict_keys"]
+        )
+        unclaimed = sorted(delta - claimed.get(golden_key, set()))
+        if unclaimed:
+            offenders[golden_key] = unclaimed
+    return offenders
+
+
+def unauthorized_additions(
+    old: Dict[str, Dict[str, Any]],
+    new: Dict[str, Dict[str, Any]],
+    records: Sequence[_SchemaAddition] = (),
+) -> Dict[str, List[str]]:
+    """Keys that regeneration would add without a matching _SchemaAddition.
+
+    Entries absent from `old` are skipped. A genuinely new class or case has no
+    baseline to break, so its first snapshot needs no authorization. Pair this
+    with removed_entries, which is what stops a rename from reaching that
+    exemption while also adding a key.
+    """
+    return _unclaimed_delta(source=new, target=old, records=records)
+
+
+def unauthorized_removals(
+    old: Dict[str, Dict[str, Any]],
+    new: Dict[str, Dict[str, Any]],
+    records: Sequence[_SchemaRemoval] = (),
+) -> Dict[str, List[str]]:
+    """Keys that regeneration would drop without a matching _SchemaRemoval.
+
+    Entries absent from `new` are skipped, because removed_entries already
+    refuses those outright.
+    """
+    return _unclaimed_delta(source=old, target=new, records=records)
+
+
+def removed_entries(
+    old: Dict[str, Dict[str, Any]], new: Dict[str, Dict[str, Any]]
+) -> List[str]:
+    """Golden entries that regeneration would drop.
+
+    A METRICS_TO_TEST key is built from `__name__`, so renaming a metric moves
+    its entry. The old one disappears and the replacement looks brand new, so a
+    rename that also adds a state key would walk straight through the addition
+    gate. Case-table keys are hand-written ids and do not move on a rename,
+    which is what those ids are for.
+
+    Losing an entry is rare and always worth a look, so this refuses rather
+    than asking for a record.
+    """
+    return sorted(set(old) - set(new))
+
+
+def stale_records(
+    records: Sequence[_SchemaAddition], snapshot: Dict[str, Dict[str, Any]]
+) -> List[str]:
+    """Addition records naming a key the snapshot does not hold.
+
+    A record for a key that never landed, or that was later removed, is a claim
+    nobody can check.
+    """
+    stale: List[str] = []
+    for record in records:
+        entry = snapshot.get(record.golden_key)
+        if entry is None:
+            stale.append(f"{record.golden_key} is not in the golden")
+        elif record.state_key not in entry["state_dict_keys"]:
+            stale.append(f"{record.golden_key} has no key {record.state_key!r}")
+    return stale
+
+
+def stale_removal_records(
+    records: Sequence[_SchemaRemoval], snapshot: Dict[str, Dict[str, Any]]
+) -> List[str]:
+    """Removal records whose key came back.
+
+    Staleness inverts here. An addition record points at a key that must now be
+    present; a removal record points at one that must now be absent. Re-adding
+    the key leaves a record excusing a removal that no longer happened.
+    """
+    stale: List[str] = []
+    for record in records:
+        entry = snapshot.get(record.golden_key)
+        if entry is None:
+            stale.append(f"{record.golden_key} is not in the golden")
+        elif record.state_key in entry["state_dict_keys"]:
+            stale.append(f"{record.golden_key} still has key {record.state_key!r}")
+    return stale
+
+
 def update_golden_snapshot() -> None:
     print("Generating golden snapshot...")
-    snapshot = generate_golden_snapshot()
+    snapshot = generate_schema_case_entries()
+
+    # Not load_golden_snapshot: an absent file reads as {}, which turns every
+    # generated entry into a brand-new one and silences all three gates below.
+    previous = load_required_golden_snapshot()
+
+    dropped = removed_entries(previous, snapshot)
+    if dropped:
+        raise ValueError(
+            f"Regenerating would remove golden entries: {dropped}.\n"
+            "No record authorizes this, deliberately. If the removal is right, "
+            f"delete those entries from {GOLDEN_SNAPSHOT_PATH.name} by hand and "
+            "run again, in the same diff that renames or drops the class. The "
+            "hand edit is the acknowledgement.\n"
+            "If it is not right, a case lost its coverage and the table needs "
+            "the row back."
+        )
+
+    dropped_keys = unauthorized_removals(previous, snapshot, _SCHEMA_REMOVALS)
+    if dropped_keys:
+        detail = "\n".join(
+            f"  {key}: {sorted(keys)}" for key, keys in sorted(dropped_keys.items())
+        )
+        raise ValueError(
+            "Regenerating would drop state_dict keys that nothing authorizes:\n"
+            f"{detail}\n"
+            "A checkpoint written before the removal still carries the key. "
+            "Loads built from the model never ask for it, but a "
+            "checkpoint-derived load reads it back, finds nobody claiming it, "
+            "and raises. Add a _SchemaRemoval for each, naming the hook that "
+            "pops it."
+        )
+
+    offenders = unauthorized_additions(previous, snapshot, _SCHEMA_ADDITIONS)
+    if offenders:
+        detail = "\n".join(
+            f"  {key}: {sorted(keys)}" for key, keys in sorted(offenders.items())
+        )
+        raise ValueError(
+            "Regenerating would add state_dict keys that nothing authorizes:\n"
+            f"{detail}\n"
+            "An added key makes every older checkpoint unloadable, and no "
+            "module hook can repair that: the planner rejects the load before "
+            "any hook runs. Add a _SchemaAddition for each, naming the reason, "
+            "the rollout plan for existing checkpoints, and an owner."
+        )
+
     save_golden_snapshot(snapshot)
     print(f"Golden snapshot saved to {GOLDEN_SNAPSHOT_PATH}")
     print(f"Total metrics captured: {len(snapshot)}")

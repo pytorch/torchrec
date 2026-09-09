@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 import fbgemm_gpu  # @manual = "//deeplearning/fbgemm/fbgemm_gpu:fbgemm_gpu"
 import torch
 import torch.distributed as dist
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.modules.hash_mc_evictions import (
     get_kernel_from_policy,
     HashZchEvictionConfig,
@@ -193,6 +194,7 @@ def _get_device(hash_zch_identities: torch.Tensor) -> torch.device:
     return hash_zch_identities.device
 
 
+@checkpoint_schema_stable("hash_zch_managed_collision_module")
 class HashZchManagedCollisionModule(ManagedCollisionModule):
     """
     Module to manage multi-probe ZCH (MPZCH), including lookup (remapping), eviction, metrics collection, and required auxiliary tensors.

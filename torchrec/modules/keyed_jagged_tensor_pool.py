@@ -10,6 +10,7 @@
 from typing import Any, Dict, List, Optional
 
 import torch
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.modules.object_pool import ObjectPool
 from torchrec.modules.object_pool_lookups import (
     KeyedJaggedTensorPoolLookup,
@@ -74,6 +75,7 @@ def _fx_wrap_lookup(
     )
 
 
+@checkpoint_schema_stable("keyed_jagged_tensor_pool")
 class KeyedJaggedTensorPool(ObjectPool[KeyedJaggedTensor]):
     """
     KeyedJaggedTensorPool represents a collection of KeyedJaggedTensor (KJT)
