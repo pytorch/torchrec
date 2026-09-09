@@ -13,10 +13,12 @@ from typing import Any, Dict, List, Optional, Union
 import torch
 import torch.distributed as dist
 from torch.distributed.tensor import DeviceMesh
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.metrics.deferrable_metrics import DeferrableMetrics
 from torchrec.metrics.metric_module import MetricValue, RecMetricModule
 
 
+@checkpoint_schema_stable("noop_metric_module")
 class NoOpMetricModule(RecMetricModule):
     """
     A no-op implementation of RecMetricModule for when metrics
