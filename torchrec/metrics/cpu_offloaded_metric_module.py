@@ -61,6 +61,7 @@ except Exception:
                 pass
 
 
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.distributed.logging_utils import EventType
 from torchrec.metrics.cpu_comms_metric_module import CPUCommsRecMetricModule
 from torchrec.metrics.deferrable_metrics import (
@@ -297,6 +298,7 @@ def _foreach_clone_kwargs(kwargs: Mapping[str, Any]) -> Dict[str, Any]:
     return out
 
 
+@checkpoint_schema_stable("cpu_offloaded_rec_metric_module")
 class CPUOffloadedRecMetricModule(RecMetricModule):
     """
     RecMetricModule that offloads metric update() and compute() to CPU using background threads.
