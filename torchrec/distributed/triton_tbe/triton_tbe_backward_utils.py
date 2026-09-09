@@ -213,10 +213,10 @@ def _expand_long_runs(
         dtype=torch.int32,
         device=device,
     )
-    num_short_runs_t = torch.zeros(num_buckets, dtype=torch.int64, device=device)
+    num_short_runs_t = torch.zeros(num_buckets, dtype=torch.int32, device=device)
 
     long_run_original_ids = torch.empty(max_long_runs, dtype=torch.int32, device=device)
-    num_long_runs_t = torch.zeros(1, dtype=torch.int64, device=device)
+    num_long_runs_t = torch.zeros(1, dtype=torch.int32, device=device)
 
     # Kernel 1: classify and compact runs
     CLASSIFY_BLOCK = 1024
@@ -248,7 +248,7 @@ def _expand_long_runs(
         max_long_run_programs, dtype=torch.int32, device=device
     )
     programs_per_long_run = torch.zeros(max_long_runs, dtype=torch.int32, device=device)
-    num_long_run_programs_t = torch.zeros(1, dtype=torch.int64, device=device)
+    num_long_run_programs_t = torch.zeros(1, dtype=torch.int32, device=device)
 
     # Kernel 2: expand long runs into sub-programs
     _expand_long_runs_kernel[(max_long_runs,)](
