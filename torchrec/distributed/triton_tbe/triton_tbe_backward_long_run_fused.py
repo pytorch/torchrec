@@ -40,6 +40,7 @@ def triton_tbe_backward_long_run_fused_weighted(
     hash_size_cumsum_ptr,
     momentum_ptr,
     rows_cumsum_ptr,
+    num_long_runs,
     num_long_run_programs_ptr,
     # pyre-fixme[2]: Parameter must be annotated.
     row_output_offsets_ptr,
@@ -54,7 +55,9 @@ def triton_tbe_backward_long_run_fused_weighted(
     info_B_mask,
     STOCHASTIC_ROUNDING: tl.constexpr,
     stochastic_rounding_seed,
+    USE_TMA_REDUCE: tl.constexpr = False,
     vbe: tl.constexpr = False,
+    BUFFER_SIZE: tl.constexpr = 8,
 ) -> None:
     """
     Fused weighted long-run kernel: accumulates weighted partial gradients
@@ -62,12 +65,21 @@ def triton_tbe_backward_long_run_fused_weighted(
     applies the optimizer update — eliminating a separate apply kernel launch.
     """
     col_offsets = tl.arange(0, BLOCK_SIZE)
-    buffer_size: tl.constexpr = 8
+    buffer_size: tl.constexpr = BUFFER_SIZE
     buffer_offsets = tl.arange(0, buffer_size)
 
     clc_phase_producer = 1
     clc_phase_consumer = 0
     clc_context = tlx.clc_create_context(1)
+    if USE_TMA_REDUCE:
+        smem_bufs = tlx.local_alloc((1, BLOCK_SIZE), tl.float32, tl.constexpr(1))
+        smem_buf = tlx.local_view(smem_bufs, 0)
+        desc_temp = tl.make_tensor_descriptor(
+            temp_grad_buffer_ptr,
+            shape=[num_long_runs, BLOCK_SIZE],
+            strides=[BLOCK_SIZE, 1],
+            block_shape=[1, BLOCK_SIZE],
+        )
 
     tile_id = tl.program_id(0)
     num_tiles = tl.num_programs(0)
@@ -151,11 +163,20 @@ def triton_tbe_backward_long_run_fused_weighted(
 
             # Atomically accumulate partial gradient into the temp buffer
             temp_grad_offset = grad_buffer_id.to(tl.int64) * BLOCK_SIZE
-            tl.atomic_add(
-                temp_grad_buffer_ptr + temp_grad_offset + col_offsets,
-                grad,
-                mask=mask,
-            )
+            if USE_TMA_REDUCE:
+                grad_2d = tl.reshape(grad, (1, BLOCK_SIZE))
+                tlx.local_store(smem_buf, grad_2d)
+                tlx.fence_async_shared()
+                tlx.async_descriptor_store(
+                    desc_temp, smem_buf, [grad_buffer_id, 0], store_reduce="add"
+                )
+                tlx.async_descriptor_store_wait(0)
+            else:
+                tl.atomic_add(
+                    temp_grad_buffer_ptr + temp_grad_offset + col_offsets,
+                    grad,
+                    mask=mask,
+                )
 
             tlx.fence("gpu")
 
@@ -244,6 +265,7 @@ def triton_tbe_backward_long_run_fused_unweighted(
     hash_size_cumsum_ptr,
     momentum_ptr,
     rows_cumsum_ptr,
+    num_long_runs,
     num_long_run_programs_ptr,
     # pyre-fixme[2]: Parameter must be annotated.
     row_output_offsets_ptr,
@@ -258,7 +280,9 @@ def triton_tbe_backward_long_run_fused_unweighted(
     info_B_mask,
     STOCHASTIC_ROUNDING: tl.constexpr,
     stochastic_rounding_seed,
+    USE_TMA_REDUCE: tl.constexpr = False,
     vbe: tl.constexpr = False,
+    BUFFER_SIZE: tl.constexpr = 8,
 ) -> None:
     """
     Fused long-run kernel: accumulates partial gradients via atomic add,
@@ -266,12 +290,21 @@ def triton_tbe_backward_long_run_fused_unweighted(
     the optimizer update — eliminating a separate apply kernel launch.
     """
     col_offsets = tl.arange(0, BLOCK_SIZE)
-    buffer_size: tl.constexpr = 16
+    buffer_size: tl.constexpr = BUFFER_SIZE
     buffer_offsets = tl.arange(0, buffer_size)
 
     clc_phase_producer = 1
     clc_phase_consumer = 0
     clc_context = tlx.clc_create_context(1)
+    if USE_TMA_REDUCE:
+        smem_bufs = tlx.local_alloc((1, BLOCK_SIZE), tl.float32, tl.constexpr(1))
+        smem_buf = tlx.local_view(smem_bufs, 0)
+        desc_temp = tl.make_tensor_descriptor(
+            temp_grad_buffer_ptr,
+            shape=[num_long_runs, BLOCK_SIZE],
+            strides=[BLOCK_SIZE, 1],
+            block_shape=[1, BLOCK_SIZE],
+        )
 
     tile_id = tl.program_id(0)
     num_tiles = tl.num_programs(0)
@@ -350,11 +383,20 @@ def triton_tbe_backward_long_run_fused_unweighted(
                 grad += dout_row
 
             temp_grad_offset = grad_buffer_id.to(tl.int64) * BLOCK_SIZE
-            tl.atomic_add(
-                temp_grad_buffer_ptr + temp_grad_offset + col_offsets,
-                grad,
-                mask=mask,
-            )
+            if USE_TMA_REDUCE:
+                grad_2d = tl.reshape(grad, (1, BLOCK_SIZE))
+                tlx.local_store(smem_buf, grad_2d)
+                tlx.fence_async_shared()
+                tlx.async_descriptor_store(
+                    desc_temp, smem_buf, [grad_buffer_id, 0], store_reduce="add"
+                )
+                tlx.async_descriptor_store_wait(0)
+            else:
+                tl.atomic_add(
+                    temp_grad_buffer_ptr + temp_grad_offset + col_offsets,
+                    grad,
+                    mask=mask,
+                )
 
             tlx.fence("gpu")
 
