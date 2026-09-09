@@ -1,6 +1,5 @@
 {
   "AUCMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "AUCMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -8,7 +7,6 @@
     "variant": ""
   },
   "AUPRCMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "AUPRCMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -16,7 +14,6 @@
     "variant": ""
   },
   "AccuracyMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "AccuracyMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -27,7 +24,6 @@
     "variant": ""
   },
   "AverageMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "AverageMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -39,7 +35,6 @@
     "variant": ""
   },
   "CTRMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "CTRMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -50,7 +45,6 @@
     "variant": ""
   },
   "CaliFreeNEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "CaliFreeNEMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -64,7 +58,6 @@
     "variant": ""
   },
   "CalibrationMetric_FUSED_TASKS_COMPUTATION": {
-    "compute_mode": "FUSED_TASKS_COMPUTATION",
     "metric_class": "CalibrationMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -75,7 +68,6 @@
     "variant": ""
   },
   "CalibrationMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "CalibrationMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -86,7 +78,6 @@
     "variant": ""
   },
   "GAUCMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "GAUCMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -97,7 +88,6 @@
     "variant": ""
   },
   "HindsightTargetPRMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "HindsightTargetPRMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -109,7 +99,6 @@
     "variant": ""
   },
   "MAEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "MAEMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -120,7 +109,6 @@
     "variant": ""
   },
   "MSEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "MSEMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -131,7 +119,6 @@
     "variant": ""
   },
   "MSEMetric_UNFUSED_TASKS_COMPUTATION_with_r_squared": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "MSEMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -143,19 +130,7 @@
     ],
     "variant": "with_r_squared"
   },
-  "MulticlassRecallMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "MulticlassRecallMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.total_weights",
-      "_metrics_computations.0.tp_at_k"
-    ],
-    "variant": ""
-  },
   "MultiLabelPrecisionMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "MultiLabelPrecisionMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -165,8 +140,17 @@
     ],
     "variant": ""
   },
+  "MulticlassRecallMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "MulticlassRecallMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.total_weights",
+      "_metrics_computations.0.tp_at_k"
+    ],
+    "variant": ""
+  },
   "NDCGMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "NDCGMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -177,7 +161,6 @@
     "variant": ""
   },
   "NEMetric_FUSED_TASKS_COMPUTATION": {
-    "compute_mode": "FUSED_TASKS_COMPUTATION",
     "metric_class": "NEMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -190,7 +173,6 @@
     "variant": ""
   },
   "NEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "NEMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -202,21 +184,7 @@
     ],
     "variant": ""
   },
-  "NEMetric_UNFUSED_TASKS_COMPUTATION_with_logloss": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "NEMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.cross_entropy_sum",
-      "_metrics_computations.0.neg_labels",
-      "_metrics_computations.0.pos_labels",
-      "_metrics_computations.0.weighted_num_samples"
-    ],
-    "variant": "with_logloss"
-  },
   "NEPositiveMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "NEPositiveMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -229,7 +197,6 @@
     "variant": ""
   },
   "NMSEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "NMSEMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -241,7 +208,6 @@
     "variant": ""
   },
   "NumMissingLabelsMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "NumMissingLabelsMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -251,7 +217,6 @@
     "variant": ""
   },
   "NumPositiveSamplesMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "NumPositiveSamplesMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -261,7 +226,6 @@
     "variant": ""
   },
   "OutputMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "OutputMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -269,7 +233,6 @@
     "variant": ""
   },
   "PrecisionMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "PrecisionMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -280,7 +243,6 @@
     "variant": ""
   },
   "PrecisionSessionMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "PrecisionSessionMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -291,14 +253,210 @@
     "variant": ""
   },
   "RAUCMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
     "metric_class": "RAUCMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
     "state_dict_keys": [],
     "variant": ""
   },
-  "RecMetricModule": {
+  "RecalibratedCalibrationMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "RecalibratedCalibrationMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.calibration_denom",
+      "_metrics_computations.0.calibration_num"
+    ],
+    "variant": ""
+  },
+  "RecalibratedNEMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "RecalibratedNEMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.cross_entropy_sum",
+      "_metrics_computations.0.neg_labels",
+      "_metrics_computations.0.pos_labels",
+      "_metrics_computations.0.weighted_num_samples"
+    ],
+    "variant": ""
+  },
+  "RecallMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "RecallMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.false_neg_sum",
+      "_metrics_computations.0.true_pos_sum"
+    ],
+    "variant": ""
+  },
+  "RecallSessionMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "RecallSessionMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.num_false_neg",
+      "_metrics_computations.0.num_true_pos"
+    ],
+    "variant": ""
+  },
+  "ScalarMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "ScalarMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [],
+    "variant": ""
+  },
+  "SegmentedNEMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "SegmentedNEMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.cross_entropy_sum",
+      "_metrics_computations.0.neg_labels",
+      "_metrics_computations.0.pos_labels",
+      "_metrics_computations.0.weighted_num_samples"
+    ],
+    "variant": ""
+  },
+  "ServingCalibrationMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "ServingCalibrationMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.calibration_denom",
+      "_metrics_computations.0.calibration_num",
+      "_metrics_computations.0.num_examples"
+    ],
+    "variant": ""
+  },
+  "ServingNEMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "ServingNEMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.cross_entropy_sum",
+      "_metrics_computations.0.neg_labels",
+      "_metrics_computations.0.num_examples",
+      "_metrics_computations.0.pos_labels",
+      "_metrics_computations.0.weighted_num_samples"
+    ],
+    "variant": ""
+  },
+  "SumWeightsMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "SumWeightsMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.weighted_sum"
+    ],
+    "variant": ""
+  },
+  "TensorWeightedAvgMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "TensorWeightedAvgMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.weighted_num_samples",
+      "_metrics_computations.0.weighted_sum"
+    ],
+    "variant": ""
+  },
+  "TowerQPSMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "TowerQPSMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.num_examples",
+      "_metrics_computations.0.time_lapse",
+      "_metrics_computations.0.warmup_examples"
+    ],
+    "variant": ""
+  },
+  "UnweightedNEMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "UnweightedNEMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.cross_entropy_sum",
+      "_metrics_computations.0.neg_labels",
+      "_metrics_computations.0.pos_labels",
+      "_metrics_computations.0.weighted_num_samples"
+    ],
+    "variant": ""
+  },
+  "WeightedAvgMetric_FUSED_TASKS_COMPUTATION": {
+    "metric_class": "WeightedAvgMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.weighted_num_samples",
+      "_metrics_computations.0.weighted_sum"
+    ],
+    "variant": ""
+  },
+  "WeightedAvgMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "WeightedAvgMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.weighted_num_samples",
+      "_metrics_computations.0.weighted_sum"
+    ],
+    "variant": ""
+  },
+  "WeightedSumPredictionsMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "WeightedSumPredictionsMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.weighted_predictions_sum"
+    ],
+    "variant": ""
+  },
+  "XAUCMetric_UNFUSED_TASKS_COMPUTATION": {
+    "metric_class": "XAUCMetric",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "_metrics_computations.0.error_sum",
+      "_metrics_computations.0.weighted_num_pairs"
+    ],
+    "variant": ""
+  },
+  "cpu_comms_rec_metric_module": {
+    "metric_class": "CPUCommsRecMetricModule",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "rec_metrics.rec_metrics.0._metrics_computations.0.cross_entropy_sum",
+      "rec_metrics.rec_metrics.0._metrics_computations.0.neg_labels",
+      "rec_metrics.rec_metrics.0._metrics_computations.0.pos_labels",
+      "rec_metrics.rec_metrics.0._metrics_computations.0.weighted_num_samples"
+    ],
+    "variant": ""
+  },
+  "cpu_offloaded_rec_metric_module": {
+    "metric_class": "CPUOffloadedRecMetricModule",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [
+      "rec_metrics.rec_metrics.0._metrics_computations.0.cross_entropy_sum",
+      "rec_metrics.rec_metrics.0._metrics_computations.0.neg_labels",
+      "rec_metrics.rec_metrics.0._metrics_computations.0.pos_labels",
+      "rec_metrics.rec_metrics.0._metrics_computations.0.weighted_num_samples"
+    ],
+    "variant": ""
+  },
+  "noop_metric_module": {
+    "metric_class": "NoOpMetricModule",
+    "non_persistent_buffer_fqns": [],
+    "persistent_buffer_fqns": [],
+    "state_dict_keys": [],
+    "variant": ""
+  },
+  "rec_metric_module": {
     "metric_class": "RecMetricModule",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -310,7 +468,7 @@
     ],
     "variant": ""
   },
-  "RecMetricModule_with_throughput": {
+  "rec_metric_module_with_throughput": {
     "metric_class": "RecMetricModule",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -325,121 +483,7 @@
     ],
     "variant": "with_throughput"
   },
-  "RecalibratedCalibrationMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "RecalibratedCalibrationMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.calibration_denom",
-      "_metrics_computations.0.calibration_num"
-    ],
-    "variant": ""
-  },
-  "RecalibratedNEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "RecalibratedNEMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.cross_entropy_sum",
-      "_metrics_computations.0.neg_labels",
-      "_metrics_computations.0.pos_labels",
-      "_metrics_computations.0.weighted_num_samples"
-    ],
-    "variant": ""
-  },
-  "RecallMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "RecallMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.false_neg_sum",
-      "_metrics_computations.0.true_pos_sum"
-    ],
-    "variant": ""
-  },
-  "RecallSessionMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "RecallSessionMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.num_false_neg",
-      "_metrics_computations.0.num_true_pos"
-    ],
-    "variant": ""
-  },
-  "ScalarMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "ScalarMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [],
-    "variant": ""
-  },
-  "SegmentedNEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "SegmentedNEMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.cross_entropy_sum",
-      "_metrics_computations.0.neg_labels",
-      "_metrics_computations.0.pos_labels",
-      "_metrics_computations.0.weighted_num_samples"
-    ],
-    "variant": ""
-  },
-  "ServingCalibrationMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "ServingCalibrationMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.calibration_denom",
-      "_metrics_computations.0.calibration_num",
-      "_metrics_computations.0.num_examples"
-    ],
-    "variant": ""
-  },
-  "ServingNEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "ServingNEMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.cross_entropy_sum",
-      "_metrics_computations.0.neg_labels",
-      "_metrics_computations.0.num_examples",
-      "_metrics_computations.0.pos_labels",
-      "_metrics_computations.0.weighted_num_samples"
-    ],
-    "variant": ""
-  },
-  "SumWeightsMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "SumWeightsMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.weighted_sum"
-    ],
-    "variant": ""
-  },
-  "TensorWeightedAvgMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "TensorWeightedAvgMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.weighted_num_samples",
-      "_metrics_computations.0.weighted_sum"
-    ],
-    "variant": ""
-  },
-  "ThroughputMetric": {
+  "throughput_metric": {
     "metric_class": "ThroughputMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -450,7 +494,7 @@
     ],
     "variant": ""
   },
-  "ThroughputMetric_with_batch_size_stages": {
+  "throughput_metric_with_batch_size_stages": {
     "metric_class": "ThroughputMetric",
     "non_persistent_buffer_fqns": [],
     "persistent_buffer_fqns": [],
@@ -461,73 +505,5 @@
       "warmup_examples"
     ],
     "variant": "with_batch_size_stages"
-  },
-  "TowerQPSMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "TowerQPSMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.num_examples",
-      "_metrics_computations.0.time_lapse",
-      "_metrics_computations.0.warmup_examples"
-    ],
-    "variant": ""
-  },
-  "UnweightedNEMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "UnweightedNEMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.cross_entropy_sum",
-      "_metrics_computations.0.neg_labels",
-      "_metrics_computations.0.pos_labels",
-      "_metrics_computations.0.weighted_num_samples"
-    ],
-    "variant": ""
-  },
-  "WeightedAvgMetric_FUSED_TASKS_COMPUTATION": {
-    "compute_mode": "FUSED_TASKS_COMPUTATION",
-    "metric_class": "WeightedAvgMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.weighted_num_samples",
-      "_metrics_computations.0.weighted_sum"
-    ],
-    "variant": ""
-  },
-  "WeightedAvgMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "WeightedAvgMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.weighted_num_samples",
-      "_metrics_computations.0.weighted_sum"
-    ],
-    "variant": ""
-  },
-  "WeightedSumPredictionsMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "WeightedSumPredictionsMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.weighted_predictions_sum"
-    ],
-    "variant": ""
-  },
-  "XAUCMetric_UNFUSED_TASKS_COMPUTATION": {
-    "compute_mode": "UNFUSED_TASKS_COMPUTATION",
-    "metric_class": "XAUCMetric",
-    "non_persistent_buffer_fqns": [],
-    "persistent_buffer_fqns": [],
-    "state_dict_keys": [
-      "_metrics_computations.0.error_sum",
-      "_metrics_computations.0.weighted_num_pairs"
-    ],
-    "variant": ""
   }
 }
