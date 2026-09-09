@@ -8,6 +8,7 @@
 import triton  # @manual
 import triton.language as tl  # @manual
 from torchrec.distributed.triton_tbe.triton_tbe_backward_utils import (
+    _get_weight_row_ptrs_for_update,
     _stochastic_rounding_store,
 )
 
@@ -31,7 +32,9 @@ def triton_tbe_backward_long_run_fused_weighted(
     embedding_dims_ptr,
     embedding_offsets_ptr,
     per_sample_weights_ptr,
-    weight_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
     sorted_linear_indices_run_ptr,
     sorted_linear_indices_cumulative_run_lengths_ptr,
     long_run_original_ids_ptr,
@@ -58,7 +61,7 @@ def triton_tbe_backward_long_run_fused_weighted(
     USE_TMA_REDUCE: tl.constexpr = False,
     vbe: tl.constexpr = False,
     BUFFER_SIZE: tl.constexpr = 8,
-) -> None:
+):
     """
     Fused weighted long-run kernel: accumulates weighted partial gradients
     via atomic add, uses tlx.fence("gpu") + atomic counter so the last sub-program
@@ -203,8 +206,15 @@ def triton_tbe_backward_long_run_fused_weighted(
 
                 index_offset = tl.load(hash_size_cumsum_ptr + t_0)
                 row_idx = linear_index - index_offset
-                row_start_ptr = weight_ptr + table_offset + row_idx * emb_dim
-                row_ptrs = row_start_ptr + col_offsets
+                logical_row_start = table_offset + row_idx * emb_dim
+                row_ptrs = _get_weight_row_ptrs_for_update(
+                    weight_ptrs,
+                    weight_chunk_starts,
+                    split_weight_row_starts,
+                    logical_row_start,
+                    col_offsets,
+                    apply_mask,
+                )
                 row = tl.load(row_ptrs, mask=apply_mask, other=0)
 
                 row_update = row - learning_rate * grad_original
@@ -256,7 +266,9 @@ def triton_tbe_backward_long_run_fused_unweighted(
     grad_accum_counter_ptr,
     embedding_dims_ptr,
     embedding_offsets_ptr,
-    weight_ptr,
+    weight_ptrs,
+    weight_chunk_starts: tl.constexpr,
+    split_weight_row_starts: tl.constexpr,
     sorted_linear_indices_run_ptr,
     sorted_linear_indices_cumulative_run_lengths_ptr,
     long_run_original_ids_ptr,
@@ -283,7 +295,7 @@ def triton_tbe_backward_long_run_fused_unweighted(
     USE_TMA_REDUCE: tl.constexpr = False,
     vbe: tl.constexpr = False,
     BUFFER_SIZE: tl.constexpr = 8,
-) -> None:
+):
     """
     Fused long-run kernel: accumulates partial gradients via atomic add,
     uses tlx.fence("gpu") + atomic counter so the last sub-program applies
@@ -423,8 +435,15 @@ def triton_tbe_backward_long_run_fused_unweighted(
 
                 index_offset = tl.load(hash_size_cumsum_ptr + t_0)
                 row_idx = linear_index - index_offset
-                row_start_ptr = weight_ptr + table_offset + row_idx * emb_dim
-                row_ptrs = row_start_ptr + col_offsets
+                logical_row_start = table_offset + row_idx * emb_dim
+                row_ptrs = _get_weight_row_ptrs_for_update(
+                    weight_ptrs,
+                    weight_chunk_starts,
+                    split_weight_row_starts,
+                    logical_row_start,
+                    col_offsets,
+                    apply_mask,
+                )
                 row = tl.load(row_ptrs, mask=apply_mask, other=0)
 
                 row_update = row - learning_rate * grad_original
