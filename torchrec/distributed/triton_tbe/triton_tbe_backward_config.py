@@ -51,6 +51,12 @@ class TbeBackwardConfig:
     # parallelism against register footprint, and therefore occupancy.
     short_run_buffer_size_unweighted: int
     short_run_buffer_size_weighted: int
+    # NOTE on the weighted value: 4 was tuned on a mixed-dimension shape. It is
+    # wrong for wide rows, because the register cost is BUFFER_SIZE * BLOCK_SIZE
+    # addresses -- at BLOCK_SIZE=256 the weighted short-run kernel needs 125
+    # registers/thread and lands at 24.8% occupancy, against CUDA TBE's 40 and
+    # 68.3% on the same shape. Narrowing to 2 moves the weighted population's
+    # median from 1.02 to 1.21 and parity from 50% to 68%.
 
     # Same knob, same trade-off, for the long-run grad-accumulation kernels.
     # These kept the historical 8/16 when the short-run widths were tuned down,
@@ -101,7 +107,7 @@ _BLACKWELL = TbeBackwardConfig(
     long_run_accum_programs=_CUDA_BASE_GRID,
     long_run_threshold=256,
     short_run_buffer_size_unweighted=2,
-    short_run_buffer_size_weighted=4,
+    short_run_buffer_size_weighted=2,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
     long_run_fused_buffer_size_unweighted=2,
@@ -123,7 +129,7 @@ _HOPPER = TbeBackwardConfig(
     long_run_accum_programs=_CUDA_BASE_GRID,
     long_run_threshold=256,
     short_run_buffer_size_unweighted=2,
-    short_run_buffer_size_weighted=4,
+    short_run_buffer_size_weighted=2,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
     long_run_fused_buffer_size_unweighted=2,
@@ -142,7 +148,7 @@ _MI300X = TbeBackwardConfig(
     long_run_accum_programs=_AMD_BASE_GRID,
     long_run_threshold=256,
     short_run_buffer_size_unweighted=2,
-    short_run_buffer_size_weighted=4,
+    short_run_buffer_size_weighted=2,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
     long_run_fused_buffer_size_unweighted=2,
@@ -161,7 +167,7 @@ _MI350X = TbeBackwardConfig(
     long_run_accum_programs=_AMD_BASE_GRID,
     long_run_threshold=256,
     short_run_buffer_size_unweighted=2,
-    short_run_buffer_size_weighted=4,
+    short_run_buffer_size_weighted=2,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
     long_run_fused_buffer_size_unweighted=2,
@@ -180,7 +186,7 @@ _PORTABLE_DEFAULT = TbeBackwardConfig(
     long_run_accum_programs=_CUDA_BASE_GRID,
     long_run_threshold=256,
     short_run_buffer_size_unweighted=2,
-    short_run_buffer_size_weighted=4,
+    short_run_buffer_size_weighted=2,
     long_run_accum_buffer_size_unweighted=2,
     long_run_accum_buffer_size_weighted=4,
     long_run_fused_buffer_size_unweighted=2,
