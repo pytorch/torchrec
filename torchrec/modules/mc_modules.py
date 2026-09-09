@@ -23,6 +23,7 @@ from typing import (
 
 import torch
 from torch import nn
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.modules.embedding_configs import BaseEmbeddingConfig
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
@@ -1067,6 +1068,7 @@ def _mch_remap(
     return remapped_features
 
 
+@checkpoint_schema_stable("mch_managed_collision_module")
 class MCHManagedCollisionModule(ManagedCollisionModule):
     _mch_sorted_raw_ids: torch.Tensor
     _mch_remapped_ids_mapping: torch.Tensor

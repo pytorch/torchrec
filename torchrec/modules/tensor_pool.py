@@ -10,6 +10,7 @@
 from typing import Optional
 
 import torch
+from torchrec.checkpoint.schema import checkpoint_schema_stable
 from torchrec.modules.object_pool import ObjectPool
 from torchrec.modules.utils import deterministic_dedup
 
@@ -25,6 +26,7 @@ def _fx_assert_pool_size(ids: torch.Tensor, pool_size: int) -> None:
     assert torch.all(ids < pool_size).item()
 
 
+@checkpoint_schema_stable("tensor_pool")
 class TensorPool(ObjectPool[torch.Tensor]):
     """
     TensorPool represents a collection of torch.Tensor with uniform dimension.
