@@ -62,6 +62,10 @@ class ThroughputMetric(nn.Module):
                   )
     """
 
+    # The id this class's golden entry is filed under. Snake_case and
+    # deliberately not the class name: it must survive a rename untouched.
+    _checkpoint_schema_id: str = "throughput_metric"
+
     _namespace: MetricNamespace = MetricNamespace.THROUGHPUT
     _metric_name: MetricName = MetricName.THROUGHPUT
     _window_seconds: int

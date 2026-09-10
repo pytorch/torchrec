@@ -67,6 +67,10 @@ class TensorPool(ObjectPool[torch.Tensor]):
         #        [3., 4.]])
     """
 
+    # The id this class's golden entry is filed under. Snake_case and
+    # deliberately not the class name: it must survive a rename untouched.
+    _checkpoint_schema_id: str = "tensor_pool"
+
     def __init__(
         self,
         pool_size: int,
