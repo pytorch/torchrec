@@ -132,6 +132,10 @@ class KeyedJaggedTensorPool(ObjectPool[KeyedJaggedTensor]):
 
     """
 
+    # The id this class's golden entry is filed under. Snake_case and
+    # deliberately not the class name: it must survive a rename untouched.
+    _checkpoint_schema_id: str = "keyed_jagged_tensor_pool"
+
     def __init__(
         self,
         pool_size: int,

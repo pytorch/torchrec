@@ -160,7 +160,10 @@ class MulticlassRecallMetric(RecMetric):
     _namespace: MetricNamespace = MetricNamespace.MULTICLASS_RECALL
     _computation_class: Type[RecMetricComputation] = MulticlassRecallMetricComputation
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, number_of_classes: int, **kwargs: Any) -> None:
+        # Declared rather than read straight out of kwargs, so the signature
+        # says it is required. The computation still reads it from kwargs.
+        kwargs["number_of_classes"] = number_of_classes
         super().__init__(*args, **kwargs)
         if self._compute_mode == RecComputeMode.FUSED_TASKS_AND_STATES_COMPUTATION:
             logging.warning(

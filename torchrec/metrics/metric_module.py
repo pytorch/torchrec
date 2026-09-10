@@ -241,6 +241,10 @@ class RecMetricModule(nn.Module):
         >>> )
     """
 
+    # The id this class's golden entry is filed under. Snake_case and
+    # deliberately not the class name: it must survive a rename untouched.
+    _checkpoint_schema_id: str = "rec_metric_module"
+
     batch_size: int
     world_size: int
     rec_tasks: List[RecTaskInfo]

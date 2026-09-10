@@ -223,6 +223,10 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
         module(features)
     """
 
+    # The id this class's golden entry is filed under. Snake_case and
+    # deliberately not the class name: it must survive a rename untouched.
+    _checkpoint_schema_id: str = "hash_zch_managed_collision_module"
+
     _evicted_indices: List[torch.Tensor]
 
     IDENTITY_BUFFER: str = "_hash_zch_identities"
