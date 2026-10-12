@@ -3043,23 +3043,31 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             torch._check(permuted_length_per_key_sum != 0)
 
         if self.variable_stride_per_key():
+            stride_per_key = self.stride_per_key()
             length_per_key_tensor = _pin_and_move(
                 torch.tensor(self.length_per_key()), self.device()
             )
             stride_per_key_tensor = _pin_and_move(
-                torch.tensor(self.stride_per_key()), self.device()
+                torch.tensor(stride_per_key), self.device()
             )
+            is_tpu = self.device().type == "tpu"
+            if not torch.jit.is_scripting():
+                is_tpu = is_tpu or (
+                    getattr(torch, "tpu", None) is not None and torch.tpu.is_available()
+                )
             permuted_lengths, _ = _permute_tensor_by_segments(
                 self.lengths(),
                 stride_per_key_tensor,
                 indices_tensor,
                 None,
+                sum(stride_per_key[i] for i in indices) if is_tpu else None,
             )
             permuted_values, permuted_weights = _permute_tensor_by_segments(
                 self.values(),
                 length_per_key_tensor,
                 indices_tensor,
                 self.weights_or_none(),
+                permuted_length_per_key_sum if is_tpu else None,
             )
         elif is_torchdynamo_compiling() and not torch.jit.is_scripting():
             (
@@ -3464,17 +3472,25 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
 
             with record_function("## dist_init:recat_values vb ##"):
                 if recat is not None:
+                    is_tpu = lengths.device.type == "tpu"
+                    if not torch.jit.is_scripting():
+                        is_tpu = is_tpu or (
+                            getattr(torch, "tpu", None) is not None
+                            and torch.tpu.is_available()
+                        )
                     lengths, _ = _permute_tensor_by_segments(
                         lengths,
                         stride_per_rank_per_key,
                         torch.jit._unwrap_optional(recat),
                         None,
+                        lengths.numel() if is_tpu else None,
                     )
                     values, weights = _permute_tensor_by_segments(
                         values,
                         length_per_key_tensor,
                         torch.jit._unwrap_optional(recat),
                         weights,
+                        values.numel() if is_tpu else None,
                     )
 
             if stride_per_key_per_rank.numel() == 0:

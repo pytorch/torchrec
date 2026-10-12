@@ -14,12 +14,16 @@ from __future__ import annotations
 
 import torch
 from torch_tpu._internal import pallas  # pyrefly: ignore[missing-import]
-from torchrec.experimental.torch_tpu.pallas import associative_scan
+from torchrec.experimental.torch_tpu.pallas import associative_scan, permute_1d
 
 
 _complete_cumsum = pallas.jax_op(
     "torchrec_pallas::associative_complete_cumsum",
     associative_scan.complete_cumsum_jax,
+)
+_permute_1d_sparse_data = pallas.jax_op(
+    "torchrec_pallas::permute_1d_sparse_data",
+    permute_1d.permute_1d_sparse_data_indices_jax,
 )
 
 
@@ -49,6 +53,20 @@ def permute_2D_sparse_data(
 def permute_1D_sparse_data(
     permute, lengths, indices, weights=None, permuted_lengths_sum=None
 ):
+    # TODO: Re-evaluate the int32 path that is used.
+    if permuted_lengths_sum is not None:
+        permuted_lengths, source_indices = _permute_1d_sparse_data(
+            permute=permute.to(torch.int32),
+            lengths=lengths.to(torch.int32),
+            permuted_lengths_sum=permuted_lengths_sum,
+        )
+        indices = indices.to(torch.int32) if indices.dtype == torch.int64 else indices
+        return (
+            permuted_lengths,
+            indices[source_indices],
+            None if weights is None else weights[source_indices],
+        )
+
     (permuted_lengths_after_sparse_data_all2all, sharded_input_embeddings, w) = (
         torch.ops.fbgemm.permute_1D_sparse_data(
             permute.to("cpu"),
