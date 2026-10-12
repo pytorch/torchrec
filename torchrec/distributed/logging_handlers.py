@@ -397,7 +397,7 @@ def log_ems_config(
 
 def log_oms_config(
     metadata: Optional[Dict[str, str]] = None,
-    technique: OptimizationTechnique = OptimizationTechnique.OMS,
+    technique: Optional[OptimizationTechnique] = None,
 ) -> None:
     """No-op OSS stub."""
     pass

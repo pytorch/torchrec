@@ -32,15 +32,12 @@ from torch import nn
 from torch.autograd.profiler import record_function
 from torch.distributed._shard.sharded_tensor import ShardedTensor
 from torch.distributed._tensor import DTensor
+from torchrec.distributed import logging_handlers
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
 )
-from torchrec.distributed.logging_handlers import (
-    log_ems_config,
-    log_ems_event,
-    log_oms_config,
-)
+from torchrec.distributed.logging_handlers import log_ems_config, log_ems_event
 from torchrec.distributed.logging_utils import OptimizationTechnique
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
@@ -1796,7 +1793,11 @@ def _log_stashing_config(
     if config.technique == OptimizationTechnique.EMS:
         log_ems_config(metadata, technique=technique)
     elif config.technique == OptimizationTechnique.OMS:
-        log_oms_config(metadata, technique=technique)
+        # Looked up at call time: logging_handlers can come from an older base
+        # package than this module, one that predates log_oms_config.
+        log_oms_config = getattr(logging_handlers, "log_oms_config", None)
+        if log_oms_config is not None:
+            log_oms_config(metadata, technique=technique)
     else:
         raise ValueError(f"not a memory stashing technique: {config.technique}")
 
