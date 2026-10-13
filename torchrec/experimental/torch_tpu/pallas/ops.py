@@ -50,6 +50,11 @@ lib.define(
     "Tensor grad_out, Tensor offset_dim_list, Tensor permute_list"
     ") -> Tensor"
 )
+lib.define(
+    "batch_index_select_dim0("
+    "Tensor inputs, Tensor indices, int[] input_rows, int[] input_columns"
+    ") -> Tensor"
+)
 
 
 def embedding_lookup_cpu(
@@ -235,7 +240,7 @@ lib.impl("permute_pooled_embs", permute_pooled_embs_cpu, "CPU")
 lib.impl("permute_pooled_embs_backward", permute_pooled_embs_backward_cpu, "CPU")
 
 
-def _setup_context(ctx, inputs, output) -> None:  # pyre-ignore[2]
+def _setup_context(ctx, inputs, output) -> None:
     _ = output
     indices, weights, emb_dim = inputs
     ctx.save_for_backward(indices)
@@ -243,7 +248,7 @@ def _setup_context(ctx, inputs, output) -> None:  # pyre-ignore[2]
     ctx.emb_dim = emb_dim
 
 
-def _backward(ctx, grad_out: torch.Tensor):  # pyre-ignore[2,3]
+def _backward(ctx, grad_out: torch.Tensor):
     (indices,) = ctx.saved_tensors
     grad_weights = torch.ops.torchrec.embedding_lookup_backward(
         grad_out.contiguous(), indices, ctx.num_rows, ctx.emb_dim
@@ -256,7 +261,7 @@ torch.library.register_autograd(
 )
 
 
-def _setup_pooled_context(ctx, inputs, output) -> None:  # pyre-ignore[2]
+def _setup_pooled_context(ctx, inputs, output) -> None:
     _ = output
     idx, table, pool = inputs
     ctx.save_for_backward(idx)
@@ -265,7 +270,7 @@ def _setup_pooled_context(ctx, inputs, output) -> None:  # pyre-ignore[2]
     ctx.emb_dim = table.shape[1]
 
 
-def _pooled_backward(ctx, grad_out: torch.Tensor):  # pyre-ignore[2,3]
+def _pooled_backward(ctx, grad_out: torch.Tensor):
     (idx,) = ctx.saved_tensors
     grad_table = torch.ops.torchrec.embedding_pooled_lookup_backward(
         grad_out.contiguous(), idx, ctx.pool, ctx.num_rows, ctx.emb_dim
@@ -273,7 +278,7 @@ def _pooled_backward(ctx, grad_out: torch.Tensor):  # pyre-ignore[2,3]
     return None, grad_table, None
 
 
-def _setup_pooled_offset_context(ctx, inputs, output) -> None:  # pyre-ignore[2]
+def _setup_pooled_offset_context(ctx, inputs, output) -> None:
     _ = output
     indices, offsets, weights, emb_dim = inputs
     ctx.save_for_backward(indices, offsets)
@@ -281,7 +286,7 @@ def _setup_pooled_offset_context(ctx, inputs, output) -> None:  # pyre-ignore[2]
     ctx.emb_dim = emb_dim
 
 
-def _pooled_offset_backward(ctx, grad_out: torch.Tensor):  # pyre-ignore[2,3]
+def _pooled_offset_backward(ctx, grad_out: torch.Tensor):
     indices, offsets = ctx.saved_tensors
     grad_weights = torch.ops.torchrec.embedding_pooled_lookup_offset_backward(
         grad_out.contiguous(), indices, offsets, ctx.num_rows, ctx.emb_dim
@@ -297,7 +302,7 @@ def _setup_pooled_batched_offset_context(ctx, inputs, output) -> None:
     ctx.emb_dim = emb_dim
 
 
-def _pooled_batched_offset_backward(ctx, grad_out: torch.Tensor):  # pyre-ignore[2,3]
+def _pooled_batched_offset_backward(ctx, grad_out: torch.Tensor):
     indices, offsets, row_offsets = ctx.saved_tensors
     grad_weights = torch.ops.torchrec.embedding_pooled_batched_lookup_offset_backward(
         grad_out.contiguous(),
@@ -310,13 +315,13 @@ def _pooled_batched_offset_backward(ctx, grad_out: torch.Tensor):  # pyre-ignore
     return None, None, grad_weights, None, None
 
 
-def _permute_setup_context(ctx, inputs, output) -> None:  # pyre-ignore[2]
+def _permute_setup_context(ctx, inputs, output) -> None:
     _ = output
     _, offset_dim_list, permute_list = inputs
     ctx.save_for_backward(offset_dim_list, permute_list)
 
 
-def _permute_backward(ctx, grad_out: torch.Tensor):  # pyre-ignore[2,3]
+def _permute_backward(ctx, grad_out: torch.Tensor):
     offset_dim_list, permute_list = ctx.saved_tensors
     grad_input = torch.ops.torchrec.permute_pooled_embs_backward(
         grad_out.contiguous(),
@@ -345,4 +350,40 @@ torch.library.register_autograd(
     "torchrec::permute_pooled_embs",
     _permute_backward,
     setup_context=_permute_setup_context,
+)
+
+
+def _batch_index_select_setup_context(ctx, inputs, output) -> None:
+    _ = output
+    input_tensor, indices, input_rows, input_columns = inputs
+    ctx.save_for_backward(indices)
+    ctx.input_rows = input_rows
+    ctx.input_columns = input_columns
+    ctx.input_numel = input_tensor.numel()
+
+
+def _batch_index_select_backward(ctx, grad_out: torch.Tensor):
+    (indices,) = ctx.saved_tensors
+    input_rows = ctx.input_rows
+    input_columns = ctx.input_columns
+    batch_size = indices.numel() // len(input_columns)
+    input_num_indices = torch.full((len(input_columns),), batch_size)
+    # The fused CPU op avoids launching one TPU index_add per feature.
+    grad_inputs = torch.ops.fbgemm.batch_index_select_dim0_backward_cpu_impl(
+        grad_out.to("cpu").contiguous(),
+        indices.to("cpu"),
+        input_num_indices,
+        input_num_indices,
+        torch.tensor(input_rows),
+        torch.tensor(input_columns),
+        True,
+        torch.tensor([ctx.input_numel]),
+    )
+    return grad_inputs.to(grad_out.device), None, None, None
+
+
+torch.library.register_autograd(
+    "torchrec::batch_index_select_dim0",
+    _batch_index_select_backward,
+    setup_context=_batch_index_select_setup_context,
 )
