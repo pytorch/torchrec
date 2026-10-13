@@ -117,6 +117,7 @@ from torchrec.modules.crossnet import (
     VectorCrossNet,
 )
 from torchrec.modules.embedding_configs import (
+    BaseEmbeddingConfig,
     DataType,
     EmbeddingBagConfig,
     EmbeddingConfig,
@@ -126,6 +127,8 @@ from torchrec.modules.embedding_modules import (
     EmbeddingBagCollection,
     EmbeddingCollection,
 )
+from torchrec.modules.feature_processor_ import PositionWeightedModuleCollection
+from torchrec.modules.fp_embedding_modules import FeatureProcessedEmbeddingBagCollection
 from torchrec.modules.hash_mc_evictions import (
     HashZchEvictionConfig,
     HashZchEvictionPolicyName,
@@ -137,10 +140,15 @@ from torchrec.modules.itep_embedding_modules import (
 )
 from torchrec.modules.itep_modules import GenericITEPModule
 from torchrec.modules.keyed_jagged_tensor_pool import KeyedJaggedTensorPool
+from torchrec.modules.mc_embedding_modules import (
+    ManagedCollisionEmbeddingBagCollection,
+    ManagedCollisionEmbeddingCollection,
+)
 from torchrec.modules.mc_modules import (
     DistanceLFU_EvictionPolicy,
     LFU_EvictionPolicy,
     LRU_EvictionPolicy,
+    ManagedCollisionCollection,
     MCHEvictionPolicy,
     MCHManagedCollisionModule,
 )
@@ -442,6 +450,66 @@ def _make_hash_zch_module(**overrides: Any) -> HashZchManagedCollisionModule:
 
 _TABLE_NAME = "table1"
 _FEATURE_NAME = "feature1"
+# ManagedCollisionCollection asserts this equals the collision module's zch_size.
+_MC_NUM_EMBEDDINGS = 64
+
+
+def _make_mc_collection(config: BaseEmbeddingConfig) -> ManagedCollisionCollection:
+    return ManagedCollisionCollection(
+        managed_collision_modules={
+            _TABLE_NAME: _make_mch_module(DistanceLFU_EvictionPolicy())
+        },
+        embedding_configs=[config],
+    )
+
+
+def _make_mc_embedding_collection() -> ManagedCollisionEmbeddingCollection:
+    # The wrapper asserts both halves hold the same config objects.
+    config = EmbeddingConfig(
+        name=_TABLE_NAME,
+        embedding_dim=4,
+        num_embeddings=_MC_NUM_EMBEDDINGS,
+        feature_names=[_FEATURE_NAME],
+    )
+    return ManagedCollisionEmbeddingCollection(
+        embedding_collection=EmbeddingCollection(
+            tables=[config], device=torch.device("cpu")
+        ),
+        managed_collision_collection=_make_mc_collection(config),
+    )
+
+
+def _make_mc_embedding_bag_collection() -> ManagedCollisionEmbeddingBagCollection:
+    config = EmbeddingBagConfig(
+        name=_TABLE_NAME,
+        embedding_dim=4,
+        num_embeddings=_MC_NUM_EMBEDDINGS,
+        feature_names=[_FEATURE_NAME],
+    )
+    return ManagedCollisionEmbeddingBagCollection(
+        embedding_bag_collection=EmbeddingBagCollection(
+            tables=[config], device=torch.device("cpu")
+        ),
+        managed_collision_collection=_make_mc_collection(config),
+    )
+
+
+def _make_fp_embedding_bag_collection() -> FeatureProcessedEmbeddingBagCollection:
+    return FeatureProcessedEmbeddingBagCollection(
+        embedding_bag_collection=EmbeddingBagCollection(
+            tables=[
+                EmbeddingBagConfig(
+                    name=_TABLE_NAME,
+                    embedding_dim=4,
+                    num_embeddings=50,
+                    feature_names=[_FEATURE_NAME],
+                )
+            ],
+            is_weighted=True,
+            device=torch.device("cpu"),
+        ),
+        feature_processors=PositionWeightedModuleCollection({_FEATURE_NAME: 8}),
+    )
 
 
 class _ITEPEmbedding(torch.nn.Module):
@@ -700,6 +768,48 @@ _MODULE_CASES: Tuple[_GoldenCase, ...] = (
             ],
             device=torch.device("cpu"),
         ),
+    ),
+    # The collision modules inside are enrolled above. These wrappers set the
+    # prefix of every key beneath them, so renaming one of their attributes
+    # moves the whole checkpoint.
+    _GoldenCase(
+        "managed_collision_collection",
+        ManagedCollisionCollection,
+        "",
+        lambda: _make_mc_collection(
+            EmbeddingConfig(
+                name=_TABLE_NAME,
+                embedding_dim=4,
+                num_embeddings=_MC_NUM_EMBEDDINGS,
+                feature_names=[_FEATURE_NAME],
+            )
+        ),
+    ),
+    _GoldenCase(
+        "managed_collision_embedding_collection",
+        ManagedCollisionEmbeddingCollection,
+        "",
+        _make_mc_embedding_collection,
+    ),
+    _GoldenCase(
+        "managed_collision_embedding_bag_collection",
+        ManagedCollisionEmbeddingBagCollection,
+        "",
+        _make_mc_embedding_bag_collection,
+    ),
+    # Position weights are keyed by feature name under the wrapper's
+    # `_feature_processors`, so renaming either moves those keys.
+    _GoldenCase(
+        "position_weighted_module_collection",
+        PositionWeightedModuleCollection,
+        "",
+        lambda: PositionWeightedModuleCollection({_FEATURE_NAME: 8}),
+    ),
+    _GoldenCase(
+        "feature_processed_embedding_bag_collection",
+        FeatureProcessedEmbeddingBagCollection,
+        "",
+        _make_fp_embedding_bag_collection,
     ),
     # Dense modules. Their state is nn.Parameter reached through submodules,
     # so a scan for register_buffer does not find them. Keys are attribute
