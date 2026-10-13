@@ -8,6 +8,7 @@
 import torch
 from torch_tpu._internal import pallas  # pyre-ignore[21]
 from torchrec.experimental.torch_tpu.pallas import (
+    batch_index,
     lookup,
     ops,
     permute_embs,
@@ -54,6 +55,10 @@ _permute_pooled_embs_tc_fwd = pallas.jax_op(
 _permute_pooled_embs_tc_bwd = pallas.jax_op(
     "torchrec_pallas::permute_pooled_embs_backward",
     permute_embs.permute_pooled_embs_tc_bwd,
+)
+_batch_index_select_sc = pallas.jax_op(
+    "torchrec_pallas::batch_index_select_dim0",
+    batch_index.batch_index_select_sc,
 )
 
 
@@ -159,6 +164,18 @@ def permute_pooled_embs_sparse_core_tpu(
     )
 
 
+def batch_index_select_dim0_tpu(inputs, indices, input_rows, input_columns):
+    return _batch_index_select_sc(
+        inputs=inputs,
+        indices=indices.to(torch.int32),
+        input_rows=torch.tensor(input_rows, dtype=torch.int32, device=inputs.device),
+        input_columns=torch.tensor(
+            input_columns, dtype=torch.int32, device=inputs.device
+        ),
+        total_columns=sum(input_columns),
+    )
+
+
 lib: torch.library.Library = torch.library.Library("torchrec", "IMPL")
 lib.impl("embedding_lookup", embedding_lookup_tpu, "TPU")
 lib.impl("embedding_lookup_backward", embedding_lookup_backward_tpu, "TPU")
@@ -184,6 +201,7 @@ lib.impl(
 )
 lib.impl("permute_pooled_embs", permute_pooled_embs_tpu, "TPU")
 lib.impl("permute_pooled_embs_backward", permute_pooled_embs_backward_tpu, "TPU")
+lib.impl("batch_index_select_dim0", batch_index_select_dim0_tpu, "TPU")
 
 
 _ = ops

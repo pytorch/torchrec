@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import torch
 from torch_tpu._internal import pallas  # pyrefly: ignore[missing-import]
-from torchrec.experimental.torch_tpu.pallas import associative_scan, permute_1d
+from torchrec.experimental.torch_tpu.pallas import associative_scan, impl, permute_1d
 
 
 _complete_cumsum = pallas.jax_op(
@@ -25,8 +25,6 @@ _permute_1d_sparse_data = pallas.jax_op(
     "torchrec_pallas::permute_1d_sparse_data",
     permute_1d.permute_1d_sparse_data_indices_jax,
 )
-
-
 lib = torch.library.Library("fbgemm", "IMPL")
 
 
@@ -195,6 +193,28 @@ def batch_index_select_dim0_tpu(
     input_columns,
     permute_output_dim_0_1,
 ):
+    batch_size = input_num_indices[0]
+    if (
+        permute_output_dim_0_1
+        and batch_size % 16 == 0
+        and all(size == batch_size for size in input_num_indices)
+        and all(columns % 16 == 0 for columns in input_columns)
+    ):
+        # FBGEMM requires these conditions as well
+        if input_num_indices[0] <= 0:
+            raise ValueError(
+                f"input_num_indices {input_num_indices[0]} elements should be non-zero positive."
+            )
+        if not all(size == input_num_indices[0] for size in input_num_indices):
+            raise ValueError(
+                "All input_num_indices must be the same if `permute_output_dim_0_1` is true."
+                f"Instead it is {input_num_indices}."
+            )
+
+        return torch.ops.torchrec.batch_index_select_dim0(
+            inputs, indices, input_rows, input_columns
+        )
+
     return torch.ops.fbgemm.batch_index_select_dim0(
         inputs.to("cpu"),
         indices.to("cpu"),
@@ -218,3 +238,4 @@ lib.impl(
 lib.impl("segment_sum_csr", segment_sum_csr_tpu, "TPU")
 lib.impl("asynchronous_complete_cumsum", asynchronous_complete_cumsum_tpu, "TPU")
 lib.impl("batch_index_select_dim0", batch_index_select_dim0_tpu, "TPU")
+_ = impl
