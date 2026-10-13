@@ -300,7 +300,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
             else torch.cuda.stream
         )
         self._cur_batch: Optional[In] = None
-        self._dataloader_iter: Optional[Iterator[In]] = None
         self._connected = False
         self._data_iter_stopped = False
         super().__init__()
@@ -309,12 +308,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         self._connected = False
         self._data_iter_stopped = False
         self._cur_batch = None
-
-    def _reset_data_iter_if_needed(self, dataloader_iter: Iterator[In]) -> None:
-        if dataloader_iter is not self._dataloader_iter:
-            if self._data_iter_stopped:
-                self._reset_data_iter()
-            self._dataloader_iter = dataloader_iter
 
     def _connect(self, dataloader_iter: Iterator[In]) -> None:
         """
@@ -378,7 +371,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
         TorchrecComponent.TRAIN_PIPELINE, n=1000, add_wait_counter=True
     )
     def progress(self, dataloader_iter: Iterator[In]) -> Out:
-        self._reset_data_iter_if_needed(dataloader_iter)
         if not self._connected:
             self._connect(dataloader_iter)
         if self._data_iter_stopped:
@@ -429,7 +421,6 @@ class TrainPipelineBase(TrainPipeline[In, Out]):
 
     def reset(self) -> None:
         self._reset_data_iter()
-        self._dataloader_iter = None
 
 
 class TrainPipelinePT2(TrainPipelineBase[In, Out]):
