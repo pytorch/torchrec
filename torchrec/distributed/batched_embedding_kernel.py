@@ -15,7 +15,7 @@ import json
 import logging
 import tempfile
 from dataclasses import dataclass
-from math import sqrt
+from math import isfinite, sqrt
 from typing import (
     Any,
     Callable,
@@ -5766,9 +5766,33 @@ class BatchedTPUEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
         if pooled_lookup_kernel is None:
             pooled_lookup_kernel = PooledLookupKernel.OFFSET
         self.pooled_lookup_kernel = pooled_lookup_kernel
-        self._use_batched_lookup = (
-            pooled_lookup_kernel == PooledLookupKernel.BATCHED_OFFSET
+        self._use_batched_lookup = pooled_lookup_kernel in (
+            PooledLookupKernel.BATCHED_OFFSET,
+            PooledLookupKernel.BATCHED_OFFSET_FUSED_ADAGRAD,
         )
+        fused_params = config.fused_params or {}
+        optimizer = fused_params.get("optimizer", OptimType.NONE)
+        if pooled_lookup_kernel == PooledLookupKernel.BATCHED_OFFSET_FUSED_ADAGRAD:
+            if (
+                "optimizer" in fused_params
+                and optimizer != OptimType.EXACT_ROWWISE_ADAGRAD
+            ):
+                raise ValueError("Fused rowwise Adagrad requires EXACT_ROWWISE_ADAGRAD")
+            if "learning_rate" not in fused_params and "lr" not in fused_params:
+                raise ValueError("Fused rowwise Adagrad requires learning_rate or lr")
+            optimizer = OptimType.EXACT_ROWWISE_ADAGRAD
+        if optimizer != OptimType.NONE and not self._use_batched_lookup:
+            raise ValueError("Fused optimizer requires batched offset lookup")
+        learning_rate = fused_params.get("learning_rate", fused_params.get("lr", 0.01))
+        if optimizer == OptimType.EXACT_ROWWISE_ADAGRAD and (
+            learning_rate is None or not isfinite(learning_rate) or learning_rate <= 0
+        ):
+            raise ValueError(
+                "Fused rowwise Adagrad requires a positive finite learning_rate"
+            )
+        if learning_rate is None:
+            learning_rate = 0.01
+        eps = fused_params.get("eps", 1e-8)
 
         super().__init__(config, pg, device, sharding_type)
         dtype = data_type_to_sparse_type(config.data_type).as_dtype()
@@ -5781,6 +5805,9 @@ class BatchedTPUEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
                 weights_precision=dtype,
                 mode="mean" if self._pooling == PoolingMode.MEAN else "sum",
                 device=device,
+                optimizer=optimizer,
+                learning_rate=learning_rate,
+                eps=eps,
             )
         else:
             for local_rows, local_cols in zip(self._local_rows, self._local_cols):

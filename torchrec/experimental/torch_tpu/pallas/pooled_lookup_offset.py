@@ -13,6 +13,7 @@ This version is fully offset-driven.
 
 import functools
 import os
+from typing import cast
 
 import jax
 import jax.numpy as jnp
@@ -29,7 +30,7 @@ from jax.experimental.pallas import tpu as pltpu, tpu_sc as plsc
 NL, NACC, TILE, CHUNK, RB = 16, 16, 8, 16, 8
 
 
-@jax.jit(static_argnames=["emb_dim"])  # pyre-ignore[20]
+@functools.partial(jax.jit, static_argnames=["emb_dim"])  # pyre-ignore[20]
 def run_sc_pooled_lookup(  # noqa: C901
     indices: jax.Array,
     offsets: jax.Array,
@@ -182,14 +183,8 @@ def embedding_pooled_lookup_jax(
     return run_sc_pooled_lookup(indices, offsets, dev_weights, emb_dim)
 
 
-# Which derivation the backward uses for the per-id bag ids. "searchsorted" is the
-# default because it is unconditionally correct: it reads the bag boundaries out of
-# `offsets` and needs no relationship between `offsets` and the id count. "repeat" is
-# markedly faster (see `embedding_pooled_lookup_segments_jax`) but requires
-# `offsets[-1] == indices.shape[0]`; `jnp.repeat`'s `total_repeat_length` pads or
-# truncates silently rather than raising, so a caller that builds a mismatched
-# offsets/indices pair would get a wrong `seg` and a silently wrong gradient. Opt in
-# with TPU_POOLED_BWD_MODE=repeat once the caller is known to hold that invariant.
+# The single-table backward defaults to searchsorted; repeat requires offsets[-1]
+# to match the id count there. The batched backward masks bucket-padded ids.
 POOLED_BWD_MODE_ENV = "TPU_POOLED_BWD_MODE"
 POOLED_BWD_MODE_DEFAULT = "searchsorted"
 
@@ -295,7 +290,7 @@ def embedding_pooled_lookup_bwd_seg_jax(
     return jnp.zeros((num_rows, emb_dim), grad_out.dtype).at[indices].add(grad_per_id)
 
 
-@jax.jit(static_argnames=["emb_dim"])  # pyre-ignore[20]
+@functools.partial(jax.jit, static_argnames=["emb_dim"])  # pyre-ignore[20]
 def run_sc_pooled_lookup_batch_parallel(  # noqa: C901
     indices: jax.Array,
     offsets: jax.Array,
@@ -669,8 +664,43 @@ def embedding_pooled_batched_lookup_jax(
     emb_dim: int,
 ) -> jax.Array:
     return run_sc_pooled_lookup_batch_parallel(
-        indices, offsets, dev_weights, row_offsets, emb_dim
+        indices, offsets, dev_weights.reshape((-1, emb_dim)), row_offsets, emb_dim
     )
+
+
+def embedding_pooled_batched_lookup_gradient_map_jax(
+    indices: jax.Array,
+    offsets: jax.Array,
+    row_offsets: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Map each flat ID to (stacked row, global bag, valid bool).
+
+    This mapping is per occurrence, not deduplicated: repeated rows may contribute
+    gradients from different bags, which the backward's scatter-add aggregates.
+    Padded IDs are marked invalid.
+    """
+    num_bags = offsets.shape[0] - 1
+    assert num_bags > 0
+
+    positions = jnp.arange(indices.shape[0], dtype=offsets.dtype)
+    bag_starts = offsets[:-1]
+    bag_markers = jnp.zeros((indices.shape[0],), dtype=offsets.dtype)
+    bag_indices = (
+        jax.lax.associative_scan(jax.lax.add, bag_markers.at[bag_starts].add(1)) - 1
+    )
+    valid = positions < offsets[-1]
+    safe_bag_indices = jnp.minimum(bag_indices, num_bags - 1)
+    # Base deltas telescope even when empty bags have the same start.
+    base_deltas = jnp.diff(row_offsets, prepend=0)
+    base_markers = jnp.zeros((indices.shape[0],), dtype=row_offsets.dtype)
+    weight_indices = indices + cast(
+        jax.Array,
+        jax.lax.associative_scan(
+            jax.lax.add, base_markers.at[bag_starts].add(base_deltas)
+        ),
+    )
+    safe_weight_indices = jnp.where(valid, weight_indices, 0)
+    return safe_weight_indices, safe_bag_indices, valid
 
 
 def embedding_pooled_batched_lookup_bwd_jax(
@@ -680,24 +710,68 @@ def embedding_pooled_batched_lookup_bwd_jax(
     row_offsets: jax.Array,
     num_rows: int,
     emb_dim: int,
+    flat_weights: bool = False,
 ) -> jax.Array:
-    """Dense gradient for a stacked table-batched sum-pooled lookup."""
-    num_bags = grad_out.shape[0]
-    assert num_bags > 0
+    """Preprocessing for dense gradient for a stacked table-batched sum-pooled lookup."""
+    safe_weight_indices, safe_bag_indices, valid = (
+        embedding_pooled_batched_lookup_gradient_map_jax(indices, offsets, row_offsets)
+    )
 
-    positions = jnp.arange(indices.shape[0], dtype=offsets.dtype)
-    bag_indices = jnp.searchsorted(offsets[1:], positions, side="right")
-    valid = positions < offsets[-1]
-    safe_bag_indices = jnp.minimum(bag_indices, num_bags - 1)
-    weight_indices = indices + row_offsets[safe_bag_indices]
-    safe_weight_indices = jnp.where(valid, weight_indices, 0)
+    safe_weight_indices = jnp.where(valid, safe_weight_indices, num_rows)
+    ind = jnp.argsort(safe_weight_indices)
+    safe_weight_indices = safe_weight_indices[ind]
+    safe_bag_indices = safe_bag_indices[ind]
+    valid = valid[ind]
+
     grad_per_id = jnp.where(
         valid[:, None],
         grad_out[safe_bag_indices],
         jnp.zeros((), dtype=grad_out.dtype),
     )
+    if flat_weights:
+        columns = jnp.arange(emb_dim, dtype=safe_weight_indices.dtype)
+        return (
+            jnp.zeros((num_rows * emb_dim,), grad_out.dtype)
+            .at[safe_weight_indices[:, None] * emb_dim + columns]
+            .add(grad_per_id)
+        )
     return (
         jnp.zeros((num_rows, emb_dim), grad_out.dtype)
         .at[safe_weight_indices]
         .add(grad_per_id)
     )
+
+
+def embedding_pooled_batched_lookup_row_runs_jax(
+    indices: jax.Array,
+    offsets: jax.Array,
+    row_offsets: jax.Array,
+    num_rows: int,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Preprocessing for fused gradient for a stacked table-batched pooled lookup"""
+    rows, bags, valid = embedding_pooled_batched_lookup_gradient_map_jax(
+        indices, offsets, row_offsets
+    )
+
+    sorted_rows, sorted_bags = jax.lax.sort_key_val(
+        jnp.where(valid, rows, num_rows),
+        bags,
+        dimension=0,
+    )
+
+    n = indices.shape[0]
+    run_starts = (sorted_rows != num_rows) & jnp.concatenate(
+        (
+            jnp.ones((1,), dtype=jnp.bool_),
+            sorted_rows[1:] != sorted_rows[:-1],
+        )
+    )[:n]
+    num_runs = jnp.sum(run_starts, dtype=offsets.dtype)
+    run_offsets = jnp.nonzero(run_starts, size=n, fill_value=n)[0]
+    run_offsets = (
+        jnp.concatenate((run_offsets, jnp.array([n], dtype=run_offsets.dtype)))
+        .at[num_runs]
+        .set(offsets[-1])
+    )
+
+    return sorted_rows, sorted_bags, run_offsets, num_runs

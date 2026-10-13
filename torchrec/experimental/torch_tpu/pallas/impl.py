@@ -13,6 +13,7 @@ from torchrec.experimental.torch_tpu.pallas import (
     ops,
     permute_embs,
     pooled_lookup_offset,
+    pooled_lookup_offset_bwd,
     pooled_lookup_padded,
 )
 
@@ -43,6 +44,11 @@ _pooled_batched_offset_fwd = pallas.jax_op(
 _pooled_batched_offset_bwd = pallas.jax_op(
     "torchrec_pallas::embedding_pooled_batched_lookup_offset_bwd",
     pooled_lookup_offset.embedding_pooled_batched_lookup_bwd_jax,
+)
+_pooled_batched_offset_adagrad_update = pallas.jax_op(
+    "torchrec_pallas::embedding_pooled_batched_lookup_adagrad_update",
+    pooled_lookup_offset_bwd.embedding_pooled_batched_lookup_fused_adagrad_bwd_jax,
+    donate_argnums=(4, 5),
 )
 _permute_pooled_embs_sc_fwd = pallas.jax_op(
     "torchrec_pallas::permute_pooled_embs_auto_grad_split",
@@ -119,8 +125,34 @@ def embedding_pooled_batched_lookup_offset_tpu(
     )
 
 
+def embedding_pooled_batched_lookup_offset_fused_adagrad_tpu(
+    indices, offsets, weights, row_offsets, momentum, lr, eps, emb_dim
+):
+    return embedding_pooled_batched_lookup_offset_tpu(
+        indices, offsets, weights, row_offsets, emb_dim
+    )
+
+
+def embedding_pooled_batched_lookup_offset_adagrad_update_tpu(
+    grad_out, indices, offsets, row_offsets, weights, momentum, lr, eps
+):
+    new_weights, new_momentum = _pooled_batched_offset_adagrad_update(
+        grad_out=grad_out,
+        indices=indices,
+        offsets=offsets,
+        row_offsets=row_offsets,
+        emb_tables=weights,
+        momentum=momentum,
+        lr=lr,
+        eps=eps,
+        emb_dim=grad_out.shape[1],
+    )
+    weights.set_(new_weights)
+    momentum.set_(new_momentum)
+
+
 def embedding_pooled_batched_lookup_offset_backward_tpu(
-    grad_out, indices, offsets, row_offsets, num_rows, emb_dim
+    grad_out, indices, offsets, row_offsets, num_rows, emb_dim, flat_weights=False
 ):
     return _pooled_batched_offset_bwd(
         grad_out=grad_out,
@@ -129,6 +161,7 @@ def embedding_pooled_batched_lookup_offset_backward_tpu(
         row_offsets=row_offsets,
         num_rows=num_rows,
         emb_dim=emb_dim,
+        flat_weights=flat_weights,
     )
 
 
@@ -197,6 +230,16 @@ lib.impl(
 lib.impl(
     "embedding_pooled_batched_lookup_offset_backward",
     embedding_pooled_batched_lookup_offset_backward_tpu,
+    "TPU",
+)
+lib.impl(
+    "embedding_pooled_batched_lookup_offset_fused_adagrad",
+    embedding_pooled_batched_lookup_offset_fused_adagrad_tpu,
+    "TPU",
+)
+lib.impl(
+    "embedding_pooled_batched_lookup_offset_adagrad_update",
+    embedding_pooled_batched_lookup_offset_adagrad_update_tpu,
     "TPU",
 )
 lib.impl("permute_pooled_embs", permute_pooled_embs_tpu, "TPU")
