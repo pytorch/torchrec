@@ -7,7 +7,7 @@
 
 # pyre-strict
 
-from typing import Any, Dict, List, Optional
+from typing import Any, cast, Dict, List, Optional
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -96,7 +96,7 @@ def _register_tpu_kernels() -> None:
     present on a TPU host, so importing it at module scope would break the CPU
     tests.
     """
-    from torchrec.experimental.torch_tpu.pallas import impl  # noqa: F401
+    from torchrec.experimental.torch_tpu.pallas import dispatcher  # noqa: F401
 
 
 def _grouped_config(
@@ -191,6 +191,92 @@ class EBCLookupTest(TestCase):
         self.assertTrue(
             all(weight.requires_grad for weight in kernel.split_embedding_weights())
         )
+
+    @parameterized.expand(
+        [(device, groups) for device in ("cpu", "tpu") for groups in (1, 2)]
+    )
+    def test_vbe_rank_major_output_and_grad(self, device: str, num_groups: int) -> None:
+        self._setup_device(device)
+        tables = [
+            EmbeddingBagConfig(
+                name=f"table_{t}",
+                embedding_dim=16 if num_groups == 1 or t == 0 else 32,
+                num_embeddings=16,
+                feature_names=[f"feature_{t}"],
+                pooling=PoolingType.SUM,
+            )
+            for t in range(2)
+        ]
+        # Citrine C3: create input and expected tensors on the lookup device.
+        features = KeyedJaggedTensor(
+            keys=["feature_0", "feature_1"],
+            values=torch.tensor([1, 2, 3, 4, 5, 6], dtype=torch.int32, device=device),
+            lengths=torch.ones(6, dtype=torch.int32, device=device),
+            stride_per_key_per_rank=[[2, 1], [1, 2]],
+        )
+        second_dim = tables[1].embedding_dim
+        expected = torch.tensor(
+            [11, 12, 24, 13, 25, 26], dtype=torch.float32, device=device
+        ).repeat_interleave(
+            torch.tensor(
+                [16, 16, second_dim, 16, second_dim, second_dim],
+                dtype=torch.int32,
+                device=device,
+            )
+        )
+
+        groups = [tables] if num_groups == 1 else [[table] for table in tables]
+        with patch(
+            "torchrec.distributed.embedding_lookup.dist.get_world_size",
+            return_value=2,
+        ):
+            lookup = GroupedPooledEmbeddingsLookup(
+                grouped_configs=[
+                    _grouped_config(
+                        EmbeddingComputeKernel.UNFUSED_TPU,
+                        group,
+                        PoolingType.SUM,
+                        fused_params={
+                            "pooled_lookup_kernel": PooledLookupKernel.BATCHED_OFFSET
+                        },
+                    )
+                    for group in groups
+                ],
+                device=torch.device(device),
+            )
+        tpu_modules = [cast(BatchedTPUEmbeddingBag, m) for m in lookup._emb_modules]
+        with torch.no_grad():
+            weights = [
+                weight
+                for emb_module in tpu_modules
+                for weight in emb_module.split_embedding_weights()
+            ]
+            for table_idx, weight in enumerate(weights):
+                weight.copy_(
+                    torch.arange(16, dtype=torch.float32, device=device)[:, None]
+                    + 10 * (table_idx + 1)
+                )
+
+        actual = lookup(features)
+        self.assertEqual(actual.shape, expected.shape)
+        torch.testing.assert_close(actual, expected)
+
+        # FBGEMM's CPU sparse permute has no backward; TPU dispatch uses gather.
+        if device == "tpu":
+            actual.sum().backward()
+            grads = [
+                weight.grad
+                for emb_module in tpu_modules
+                for weight in emb_module.split_embedding_weights()
+            ]
+            for table_idx, grad in enumerate(grads):
+                self.assertIsNotNone(grad)
+                assert grad is not None
+                row_start = 1 if table_idx == 0 else 4
+                torch.testing.assert_close(
+                    grad[row_start : row_start + 3],
+                    torch.ones((3, tables[table_idx].embedding_dim), device=device),
+                )
 
     @parameterized.expand(DEVICE_KERNEL_CASES)
     def test_forward_matches_embedding_bag_collection(
