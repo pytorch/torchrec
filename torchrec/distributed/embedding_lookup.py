@@ -1137,13 +1137,14 @@ class GroupedPooledEmbeddingsLookup(
 
         # If VBE is enabled and multiple TBEs are involved, we need to merge
         # the output. The pre-allocated merging path requires TBE modules that
-        # support vbe_output/vbe_output_offsets (SplitTable, SSD). Triton and
-        # Dense TBE modules create their own output, so merge them separately.
+        # support vbe_output/vbe_output_offsets (SplitTable, SSD). Triton, TPU,
+        # and Dense TBE modules create their own output, so merge them separately.
         if is_vbe_enabled and len(self._emb_modules) > 1:
-            n_triton = sum(
-                isinstance(m, TritonBatchedFusedEmbeddingBag) for m in self._emb_modules
-            )
-            if n_triton > 0:
+            if any(
+                isinstance(m, TritonBatchedFusedEmbeddingBag)
+                or (isinstance(m, BatchedTPUEmbeddingBag) and m._use_batched_lookup)
+                for m in self._emb_modules
+            ):
                 return self._merge_variable_batch_embeddings(
                     self._forward(features_by_group),
                     self._vbe_splits(features_by_group),
