@@ -38,7 +38,17 @@ lib.define(
 lib.define(
     "embedding_pooled_batched_lookup_offset_backward("
     "Tensor grad_out, Tensor indices, Tensor offsets, Tensor row_offsets, "
-    "int num_rows, int emb_dim) -> Tensor"
+    "int num_rows, int emb_dim, bool flat_weights=False) -> Tensor"
+)
+lib.define(
+    "embedding_pooled_batched_lookup_offset_fused_adagrad("
+    "Tensor indices, Tensor offsets, Tensor weights, Tensor row_offsets, "
+    "Tensor momentum, float lr, float eps, int emb_dim) -> Tensor"
+)
+lib.define(
+    "embedding_pooled_batched_lookup_offset_adagrad_update("
+    "Tensor grad_out, Tensor indices, Tensor offsets, Tensor row_offsets, "
+    "Tensor(a!) weights, Tensor(b!) momentum, float lr, float eps) -> ()"
 )
 lib.define(
     "permute_pooled_embs("
@@ -142,10 +152,15 @@ def embedding_pooled_batched_lookup_offset_cpu(
     bag_indices = _bag_indices(offsets)
     active_indices = indices[: bag_indices.numel()]
     weight_indices = active_indices.long() + row_offsets[bag_indices].long()
+    if weights.ndim == 1:
+        columns = torch.arange(emb_dim, device=weights.device)
+        gathered = weights[weight_indices[:, None] * emb_dim + columns]
+    else:
+        gathered = weights[weight_indices]
     return weights.new_zeros((offsets.numel() - 1, emb_dim)).index_add_(
         0,
         bag_indices,
-        weights[weight_indices],
+        gathered,
     )
 
 
@@ -156,15 +171,69 @@ def embedding_pooled_batched_lookup_offset_backward_cpu(
     row_offsets: torch.Tensor,
     num_rows: int,
     emb_dim: int,
+    flat_weights: bool = False,
 ) -> torch.Tensor:
     bag_indices = _bag_indices(offsets)
     active_indices = indices[: bag_indices.numel()]
     weight_indices = active_indices.long() + row_offsets[bag_indices].long()
+    if flat_weights:
+        columns = torch.arange(emb_dim, device=grad_out.device)
+        linear_indices = weight_indices[:, None] * emb_dim + columns
+        return grad_out.new_zeros((num_rows * emb_dim,)).index_put_(
+            (linear_indices,), grad_out[bag_indices], accumulate=True
+        )
     return grad_out.new_zeros((num_rows, emb_dim)).index_add_(
         0,
         weight_indices,
         grad_out[bag_indices],
     )
+
+
+def embedding_pooled_batched_lookup_offset_fused_adagrad_cpu(
+    indices: torch.Tensor,
+    offsets: torch.Tensor,
+    weights: torch.Tensor,
+    row_offsets: torch.Tensor,
+    momentum: torch.Tensor,
+    lr: float,
+    eps: float,
+    emb_dim: int,
+) -> torch.Tensor:
+    return embedding_pooled_batched_lookup_offset_cpu(
+        indices, offsets, weights, row_offsets, emb_dim
+    )
+
+
+def embedding_pooled_batched_lookup_offset_adagrad_update_cpu(
+    grad_out: torch.Tensor,
+    indices: torch.Tensor,
+    offsets: torch.Tensor,
+    row_offsets: torch.Tensor,
+    weights: torch.Tensor,
+    momentum: torch.Tensor,
+    lr: float,
+    eps: float,
+) -> None:
+    bag_indices = _bag_indices(offsets)
+    rows = indices[: bag_indices.numel()].long() + row_offsets[bag_indices].long()
+    unique_rows, inverse = torch.unique(rows, return_inverse=True)
+    grad_per_row = grad_out.new_zeros((unique_rows.numel(), grad_out.shape[1]))
+    grad_per_row.index_add_(0, inverse, grad_out[bag_indices])
+    updated_momentum = momentum[unique_rows] + grad_per_row.square().mean(dim=1)
+    if weights.ndim == 1:
+        columns = torch.arange(grad_out.shape[1], device=weights.device)
+        linear_indices = unique_rows[:, None] * grad_out.shape[1] + columns
+        weights[linear_indices] -= (
+            lr * grad_per_row / (updated_momentum.sqrt().unsqueeze(1) + eps)
+        )
+    else:
+        weights.index_copy_(
+            0,
+            unique_rows,
+            weights[unique_rows]
+            - lr * grad_per_row / (updated_momentum.sqrt().unsqueeze(1) + eps),
+        )
+    momentum.index_copy_(0, unique_rows, updated_momentum)
 
 
 lib.impl("embedding_pooled_lookup", embedding_pooled_lookup_cpu, "CPU")
@@ -185,6 +254,16 @@ lib.impl(
 lib.impl(
     "embedding_pooled_batched_lookup_offset_backward",
     embedding_pooled_batched_lookup_offset_backward_cpu,
+    "CPU",
+)
+lib.impl(
+    "embedding_pooled_batched_lookup_offset_fused_adagrad",
+    embedding_pooled_batched_lookup_offset_fused_adagrad_cpu,
+    "CPU",
+)
+lib.impl(
+    "embedding_pooled_batched_lookup_offset_adagrad_update",
+    embedding_pooled_batched_lookup_offset_adagrad_update_cpu,
     "CPU",
 )
 
@@ -298,8 +377,9 @@ def _setup_pooled_batched_offset_context(ctx, inputs, output) -> None:
     _ = output
     indices, offsets, weights, row_offsets, emb_dim = inputs
     ctx.save_for_backward(indices, offsets, row_offsets)
-    ctx.num_rows = weights.shape[0]
+    ctx.num_rows = weights.numel() // emb_dim
     ctx.emb_dim = emb_dim
+    ctx.flat_weights = weights.ndim == 1
 
 
 def _pooled_batched_offset_backward(ctx, grad_out: torch.Tensor):
@@ -311,8 +391,33 @@ def _pooled_batched_offset_backward(ctx, grad_out: torch.Tensor):
         row_offsets,
         ctx.num_rows,
         ctx.emb_dim,
+        ctx.flat_weights,
     )
     return None, None, grad_weights, None, None
+
+
+def _setup_fused_adagrad_context(ctx, inputs, output) -> None:
+    _ = output
+    indices, offsets, weights, row_offsets, momentum, lr, eps, emb_dim = inputs
+    ctx.save_for_backward(indices, offsets, row_offsets, weights, momentum)
+    ctx.lr = lr
+    ctx.eps = eps
+
+
+def _fused_adagrad_backward(ctx, grad_out: torch.Tensor):
+    indices, offsets, row_offsets, weights, momentum = ctx.saved_tensors
+    with torch.no_grad():
+        torch.ops.torchrec.embedding_pooled_batched_lookup_offset_adagrad_update(
+            grad_out.contiguous(),
+            indices,
+            offsets,
+            row_offsets,
+            weights,
+            momentum,
+            ctx.lr,
+            ctx.eps,
+        )
+    return None, None, None, None, None, None, None, None
 
 
 def _permute_setup_context(ctx, inputs, output) -> None:
@@ -345,6 +450,11 @@ torch.library.register_autograd(
     "torchrec::embedding_pooled_batched_lookup_offset",
     _pooled_batched_offset_backward,
     setup_context=_setup_pooled_batched_offset_context,
+)
+torch.library.register_autograd(
+    "torchrec::embedding_pooled_batched_lookup_offset_fused_adagrad",
+    _fused_adagrad_backward,
+    setup_context=_setup_fused_adagrad_context,
 )
 torch.library.register_autograd(
     "torchrec::permute_pooled_embs",
