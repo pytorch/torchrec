@@ -12,6 +12,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 import torch
+from fbgemm_gpu.split_embedding_configs import EmbOptimType as OptimType
 from parameterized import parameterized
 from torchrec.distributed.batched_embedding_kernel import BatchedTPUEmbeddingBag
 from torchrec.distributed.embedding_lookup import GroupedPooledEmbeddingsLookup
@@ -57,6 +58,7 @@ DEVICE_KERNEL_CASES = [
     (f"{device}_{kernel.value}", device, kernel)
     for device in ("cpu", "tpu")
     for kernel in PooledLookupKernel
+    if kernel != PooledLookupKernel.BATCHED_OFFSET_FUSED_ADAGRAD
 ]
 
 
@@ -163,6 +165,64 @@ class EBCLookupTest(TestCase):
 
         self.assertEqual(expected_names, list(dict(kernel.named_parameters())))
         self.assertEqual(expected_names, list(kernel.state_dict()))
+
+    @parameterized.expand(
+        [
+            (
+                "explicit",
+                PooledLookupKernel.BATCHED_OFFSET,
+                {
+                    "optimizer": OptimType.EXACT_ROWWISE_ADAGRAD,
+                    "learning_rate": 0.2,
+                    "eps": 0.01,
+                },
+                0.01,
+            ),
+            (
+                "legacy",
+                PooledLookupKernel.BATCHED_OFFSET_FUSED_ADAGRAD,
+                {"lr": 0.2},
+                1e-8,
+            ),
+        ]
+    )
+    def test_fused_adagrad_config(
+        self,
+        _name: str,
+        pooled_lookup_kernel: PooledLookupKernel,
+        fused_params: Dict[str, Any],
+        expected_eps: float,
+    ) -> None:
+        table = EmbeddingBagConfig(
+            name="table",
+            embedding_dim=16,
+            num_embeddings=4,
+            feature_names=["feature"],
+        )
+        kernel = BatchedTPUEmbeddingBag(
+            config=_grouped_config(
+                EmbeddingComputeKernel.UNFUSED_TPU,
+                [table],
+                PoolingType.SUM,
+                fused_params=fused_params,
+            ),
+            device=torch.device("cpu"),
+            pooled_lookup_kernel=pooled_lookup_kernel,
+        )
+        self.assertEqual(kernel.emb_module.optimizer, OptimType.EXACT_ROWWISE_ADAGRAD)
+        self.assertEqual(kernel.emb_module.learning_rate, 0.2)
+        self.assertEqual(kernel.emb_module.eps, expected_eps)
+        kernel(
+            KeyedJaggedTensor(
+                keys=["feature"],
+                values=torch.tensor([1, 1, 2], dtype=torch.int32),
+                lengths=torch.tensor([2, 1], dtype=torch.int32),
+            )
+        ).sum().backward()
+        self.assertIsNone(kernel.emb_module.weights.grad)
+        torch.testing.assert_close(
+            kernel.emb_module.momentum, torch.tensor([0.0, 4.0, 1.0, 0.0])
+        )
 
     @parameterized.expand([("cpu",), ("tpu",)])
     def test_dispatch(self, device: str) -> None:

@@ -12,6 +12,7 @@ from itertools import accumulate
 from typing import cast, List, Optional, Tuple
 
 import torch
+from fbgemm_gpu.split_embedding_configs import EmbOptimType as OptimType
 from torch import nn
 
 # Imported is needed: defines torchrec::embedding_lookup
@@ -22,6 +23,7 @@ class PooledLookupKernel(Enum):
     PADDED = "padded"
     OFFSET = "offset"
     BATCHED_OFFSET = "batched_offset"
+    BATCHED_OFFSET_FUSED_ADAGRAD = "batched_offset_fused_adagrad"
 
 
 class TPUEmbeddingUnfused(torch.nn.Module):
@@ -335,6 +337,9 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
         weights_precision: Weight dtype; currently only torch.float32.
         mode: Pooling mode, either sum or mean.
         device: Device on which weights and lookup buffers are allocated.
+        optimizer: NONE (external optimizer) or EXACT_ROWWISE_ADAGRAD.
+        learning_rate: Learning rate for the fused optimizer.
+        eps: Epsilon for the fused optimizer.
 
     Example::
 
@@ -351,12 +356,22 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
         weights_precision: torch.dtype = torch.float32,
         mode: str = "sum",
         device: Optional[torch.device] = None,
+        optimizer: OptimType = OptimType.NONE,
+        learning_rate: float = 0.01,
+        eps: float = 1e-8,
     ) -> None:
         super().__init__()
         self.device = device if device is not None else torch.device("tpu")
         if mode not in {"sum", "mean"}:
             raise ValueError(f"mode must be 'sum' or 'mean', got {mode}")
+        if optimizer not in (OptimType.NONE, OptimType.EXACT_ROWWISE_ADAGRAD):
+            raise ValueError(
+                f"TPU batched lookup supports only NONE or EXACT_ROWWISE_ADAGRAD, got {optimizer}"
+            )
         self.mode = mode
+        self.optimizer = optimizer
+        self.learning_rate = learning_rate
+        self.eps = eps
         self.weights_precision = weights_precision
         assert (
             self.weights_precision == torch.float32
@@ -405,6 +420,18 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
 
         # Construct the weights
         self.weights = self.construct_weights()
+        self.momentum: Optional[torch.Tensor]
+        # Citrine C3: allocate the optimizer state directly on the target device.
+        self.register_buffer(
+            "momentum",
+            (
+                torch.zeros(
+                    self.total_hash_size, dtype=torch.float32, device=self.device
+                )
+                if optimizer == OptimType.EXACT_ROWWISE_ADAGRAD
+                else None
+            ),
+        )
 
         # Register the buffers needed
         self.register_buffer(
@@ -418,12 +445,10 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
         )
 
     def construct_weights(self) -> nn.Parameter:
-        rows, dims = zip(*self.embedding_specs)
-
-        # TODO: make this similar to how BatchedFused is doing with normal
+        # TODO: make this similar to how BatchedFused is doing with normal initialization
         return nn.Parameter(
             torch.zeros(
-                size=(sum(rows), max(dims)),
+                size=(self.size,),
                 dtype=self.weights_precision,
                 device=self.device,
             )
@@ -521,9 +546,23 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
         if bucket != indices.numel():
             indices = nn.functional.pad(indices, (0, bucket - indices.numel()))
 
-        pooled_embs = torch.ops.torchrec.embedding_pooled_batched_lookup_offset(
-            indices, offsets, self.weights, row_offsets, self.max_D
-        )
+        if self.optimizer == OptimType.EXACT_ROWWISE_ADAGRAD:
+            pooled_embs = (
+                torch.ops.torchrec.embedding_pooled_batched_lookup_offset_fused_adagrad(
+                    indices,
+                    offsets,
+                    self.weights,
+                    row_offsets,
+                    cast(torch.Tensor, self.momentum),
+                    self.learning_rate,
+                    self.eps,
+                    self.max_D,
+                )
+            )
+        else:
+            pooled_embs = torch.ops.torchrec.embedding_pooled_batched_lookup_offset(
+                indices, offsets, self.weights, row_offsets, self.max_D
+            )
         if self.mode == "mean":
             lengths = offsets[1:] - offsets[:-1]
             pooled_embs = pooled_embs / lengths.clamp(min=1).unsqueeze(1).to(
