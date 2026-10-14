@@ -66,6 +66,10 @@ _batch_index_select_sc = pallas.jax_op(
     "torchrec_pallas::batch_index_select_dim0",
     batch_index.batch_index_select_sc,
 )
+_batch_index_select_sc_bwd = pallas.jax_op(
+    "torchrec_pallas::batch_index_select_dim0_backward",
+    batch_index.batch_index_select_bwd_sc,
+)
 
 
 def embedding_lookup_tpu(indices, weights, emb_dim):
@@ -209,6 +213,28 @@ def batch_index_select_dim0_tpu(inputs, indices, input_rows, input_columns):
     )
 
 
+def batch_index_select_dim0_backward_tpu_impl(
+    grad_output, indices, input_rows, input_columns, input_numel
+):
+    if any(columns % 16 != 0 for columns in input_columns):
+        raise NotImplementedError(
+            f"embedding dimensions must be divisible by 16, got {input_columns}"
+        )
+    # TODO: re-evaluate the int32 conversion here
+    return _batch_index_select_sc_bwd(
+        grad_output=grad_output,
+        indices=indices.to(torch.int32),
+        input_rows=torch.tensor(
+            input_rows, dtype=torch.int32, device=grad_output.device
+        ),
+        input_columns=torch.tensor(
+            input_columns, dtype=torch.int32, device=grad_output.device
+        ),
+        permute_output_dim_0_1=True,
+        output_size=input_numel,
+    )
+
+
 lib: torch.library.Library = torch.library.Library("torchrec", "IMPL")
 lib.impl("embedding_lookup", embedding_lookup_tpu, "TPU")
 lib.impl("embedding_lookup_backward", embedding_lookup_backward_tpu, "TPU")
@@ -245,6 +271,11 @@ lib.impl(
 lib.impl("permute_pooled_embs", permute_pooled_embs_tpu, "TPU")
 lib.impl("permute_pooled_embs_backward", permute_pooled_embs_backward_tpu, "TPU")
 lib.impl("batch_index_select_dim0", batch_index_select_dim0_tpu, "TPU")
+lib.impl(
+    "batch_index_select_dim0_backward_tpu_impl",
+    batch_index_select_dim0_backward_tpu_impl,
+    "TPU",
+)
 
 
 _ = ops
