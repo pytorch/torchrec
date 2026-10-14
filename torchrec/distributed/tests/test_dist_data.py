@@ -60,6 +60,10 @@ from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
 )
+from torchrec.distributed.train_pipeline.delayed_backward import (
+    detach_output_dist_tensors,
+    run_delayed_backward,
+)
 from torchrec.distributed.types import (
     Awaitable,
     EmbeddingEvent,
@@ -1195,6 +1199,68 @@ class SeqEmbeddingsAllToAllTest(MultiProcessTestBase):
 
 
 class VariableBatchPooledEmbeddingsAllToAllTest(MultiProcessTestBase):
+    @classmethod
+    def _run_test_delayed_backward_dist(
+        cls,
+        rank: int,
+        world_size: int,
+    ) -> None:
+        dist.init_process_group(rank=rank, world_size=world_size, backend="nccl")
+        device = torch.device(f"cuda:{rank}")
+
+        emb_dim_per_rank_per_feature = [[2], [3, 3]]
+        batch_size_per_rank_per_feature = [[2], [1]] if rank == 0 else [[1, 3], [2, 2]]
+        batch_size_per_feature_pre_a2a = [2, 1, 3] if rank == 0 else [1, 2, 2]
+        input_size = 6 if rank == 0 else 24
+        # Citrine C3: create the test tensor directly on its target GPU.
+        local_embs = torch.arange(
+            1,
+            input_size + 1,
+            dtype=torch.float32,
+            device=device,
+            requires_grad=True,
+        )
+
+        a2a = VariableBatchPooledEmbeddingsAllToAll(
+            # `Optional[_distributed_c10d.ProcessGroup]`.
+            # pyrefly: ignore[bad-argument-type]
+            pg=dist.group.WORLD,
+            emb_dim_per_rank_per_feature=emb_dim_per_rank_per_feature,
+            device=device,
+        )
+        awaitable = a2a(
+            local_embs=local_embs,
+            batch_size_per_rank_per_feature=batch_size_per_rank_per_feature,
+            batch_size_per_feature_pre_a2a=batch_size_per_feature_pre_a2a,
+        )
+        delayed_backward_tensors = detach_output_dist_tensors(awaitable)
+        assert len(delayed_backward_tensors) == 1
+
+        result = awaitable.wait()
+        result.backward(result)
+
+        assert local_embs.grad is None
+        assert delayed_backward_tensors[0].proxy_tensor.grad is not None
+
+        run_delayed_backward(delayed_backward_tensors)
+
+        input_grad = local_embs.grad
+        assert input_grad is not None
+        torch.testing.assert_close(
+            local_embs.detach().div(world_size),
+            input_grad,
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_variable_batch_pooled_embeddings_delayed_backward(self) -> None:
+        self._run_multi_process_test(
+            callable=self._run_test_delayed_backward_dist,
+            world_size=2,
+        )
+
     @classmethod
     def _run_test_dist(
         cls,

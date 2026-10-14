@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
 
 import torch
 from torchrec.distributed.embedding_sharding import FusedKJTListSplitsAwaitable
+from torchrec.distributed.train_pipeline.delayed_backward import DelayedBackwardTensor
 from torchrec.distributed.types import Awaitable, LazyAwaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
@@ -45,6 +46,9 @@ class TrainPipelineContext:
         event: Optional[torch.cuda.Event]: Event to record the completion of this stage
         index: Optional[int]: Index of the current batch.
         version: int = 0; support for backward compatiblity
+        delayed_backward_tensors: Output-dist tensors whose upstream backward is
+            delayed until a later pipeline stage.
+        delay_backward: Whether output-dist backward is delayed for this batch.
     """
 
     input_dist_splits_requests: Dict[str, Awaitable[Any]] = field(default_factory=dict)
@@ -62,6 +66,8 @@ class TrainPipelineContext:
     version: int = (
         0  # 1 is current version, 0 is deprecated but supported for backward compatibility
     )
+    delayed_backward_tensors: List[DelayedBackwardTensor] = field(default_factory=list)
+    delay_backward: bool = True
 
 
 @dataclass
