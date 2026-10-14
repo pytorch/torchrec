@@ -270,12 +270,14 @@ class TPUEmbeddingBagUnfused(torch.nn.Module):
         self,
         input: torch.Tensor,
         offsets: torch.Tensor,
+        batch_size_per_feature_per_rank: list[list[int]] | None = None,
     ) -> torch.Tensor:
         """Pool embedding rows using the configured Pallas kernel.
 
         Args:
             input (torch.Tensor): Row indices on the embedding table's device.
             offsets (torch.Tensor): Bag boundaries on the embedding table's device.
+            batch_size_per_feature_per_rank (Optional(list[list[int]])): Needed for backward compatibility
 
         Returns:
             torch.Tensor: Pooled rows with shape
@@ -388,7 +390,7 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
         )
         self._cached_row_offsets: Optional[torch.Tensor]
         self.register_buffer("_cached_row_offsets", None, persistent=False)
-        self._cached_row_offsets_batch_size: int = -1
+        self._cached_row_offsets_batch_size: int | tuple[int, ...] = -1
         feature_weight_offsets = [
             self.offsets[table_idx] for table_idx in self.feature_table_map
         ]
@@ -453,36 +455,64 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
         offsets: torch.Tensor,
         # per_sample_weights: Tensor | None = None,
         # feature_requires_grad: Tensor | None = None,
-        # batch_size_per_feature_per_rank: list[list[int]] | None = None,
+        batch_size_per_feature_per_rank: list[list[int]] | None = None,
         # total_unique_indices: int | None = None,
         # hash_zch_identities: Tensor | None = None,
         # hash_zch_runtime_meta: Tensor | None = None,
         # vbe_output: Tensor | None = None,
         # vbe_output_offsets: Tensor | None = None,
     ) -> torch.Tensor:
-        """Pool feature-major jagged IDs and return batch-major embeddings.
+        """Pool feature-major jagged IDs into fixed or VBE output layouts.
 
         Args:
             indices: Flattened local row IDs for all feature bags.
             offsets: Boundaries for feature-major bags.
+            batch_size_per_feature_per_rank: Features then rank of the batch_size
 
         Returns:
-            Tensor shaped as batch size by features times embedding dimension.
+            Fixed batch: [batch, features * dimension]. VBE: flat, rank-major.
         """
         num_features = len(self.feature_table_map)
-        batch_size = (offsets.numel() - 1) // num_features  # ASSUMES NON-VBE
+        fixed_batch_size = (offsets.numel() - 1) // num_features
+
+        # TODO: Re-evaluate int32 on TPUs
+        indices = indices.to(dtype=torch.int32)
+        offsets = offsets.to(dtype=torch.int32)
 
         # Instead of having an offset per feature, repeat it to have one per bag.
-        # Cache the result because fixed-batch workloads otherwise rebuild the same
-        # device tensor on every forward.
-        row_offsets = self._cached_row_offsets
-        if row_offsets is None or self._cached_row_offsets_batch_size != batch_size:
-            row_offsets = torch.repeat_interleave(
-                cast(torch.Tensor, self.weights_offsets), batch_size
-            )
-            self._cached_row_offsets = row_offsets
-            self._cached_row_offsets_batch_size = batch_size
+        # Also Cache the result because fixed-batch workloads otherwise rebuild the same
+        # device tensor on every forward. VBE case would have repeat, as well
 
+        batch_sizes_per_feature = (
+            tuple(sum(ranks) for ranks in batch_size_per_feature_per_rank)
+            if batch_size_per_feature_per_rank
+            else None
+        )
+        cache_key = (
+            batch_sizes_per_feature
+            if batch_sizes_per_feature is not None
+            else fixed_batch_size
+        )
+        row_offsets = self._cached_row_offsets
+        if row_offsets is None or self._cached_row_offsets_batch_size != cache_key:
+            if batch_sizes_per_feature is not None:
+                # VBE case, note that it may  repeat this calculation multiple times
+                row_offsets = torch.repeat_interleave(
+                    cast(torch.Tensor, self.weights_offsets),
+                    torch.tensor(
+                        batch_sizes_per_feature,
+                        dtype=torch.int32,
+                        device=self.weights.device,
+                    ),
+                    output_size=sum(batch_sizes_per_feature),
+                )
+            else:
+                row_offsets = torch.repeat_interleave(
+                    cast(torch.Tensor, self.weights_offsets), fixed_batch_size
+                )
+
+            self._cached_row_offsets = row_offsets
+            self._cached_row_offsets_batch_size = cache_key
         # `offsets` and `row_offsets` are a fixed [F * B (+1)] for non-VBE, but the id
         # count moves with every batch, so an unbucketed call retraces and recompiles
         # the kernel on every step.
@@ -500,8 +530,34 @@ class PallasTableBatchedEmbeddingBags(nn.Module):
                 pooled_embs.dtype
             )
 
+        if batch_size_per_feature_per_rank:
+            # For VBE: Need to re-order from feature-major order to rank-major order
+            # TODO: investigate to change the pallas kernel to immediately output
+            # the correct order.
+            n_ranks = len(batch_size_per_feature_per_rank[0])
+            segment_lengths = [
+                count * self.max_D
+                for counts in batch_size_per_feature_per_rank
+                for count in counts
+            ]
+            order = [
+                feature * n_ranks + rank
+                for rank in range(n_ranks)
+                for feature in range(num_features)
+            ]
+            _, reordered, _ = torch.ops.fbgemm.permute_1D_sparse_data(
+                torch.tensor(order, dtype=torch.int32, device=pooled_embs.device),
+                torch.tensor(
+                    segment_lengths, dtype=torch.int32, device=pooled_embs.device
+                ),
+                pooled_embs.flatten(),
+                None,
+                pooled_embs.numel(),
+            )
+            return reordered
+
         return (
-            pooled_embs.view(num_features, batch_size, self.max_D)
+            pooled_embs.view(num_features, fixed_batch_size, self.max_D)
             .permute(1, 0, 2)
-            .reshape(batch_size, num_features * self.max_D)
+            .reshape(fixed_batch_size, num_features * self.max_D)
         )

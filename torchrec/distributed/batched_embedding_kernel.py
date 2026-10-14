@@ -5855,31 +5855,17 @@ class BatchedTPUEmbeddingBag(BaseBatchedEmbeddingBag[torch.Tensor]):
         vbe_output_offsets: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if self._use_batched_lookup:
-            if features.variable_stride_per_key():
-                raise NotImplementedError("VBE on Pallas Batched EBC is not supported.")
+            batch_size_per_feature_per_rank = features.stride_per_key_per_rank()
 
             offsets = features.offsets_or_none()
             if offsets is None:
                 lengths = features.lengths()
-                # KJT's fallback uses an FBGEMM op without a TPU implementation.
-                # Scan batches independently, then add the much shorter feature-prefix
-                # scan to produce the same global offsets as a flat cumulative sum.
-                num_features = len(features.keys())
-                lengths_2d = lengths.view(num_features, -1)
-                local_ends = torch.cumsum(lengths_2d, dim=1).to(lengths.dtype)
-                zero = lengths.new_zeros(1)
-                feature_bases = torch.cat(
-                    [
-                        zero,
-                        torch.cumsum(local_ends[:, -1], dim=0).to(lengths.dtype)[:-1],
-                    ]
-                )
-                global_ends = local_ends + feature_bases.unsqueeze(1)
-                offsets = torch.cat([zero, global_ends.reshape(-1)])
+                offsets = torch.ops.fbgemm.asynchronous_complete_cumsum(lengths)
 
             return self.emb_module(
                 indices=features.values(),
                 offsets=offsets,
+                batch_size_per_feature_per_rank=batch_size_per_feature_per_rank,
             )
 
         jt_dict = features.to_dict()
