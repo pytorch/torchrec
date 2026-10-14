@@ -23,7 +23,7 @@ _complete_cumsum = pallas.jax_op(
 )
 _permute_1d_sparse_data = pallas.jax_op(
     "torchrec_pallas::permute_1d_sparse_data",
-    permute_1d.permute_1d_sparse_data_indices_jax,
+    permute_1d.permute_1d_sparse_data_sc,
 )
 lib = torch.library.Library("fbgemm", "IMPL")
 
@@ -52,18 +52,36 @@ def permute_1D_sparse_data(
     permute, lengths, indices, weights=None, permuted_lengths_sum=None
 ):
     # TODO: Re-evaluate the int32 path that is used.
-    if permuted_lengths_sum is not None:
-        permuted_lengths, source_indices = _permute_1d_sparse_data(
+    if permuted_lengths_sum is not None and weights is None:
+        if indices.requires_grad:
+            cpu_permute = permute.to("cpu")
+            cpu_lengths = lengths.to("cpu")
+            source = torch.arange(indices.numel(), dtype=torch.int64)
+            permuted_lengths, source_indices, _ = (
+                torch.ops.fbgemm.permute_1D_sparse_data(
+                    cpu_permute,
+                    cpu_lengths,
+                    source,
+                    None,
+                    permuted_lengths_sum,
+                )
+            )
+            permuted_indices = indices.to("cpu").index_select(0, source_indices.long())
+            return (
+                permuted_lengths.to(lengths.device),
+                permuted_indices.to(indices.device),
+                None,
+            )
+
+        indices = indices.to(torch.int32) if indices.dtype == torch.int64 else indices
+        permuted_lengths, permuted_indices = _permute_1d_sparse_data(
             permute=permute.to(torch.int32),
             lengths=lengths.to(torch.int32),
+            indices=indices,
+            weights=None,
             permuted_lengths_sum=permuted_lengths_sum,
         )
-        indices = indices.to(torch.int32) if indices.dtype == torch.int64 else indices
-        return (
-            permuted_lengths,
-            indices[source_indices],
-            None if weights is None else weights[source_indices],
-        )
+        return permuted_lengths, permuted_indices, None
 
     (permuted_lengths_after_sparse_data_all2all, sharded_input_embeddings, w) = (
         torch.ops.fbgemm.permute_1D_sparse_data(
