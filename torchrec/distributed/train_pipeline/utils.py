@@ -106,7 +106,11 @@ from torchrec.distributed.train_pipeline.tracing import (
     NodeArgsHelper,
     Tracer,
 )
-from torchrec.distributed.train_pipeline.types import CallArgs  # noqa
+from torchrec.distributed.train_pipeline.types import (  # noqa
+    CallArgs,
+    PipeliningDiagnostic,
+    PipeliningDiagnosticReason,
+)
 from torchrec.distributed.types import Awaitable
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable, Pipelineable
@@ -630,6 +634,8 @@ def _rewrite_model(  # noqa C901
     pipelined_sharded_modules = []
 
     non_pipelined_sharded_modules = []
+    non_pipelined_reasons: Dict[str, str] = {}
+    fx_blockers_per_module: Dict[str, str] = {}
 
     args_helper = NodeArgsHelper(
         model, context, pipeline_postproc, default_stream, dist_stream
@@ -649,8 +655,11 @@ def _rewrite_model(  # noqa C901
             logger.warning(f"Module '{node.target}' is a ShardedModule with zero input")
             continue
 
+        diagnostics: List[PipeliningDiagnostic] = []
         # List[ArgInfo]: for rebuilding the input arguments, while the num verifies if missing any
-        arg_info_list, num_found = args_helper.get_node_args(node)
+        arg_info_list, num_found = args_helper.get_node_args(
+            node, diagnostics=diagnostics
+        )
 
         if num_found == total_num_args:
             logger.info(f"Module '{node.target}' will be pipelined")
@@ -676,6 +685,18 @@ def _rewrite_model(  # noqa C901
                 f"Module '{node.target}' will NOT be pipelined, due to input modifications"
             )
             non_pipelined_sharded_modules.append(node.target)
+            # One reason per input, so a module can have several.
+            reasons = list(dict.fromkeys(d.reason.value for d in diagnostics))
+            non_pipelined_reasons[str(node.target)] = (
+                "|".join(reasons)
+                if reasons
+                else PipeliningDiagnosticReason.UNKNOWN.value
+            )
+            fx_blockers = list(
+                dict.fromkeys(d.fx_node for d in diagnostics if d.fx_node is not None)
+            )
+            if fx_blockers:
+                fx_blockers_per_module[str(node.target)] = "|".join(fx_blockers)
 
     # JIT script unsharded modules if applicable.
     if apply_jit:
@@ -695,6 +716,9 @@ def _rewrite_model(  # noqa C901
         pipelined_module_fqns=pipelined_sharded_modules,
         non_pipelined_module_fqns=non_pipelined_sharded_modules,
         pipeline_forward_type=pipelined_forward.__name__,
+        non_pipelined_reasons=non_pipelined_reasons,
+        postproc_fx_blockers=fx_blockers_per_module,
+        pipeline_postproc=pipeline_postproc,
     )
 
     return (
