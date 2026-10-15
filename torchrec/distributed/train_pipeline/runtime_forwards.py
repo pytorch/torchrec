@@ -329,22 +329,16 @@ class PECPipelinedForward(InSyncEmbeddingPipelinedForward):
 
         pec_ctx = cast(PECEmbeddingCollectionContext, ctx.module_contexts[name])
 
-        # OL/NOL awaitables and forward ctxs are forward-only -> pop.
+        # OL/NOL awaitables and forward contexts are consumed by this forward.
         ol_awaitables = ctx.pec_ol_awaitables.pop(name)
         nol_awaitables = ctx.pec_nol_awaitables.pop(name)
         forward_ctxs = ctx.pec_forward_ctxs.pop(name)
-
-        # Backward ctxs are read non-destructively: they are also needed after
-        # forward (OL grad + deferred NOL). Always present by forward time
-        # (overlap_dist of the next batch / finalize runs earlier this progress).
-        backward_ctxs = ctx.pec_backward_ctxs[name]
 
         return self._module.merge_partitioned_embeddings(
             pec_ctx,
             ol_awaitables,
             nol_awaitables,
             forward_ctxs,
-            backward_ctxs,
         )
 
 

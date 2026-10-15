@@ -6,8 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-# pyre-strict
-
 # NOTE: Do NOT add `from __future__ import annotations` here.
 # This module is loaded inside a torch.package at model-publish time. Combining
 # PEP 563 (string annotations) with @dataclass on Python 3.12 hits
@@ -68,7 +66,7 @@ def _mask_dist(
     prev_sharding_ctx: SequenceShardingContext | None,
     masks: OverlapMasks,
 ) -> Tuple[MaskDistAwaitable | None, MaskDistAwaitable | None]:
-    """Starts forward and backward mask AllToAlls for one sharding group.
+    """Starts forward and backward mask AllToAlls for one sharding type.
 
     Kicks off both AllToAlls (non-blocking) before any local work, so
     they overlap with the subsequent _split_kjt computation. Returns
@@ -148,8 +146,7 @@ def _split_kjt(
 
 @dataclass
 class ForwardPartitionContext:
-    """Forward partition result for one sharding group, produced by
-    OverlapDistAwaitable on wait.
+    """Forward partition result for one sharding type.
 
     Attributes:
         splits: per-rank OL/NOL split sizes for the embedding AllToAll.
@@ -167,13 +164,11 @@ class ForwardPartitionContext:
 
 @dataclass
 class BackwardPartitionContext:
-    """Backward partition result for one sharding group.
+    """Backward partition result for one sharding type.
 
-    Produced by OverlapDistAwaitable on wait. Contains the previous
-    batch's features re-split by overlap with the current batch, for
-    gradient re-routing during backward. Passed to
-    merge_partitioned_embeddings which sets the corresponding fields
-    on PECAll2AllSeqInfo.
+    Contains the previous batch's features re-split by overlap with the
+    current batch for gradient re-routing during backward. Installed on
+    PECAll2AllSeqInfo before loss.backward().
 
     Attributes:
         splits: per-rank OL/NOL split sizes for gradient AllToAll.
@@ -193,95 +188,76 @@ class BackwardPartitionContext:
     nol_features: KeyedJaggedTensor
 
 
-OverlapDistOutput = Tuple[
-    ForwardPartitionContext | None, BackwardPartitionContext | None
-]
-
-
-class OverlapDistAwaitable(LazyAwaitable[OverlapDistOutput]):
-    """Awaitable that resolves mask AllToAlls and produces partition contexts.
-
-    Created by overlap_dist with in-flight mask AllToAlls. On wait,
-    completes the AllToAlls and computes splits + permutations from the
-    received masks, returning (ForwardPartitionContext, BackwardPartitionContext).
-    Either may be None: forward is None for last-batch finalization,
-    backward is None for the first batch.
-    """
+class ForwardOverlapDistAwaitable(LazyAwaitable[ForwardPartitionContext]):
+    """Resolves a forward mask AllToAll into a partition context."""
 
     def __init__(
         self,
         handler: OverlapHandler,
-        ol_features: KeyedJaggedTensor | None,
-        nol_features: KeyedJaggedTensor | None,
-        forward_mask_dist: MaskDistAwaitable | None,
-        forward_sharding_ctx: SequenceShardingContext | None,
-        backward_mask_dist: MaskDistAwaitable | None,
-        backward_sharding_ctx: SequenceShardingContext | None,
-        bwd_ol_features: KeyedJaggedTensor | None,
-        bwd_nol_features: KeyedJaggedTensor | None,
+        ol_features: KeyedJaggedTensor,
+        nol_features: KeyedJaggedTensor,
+        mask_dist: MaskDistAwaitable,
+        sharding_ctx: SequenceShardingContext,
     ) -> None:
         super().__init__()
         self._handler = handler
-
-        # Forward fields (None for last-batch finalization)
         self._ol_features = ol_features
         self._nol_features = nol_features
-        self._forward_mask_dist = forward_mask_dist
-        self._forward_sharding_ctx = forward_sharding_ctx
+        self._mask_dist = mask_dist
+        self._sharding_ctx = sharding_ctx
 
-        # Backward fields (None for first batch)
-        self._backward_mask_dist = backward_mask_dist
-        self._backward_sharding_ctx = backward_sharding_ctx
-        self._bwd_ol_features = bwd_ol_features
-        self._bwd_nol_features = bwd_nol_features
+    def _wait_impl(self) -> ForwardPartitionContext:
+        post_dist_mask, pre_dist_mask = self._mask_dist.wait()
+        return ForwardPartitionContext(
+            ol_features=self._ol_features,
+            nol_features=self._nol_features,
+            splits=self._handler.compute_splits(
+                post_dist_mask,
+                pre_dist_mask,
+                self._sharding_ctx,
+            ),
+            permute=self._handler.compute_forward_permute(
+                post_dist_mask,
+                self._sharding_ctx,
+            ),
+        )
 
-    def _wait_impl(self) -> OverlapDistOutput:
-        forward_ctx = None
-        backward_ctx = None
 
-        if self._forward_mask_dist is not None:
-            assert self._forward_sharding_ctx is not None
-            assert self._ol_features is not None
-            assert self._nol_features is not None
+class BackwardOverlapDistAwaitable(LazyAwaitable[BackwardPartitionContext]):
+    """Resolves a backward mask AllToAll into a partition context."""
 
-            fwd_post_dist_mask, fwd_pre_dist_mask = self._forward_mask_dist.wait()
-            forward_ctx = ForwardPartitionContext(
-                ol_features=self._ol_features,
-                nol_features=self._nol_features,
-                splits=self._handler.compute_splits(
-                    fwd_post_dist_mask,
-                    fwd_pre_dist_mask,
-                    self._forward_sharding_ctx,
-                ),
-                permute=self._handler.compute_forward_permute(
-                    fwd_post_dist_mask,
-                    self._forward_sharding_ctx,
-                ),
-            )
+    def __init__(
+        self,
+        handler: OverlapHandler,
+        ol_features: KeyedJaggedTensor,
+        nol_features: KeyedJaggedTensor,
+        mask_dist: MaskDistAwaitable,
+        sharding_ctx: SequenceShardingContext,
+    ) -> None:
+        super().__init__()
+        self._handler = handler
+        self._ol_features = ol_features
+        self._nol_features = nol_features
+        self._mask_dist = mask_dist
+        self._sharding_ctx = sharding_ctx
 
-        if self._backward_mask_dist is not None:
-            assert self._backward_sharding_ctx is not None
-            assert self._bwd_ol_features is not None
-            assert self._bwd_nol_features is not None
-
-            bwd_post_dist_mask, bwd_pre_dist_mask = self._backward_mask_dist.wait()
-            bwd_ol_permute, bwd_nol_permute = self._handler.compute_backward_permutes(
-                bwd_post_dist_mask,
-                self._backward_sharding_ctx,
-            )
-            backward_ctx = BackwardPartitionContext(
-                splits=self._handler.compute_splits(
-                    bwd_post_dist_mask,
-                    bwd_pre_dist_mask,
-                    self._backward_sharding_ctx,
-                ),
-                ol_permute=bwd_ol_permute,
-                nol_permute=bwd_nol_permute,
-                ol_features=self._bwd_ol_features,
-                nol_features=self._bwd_nol_features,
-            )
-
-        return forward_ctx, backward_ctx
+    def _wait_impl(self) -> BackwardPartitionContext:
+        post_dist_mask, pre_dist_mask = self._mask_dist.wait()
+        ol_permute, nol_permute = self._handler.compute_backward_permutes(
+            post_dist_mask,
+            self._sharding_ctx,
+        )
+        return BackwardPartitionContext(
+            splits=self._handler.compute_splits(
+                post_dist_mask,
+                pre_dist_mask,
+                self._sharding_ctx,
+            ),
+            ol_permute=ol_permute,
+            nol_permute=nol_permute,
+            ol_features=self._ol_features,
+            nol_features=self._nol_features,
+        )
 
 
 @dataclass
@@ -292,17 +268,30 @@ class PECEmbeddingCollectionContext(EmbeddingCollectionContext):
     to all pipeline stages for a single batch.
 
     Attributes:
-        remapped_kjt_values: Cached remapped values per sharding group,
+        remapped_kjt_values: Cached remapped values per sharding type,
             set by overlap_dist. Used by the next batch's overlap_dist
             to detect overlap without re-remapping.
-        autograd_ctx_per_sharding: PECAll2AllSeqInfo per sharding group,
-            set by merge_partitioned_embeddings. When backward_ctxs is
-            passed to merge, backward fields are populated automatically.
-            Read by PECAll2AllSeqWait during loss.backward().
+        autograd_ctx_per_sharding: PECAll2AllSeqInfo per sharding type,
+            created by merge_partitioned_embeddings. Backward fields are
+            populated by set_backward_partition_contexts and read by
+            PECAll2AllSeqWait during loss.backward().
     """
 
     remapped_kjt_values: List[torch.Tensor] | None = None
     autograd_ctx_per_sharding: List[PECAll2AllSeqInfo] | None = None
+
+
+def set_backward_partition_contexts(
+    ctx: PECEmbeddingCollectionContext,
+    backward_ctxs: list[BackwardPartitionContext],
+) -> None:
+    """Sets gradient re-split metadata before loss.backward()."""
+    assert ctx.autograd_ctx_per_sharding is not None
+    assert len(ctx.autograd_ctx_per_sharding) == len(backward_ctxs)
+    for info, backward_ctx in zip(ctx.autograd_ctx_per_sharding, backward_ctxs):
+        info.backward_splits = backward_ctx.splits
+        info.backward_ol_permute = backward_ctx.ol_permute
+        info.backward_nol_permute = backward_ctx.nol_permute
 
 
 class PECEmbeddingCollectionAwaitable(LazyAwaitable[Dict[str, JaggedTensor]]):
@@ -461,14 +450,17 @@ class ShardedPECEmbeddingCollection(
         dist_input: KJTList | None = None,
         prev_ctx: PECEmbeddingCollectionContext | None = None,
         prev_dist_input: KJTList | None = None,
-    ) -> List[LazyAwaitable[OverlapDistOutput]]:
+    ) -> Tuple[
+        List[LazyAwaitable[ForwardPartitionContext]],
+        List[LazyAwaitable[BackwardPartitionContext]],
+    ]:
         """Detects and distributes overlap between batches.
 
-        For each sharding group: remaps current values, detects overlap
+        For each sharding type: remaps current values, detects overlap
         with the previous batch, starts mask AllToAlls (non-blocking),
         and splits features into OL/NOL partitions while AllToAlls are
-        in flight. Returns LazyAwaitables that compute splits and
-        permutations from the received masks on wait.
+        in flight. Forward and backward LazyAwaitables are returned separately
+        because their results are consumed at different pipeline stages.
 
         Handles three batch positions based on which args are None:
         - First batch (ctx set, prev_ctx None): forward only, no backward
@@ -490,14 +482,15 @@ class ShardedPECEmbeddingCollection(
                 None for first batch.
 
         Returns:
-            List of LazyAwaitable[OverlapDistOutput], one per sharding
-            group. Each resolves to (ForwardPartitionContext | None,
-            BackwardPartitionContext | None).
+            A tuple of forward and backward awaitable lists. Each list is in
+            sharding-type order. The backward list is empty for the first batch;
+            the forward list is empty during last-batch finalization.
         """
         assert ctx is not None or prev_ctx is not None
 
         remapped_values = []
-        awaitables: List[LazyAwaitable[OverlapDistOutput]] = []
+        forward_awaitables: List[LazyAwaitable[ForwardPartitionContext]] = []
+        backward_awaitables: List[LazyAwaitable[BackwardPartitionContext]] = []
 
         for i, handler in enumerate(self._overlap_handlers):
             current_remapped, sharding_ctx, features = None, None, None
@@ -533,24 +526,38 @@ class ShardedPECEmbeddingCollection(
                 masks=masks,
             )
 
-            awaitables.append(
-                OverlapDistAwaitable(
-                    handler=handler,
-                    ol_features=ol_kjt,
-                    nol_features=nol_kjt,
-                    forward_mask_dist=fwd_aw,
-                    forward_sharding_ctx=sharding_ctx,
-                    backward_mask_dist=bwd_aw,
-                    backward_sharding_ctx=prev_sharding_ctx,
-                    bwd_ol_features=bwd_ol_kjt,
-                    bwd_nol_features=bwd_nol_kjt,
+            if fwd_aw is not None:
+                assert ol_kjt is not None
+                assert nol_kjt is not None
+                assert sharding_ctx is not None
+                forward_awaitables.append(
+                    ForwardOverlapDistAwaitable(
+                        handler=handler,
+                        ol_features=ol_kjt,
+                        nol_features=nol_kjt,
+                        mask_dist=fwd_aw,
+                        sharding_ctx=sharding_ctx,
+                    )
                 )
-            )
+
+            if bwd_aw is not None:
+                assert bwd_ol_kjt is not None
+                assert bwd_nol_kjt is not None
+                assert prev_sharding_ctx is not None
+                backward_awaitables.append(
+                    BackwardOverlapDistAwaitable(
+                        handler=handler,
+                        ol_features=bwd_ol_kjt,
+                        nol_features=bwd_nol_kjt,
+                        mask_dist=bwd_aw,
+                        sharding_ctx=prev_sharding_ctx,
+                    )
+                )
 
         if ctx is not None:
             ctx.remapped_kjt_values = remapped_values
 
-        return awaitables
+        return forward_awaitables, backward_awaitables
 
     def compute_and_output_dist_in_partition(
         self,
@@ -564,8 +571,8 @@ class ShardedPECEmbeddingCollection(
         Looks up embeddings for the partition's features using the inner
         EC's lookup modules, then AllToAll's the results back using
         partition-specific splits from ForwardPartitionContext.splits.
-        Iterates over sharding groups, zipping the per-group features and
-        splits with the inner EC's per-group lookups.
+        Iterates over sharding types, zipping their features and splits with
+        the inner EC's corresponding lookups.
 
         Called twice per batch: once for OL (is_overlapped=True) and
         once for NOL (is_overlapped=False). A partition may be empty
@@ -575,15 +582,15 @@ class ShardedPECEmbeddingCollection(
         Args:
             ctx: PEC context (sharding_contexts must be set from
                 input_dist).
-            features: per-sharding-group partition features (OL or NOL KJT
-                from ForwardPartitionContext), one per sharding group.
-            overlap_splits: per-sharding-group per-rank OL/NOL split sizes
-                from ForwardPartitionContext.splits, one per sharding group.
+            features: partition features from ForwardPartitionContext, one KJT
+                per sharding type.
+            overlap_splits: per-rank OL/NOL split sizes from
+                ForwardPartitionContext.splits, one per sharding type.
             is_overlapped: True for overlapped partition (index 0 in
                 splits), False for nonoverlapped (index 1).
 
         Returns:
-            List of Awaitable[torch.Tensor], one per sharding group.
+            List of Awaitable[torch.Tensor], one per sharding type.
         """
         partition_idx = 0 if is_overlapped else 1
         ec = self._embedding_collection
@@ -626,7 +633,6 @@ class ShardedPECEmbeddingCollection(
         overlapped_awaitables: List[Awaitable[torch.Tensor]],
         nonoverlapped_awaitables: List[Awaitable[torch.Tensor]],
         forward_ctxs: List[ForwardPartitionContext],
-        backward_ctxs: List[BackwardPartitionContext] | None = None,
     ) -> LazyAwaitable[Dict[str, JaggedTensor]]:
         """Creates a LazyAwaitable that merges OL/NOL embeddings on wait.
 
@@ -635,10 +641,9 @@ class ShardedPECEmbeddingCollection(
         and sets up the autograd graph for gradient re-split in backward),
         then constructs the final Dict[str, JaggedTensor] output.
 
-        Creates one PECAll2AllSeqInfo per sharding group and stores them
-        on PEC context. If backward_ctxs is provided, populates the
-        backward fields (splits, permutes) so the caller does not need
-        to wire them manually before loss.backward().
+        Creates one PECAll2AllSeqInfo per sharding type and stores them
+        on the PEC context. Backward fields are populated separately by
+        set_backward_partition_contexts before loss.backward().
 
         Args:
             ctx: PEC context (sharding_contexts must be set from
@@ -648,10 +653,7 @@ class ShardedPECEmbeddingCollection(
             nonoverlapped_awaitables: from
                 compute_and_output_dist_in_partition(is_overlapped=False).
             forward_ctxs: ForwardPartitionContexts from overlap_dist,
-                one per sharding group.
-            backward_ctxs: BackwardPartitionContexts from overlap_dist,
-                one per sharding group. If provided, backward fields are
-                set on PECAll2AllSeqInfo automatically.
+                one per sharding type.
 
         Returns:
             LazyAwaitable resolving to Dict[str, JaggedTensor].
@@ -665,12 +667,6 @@ class ShardedPECEmbeddingCollection(
             )
             for fc in forward_ctxs
         ]
-
-        if backward_ctxs is not None:
-            for info, bwd in zip(autograd_ctx_per_sharding, backward_ctxs):
-                info.backward_splits = bwd.splits
-                info.backward_ol_permute = bwd.ol_permute
-                info.backward_nol_permute = bwd.nol_permute
 
         ctx.autograd_ctx_per_sharding = autograd_ctx_per_sharding
 
@@ -707,11 +703,11 @@ class ShardedPECEmbeddingCollection(
             ctx: PEC context with autograd_ctx_per_sharding populated by
                 backward.
             backward_features: previous batch's OL or NOL features for
-                gradient re-lookup (one per sharding group).
+                gradient re-lookup (one per sharding type).
             is_overlapped: True for OL partition, False for NOL.
 
         Returns:
-            List of awaitables, one per sharding group.
+            List of awaitables, one per sharding type.
         """
         assert ctx.autograd_ctx_per_sharding is not None
         ec = self._embedding_collection

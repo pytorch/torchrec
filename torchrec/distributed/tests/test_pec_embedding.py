@@ -6,8 +6,6 @@
 # LICENSE file in the root directory of this source tree.
 
 
-# pyre-strict
-
 import copy
 import unittest
 from dataclasses import dataclass
@@ -23,6 +21,7 @@ from torchrec.distributed.pec_embedding import (
     ForwardPartitionContext,
     PECEmbeddingCollectionContext,
     PECEmbeddingCollectionSharder,
+    set_backward_partition_contexts,
     ShardedPECEmbeddingCollection,
 )
 from torchrec.distributed.shard import shard_modules
@@ -228,9 +227,13 @@ def _pec_pre_forward(
     pec_ctx = sharded_pec.create_context()
     dist_input = sharded_pec.input_dist(pec_ctx, kjt_0).wait().wait()
 
-    results_0 = sharded_pec.overlap_dist(ctx=pec_ctx, dist_input=dist_input)
-    fwd_ctx, _ = results_0[0].wait()
-    assert fwd_ctx is not None
+    forward_results_0, backward_results_0 = sharded_pec.overlap_dist(
+        ctx=pec_ctx,
+        dist_input=dist_input,
+    )
+    assert len(forward_results_0) == 1
+    assert len(backward_results_0) == 0
+    fwd_ctx = forward_results_0[0].wait()
 
     return _PECState(
         sharded_pec=sharded_pec,
@@ -274,14 +277,15 @@ def _pec_forward(
         next_kjt = batches[batch_idx + 1].to(state.device)
         next_pec_ctx = sharded_pec.create_context()
         next_dist_input = sharded_pec.input_dist(next_pec_ctx, next_kjt).wait().wait()
-        results_next = sharded_pec.overlap_dist(
+        forward_results_next, backward_results_cur = sharded_pec.overlap_dist(
             ctx=next_pec_ctx,
             dist_input=next_dist_input,
             prev_ctx=pec_ctx,
             prev_dist_input=dist_input,
         )
+        assert len(forward_results_next) == 1
     else:
-        results_next = sharded_pec.overlap_dist(
+        forward_results_next, backward_results_cur = sharded_pec.overlap_dist(
             ctx=None,
             dist_input=None,
             prev_ctx=pec_ctx,
@@ -289,11 +293,13 @@ def _pec_forward(
         )
         next_pec_ctx = None
         next_dist_input = None
+        assert len(forward_results_next) == 0
 
-    fwd_next, bwd_cur = results_next[0].wait()
-    assert bwd_cur is not None
+    assert len(backward_results_cur) == 1
+    bwd_cur = backward_results_cur[0].wait()
+    fwd_next = forward_results_next[0].wait() if len(forward_results_next) > 0 else None
 
-    # Compute OL/NOL. compute_and_output_dist_in_partition takes per-sharding-group
+    # Compute OL/NOL. compute_and_output_dist_in_partition takes per-sharding-type
     # lists; this RW-only test has a single group, so wrap in single-element lists.
     ol_awaitables = sharded_pec.compute_and_output_dist_in_partition(
         pec_ctx,
@@ -326,8 +332,8 @@ def _pec_forward(
             ol_awaitables,
             nol_awaitables,
             [fwd_ctx],
-            [bwd_cur],
         ).wait()
+        set_backward_partition_contexts(pec_ctx, [bwd_cur])
 
     if verify_fn is not None:
         verify_fn(result, ref_ec, rank, batch_idx)

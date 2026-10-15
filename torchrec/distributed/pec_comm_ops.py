@@ -140,10 +140,10 @@ class PECGradientApply:
 class PECAll2AllSeqInfo:
     """Metadata for PEC backward gradient re-split and distribution.
 
-    Created by merge_partitioned_embeddings during forward. When
-    backward_ctxs is passed to merge, backward fields are populated
-    automatically. Read by PECAll2AllSeqWait during backward to re-split
-    gradients and create PECGradientApply instances.
+    Created by merge_partitioned_embeddings during forward. Backward fields
+    are populated before loss.backward() from the independently waited
+    backward overlap result. PECAll2AllSeqWait reads them during backward to
+    re-split gradients and create PECGradientApply instances.
 
     Attributes:
         forward_permute: Permute tensor for merging [ol, nol] → original order.

@@ -5,8 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# pyre-strict
-
 from __future__ import annotations
 
 from typing import Any, Callable, cast, Dict, Iterator, List, Optional, Tuple
@@ -18,8 +16,8 @@ from torchrec.distributed.embedding_types import KJTList
 from torchrec.distributed.pec_embedding import (
     BackwardPartitionContext,
     ForwardPartitionContext,
-    OverlapDistOutput,
     PECEmbeddingCollectionContext,
+    set_backward_partition_contexts,
     ShardedPECEmbeddingCollection,
 )
 from torchrec.distributed.train_pipeline.pipeline_context import (
@@ -64,10 +62,11 @@ class TrainPipelinePEC(TrainPipelineSparseDist[In, Out]):
         self._pec_modules: Dict[str, ShardedPECEmbeddingCollection] = {}
         # Reusable events ordering data-dist-stream work before the main-stream
         # compute that consumes it: _input_dist_event for non-PEC input-dist
-        # waits -> embedding lookup; _overlap_dist_event for overlap_dist ->
-        # NOL compute.
+        # waits -> embedding lookup; separate overlap events for forward lookup
+        # and backward gradient re-splitting.
         self._input_dist_event: torch.cuda.Event = torch.cuda.Event()
-        self._overlap_dist_event: torch.cuda.Event = torch.cuda.Event()
+        self._forward_overlap_dist_event: torch.cuda.Event = torch.cuda.Event()
+        self._backward_overlap_dist_event: torch.cuda.Event = torch.cuda.Event()
         # Deferred NOL grad is carried on PECTrainPipelineContext.pec_deferred_nol_grad,
         # attached to the next batch's context -- no pipeline-level stash.
 
@@ -107,39 +106,31 @@ class TrainPipelinePEC(TrainPipelineSparseDist[In, Out]):
         ctx.ol_permute.record_stream(stream)
         ctx.nol_permute.record_stream(stream)
 
-    def _wait_pec_overlap_results(
+    def _wait_pec_forward_results(
         self,
-        results: List[LazyAwaitable[OverlapDistOutput]],
+        results: List[LazyAwaitable[ForwardPartitionContext]],
         default_stream: torch.cuda.streams.Stream,
-    ) -> Tuple[List[ForwardPartitionContext], List[BackwardPartitionContext]]:
-        """Waits the per-group overlap awaitables and records them on default_stream.
-
-        overlap_dist returns one OverlapDistOutput per sharding group; the
-        returned lists stay aligned with the per-group order of ec._lookups
-        (which merge / grad_dist zip against). A group contributes to forward
-        only when forward is present (absent for the last batch) and to backward
-        only when backward is present (absent for the first batch).
-
-        Args:
-            results: one OverlapDistOutput awaitable per sharding group.
-            default_stream: stream the partition tensors are consumed on.
-
-        Returns:
-            (forward_ctxs, backward_ctxs) as per-group lists.
-        """
+    ) -> List[ForwardPartitionContext]:
         fwd_ctxs: List[ForwardPartitionContext] = []
+        for result in results:
+            fwd_ctx = result.wait()
+            self._record_stream_forward_ctx(fwd_ctx, default_stream)
+            self._precache_length_per_key(fwd_ctx)
+            fwd_ctxs.append(fwd_ctx)
+        return fwd_ctxs
+
+    def _wait_pec_backward_results(
+        self,
+        results: List[LazyAwaitable[BackwardPartitionContext]],
+        default_stream: torch.cuda.streams.Stream,
+    ) -> List[BackwardPartitionContext]:
         bwd_ctxs: List[BackwardPartitionContext] = []
         for result in results:
-            fwd_ctx, bwd_ctx = result.wait()
-            if fwd_ctx is not None:
-                self._record_stream_forward_ctx(fwd_ctx, default_stream)
-                self._precache_length_per_key(fwd_ctx)
-                fwd_ctxs.append(fwd_ctx)
-            if bwd_ctx is not None:
-                self._record_stream_backward_ctx(bwd_ctx, default_stream)
-                self._precache_length_per_key(bwd_ctx)
-                bwd_ctxs.append(bwd_ctx)
-        return fwd_ctxs, bwd_ctxs
+            bwd_ctx = result.wait()
+            self._record_stream_backward_ctx(bwd_ctx, default_stream)
+            self._precache_length_per_key(bwd_ctx)
+            bwd_ctxs.append(bwd_ctx)
+        return bwd_ctxs
 
     @staticmethod
     def _precache_length_per_key(ctx: object) -> None:
@@ -181,24 +172,16 @@ class TrainPipelinePEC(TrainPipelineSparseDist[In, Out]):
           - finalize:     current_ctx None, prev_ctx set -> backward only (the
             last batch has no successor, so all its values are NOL)
 
-        Forward partition contexts attach to current_ctx; backward partition
-        contexts attach to prev_ctx (backward of batch N is defined by its
-        overlap with N+1). When current_ctx is set, its PEC features are waited
-        from the inherited input_dist_tensors_requests (popped so the base
-        forward path won't touch them) and stashed in pec_dist_inputs to serve
-        as the next batch's prev.
-
-        The mask AllToAlls launch on the data-dist stream (owned here); the
-        produced tensors are recorded against the default compute stream they
-        are consumed on. On completion it records _overlap_dist_event so a
-        main-stream consumer (NOL compute) can order against the produced
-        forward contexts via wait_event.
+        Forward awaitables attach to current_ctx; backward awaitables attach
+        to prev_ctx. Both remain in flight during model forward. After forward,
+        backward results for prev_ctx are resolved first, then forward results
+        for current_ctx before its NOL lookup. The first batch waits forward
+        results during pipeline fill because it has no previous batch.
 
         Args:
             current_ctx: context of the batch being distributed (None at finalize).
             prev_ctx: context of the previous batch (None for the first batch).
         """
-        default_stream = torch.get_device_module(self._device).current_stream()
         # pyrefly: ignore [bad-argument-type]
         with self._stream_context(self._data_dist_stream):
             for name, pec in self._pec_modules.items():
@@ -217,24 +200,53 @@ class TrainPipelinePEC(TrainPipelineSparseDist[In, Out]):
                     prev_module_ctx = self._pec_module_ctx(prev_ctx, name)
                     prev_dist_input = prev_ctx.pec_dist_inputs[name]
 
-                results = pec.overlap_dist(
+                forward_results, backward_results = pec.overlap_dist(
                     ctx=current_module_ctx,
                     dist_input=dist_input,
                     prev_ctx=prev_module_ctx,
                     prev_dist_input=prev_dist_input,
                 )
-                fwd_ctxs, bwd_ctxs = self._wait_pec_overlap_results(
-                    results, default_stream
-                )
 
                 if current_ctx is not None:
-                    current_ctx.pec_forward_ctxs[name] = fwd_ctxs
-                if bwd_ctxs and prev_ctx is not None:
-                    prev_ctx.pec_backward_ctxs[name] = bwd_ctxs
+                    current_ctx.pec_forward_awaitables[name] = forward_results
+                if prev_ctx is not None:
+                    prev_ctx.pec_backward_awaitables[name] = backward_results
 
-            # Mark overlap_dist's data-dist work complete so main-stream
-            # consumers (NOL compute) can order against it via wait_event.
-            self._overlap_dist_event.record(self._data_dist_stream)
+    def _wait_pec_forward(self, context: PECTrainPipelineContext) -> None:
+        """Resolves forward overlap results before this batch's NOL lookup."""
+        default_stream = torch.get_device_module(self._device).current_stream()
+        # pyrefly: ignore [bad-argument-type]
+        with self._stream_context(self._data_dist_stream):
+            for name in self._pec_modules:
+                forward_results: List[LazyAwaitable[ForwardPartitionContext]] = (
+                    context.pec_forward_awaitables.pop(name)
+                )
+                context.pec_forward_ctxs[name] = self._wait_pec_forward_results(
+                    forward_results,
+                    default_stream,
+                )
+            self._forward_overlap_dist_event.record(self._data_dist_stream)
+
+    def _wait_pec_backward(self, context: PECTrainPipelineContext) -> None:
+        """Resolves backward overlap results and installs gradient split metadata."""
+        default_stream = torch.get_device_module(self._device).current_stream()
+        # pyrefly: ignore [bad-argument-type]
+        with self._stream_context(self._data_dist_stream):
+            for name in self._pec_modules:
+                backward_results: List[LazyAwaitable[BackwardPartitionContext]] = (
+                    context.pec_backward_awaitables.pop(name)
+                )
+                backward_ctxs = self._wait_pec_backward_results(
+                    backward_results,
+                    default_stream,
+                )
+                context.pec_backward_ctxs[name] = backward_ctxs
+                set_backward_partition_contexts(
+                    self._pec_module_ctx(context, name),
+                    backward_ctxs,
+                )
+
+            self._backward_overlap_dist_event.record(self._data_dist_stream)
 
     def _compute_and_output_dist(self, context: PECTrainPipelineContext) -> None:
         """Runs compute + output_dist for non-PEC pipelined modules.
@@ -430,12 +442,12 @@ class TrainPipelinePEC(TrainPipelineSparseDist[In, Out]):
         self.wait_sparse_data_dist(self.contexts[0])
 
         ctx0: PECTrainPipelineContext = cast(PECTrainPipelineContext, self.contexts[0])
-        # overlap_dist(0, prev=None): waits + pops PEC features, builds forward
-        # ctx(0) and records _overlap_dist_event. NOL compute(0) consumes the
-        # forward ctx on the main stream, so order it after the event.
+        # The first batch needs its forward results now for NOL compute;
+        # there is no previous batch's backward result to wait first.
         self._pec_overlap_dist(ctx0, None)
+        self._wait_pec_forward(ctx0)
         torch.get_device_module(self._device).current_stream().wait_event(
-            self._overlap_dist_event
+            self._forward_overlap_dist_event
         )
         self._pec_nol_compute(ctx0)
 
@@ -486,10 +498,10 @@ class TrainPipelinePEC(TrainPipelineSparseDist[In, Out]):
         with record_function("## pec_compute_and_output_dist ##"):
             self._compute_and_output_dist(ctx0)
 
-        # #5 overlap_dist for N+1 (forward ctx[N+1] + backward ctx[N]). On the
+        # #5 overlap_dist for N+1 (forward results[N+1] + backward results[N]). On the
         #    last batch ctx1 is None, so this is the finalize call (current=None)
-        #    producing only N's backward ctx. Runs on the data-dist stream and
-        #    records _overlap_dist_event.
+        #    producing only N's backward results. Both directions remain in
+        #    flight on the data-dist stream during model forward.
         with record_function("## pec_overlap_dist ##"):
             self._pec_overlap_dist(ctx1, ctx0)
 
@@ -527,35 +539,36 @@ class TrainPipelinePEC(TrainPipelineSparseDist[In, Out]):
         if len(self.batches) > 2:
             self.wait_sparse_data_dist(self.contexts[2])
 
+        # Resolve N's backward partition metadata after the N+2 split wait
+        # has launched its input tensor distribution. The mask AllToAll was
+        # launched before forward and has overlapped it.
+        with record_function("## pec_backward_overlap_wait ##"):
+            self._wait_pec_backward(ctx0)
+
         # #9 apply the deferred NOL grad for N-1.
         with record_function("## pec_nol_grad_apply ##"):
             self._wait_pec_grad(nol_grad_awaitables)
 
-        # #10 NOL compute N+1 -- the first consumer of overlap_dist's forward
-        #     ctx[N+1]. Order the main stream after overlap_dist (#5, which
-        #     recorded _overlap_dist_event) only here, where the consumer runs;
-        #     skipped on the finalize step (ctx1 None, no forward ctx produced).
-        #     Done after forward so the data-dist work overlapped it.
+        # #10 Resolve forward results N+1 after backward results N, then run
+        #     NOL compute N+1. The main stream waits only at this first consumer.
+        #     Skipped on the finalize step, which has no next batch.
         if ctx1 is not None:
+            with record_function("## pec_forward_overlap_wait ##"):
+                self._wait_pec_forward(ctx1)
             torch.get_device_module(self._device).current_stream().wait_event(
-                self._overlap_dist_event
+                self._forward_overlap_dist_event
             )
             with record_function("## pec_nol_compute ##"):
                 self._pec_nol_compute(ctx1)
 
         if self._model.training:
             # #11 backward N (splits grad, creates appliers; no AllToAll).
-            #     Independent of overlap_dist, so on the finalize step it overlaps
-            #     the finalize backward-ctx data-dist work.
+            #     The backward partition metadata was resolved after forward;
+            #     order the main stream after that data-dist work here.
+            torch.get_device_module(self._device).current_stream().wait_event(
+                self._backward_overlap_dist_event
+            )
             self._backward(losses)
-
-            # overlap_dist's backward ctx[N] is first consumed by the OL grad
-            # below. If #10's NOL compute didn't already order the main stream
-            # after overlap_dist (finalize step, ctx1 None), do it now.
-            if ctx1 is None:
-                torch.get_device_module(self._device).current_stream().wait_event(
-                    self._overlap_dist_event
-                )
 
             # #12 OL grad AllToAll N.
             with record_function("## pec_ol_grad_a2a ##"):
