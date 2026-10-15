@@ -5,8 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# pyre-strict
-
 # NOTE: Do NOT add `from __future__ import annotations` here.
 # This module is loaded inside a torch.package at model-publish time. Combining
 # PEP 563 (string annotations) with @dataclass on Python 3.12 hits
@@ -18,12 +16,16 @@
 # fields referencing it must be real annotations, not string forward refs.
 
 from dataclasses import dataclass
-from typing import Callable, List, Tuple
+from typing import Any, Callable, List, Tuple
 
 import torch
 import torch.distributed as dist
 from torchrec.distributed.pec_collision_handlers import OverlapSplits
-from torchrec.distributed.types import Awaitable
+from torchrec.distributed.types import (
+    Awaitable,
+    QuantizedCommCodec,
+    QuantizedCommCodecs,
+)
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 
 
@@ -34,6 +36,8 @@ def _grad_dist(
     embedding_dim: int,
     pg: dist.ProcessGroup,
     async_op: bool = True,
+    codec: QuantizedCommCodec | None = None,
+    qcomm_ctx: Any = None,
 ) -> Tuple[dist.Work, torch.Tensor]:
     """Starts gradient reverse AllToAll. Shared by the OL and NOL partitions.
 
@@ -44,12 +48,23 @@ def _grad_dist(
         embedding_dim: embedding dimension.
         pg: process group.
         async_op: whether to run asynchronously.
+        codec: backward communication codec, if configured.
+        qcomm_ctx: per-partition context shared by encoding and decoding.
 
     Returns:
-        (work_handle, output_buffer) of shape [sum(output_splits) * embedding_dim].
+        (work_handle, output_buffer), in wire format when quantized.
     """
     output_split_sizes = [s * embedding_dim for s in output_splits]
     input_split_sizes = [s * embedding_dim for s in input_splits]
+    grad = grad.contiguous().view(-1)
+    if codec is not None:
+        grad = codec.encode(grad, qcomm_ctx)
+        input_split_sizes = [
+            codec.calc_quantized_size(s, qcomm_ctx) for s in input_split_sizes
+        ]
+        output_split_sizes = [
+            codec.calc_quantized_size(s, qcomm_ctx) for s in output_split_sizes
+        ]
 
     output_buffer = torch.empty(
         sum(output_split_sizes),
@@ -59,7 +74,7 @@ def _grad_dist(
 
     req = dist.all_to_all_single(
         output_buffer,
-        grad.contiguous().view(-1),
+        grad,
         output_split_sizes=output_split_sizes,
         input_split_sizes=input_split_sizes,
         group=pg,
@@ -92,11 +107,14 @@ class PECGradientApply:
         input_splits: List[int],
         output_splits: List[int],
         pg: dist.ProcessGroup,
+        codecs: QuantizedCommCodecs | None = None,
     ) -> None:
         self._grad = grad
         self._input_splits = input_splits
         self._output_splits = output_splits
         self._pg = pg
+        self._codec = codecs.backward if codecs is not None else None
+        self._qcomm_ctx: Any = None
         self._work: dist.Work | None = None
         self._grad_buffer: torch.Tensor | None = None
 
@@ -106,12 +124,16 @@ class PECGradientApply:
             return
 
         embedding_dim = self._grad.shape[1]
+        if self._codec is not None:
+            self._qcomm_ctx = self._codec.create_context()
         self._work, self._grad_buffer = _grad_dist(
             self._grad,
             input_splits=self._input_splits,
             output_splits=self._output_splits,
             embedding_dim=embedding_dim,
             pg=self._pg,
+            codec=self._codec,
+            qcomm_ctx=self._qcomm_ctx,
         )
         self._grad = None  # type: ignore[assignment]
 
@@ -126,14 +148,18 @@ class PECGradientApply:
         assert self._grad_buffer is not None
 
         self._work.wait()
+        grad = self._grad_buffer
+        if self._codec is not None:
+            grad = self._codec.decode(grad, self._qcomm_ctx)
 
         if features.values().numel() > 0:
             with torch.enable_grad():
                 embs = lookup_fn(features).view(-1, embedding_dim)
                 if embs.numel() > 0:
-                    embs.backward(self._grad_buffer.view(-1, embedding_dim))
+                    embs.backward(grad.view(-1, embedding_dim))
         self._work = None
         self._grad_buffer = None
+        self._qcomm_ctx = None
 
 
 @dataclass
@@ -151,6 +177,7 @@ class PECAll2AllSeqInfo:
         backward_nol_permute: Original-order indices for NOL gradient split.
         backward_splits: Per-rank OL/NOL split sizes for gradient AllToAll.
         pg: Process group for gradient AllToAll.
+        codecs: Sequence embedding communication codecs for this sharding.
         ol_grad_apply: OL gradient applier (set by PECAll2AllSeqWait.backward).
             Pipeline calls dist() via grad_dist.
         nol_grad_apply: NOL gradient applier (set by PECAll2AllSeqWait.backward).
@@ -162,6 +189,7 @@ class PECAll2AllSeqInfo:
     backward_nol_permute: torch.Tensor | None = None
     backward_splits: OverlapSplits | None = None
     pg: dist.ProcessGroup | None = None
+    codecs: QuantizedCommCodecs | None = None
 
     # Gradient appliers — set by PECAll2AllSeqWait.backward
     ol_grad_apply: PECGradientApply | None = None
@@ -225,6 +253,7 @@ class PECAll2AllSeqWait(torch.autograd.Function):
             input_splits=splits.input_splits[0],
             output_splits=splits.output_splits[0],
             pg=autograd_ctx.pg,
+            codecs=autograd_ctx.codecs,
         )
 
         autograd_ctx.nol_grad_apply = PECGradientApply(
@@ -232,6 +261,7 @@ class PECAll2AllSeqWait(torch.autograd.Function):
             input_splits=splits.input_splits[1],
             output_splits=splits.output_splits[1],
             pg=autograd_ctx.pg,
+            codecs=autograd_ctx.codecs,
         )
 
         return (None, None, None, None)

@@ -5,8 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# pyre-strict
-
 import copy
 import unittest
 from typing import cast, List, Optional, Tuple
@@ -14,7 +12,14 @@ from typing import cast, List, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from parameterized import parameterized
+from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
+from torchrec.distributed.fbgemm_qcomm_codec import (
+    CommType,
+    get_qcomm_codecs_registry,
+    QCommsConfig,
+)
 from torchrec.distributed.model_parallel import DistributedModelParallel
 from torchrec.distributed.pec_embedding import (
     PECEmbeddingCollectionSharder,
@@ -44,6 +49,8 @@ def _test_pec_pipeline_numerical(
     data: List[Tuple[ModelInput, List[ModelInput]]],
     backend: str = "nccl",
     local_size: Optional[int] = None,
+    qcomms_config: QCommsConfig | None = None,
+    use_custom_ec_sharder: bool = False,
 ) -> None:
     """Compares PEC pipeline output with a non-pipelined forward.
 
@@ -73,7 +80,22 @@ def _test_pec_pipeline_numerical(
         )
 
         ebc_sharder = cast(ModuleSharder[nn.Module], EmbeddingBagCollectionSharder())
-        pec_sharder = cast(ModuleSharder[nn.Module], PECEmbeddingCollectionSharder())
+        registry = (
+            get_qcomm_codecs_registry(qcomms_config, device=ctx.device)
+            if qcomms_config is not None
+            else None
+        )
+        pec_sharder = cast(
+            ModuleSharder[nn.Module],
+            PECEmbeddingCollectionSharder(
+                ec_sharder=(
+                    EmbeddingCollectionSharder(qcomm_codecs_registry=registry)
+                    if use_custom_ec_sharder
+                    else None
+                ),
+                qcomm_codecs_registry=registry,
+            ),
+        )
         sharders = [ebc_sharder, pec_sharder]
 
         planner = EmbeddingShardingPlanner(
@@ -104,6 +126,19 @@ def _test_pec_pipeline_numerical(
             device=ctx.device,
             init_data_parallel=True,
         ).to(ctx.device)
+
+        # Both the default and caller-supplied EC sharders use their constructor
+        # registry when creating the inner sharded EC.
+        if qcomms_config is not None:
+            for module in sharded_arch_pipeline.modules():
+                if isinstance(module, ShardedPECEmbeddingCollection):
+                    assert (
+                        module._embedding_collection.qcomm_codecs_registry is not None
+                    )
+                    assert (
+                        module._embedding_collection.qcomm_codecs_registry
+                        is module.qcomm_codecs_registry
+                    )
 
         # Copy identical ground-truth weights into both sharded models.
         copy_state_dict(
@@ -157,14 +192,56 @@ def _test_pec_pipeline_numerical(
 
 
 @skip_if_asan_class
+@unittest.skipIf(
+    not torch.distributed.is_nccl_available() or torch.cuda.device_count() < 2,
+    "Requires NCCL and two GPUs",
+)
 class TrainPipelinePECTest(MultiProcessTestBase):
     """Multi-process tests for TrainPipelinePEC."""
 
-    @unittest.skipIf(
-        torch.cuda.device_count() <= 1,
-        "Not enough GPUs, this test requires at least two GPUs",
+    @parameterized.expand(
+        [
+            ("unquantized", None),
+            (
+                "fp16_bf16",
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+            ),
+            (
+                "bf16_fp16_scaled",
+                QCommsConfig(
+                    forward_precision=CommType.BF16,
+                    backward_precision=CommType.FP16,
+                    backward_loss_scale=8.0,
+                ),
+            ),
+            (
+                "fp8_rowwise",
+                QCommsConfig(
+                    forward_precision=CommType.FP8,
+                    backward_precision=CommType.FP8,
+                    fp8_quantize_dim=8,
+                    fp8_quantize_dim_bwd=8,
+                ),
+            ),
+            (
+                "provided_ec_sharder",
+                QCommsConfig(
+                    forward_precision=CommType.FP16,
+                    backward_precision=CommType.BF16,
+                ),
+                True,
+            ),
+        ]
     )
-    def test_pipeline_numerical(self) -> None:
+    def test_pipeline_numerical(
+        self,
+        name: str,
+        qcomms_config: QCommsConfig | None,
+        use_custom_ec_sharder: bool = False,
+    ) -> None:
         """Verifies PEC pipeline predictions match the non-pipelined forward."""
         WORLD_SIZE = 2
         D = 8
@@ -215,4 +292,6 @@ class TrainPipelinePECTest(MultiProcessTestBase):
             tables=ebc_tables,
             ec_tables=ec_tables,
             data=data,
+            qcomms_config=qcomms_config,
+            use_custom_ec_sharder=use_custom_ec_sharder,
         )

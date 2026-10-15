@@ -47,6 +47,7 @@ from torchrec.distributed.pec_comm_ops import (
 from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.types import (
     Awaitable,
+    CommOp,
     LazyAwaitable,
     ParameterSharding,
     QuantizedCommCodecs,
@@ -664,8 +665,17 @@ class ShardedPECEmbeddingCollection(
             PECAll2AllSeqInfo(
                 forward_permute=fc.permute,
                 pg=self._env.process_group,
+                codecs=(
+                    sharding.qcomm_codecs_registry.get(
+                        CommOp.SEQUENCE_EMBEDDINGS_ALL_TO_ALL.name
+                    )
+                    if sharding.qcomm_codecs_registry is not None
+                    else None
+                ),
             )
-            for fc in forward_ctxs
+            for fc, sharding in zip(
+                forward_ctxs, ec._sharding_type_to_sharding.values()
+            )
         ]
 
         ctx.autograd_ctx_per_sharding = autograd_ctx_per_sharding
