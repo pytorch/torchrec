@@ -65,6 +65,11 @@ lib.define(
     "Tensor inputs, Tensor indices, int[] input_rows, int[] input_columns"
     ") -> Tensor"
 )
+lib.define(
+    "batch_index_select_dim0_backward_tpu_impl("
+    "Tensor grad_output, Tensor indices, int[] input_rows, int[] input_columns, "
+    "int input_numel) -> Tensor"
+)
 
 
 def embedding_lookup_cpu(
@@ -474,22 +479,14 @@ def _batch_index_select_setup_context(ctx, inputs, output) -> None:
 
 def _batch_index_select_backward(ctx, grad_out: torch.Tensor):
     (indices,) = ctx.saved_tensors
-    input_rows = ctx.input_rows
-    input_columns = ctx.input_columns
-    batch_size = indices.numel() // len(input_columns)
-    input_num_indices = torch.full((len(input_columns),), batch_size)
-    # The fused CPU op avoids launching one TPU index_add per feature.
-    grad_inputs = torch.ops.fbgemm.batch_index_select_dim0_backward_cpu_impl(
-        grad_out.to("cpu").contiguous(),
-        indices.to("cpu"),
-        input_num_indices,
-        input_num_indices,
-        torch.tensor(input_rows),
-        torch.tensor(input_columns),
-        True,
-        torch.tensor([ctx.input_numel]),
+    grad_inputs = torch.ops.torchrec.batch_index_select_dim0_backward_tpu_impl(
+        grad_out.contiguous(),
+        indices,
+        ctx.input_rows,
+        ctx.input_columns,
+        ctx.input_numel,
     )
-    return grad_inputs.to(grad_out.device), None, None, None
+    return grad_inputs, None, None, None
 
 
 torch.library.register_autograd(
