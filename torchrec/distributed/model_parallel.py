@@ -84,6 +84,7 @@ from torchrec.distributed.utils import (
     filter_state_dict,
     sharded_model_copy,
 )
+from torchrec.modules.embedding_modules import mark_data_parallel_skip_grad_sync
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
@@ -329,6 +330,27 @@ def get_module(module: nn.Module) -> nn.Module:
     return module
 
 
+def _contains_ddp(module: nn.Module) -> bool:
+    # Sharded modules keep lookups in an unregistered `_lookups` list and some
+    # override `named_modules()`, so `modules()` misses DDP in both places.
+    visited_module_ids: Set[int] = set()
+
+    def _visit(module: nn.Module) -> bool:
+        if id(module) in visited_module_ids:
+            return False
+        visited_module_ids.add(id(module))
+        if isinstance(module, DistributedDataParallel):
+            return True
+        lookups = getattr(module, "_lookups", None) or ()
+        return any(
+            _visit(child)
+            for child in (*module.children(), *lookups)
+            if isinstance(child, nn.Module)
+        )
+
+    return _visit(module)
+
+
 class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     """
     Entry point to model parallelism.
@@ -349,6 +371,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         data_parallel_wrapper (Optional[DataParallelWrapper]): custom wrapper for data
             parallel modules.
         model_tracker_config (Optional[DeltaTrackerConfig]): config for model tracker.
+        gradient_sync (bool): whether to construct gradient synchronization for
+            data-parallel modules. When ``False``, DMP omits both its outer data
+            parallel wrapper and supported inner data-parallel embedding wrappers,
+            and init_data_parallel() raises.
 
     Example::
 
@@ -376,11 +402,18 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
         model_tracker_configs: Optional[ModelTrackerConfigs] = None,
+        gradient_sync: bool = True,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
         self.init_parameters = init_parameters
+        self._gradient_sync: bool = gradient_sync
+        if not gradient_sync and data_parallel_wrapper is not None:
+            raise ValueError(
+                "gradient_sync=False cannot be combined with a custom "
+                "data_parallel_wrapper because the wrapper would be skipped"
+            )
 
         self._ddp_wrapped: bool = False
 
@@ -432,13 +465,20 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self._plan: ShardingPlan = plan
         self._writable_sharded_modules: list[ShardedEmbeddingCollection] = []
         self._dmp_wrapped_module: nn.Module = self._init_dmp(module)
+        if not self._gradient_sync and _contains_ddp(self._dmp_wrapped_module):
+            raise RuntimeError(
+                "gradient_sync=False is not supported by every sharder in this "
+                "DMP plan"
+            )
         self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
 
         if init_parameters:
             self._init_parameters(self.module)
 
-        if init_data_parallel:
+        if init_data_parallel and self._gradient_sync:
             self.init_data_parallel()
+        elif not self._gradient_sync and self.device.type != "meta":
+            self._dmp_wrapped_module.to(self.device)
 
         self.model_trackers: Dict[str, ModelDeltaTracker] = {}
 
@@ -491,6 +531,11 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         See init_data_parallel c-tor argument for usage.
         It's safe to call this method multiple times.
         """
+        if not self._gradient_sync:
+            raise RuntimeError(
+                "init_data_parallel() cannot be called on a DMP constructed with "
+                "gradient_sync=False"
+            )
         if not self._ddp_wrapped:
             # Allocate any 'meta' tensors
             if self.init_parameters:
@@ -614,6 +659,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         # shardable module
         module_sharding_plan = self._plan.get_plan_for_module(path)
         if module_sharding_plan:
+            if not self._gradient_sync:
+                mark_data_parallel_skip_grad_sync(module)
             sharder_key = type(module)
             sharded_module = self._sharder_map[sharder_key].shard(
                 module,

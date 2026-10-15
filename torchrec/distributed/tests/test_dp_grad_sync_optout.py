@@ -27,7 +27,10 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     ShardedEmbeddingBagCollection,
 )
-from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.model_parallel import (
+    DefaultDataParallelWrapper,
+    DistributedModelParallel,
+)
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     data_parallel,
@@ -110,6 +113,7 @@ def _shard_dp(
     sharder: ModuleSharder[nn.Module],
     ctx: MultiProcessContext,
     device: torch.device,
+    gradient_sync: bool = True,
 ) -> DistributedModelParallel:
     module_sharding_plan = construct_module_sharding_plan(
         module,
@@ -126,6 +130,7 @@ def _shard_dp(
         env=ShardingEnv.from_process_group(ctx.pg),
         sharders=[sharder],
         device=device,
+        gradient_sync=gradient_sync,
     )
 
 
@@ -143,8 +148,6 @@ def _run_dp_grad_sync_optout(
         default_module = _build_ebc(device) if is_ebc else _build_ec(device)
 
         frozen_module = _build_ebc(device) if is_ebc else _build_ec(device)
-        # Opt the frozen copy out of the DATA_PARALLEL DDP gradient reducer.
-        mark_data_parallel_skip_grad_sync(frozen_module)
 
         sharder = cast(
             ModuleSharder[nn.Module],
@@ -152,13 +155,28 @@ def _run_dp_grad_sync_optout(
         )
 
         default_dmp = _shard_dp(default_module, sharder, ctx, device)
-        frozen_dmp = _shard_dp(frozen_module, sharder, ctx, device)
+        frozen_dmp = _shard_dp(frozen_module, sharder, ctx, device, gradient_sync=False)
 
         # Regression guard: the default DP module still gets a DDP reducer.
         default_lookups = _dp_lookups(default_dmp)
         assert any(
             isinstance(lookup, DistributedDataParallel) for lookup in default_lookups
         ), "default DATA_PARALLEL module must keep the DistributedDataParallel wrap"
+
+        # Its already-sharded module still holds DDP, so gradient_sync=False must fail.
+        try:
+            DistributedModelParallel(
+                module=default_dmp.module,
+                env=default_dmp._env,
+                device=device,
+                plan=ShardingPlan({}),
+                sharders=[sharder],
+                gradient_sync=False,
+            )
+        except RuntimeError as e:
+            assert "not supported by every sharder" in str(e), str(e)
+        else:
+            raise AssertionError("gradient_sync=False must reject residual DDP")
 
         # The frozen/opt-out module has raw lookups (no DDP, no reducer/buckets).
         frozen_lookups = _dp_lookups(frozen_dmp)
@@ -218,6 +236,45 @@ class DataParallelGradSyncOptOutTest(MultiProcessTestBase):
 
     def test_ec_dp_skip_grad_sync(self) -> None:
         self._run(is_ebc=False)
+
+
+class DistributedModelParallelGradientSyncTest(unittest.TestCase):
+    def test_custom_wrapper_is_rejected_when_gradient_sync_is_disabled(self) -> None:
+        with self.assertRaisesRegex(ValueError, "custom data_parallel_wrapper"):
+            DistributedModelParallel(
+                module=nn.Linear(4, 2),
+                gradient_sync=False,
+                data_parallel_wrapper=DefaultDataParallelWrapper(),
+            )
+
+    def test_gradient_sync_false_preserves_dense_module_forward(self) -> None:
+        module = nn.Linear(4, 2)
+        inputs = torch.randn(3, 4)
+        with torch.inference_mode():
+            expected = module(inputs)
+
+        # No process group, so construction would raise if DMP tried to build DDP.
+        dmp = DistributedModelParallel(
+            module=module,
+            plan=ShardingPlan({}),
+            env=ShardingEnv.from_local(world_size=1, rank=0),
+            sharders=[],
+            gradient_sync=False,
+        )
+        with torch.inference_mode():
+            torch.testing.assert_close(dmp(inputs), expected)
+        with self.assertRaisesRegex(RuntimeError, "gradient_sync=False"):
+            dmp.init_data_parallel()
+
+    def test_gradient_sync_false_materializes_meta_params(self) -> None:
+        dmp = DistributedModelParallel(
+            module=nn.Linear(4, 2, device="meta"),
+            plan=ShardingPlan({}),
+            env=ShardingEnv.from_local(world_size=1, rank=0),
+            sharders=[],
+            gradient_sync=False,
+        )
+        self.assertTrue(all(p.device.type == "cpu" for p in dmp.parameters()))
 
 
 class MarkDataParallelSkipGradSyncTest(unittest.TestCase):
