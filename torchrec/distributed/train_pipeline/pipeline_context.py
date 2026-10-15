@@ -5,7 +5,6 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-# pyre-strict
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
@@ -108,17 +107,23 @@ class PECTrainPipelineContext(EmbeddingTrainPipelineContext):
     fields below are PEC-only; each dict is keyed by module FQN.
     """
 
-    # PEC features after input_dist (KJTList, one KJT per sharding group), waited
+    # PEC features after input_dist (KJTList, one KJT per sharding type), waited
     # inside overlap_dist. Held one batch so the next batch's overlap_dist can use
     # it as prev.
     pec_dist_inputs: Dict[str, Any] = field(default_factory=dict)
 
-    # List[ForwardPartitionContext] / List[BackwardPartitionContext] from
-    # overlap_dist, one entry per sharding group.
+    # Partition contexts from overlap_dist, one entry per sharding type.
     pec_forward_ctxs: Dict[str, Any] = field(default_factory=dict)
     pec_backward_ctxs: Dict[str, Any] = field(default_factory=dict)
 
-    # OL/NOL output-dist awaitables from compute (List per sharding group),
+    # Forward overlap_dist awaitables are waited before this batch's NOL lookup.
+    pec_forward_awaitables: Dict[str, Any] = field(default_factory=dict)
+
+    # Backward overlap_dist awaitables are waited after model forward, before
+    # the next batch's forward overlap results and gradient re-splitting.
+    pec_backward_awaitables: Dict[str, Any] = field(default_factory=dict)
+
+    # OL/NOL output-dist awaitables from compute (List per sharding type),
     # consumed by merge in forward.
     pec_ol_awaitables: Dict[str, Any] = field(default_factory=dict)
     pec_nol_awaitables: Dict[str, Any] = field(default_factory=dict)
