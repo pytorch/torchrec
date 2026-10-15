@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.distributed as dist
@@ -31,6 +32,124 @@ class Permute1DSparseDataTest(unittest.TestCase):
     def tearDownClass(cls) -> None:
         if dist.is_initialized():
             dist.destroy_process_group()
+
+    def _check_tpu_backward(
+        self, lengths: torch.Tensor, permute: torch.Tensor, values: torch.Tensor
+    ) -> None:
+        if not tpu_is_available():
+            self.skipTest("requires an attached TPU")
+        from torchrec.experimental.torch_tpu.pallas import dispatcher, impl
+
+        _ = impl
+        if not dist.is_initialized():
+            dist.init_process_group(backend="tpu_dist")
+
+        output_size = int(lengths[permute.long()].sum().item())
+        expected_lengths, expected_values, _ = torch.ops.fbgemm.permute_1D_sparse_data(
+            permute, lengths, values.flatten(), None, output_size
+        )
+        reference_input = values.detach().clone().requires_grad_(True)
+        _, reference_output, _ = torch.ops.fbgemm.permute_2D_sparse_data(
+            permute, lengths.view(-1, 1), reference_input.flatten(), None, output_size
+        )
+        generator = torch.Generator().manual_seed(42)
+        grad_output = torch.randn(output_size, generator=generator, dtype=values.dtype)
+        reference_output.backward(grad_output)
+
+        device = torch.device("tpu")
+        actual_input = values.detach().to(device).requires_grad_(True)
+        with (
+            patch.object(
+                dispatcher,
+                "_permute_1d_sparse_data",
+                wraps=dispatcher._permute_1d_sparse_data,
+            ) as forward,
+            patch.object(
+                dispatcher,
+                "_permute_1d_sparse_data_bwd",
+                wraps=dispatcher._permute_1d_sparse_data_bwd,
+            ) as backward,
+        ):
+            actual_lengths, actual_values, actual_weights = (
+                torch.ops.fbgemm.permute_1D_sparse_data(
+                    permute.to(device),
+                    lengths.to(device),
+                    actual_input.flatten(),
+                    None,
+                    output_size,
+                )
+            )
+            self.assertTrue(actual_values.requires_grad)
+            actual_values.backward(grad_output.to(device))
+            forward.assert_called_once()
+            backward.assert_called_once()
+
+        torch.testing.assert_close(actual_lengths.cpu(), expected_lengths)
+        torch.testing.assert_close(actual_values.detach().cpu(), expected_values)
+        self.assertIsNone(actual_weights)
+        self.assertIsNotNone(actual_input.grad)
+        assert actual_input.grad is not None
+        torch.testing.assert_close(actual_input.grad.cpu(), reference_input.grad)
+
+    def test_tpu_backward_cases(self) -> None:
+        if not tpu_is_available():
+            self.skipTest("requires an attached TPU")
+        cases = (
+            ("identity", [0, 1, 15, 16, 17, 31, 32, 33], list(range(8))),
+            ("reverse", [0, 1, 15, 16, 17, 31, 32, 33], list(reversed(range(8)))),
+            ("cycle", [4, 1, 3, 2], [2, 0, 3, 1]),
+            ("empty_values", [0, 0, 0], [2, 0, 1]),
+            ("no_segments", [], []),
+        )
+        generator = torch.Generator().manual_seed(0)
+        for name, lengths, permute in cases:
+            with self.subTest(case=name):
+                self._check_tpu_backward(
+                    torch.tensor(lengths, dtype=torch.int32),
+                    torch.tensor(permute, dtype=torch.int32),
+                    torch.randn(sum(lengths), generator=generator),
+                )
+
+    def test_tpu_backward_randomized(self) -> None:
+        if not tpu_is_available():
+            self.skipTest("requires an attached TPU")
+        generator = torch.Generator().manual_seed(1)
+        for num_segments, max_length in ((7, 17), (131, 65)):
+            with self.subTest(num_segments=num_segments):
+                lengths = torch.randint(
+                    0,
+                    max_length + 1,
+                    (num_segments,),
+                    dtype=torch.int32,
+                    generator=generator,
+                )
+                lengths[0] = 0
+                lengths[-1] = max_length
+                permute = torch.randperm(
+                    num_segments,
+                    dtype=torch.int32,
+                    generator=generator,
+                )
+                self._check_tpu_backward(
+                    lengths,
+                    permute,
+                    torch.randn(int(lengths.sum().item()), generator=generator),
+                )
+
+    def test_tpu_vbe_backward(self) -> None:
+        counts = [[2, 2], [0, 0], [1, 1]]
+        dimension = 16
+        lengths = [count * dimension for feature in counts for count in feature]
+        order = [feature * 2 + rank for rank in range(2) for feature in range(3)]
+        values = torch.randn(
+            (sum(lengths) // dimension, dimension),
+            generator=torch.Generator().manual_seed(3),
+        )
+        self._check_tpu_backward(
+            torch.tensor(lengths, dtype=torch.int32),
+            torch.tensor(order, dtype=torch.int32),
+            values,
+        )
 
     def test_with_duplicates_and_weights(self) -> None:
         kjt = KeyedJaggedTensor.from_lengths_sync(
@@ -66,7 +185,7 @@ class Permute1DSparseDataTest(unittest.TestCase):
 
         device = torch.device("tpu")
         lengths = torch.tensor([2, 0, 3, 1], dtype=torch.int32, device=device)
-        permute = torch.tensor([2, 0, 2, 3], dtype=torch.int32, device=device)
+        permute = torch.tensor([2, 0, 3, 1], dtype=torch.int32, device=device)
         values = torch.tensor(
             [10.0, 11.0, 20.0, 21.0, 22.0, 30.0],
             device=device,
@@ -79,22 +198,20 @@ class Permute1DSparseDataTest(unittest.TestCase):
             values=values,
             stride_per_key_per_rank=[[1], [1], [1], [1]],
         )
-        output = kjt.permute([2, 0, 2, 3], permute)
+        output = kjt.permute([2, 0, 3, 1], permute)
         torch.testing.assert_close(
-            output.lengths().cpu(), torch.tensor([3, 2, 3, 1], dtype=torch.int32)
+            output.lengths().cpu(), torch.tensor([3, 2, 1, 0], dtype=torch.int32)
         )
         torch.testing.assert_close(
             output.values().detach().cpu(),
-            torch.tensor([20.0, 21.0, 22.0, 10.0, 11.0, 20.0, 21.0, 22.0, 30.0]),
+            torch.tensor([20.0, 21.0, 22.0, 10.0, 11.0, 30.0]),
         )
         self.assertIsNone(output.weights_or_none())
 
         output.values().sum().backward()
         self.assertIsNotNone(values.grad)
         assert values.grad is not None
-        torch.testing.assert_close(
-            values.grad.cpu(), torch.tensor([1.0, 1.0, 2.0, 2.0, 2.0, 1.0])
-        )
+        torch.testing.assert_close(values.grad.cpu(), torch.ones(6))
 
     def _assert_tpu_matches_fbgemm_cpu(
         self,

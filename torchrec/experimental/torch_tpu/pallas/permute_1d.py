@@ -85,6 +85,9 @@ def permute_1d_sparse_data_sc(
     if permuted_lengths_sum is None:
         raise ValueError("Pallas requires a static permuted_lengths_sum")
 
+    if permuted_lengths_sum == 0:
+        return lengths[permute], jnp.empty((0,), dtype=indices.dtype)
+
     # Typical sparse-core subcore information
     sc = pltpu.get_tpu_info().sparse_core  # pyrefly: ignore [missing-attribute]
     mesh = plsc.VectorSubcoreMesh(
@@ -225,3 +228,24 @@ def permute_1d_sparse_data_sc(
         _inner()
 
     return permuted_lengths, _kernel(permute, indices, input_offsets, output_offsets)
+
+
+@jax.jit
+def permute_1d_sparse_data_backward_sc(
+    grad_output: jax.Array,
+    permute: jax.Array,
+    permuted_lengths: jax.Array,
+) -> jax.Array:
+    """Undo a full segment permutation using the forward SparseCore kernel.
+
+    ``permute`` must select every input segment exactly once.
+    """
+    inverse_permute = jnp.argsort(permute).astype(jnp.int32)
+    _, grad_input = permute_1d_sparse_data_sc(
+        permute=inverse_permute,
+        lengths=permuted_lengths,
+        indices=grad_output,
+        weights=None,
+        permuted_lengths_sum=grad_output.size,
+    )
+    return grad_input

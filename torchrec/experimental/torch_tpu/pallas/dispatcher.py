@@ -25,6 +25,30 @@ _permute_1d_sparse_data = pallas.jax_op(
     "torchrec_pallas::permute_1d_sparse_data",
     permute_1d.permute_1d_sparse_data_sc,
 )
+_permute_1d_sparse_data_bwd = pallas.jax_op(
+    "torchrec_pallas::permute_1d_sparse_data_backward",
+    permute_1d.permute_1d_sparse_data_backward_sc,
+)
+
+
+def _permute_1d_setup_context(ctx, inputs, output):
+    ctx.save_for_backward(inputs[0], output[0])
+    ctx.mark_non_differentiable(output[0])
+
+
+def _permute_1d_backward(ctx, _grad_lengths, grad_output):
+    permute, permuted_lengths = ctx.saved_tensors
+    grad_input = _permute_1d_sparse_data_bwd(
+        grad_output=grad_output.contiguous(),
+        permute=permute,
+        permuted_lengths=permuted_lengths,
+    )
+    return None, None, grad_input, None, None
+
+
+_permute_1d_sparse_data.register_autograd(
+    _permute_1d_backward, setup_context=_permute_1d_setup_context
+)
 lib = torch.library.Library("fbgemm", "IMPL")
 
 
@@ -53,26 +77,6 @@ def permute_1D_sparse_data(
 ):
     # TODO: Re-evaluate the int32 path that is used.
     if permuted_lengths_sum is not None and weights is None:
-        if indices.requires_grad:
-            cpu_permute = permute.to("cpu")
-            cpu_lengths = lengths.to("cpu")
-            source = torch.arange(indices.numel(), dtype=torch.int64)
-            permuted_lengths, source_indices, _ = (
-                torch.ops.fbgemm.permute_1D_sparse_data(
-                    cpu_permute,
-                    cpu_lengths,
-                    source,
-                    None,
-                    permuted_lengths_sum,
-                )
-            )
-            permuted_indices = indices.to("cpu").index_select(0, source_indices.long())
-            return (
-                permuted_lengths.to(lengths.device),
-                permuted_indices.to(indices.device),
-                None,
-            )
-
         indices = indices.to(torch.int32) if indices.dtype == torch.int64 else indices
         permuted_lengths, permuted_indices = _permute_1d_sparse_data(
             permute=permute.to(torch.int32),
