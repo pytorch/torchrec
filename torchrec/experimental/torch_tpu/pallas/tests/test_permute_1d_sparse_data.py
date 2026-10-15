@@ -96,6 +96,125 @@ class Permute1DSparseDataTest(unittest.TestCase):
             values.grad.cpu(), torch.tensor([1.0, 1.0, 2.0, 2.0, 2.0, 1.0])
         )
 
+    def _assert_tpu_matches_fbgemm_cpu(
+        self,
+        lengths: torch.Tensor,
+        permute: torch.Tensor,
+        values: torch.Tensor,
+    ) -> None:
+        permuted_lengths_sum = int(lengths[permute.long()].sum().item())
+        expected_lengths, expected_values, expected_weights = (
+            torch.ops.fbgemm.permute_1D_sparse_data(
+                permute,
+                lengths,
+                values,
+                None,
+                permuted_lengths_sum,
+            )
+        )
+
+        device = torch.device("tpu")
+        actual_lengths, actual_values, actual_weights = (
+            torch.ops.fbgemm.permute_1D_sparse_data(
+                permute.to(device),
+                lengths.to(device),
+                values.to(device),
+                None,
+                permuted_lengths_sum,
+            )
+        )
+
+        torch.testing.assert_close(actual_lengths.cpu(), expected_lengths)
+        torch.testing.assert_close(actual_values.cpu(), expected_values)
+        self.assertIsNone(expected_weights)
+        self.assertIsNone(actual_weights)
+
+    def test_permute_1d_randomized_matches_fbgemm_cpu(self) -> None:
+        if not tpu_is_available():
+            self.skipTest("requires an attached TPU")
+        from torchrec.experimental.torch_tpu.pallas import (  # noqa: F401
+            dispatcher,
+            impl,
+        )
+
+        if not dist.is_initialized():
+            dist.init_process_group(backend="tpu_dist")
+
+        generator = torch.Generator().manual_seed(0)
+        for num_segments, max_length, num_outputs in (
+            (1, 1, 1),
+            (7, 17, 11),
+            (19, 33, 23),
+        ):
+            with self.subTest(
+                num_segments=num_segments,
+                max_length=max_length,
+                num_outputs=num_outputs,
+            ):
+                lengths = torch.randint(
+                    0,
+                    max_length + 1,
+                    (num_segments,),
+                    dtype=torch.int32,
+                    generator=generator,
+                )
+                lengths[0] = 0
+                lengths[-1] = max_length
+                permute = torch.randint(
+                    0,
+                    num_segments,
+                    (num_outputs,),
+                    dtype=torch.int32,
+                    generator=generator,
+                )
+                permute[0] = num_segments - 1
+                values = torch.randint(
+                    0,
+                    1_000_000,
+                    (int(lengths.sum().item()),),
+                    dtype=torch.int32,
+                    generator=generator,
+                )
+                self._assert_tpu_matches_fbgemm_cpu(lengths, permute, values)
+
+    def test_permute_1d_edge_cases_match_fbgemm_cpu(self) -> None:
+        if not tpu_is_available():
+            self.skipTest("requires an attached TPU")
+        from torchrec.experimental.torch_tpu.pallas import (  # noqa: F401
+            dispatcher,
+            impl,
+        )
+
+        if not dist.is_initialized():
+            dist.init_process_group(backend="tpu_dist")
+
+        generator = torch.Generator().manual_seed(1)
+        cases = (
+            (
+                "empty_values",
+                torch.tensor([0, 0, 0], dtype=torch.int32),
+                torch.tensor([2, 0, 1], dtype=torch.int32),
+            ),
+            (
+                "empty_and_duplicate_segments",
+                torch.tensor([0, 1, 0, 17], dtype=torch.int32),
+                torch.tensor([3, 0, 3, 2, 1], dtype=torch.int32),
+            ),
+            (
+                "tile_boundaries",
+                torch.tensor([1, 15, 16, 17, 31, 32, 33], dtype=torch.int32),
+                torch.tensor([6, 0, 3, 2, 5, 1, 4], dtype=torch.int32),
+            ),
+        )
+        for name, lengths, permute in cases:
+            with self.subTest(name=name):
+                values = torch.randn(
+                    int(lengths.sum().item()),
+                    dtype=torch.float32,
+                    generator=generator,
+                )
+                self._assert_tpu_matches_fbgemm_cpu(lengths, permute, values)
+
 
 if __name__ == "__main__":
     unittest.main()
