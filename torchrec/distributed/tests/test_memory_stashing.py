@@ -7,6 +7,8 @@
 
 # pyre-strict
 
+import ast
+import inspect
 import json
 import math
 import os
@@ -22,6 +24,7 @@ from hypothesis import given, settings
 from torch import distributed as dist, nn
 from torch.distributed._shard.sharded_tensor import init_from_local_shards, Shard
 from torch.distributed._tensor import DeviceMesh, distribute_tensor, DTensor, Replicate
+from torchrec.distributed import memory_stashing
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
     GroupedEmbeddingConfig,
@@ -595,6 +598,36 @@ class TestStashCycleSummary(unittest.TestCase):
         summaries = self._logged("ems_stash_cycle_summary")
         self.assertEqual(len(summaries), 2)
         self.assertEqual(summaries[1]["stashed_bytes"], str(10 * 64 * 4))
+
+    def test_reset_lets_an_identical_summary_log_again(self) -> None:
+        weights = torch.ones((100, 64), device=self.device)
+        MemoryStashingManager.stash_embedding_weights(self._lookup(weights))
+        MemoryStashingManager.restore_embedding_weights()
+
+        MemoryStashingManager.reset()
+        MemoryStashingManager.set_streams(torch.cuda.Stream(device=self.device))
+        MemoryStashingManager.stash_embedding_weights(self._lookup(weights))
+        MemoryStashingManager.restore_embedding_weights()
+
+        self.assertEqual(len(self._logged("ems_stash_cycle_summary")), 2)
+
+    def test_failing_emit_does_not_fail_the_restore(self) -> None:
+        weights = torch.ones((100, 64), device=self.device)
+        original = weights.clone()
+
+        def _fail_summary(event_name: str, *args: Any, **kwargs: Any) -> None:
+            if event_name == "ems_stash_cycle_summary":
+                raise RuntimeError("logger down")
+
+        self.log_ems_event.side_effect = _fail_summary
+        result = MemoryStashingManager.stash_embedding_weights(self._lookup(weights))
+        assert result is not None
+
+        MemoryStashingManager.restore_embedding_weights()
+        result[0](None)
+
+        self.assertEqual(len(self._logged("ems_stash_cycle_summary")), 1)
+        torch.testing.assert_close(weights, original)
 
     def test_delayed_stash_is_tallied_when_executed(self) -> None:
         MemoryStashingManager.set_delay_stash(True)
@@ -2190,6 +2223,184 @@ class TestResolveStashWeights(unittest.TestCase):
         # Back to config fallback after reset.
         self.assertTrue(
             MemoryStashingManager.resolve_stash_weights("a", self._config(True))
+        )
+
+
+class TestNoPerIterationLogging(unittest.TestCase):
+    """Steady-state stash/restore cycles must not log.
+
+    Every call here runs once per iteration (per lookup, per slice) on the
+    training thread, mostly inside forward/backward hooks. Logging from them
+    on every iteration stalls the CPU that launches the next kernels: an
+    uncapped ``logger.info`` on the stash path once added 30+ ms per
+    iteration. Events are allowed only while warming up or when a value
+    changes, through the bounded helpers.
+    """
+
+    _NUM_STEADY_CYCLES = 5
+
+    def setUp(self) -> None:
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA not available")
+        self.device = torch.device("cuda:0")
+        MemoryStashingManager.set_streams(torch.cuda.Stream(device=self.device))
+        patcher = patch("torchrec.distributed.memory_stashing.log_ems_event")
+        self.log_ems_event: Mock = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self) -> None:
+        MemoryStashingManager.reset()
+
+    def _lookup(self, weights: torch.Tensor) -> Mock:
+        inner = Mock()
+        inner.weights_dev = weights
+        emb_module = Mock()
+        emb_module._emb_module = inner
+        lookup = Mock(spec=["_emb_modules"])
+        lookup._emb_modules = [emb_module]
+        return lookup
+
+    def _optimizer(self, optimizer_cls: type) -> torch.optim.Optimizer:
+        model = nn.Linear(512, 512).to(self.device)
+        optimizer = optimizer_cls(model.parameters(), lr=0.001)
+        model(torch.randn(8, 512, device=self.device)).sum().backward()
+        optimizer.step()
+        return optimizer
+
+    def _assert_steady_state_is_silent(self, cycle: Any) -> None:
+        cycle()  # warm-up: first-cycle events are expected.
+        self.log_ems_event.reset_mock()
+        with self.assertNoLogs("torchrec.distributed.memory_stashing", level="INFO"):
+            for _ in range(self._NUM_STEADY_CYCLES):
+                cycle()
+        self.assertEqual(self.log_ems_event.call_args_list, [])
+
+    def test_embedding_stash_restore(self) -> None:
+        lookups = [
+            self._lookup(torch.ones((100, 64), device=self.device)),
+            self._lookup(torch.ones((50, 32), device=self.device)),
+        ]
+
+        def cycle() -> None:
+            for lookup in lookups:
+                MemoryStashingManager.stash_embedding_weights(lookup, caller="EBC")
+            MemoryStashingManager.restore_embedding_weights()
+
+        self._assert_steady_state_is_silent(cycle)
+
+    def test_delayed_embedding_stash_restore(self) -> None:
+        MemoryStashingManager.set_delay_stash(True)
+        lookup = self._lookup(torch.ones((100, 64), device=self.device))
+
+        def cycle() -> None:
+            MemoryStashingManager.stash_embedding_weights(lookup)
+            MemoryStashingManager.execute_pending_stashes()
+            MemoryStashingManager.restore_embedding_weights()
+
+        self._assert_steady_state_is_silent(cycle)
+
+    def test_optimizer_stash_restore(self) -> None:
+        optimizer = self._optimizer(torch.optim.Adam)
+
+        def cycle() -> None:
+            MemoryStashingManager.stash_optimizer_state(optimizer)
+            MemoryStashingManager.restore_optimizer_state()
+
+        self._assert_steady_state_is_silent(cycle)
+
+    def test_sliced_optimizer_stash_restore(self) -> None:
+        optimizer = self._optimizer(torch.optim.Adam)
+
+        def cycle() -> None:
+            MemoryStashingManager.stash_optimizer_state(optimizer, num_slices=2)
+            MemoryStashingManager.restore_optimizer_state_next()
+            MemoryStashingManager.restore_optimizer_state_next()
+
+        self._assert_steady_state_is_silent(cycle)
+
+
+# Functions in memory_stashing.py that run once per process, not per iteration.
+_SETUP_FUNCTIONS: frozenset[str] = frozenset(
+    {"set_streams", "reset", "log_memory_stashing_config", "_log_stashing_config"}
+)
+# The only functions allowed to emit events; each bounds how often it logs.
+_BOUNDED_EMITTERS: frozenset[str] = frozenset({"_log_once", "_log_cycle_summary"})
+_EAGER_LOGGER_METHODS: frozenset[str] = frozenset(
+    {"info", "warning", "warn", "error", "exception", "critical", "log"}
+)
+
+
+def _hot_path_logging_violations(source: str) -> List[str]:
+    """Return logging calls in ``source`` that could run on every iteration.
+
+    Every function and method counts as hot path unless it is listed in
+    ``_SETUP_FUNCTIONS`` or ``_BOUNDED_EMITTERS``, so a newly added method is
+    checked by default. Flags stdlib logger calls at INFO and above,
+    ``capped_logger`` calls, ``print``, direct ``log_*`` event helpers, and
+    ``logger.debug`` with an f-string (formatted even when DEBUG is off).
+    """
+    tree = ast.parse(source)
+    functions: List[ast.FunctionDef] = []
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            functions.append(node)
+        elif isinstance(node, ast.ClassDef):
+            functions.extend(n for n in node.body if isinstance(n, ast.FunctionDef))
+
+    violations: List[str] = []
+    for function in functions:
+        if function.name in _SETUP_FUNCTIONS | _BOUNDED_EMITTERS:
+            continue
+        for call in ast.walk(function):
+            if not isinstance(call, ast.Call):
+                continue
+            func = call.func
+            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                owner, method = func.value.id, func.attr
+                eager = owner == "capped_logger" or (
+                    owner in ("logger", "logging") and method in _EAGER_LOGGER_METHODS
+                )
+                eager_debug = method == "debug" and any(
+                    isinstance(arg, ast.JoinedStr) for arg in call.args
+                )
+                if eager or eager_debug:
+                    violations.append(f"{function.name}:{call.lineno} {owner}.{method}")
+            elif isinstance(func, ast.Name) and (
+                func.id == "print" or func.id.startswith("log_")
+            ):
+                violations.append(f"{function.name}:{call.lineno} {func.id}")
+    return violations
+
+
+class TestHotPathLoggingGuard(unittest.TestCase):
+    """Statically keep per-iteration logging out of memory_stashing.py."""
+
+    def test_memory_stashing_has_no_hot_path_logging(self) -> None:
+        source = inspect.getsource(memory_stashing)
+        self.assertEqual(
+            _hot_path_logging_violations(source),
+            [],
+            "Stash/restore code runs every iteration. Emit events through "
+            "_log_once / _log_cycle_summary, or use logger.debug with lazy "
+            "%-style arguments.",
+        )
+
+    def test_guard_flags_the_per_call_logger_pattern(self) -> None:
+        source = """
+class MemoryStashingManager:
+    def stash_embedding_weights(cls, lookup):
+        logger.info(f"collected {len(lookup)} tensors")
+        capped_logger.info("collected")
+        log_ems_event("ems_collected", {})
+        logger.debug(f"cheap? {lookup}")
+        logger.debug("lazy %s", lookup)
+
+    def set_streams(cls):
+        logger.info("streams initialized")
+"""
+        self.assertEqual(
+            [v.split(" ")[1] for v in _hot_path_logging_violations(source)],
+            ["logger.info", "capped_logger.info", "log_ems_event", "logger.debug"],
         )
 
 
