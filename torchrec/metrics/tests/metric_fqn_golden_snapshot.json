@@ -192,9 +192,6 @@
       "_metrics_computations.0.weighted_num_samples"
     ]
   },
-  "SessionPairwiseAUCMetric_UNFUSED_TASKS_COMPUTATION": {
-    "state_dict_keys": []
-  },
   "ServingCalibrationMetric_UNFUSED_TASKS_COMPUTATION": {
     "state_dict_keys": [
       "_metrics_computations.0.calibration_denom",
@@ -210,6 +207,9 @@
       "_metrics_computations.0.pos_labels",
       "_metrics_computations.0.weighted_num_samples"
     ]
+  },
+  "SessionPairwiseAUCMetric_UNFUSED_TASKS_COMPUTATION": {
+    "state_dict_keys": []
   },
   "SumWeightsMetric_UNFUSED_TASKS_COMPUTATION": {
     "state_dict_keys": [
@@ -316,6 +316,12 @@
       "embeddings.table1.weight"
     ]
   },
+  "feature_processed_embedding_bag_collection": {
+    "state_dict_keys": [
+      "_embedding_bag_collection.embedding_bags.table1.weight",
+      "_feature_processors.position_weights.feature1"
+    ]
+  },
   "hash_zch_managed_collision_module": {
     "state_dict_keys": [
       "_hash_zch_bucket",
@@ -400,6 +406,38 @@
       "bias.1"
     ]
   },
+  "managed_collision_collection": {
+    "state_dict_keys": [
+      "_managed_collision_modules.table1._current_iter_tensor",
+      "_managed_collision_modules.table1._mch_counts",
+      "_managed_collision_modules.table1._mch_last_access_iter",
+      "_managed_collision_modules.table1._mch_remapped_ids_mapping",
+      "_managed_collision_modules.table1._mch_sorted_raw_ids",
+      "_managed_collision_modules.table1._output_segments_tensor"
+    ]
+  },
+  "managed_collision_embedding_bag_collection": {
+    "state_dict_keys": [
+      "_embedding_module.embedding_bags.table1.weight",
+      "_managed_collision_collection._managed_collision_modules.table1._current_iter_tensor",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_counts",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_last_access_iter",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_remapped_ids_mapping",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_sorted_raw_ids",
+      "_managed_collision_collection._managed_collision_modules.table1._output_segments_tensor"
+    ]
+  },
+  "managed_collision_embedding_collection": {
+    "state_dict_keys": [
+      "_embedding_module.embeddings.table1.weight",
+      "_managed_collision_collection._managed_collision_modules.table1._current_iter_tensor",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_counts",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_last_access_iter",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_remapped_ids_mapping",
+      "_managed_collision_collection._managed_collision_modules.table1._mch_sorted_raw_ids",
+      "_managed_collision_collection._managed_collision_modules.table1._output_segments_tensor"
+    ]
+  },
   "mch_managed_collision_module": {
     "state_dict_keys": [
       "_current_iter_tensor",
@@ -443,6 +481,11 @@
     "state_dict_keys": [
       "_linear.bias",
       "_linear.weight"
+    ]
+  },
+  "position_weighted_module_collection": {
+    "state_dict_keys": [
+      "position_weights.feature1"
     ]
   },
   "rec_metric_module": {
