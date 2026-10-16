@@ -36,9 +36,11 @@ from torchrec.distributed._collective_tag import _collective_tag_from
 from torchrec.distributed.dist_data import (
     _check_pg_for_nccl_error,
     _get_recat,
+    _get_recat_data_cached,
     JaggedTensorAllToAll,
     KJTAllToAll,
     KJTAllToAllSplitsAwaitable,
+    KJTAllToAllTensorsAwaitable,
     PooledEmbeddingsAllGather,
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
@@ -1581,6 +1583,229 @@ class GetRecatOverflowTest(unittest.TestCase):
         )
         self.assertIsNotNone(result)
         self.assertEqual(result.dtype, torch.int32)
+
+    def test_get_recat_returns_fresh_tensor_by_default(self) -> None:
+        first = _get_recat(
+            local_split=2,
+            num_splits=4,
+            stagger=1,
+            device=torch.device("cpu"),
+        )
+        second = _get_recat(
+            local_split=2,
+            num_splits=4,
+            stagger=1,
+            device=torch.device("cpu"),
+        )
+
+        self.assertIsNot(first, second)
+        self.assertTrue(torch.equal(none_throws(first), none_throws(second)))
+
+    @given(
+        local_split=st.integers(min_value=0, max_value=16),
+        split_config=st.sampled_from(
+            [
+                (num_splits, stagger)
+                for num_splits in range(1, 17)
+                for stagger in range(1, num_splits + 1)
+                if num_splits % stagger == 0
+            ]
+        ),
+        uniform_batch_size=st.one_of(
+            st.none(),
+            st.integers(min_value=0, max_value=16),
+        ),
+        device=st.sampled_from([None, torch.device("cpu")]),
+    )
+    @settings(max_examples=50, deadline=None)
+    def test_cached_get_recat_matches_uncached(
+        self,
+        local_split: int,
+        split_config: Tuple[int, int],
+        uniform_batch_size: Optional[int],
+        device: Optional[torch.device],
+    ) -> None:
+        num_splits, stagger = split_config
+        batch_size_per_rank = (
+            None if uniform_batch_size is None else [uniform_batch_size] * num_splits
+        )
+        _get_recat_data_cached.cache_clear()
+        try:
+            uncached = _get_recat(
+                local_split=local_split,
+                num_splits=num_splits,
+                stagger=stagger,
+                device=device,
+                batch_size_per_rank=batch_size_per_rank,
+            )
+            first_cached = _get_recat(
+                local_split=local_split,
+                num_splits=num_splits,
+                stagger=stagger,
+                device=device,
+                batch_size_per_rank=batch_size_per_rank,
+                cached=True,
+            )
+            second_cached = _get_recat(
+                local_split=local_split,
+                num_splits=num_splits,
+                stagger=stagger,
+                device=device,
+                batch_size_per_rank=batch_size_per_rank,
+                cached=True,
+            )
+
+            if uncached is None:
+                self.assertIsNone(first_cached)
+            else:
+                self.assertTrue(torch.equal(uncached, none_throws(first_cached)))
+            self.assertEqual(id(first_cached), id(second_cached))
+        finally:
+            _get_recat_data_cached.cache_clear()
+
+    def test_cached_recat_unchanged_after_dist_init(self) -> None:
+        _get_recat_data_cached.cache_clear()
+        self.addCleanup(_get_recat_data_cached.cache_clear)
+        _, cached_recat = _get_recat_data_cached(
+            2,
+            2,
+            1,
+            torch.device("cpu"),
+        )
+        original_recat = cached_recat.clone()
+        input = KeyedJaggedTensor(
+            keys=[],
+            values=torch.empty(0, dtype=torch.int64),
+            lengths=torch.empty(0, dtype=torch.int32),
+        )
+        pg_mock = MagicMock()
+        pg_mock.rank.return_value = 0
+        pg_mock.size.return_value = 2
+        input_tensors = [
+            torch.ones(4, dtype=torch.int32),
+            torch.tensor([10, 20, 30, 40], dtype=torch.int64),
+        ]
+
+        def copy_all_to_all(
+            *, output: torch.Tensor, input: torch.Tensor, **kwargs: object
+        ) -> MagicMock:
+            output.copy_(input)
+            return MagicMock()
+
+        with patch(
+            "torch._utils_internal.justknobs_check",
+            return_value=True,
+        ), patch(
+            "torchrec.distributed.dist_data.dist.all_to_all_single",
+            side_effect=copy_all_to_all,
+        ), patch(
+            "torchrec.distributed.dist_data.dist.get_rank",
+            return_value=0,
+        ):
+            awaitable = KJTAllToAllTensorsAwaitable(
+                pg=cast(dist.ProcessGroup, pg_mock),
+                input=input,
+                splits=[2, 2],
+                input_splits=[[2, 2], [2, 2]],
+                output_splits=[[2, 2], [2, 2]],
+                input_tensors=input_tensors,
+                labels=["lengths", "values"],
+                keys=["feature_0", "feature_1"],
+                device=torch.device("cpu"),
+                stagger=1,
+                stride_per_rank=[1, 1],
+            )
+
+        exposed_recat = none_throws(awaitable._recat)
+        self.assertIsNot(exposed_recat, cached_recat)
+        exposed_recat.zero_()
+
+        output = awaitable._wait_impl()
+
+        self.assertTrue(torch.equal(cached_recat, original_recat))
+        self.assertTrue(
+            torch.equal(
+                output.values(),
+                torch.tensor([10, 30, 20, 40], dtype=torch.int64),
+            )
+        )
+
+    def test_get_recat_logs_tensor_creation_failure(self) -> None:
+        with patch(
+            "torchrec.distributed.dist_data.torch.tensor",
+            side_effect=RuntimeError("allocation failed"),
+        ), self.assertRaisesRegex(RuntimeError, "allocation failed"), self.assertLogs(
+            level="ERROR"
+        ) as log:
+            _get_recat(
+                local_split=2,
+                num_splits=4,
+                stagger=1,
+                device=torch.device("cpu"),
+            )
+
+        self.assertEqual(len(log.records), 1)
+
+    def test_get_recat_normalizes_indexless_cuda_device_for_cache(self) -> None:
+        rank_zero_recat = torch.tensor([0], dtype=torch.int32)
+        rank_one_recat = torch.tensor([1], dtype=torch.int32)
+        pg_mock = MagicMock()
+        pg_mock.rank.return_value = 0
+        pg_mock.size.return_value = 1
+        input = KeyedJaggedTensor(
+            keys=[],
+            values=torch.empty(0, dtype=torch.int64),
+            lengths=torch.empty(0, dtype=torch.int32),
+        )
+        with patch(
+            "torchrec.distributed.dist_data._get_recat_data_cached",
+            side_effect=[
+                ((0,), rank_zero_recat),
+                ((1,), rank_one_recat),
+            ],
+        ) as get_recat_data, patch(
+            "torch.cuda.current_device",
+            side_effect=[0, 1],
+        ), patch(
+            "torch._utils_internal.justknobs_check",
+            return_value=True,
+        ):
+            rank_zero_result = KJTAllToAllTensorsAwaitable(
+                pg=cast(dist.ProcessGroup, pg_mock),
+                input=input,
+                splits=[2, 2, 2, 2],
+                input_splits=[],
+                output_splits=[],
+                input_tensors=[],
+                labels=[],
+                keys=[],
+                device=torch.device("cuda"),
+                stagger=1,
+                stride_per_rank=None,
+            )._recat
+            rank_one_result = KJTAllToAllTensorsAwaitable(
+                pg=cast(dist.ProcessGroup, pg_mock),
+                input=input,
+                splits=[2, 2, 2, 2],
+                input_splits=[],
+                output_splits=[],
+                input_tensors=[],
+                labels=[],
+                keys=[],
+                device=torch.device("cuda"),
+                stagger=1,
+                stride_per_rank=None,
+            )._recat
+
+        self.assertTrue(torch.equal(none_throws(rank_zero_result), rank_zero_recat))
+        self.assertTrue(torch.equal(none_throws(rank_one_result), rank_one_recat))
+        self.assertEqual(
+            get_recat_data.call_args_list,
+            [
+                unittest.mock.call(2, 4, 1, torch.device("cuda", 0)),
+                unittest.mock.call(2, 4, 1, torch.device("cuda", 1)),
+            ],
+        )
 
 
 class SplitsAllToAllCollectiveTagTest(MultiProcessTestBase):
