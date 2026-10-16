@@ -21,7 +21,6 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SplitTableBatchedEmbeddingBagsCodegen,
 )
 from torch import nn
-from torch._subclasses.fake_tensor import FakeTensor
 from torch.autograd.profiler import record_function
 from torch.distributed.algorithms.ddp_comm_hooks import (
     default_hooks as ddp_default_hooks,
@@ -641,23 +640,12 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     def _init_parameters(self, module: nn.Module) -> None:
         @torch.no_grad()
         def init_parameters(module: nn.Module) -> None:
-            # Materialization must never run under a TorchDispatch mode: a
-            # leaked FakeTensorMode turns empty_like/zeros_like into silent
-            # FakeTensor factories, installing params with no real storage
-            # that later segfault compiled kernels.
-            # Also refuse to "materialize" params that are already fake.
+            # Disable TorchDispatch modes: a leaked FakeTensorMode would turn
+            # empty_like/zeros_like into silent FakeTensor factories.
             with _disable_current_modes():
                 # Allocate parameters and buffers if over 'meta' device.
                 has_meta_param = False
                 for name, param in module._parameters.items():
-                    if isinstance(param, FakeTensor):
-                        raise RuntimeError(
-                            "DistributedModelParallel._init_parameters found "
-                            f"parameter {type(module).__name__}.{name} "
-                            f"(shape={tuple(param.shape)}) already a "
-                            "FakeTensor; refusing to install fake params. "
-                            "Materialize outside any FakeTensorMode."
-                        )
                     if isinstance(param, torch.Tensor) and param.device.type == "meta":
                         module._parameters[name] = nn.Parameter(
                             torch.empty_like(param, device=self.device),
@@ -665,8 +653,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
                         )
                         has_meta_param = True
                 for name, buffer in module._buffers.items():
-                    if isinstance(buffer, torch.Tensor) and buffer.device.type == "meta":
-                        module._buffers[name] = torch.zeros_like(buffer, device=self.device)
+                    if (
+                        isinstance(buffer, torch.Tensor)
+                        and buffer.device.type == "meta"
+                    ):
+                        module._buffers[name] = torch.zeros_like(
+                            buffer, device=self.device
+                        )
 
             # Init parameters if at least one parameter is over 'meta' device.
             if has_meta_param and hasattr(module, "reset_parameters"):
