@@ -283,46 +283,56 @@ class MemoryStashingManager:
         Logged again only when the value changes, up to
         ``_CYCLE_SUMMARY_LOG_LIMIT`` times per process.
         """
-        with cls._cycle_lock:
-            tallies = cls._cycle_tallies.pop(use_case, None)
-            if not tallies:
-                return
-            signature = tuple(
-                sorted(
-                    (caller, t.stashed_bytes, t.num_tensors, t.num_stashes)
-                    for caller, t in tallies.items()
+        # Runs inside restore hooks, so a logging failure must not fail the restore.
+        try:
+            with cls._cycle_lock:
+                tallies = cls._cycle_tallies.pop(use_case, None)
+                if not tallies:
+                    return
+                signature = tuple(
+                    sorted(
+                        (caller, t.stashed_bytes, t.num_tensors, t.num_stashes)
+                        for caller, t in tallies.items()
+                    )
                 )
+                if cls._last_cycle_signatures.get(use_case) == signature:
+                    return
+                log_count = cls._cycle_summary_log_counts.get(use_case, 0)
+                if log_count >= _CYCLE_SUMMARY_LOG_LIMIT:
+                    return
+                # Recorded before emitting so that an emit that fails is not
+                # retried on every restore.
+                cls._last_cycle_signatures[use_case] = signature
+                cls._cycle_summary_log_counts[use_case] = log_count + 1
+            total_bytes = sum(t.stashed_bytes for t in tallies.values())
+            metadata = {
+                "use_case": use_case,
+                "stashed_bytes": str(total_bytes),
+                "stashed_gib": f"{total_bytes / 1024**3:.3f}",
+                "num_tensors": str(sum(t.num_tensors for t in tallies.values())),
+                "num_stashes": str(sum(t.num_stashes for t in tallies.values())),
+                "by_caller": json.dumps(
+                    {
+                        caller: {
+                            "stashed_bytes": t.stashed_bytes,
+                            "num_tensors": t.num_tensors,
+                            "num_stashes": t.num_stashes,
+                        }
+                        for caller, t in tallies.items()
+                    },
+                    sort_keys=True,
+                ),
+            }
+            technique, prefix = _use_case_technique(use_case)
+            log_ems_event(
+                f"{prefix}_stash_cycle_summary", metadata, technique=technique
             )
-            if cls._last_cycle_signatures.get(use_case) == signature:
-                return
-            log_count = cls._cycle_summary_log_counts.get(use_case, 0)
-            if log_count >= _CYCLE_SUMMARY_LOG_LIMIT:
-                return
-            # Recorded before emitting so that an emit that fails is not
-            # retried on every restore.
-            cls._last_cycle_signatures[use_case] = signature
-            cls._cycle_summary_log_counts[use_case] = log_count + 1
-        total_bytes = sum(t.stashed_bytes for t in tallies.values())
-        metadata = {
-            "use_case": use_case,
-            "stashed_bytes": str(total_bytes),
-            "stashed_gib": f"{total_bytes / 1024**3:.3f}",
-            "num_tensors": str(sum(t.num_tensors for t in tallies.values())),
-            "num_stashes": str(sum(t.num_stashes for t in tallies.values())),
-            "by_caller": json.dumps(
-                {
-                    caller: {
-                        "stashed_bytes": t.stashed_bytes,
-                        "num_tensors": t.num_tensors,
-                        "num_stashes": t.num_stashes,
-                    }
-                    for caller, t in tallies.items()
-                },
-                sort_keys=True,
-            ),
-        }
-        technique, prefix = _use_case_technique(use_case)
-        log_ems_event(f"{prefix}_stash_cycle_summary", metadata, technique=technique)
+        except Exception:
+            logger.warning(
+                "MemoryStashingManager: failed to log the %s cycle summary",
+                use_case,
+                exc_info=True,
+            )
 
     # DCP staging-boundary redirect map (criterion 1: no CUDA invalid-argument).
     # Maps a *freed* GPU StorageImpl identity (``untyped_storage()._cdata``) to
@@ -507,6 +517,8 @@ class MemoryStashingManager:
         cls._pending_stash_callbacks.clear()
         with cls._cycle_lock:
             cls._cycle_tallies.clear()
+            cls._last_cycle_signatures.clear()
+            cls._cycle_summary_log_counts.clear()
         cls._staged_storage_buffers.clear()
         cls._stashed_tables = None
         if cls._stash_executor is not None:
@@ -612,9 +624,9 @@ class MemoryStashingManager:
         """
         cls._log_cycle_summary("optimizer_state")
         if cls._optimizer_state_restore_callbacks:
-            logger.info(
-                "restore_optimizer_state_next: restoring one slice "
-                f"({len(cls._optimizer_state_restore_callbacks)} remaining)"
+            logger.debug(
+                "restore_optimizer_state_next: restoring one slice (%d remaining)",
+                len(cls._optimizer_state_restore_callbacks),
             )
             cls._optimizer_state_restore_callbacks.pop(0)(None, sync_event)
 
@@ -1342,9 +1354,12 @@ class MemoryStashingManager:
         # at progressively deeper backward FQNs -- spreading the H2D bandwidth and
         # deferring each slice's HBM allocation to a later point in backward.
         slices = _partition_tensors_into_slices(tensors, num_slices)
-        logger.info(
-            f"stash_optimizer_state: partitioned {len(tensors)} tensors into "
-            f"{len(slices)} slices (requested {num_slices})"
+        logger.debug(
+            "stash_optimizer_state: partitioned %d tensors into %d slices "
+            "(requested %d)",
+            len(tensors),
+            len(slices),
+            num_slices,
         )
         slice_awaits: List[Callable[[Optional[torch.Tensor]], None]] = []
         slice_restores: List[Callable[..., None]] = []
