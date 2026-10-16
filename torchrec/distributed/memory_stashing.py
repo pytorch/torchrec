@@ -226,7 +226,7 @@ class MemoryStashingManager:
     # Last tally logged per use case and how many times it was logged, so a
     # summary is re-logged only when its value changes. Runs on every restore,
     # so the unchanged case must stay a tuple comparison.
-    _last_cycle_signatures: Dict[str, Tuple[Tuple[str, int, int, int], ...]] = {}
+    _last_cycle_signatures: Dict[str, Tuple[Any, ...]] = {}
     _cycle_summary_log_counts: Dict[str, int] = {}
     # Trunk sizes (bytes) for the bulk copies, used as ``chunked_copy_``'s
     # ``chunk_size_bytes``. Embedding and optimizer stashing each get their own
@@ -240,6 +240,10 @@ class MemoryStashingManager:
     _optimizer_stash_chunk_size_bytes: int = _DEFAULT_CHUNK_SIZE_BYTES
     _optimizer_restore_chunk_size_bytes: int = _DEFAULT_CHUNK_SIZE_BYTES
     _stashed_tables: Optional[Set[str]] = None
+    # Optimizer stash settings reported in its cycle summary. ``stash_async``
+    # stays set once the threaded path has been used in this process.
+    _optimizer_num_slices: int = 1
+    _optimizer_stash_async: bool = False
 
     @classmethod
     def _log_once(
@@ -274,12 +278,37 @@ class MemoryStashingManager:
             tally.num_stashes += 1
 
     @classmethod
+    def _cycle_settings(cls, use_case: str) -> Tuple[Tuple[str, Any], ...]:
+        """The settings a use case's stashes ran with, for its cycle summary."""
+        if use_case == "embedding":
+            settings: Tuple[Tuple[str, Any], ...] = (
+                ("stash_chunk_size_bytes", cls._embedding_stash_chunk_size_bytes),
+                ("restore_chunk_size_bytes", cls._embedding_restore_chunk_size_bytes),
+                ("delay_stash", cls._delay_stash),
+            )
+            if cls._stashed_tables is None:
+                return settings + (("stash_selection", "per_table_flags"),)
+            return settings + (
+                ("stash_selection", "planner"),
+                ("num_planner_selected_tables", len(cls._stashed_tables)),
+            )
+        if use_case == "optimizer_state":
+            return (
+                ("stash_chunk_size_bytes", cls._optimizer_stash_chunk_size_bytes),
+                ("restore_chunk_size_bytes", cls._optimizer_restore_chunk_size_bytes),
+                ("num_slices", cls._optimizer_num_slices),
+                ("stash_async", cls._optimizer_stash_async),
+            )
+        return ()
+
+    @classmethod
     def _log_cycle_summary(cls, use_case: str) -> None:
         """Log this rank's total stashed volume for ``use_case`` and reset it.
 
         Emits ``ems_stash_cycle_summary`` (``oms_`` for optimizer state): the sum
         over every stash in the cycle
-        (all lookups, or all optimizer slices) plus a per-caller breakdown.
+        (all lookups, or all optimizer slices), a per-caller breakdown, and the
+        settings the stashes ran with (see ``_cycle_settings``).
         Logged again only when the value changes, up to
         ``_CYCLE_SUMMARY_LOG_LIMIT`` times per process.
         """
@@ -289,11 +318,15 @@ class MemoryStashingManager:
                 tallies = cls._cycle_tallies.pop(use_case, None)
                 if not tallies:
                     return
-                signature = tuple(
-                    sorted(
-                        (caller, t.stashed_bytes, t.num_tensors, t.num_stashes)
-                        for caller, t in tallies.items()
-                    )
+                settings = cls._cycle_settings(use_case)
+                signature = (
+                    tuple(
+                        sorted(
+                            (caller, t.stashed_bytes, t.num_tensors, t.num_stashes)
+                            for caller, t in tallies.items()
+                        )
+                    ),
+                    settings,
                 )
                 if cls._last_cycle_signatures.get(use_case) == signature:
                     return
@@ -323,6 +356,7 @@ class MemoryStashingManager:
                     sort_keys=True,
                 ),
             }
+            metadata.update({key: str(value) for key, value in settings})
             technique, prefix = _use_case_technique(use_case)
             log_ems_event(
                 f"{prefix}_stash_cycle_summary", metadata, technique=technique
@@ -519,6 +553,8 @@ class MemoryStashingManager:
             cls._cycle_tallies.clear()
             cls._last_cycle_signatures.clear()
             cls._cycle_summary_log_counts.clear()
+        cls._optimizer_num_slices = 1
+        cls._optimizer_stash_async = False
         cls._staged_storage_buffers.clear()
         cls._stashed_tables = None
         if cls._stash_executor is not None:
@@ -1318,6 +1354,7 @@ class MemoryStashingManager:
             - Supports nested structures like Shampoo's ShampooKroneckerFactors
         """
         # Collect all CUDA tensors from optimizer state
+        cls._optimizer_num_slices = num_slices
         tensors: List[torch.Tensor] = []
         for _param, state_dict in optimizer.state.items():
             if not isinstance(state_dict, dict):
@@ -1425,6 +1462,7 @@ class MemoryStashingManager:
                 optimizer, sync_event=sync_event, num_slices=num_slices
             )
 
+        cls._optimizer_stash_async = True
         return cls.thread_submit(_work)
 
     @classmethod

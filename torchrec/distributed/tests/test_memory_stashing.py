@@ -681,6 +681,52 @@ class TestStashCycleSummary(unittest.TestCase):
             json.loads(summaries[0]["by_caller"])["Adam"]["num_stashes"], 2
         )
 
+    def test_embedding_summary_reports_its_settings(self) -> None:
+        weights = torch.ones((100, 64), device=self.device)
+        MemoryStashingManager.stash_embedding_weights(self._lookup(weights))
+        MemoryStashingManager.restore_embedding_weights()
+        MemoryStashingManager.set_stashed_tables({"t0", "t1"})
+        MemoryStashingManager.stash_embedding_weights(self._lookup(weights))
+        MemoryStashingManager.restore_embedding_weights()
+
+        summaries = self._logged("ems_stash_cycle_summary")
+        self.assertEqual(len(summaries), 2)
+        self.assertEqual(summaries[0]["stash_selection"], "per_table_flags")
+        self.assertNotIn("num_planner_selected_tables", summaries[0])
+        self.assertEqual(summaries[0]["delay_stash"], "False")
+        self.assertEqual(
+            summaries[0]["stash_chunk_size_bytes"],
+            str(MemoryStashingManager._embedding_stash_chunk_size_bytes),
+        )
+        self.assertEqual(
+            summaries[0]["restore_chunk_size_bytes"],
+            str(MemoryStashingManager._embedding_restore_chunk_size_bytes),
+        )
+        self.assertEqual(summaries[1]["stash_selection"], "planner")
+        self.assertEqual(summaries[1]["num_planner_selected_tables"], "2")
+
+    def test_optimizer_summary_reports_its_settings(self) -> None:
+        optimizer = self._adam_with_state()
+        MemoryStashingManager.stash_optimizer_state(optimizer, num_slices=2)
+        MemoryStashingManager.restore_optimizer_state()
+        MemoryStashingManager.stash_optimizer_state_threaded(optimizer).result()
+        MemoryStashingManager.restore_optimizer_state()
+
+        summaries = self._logged("oms_stash_cycle_summary")
+        self.assertEqual(len(summaries), 2)
+        self.assertEqual(summaries[0]["num_slices"], "2")
+        self.assertEqual(summaries[0]["stash_async"], "False")
+        self.assertEqual(
+            summaries[0]["stash_chunk_size_bytes"],
+            str(MemoryStashingManager._optimizer_stash_chunk_size_bytes),
+        )
+        self.assertEqual(
+            summaries[0]["restore_chunk_size_bytes"],
+            str(MemoryStashingManager._optimizer_restore_chunk_size_bytes),
+        )
+        self.assertEqual(summaries[1]["num_slices"], "1")
+        self.assertEqual(summaries[1]["stash_async"], "True")
+
     def test_collected_event_skips_lookups_with_nothing_to_stash(self) -> None:
         MemoryStashingManager.stash_embedding_weights(
             self._lookup(torch.ones((10, 8))), caller="NoStash"
