@@ -84,6 +84,7 @@ from torchrec.distributed.utils import (
     filter_state_dict,
     sharded_model_copy,
 )
+from torchrec.modules.embedding_modules import mark_data_parallel_skip_grad_sync
 from torchrec.optim.fused import FusedOptimizerModule
 from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizer
 
@@ -329,6 +330,26 @@ def get_module(module: nn.Module) -> nn.Module:
     return module
 
 
+def find_ddp_modules(module: nn.Module) -> List[DistributedDataParallel]:
+    """Returns all DDP instances in a module tree, including hidden lookups."""
+    ddp_modules: List[DistributedDataParallel] = []
+    visited_module_ids: Set[int] = set()
+
+    def _visit(module: nn.Module) -> None:
+        if id(module) in visited_module_ids:
+            return
+        visited_module_ids.add(id(module))
+        if isinstance(module, DistributedDataParallel):
+            ddp_modules.append(module)
+        lookups = getattr(module, "_lookups", None) or ()
+        for child in (*module.children(), *lookups):
+            if isinstance(child, nn.Module):
+                _visit(child)
+
+    _visit(get_module(module))
+    return ddp_modules
+
+
 class DistributedModelParallel(nn.Module, FusedOptimizerModule):
     """
     Entry point to model parallelism.
@@ -349,6 +370,10 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         data_parallel_wrapper (Optional[DataParallelWrapper]): custom wrapper for data
             parallel modules.
         model_tracker_config (Optional[DeltaTrackerConfig]): config for model tracker.
+        skip_data_parallel_grad_sync (bool): whether to omit gradient synchronization
+            for data-parallel modules. When ``True``, DMP omits both its outer data
+            parallel wrapper and supported inner data-parallel embedding wrappers,
+            and init_data_parallel() raises.
 
     Example::
 
@@ -376,11 +401,23 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         init_parameters: bool = True,
         data_parallel_wrapper: Optional[DataParallelWrapper] = None,
         model_tracker_configs: Optional[ModelTrackerConfigs] = None,
+        skip_data_parallel_grad_sync: bool = False,
     ) -> None:
         super().__init__()
         torch._C._log_api_usage_once(f"torchrec.distributed.{self.__class__.__name__}")
 
         self.init_parameters = init_parameters
+        self._skip_data_parallel_grad_sync: bool = skip_data_parallel_grad_sync
+        if skip_data_parallel_grad_sync and data_parallel_wrapper is not None:
+            raise ValueError(
+                "skip_data_parallel_grad_sync=True cannot be combined with a custom "
+                "data_parallel_wrapper because the wrapper would be skipped"
+            )
+        if skip_data_parallel_grad_sync and not init_data_parallel:
+            raise ValueError(
+                "skip_data_parallel_grad_sync=True requires "
+                "init_data_parallel=True for device placement"
+            )
 
         self._ddp_wrapped: bool = False
 
@@ -432,13 +469,26 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         self._plan: ShardingPlan = plan
         self._writable_sharded_modules: list[ShardedEmbeddingCollection] = []
         self._dmp_wrapped_module: nn.Module = self._init_dmp(module)
+        if self._skip_data_parallel_grad_sync and find_ddp_modules(
+            self._dmp_wrapped_module
+        ):
+            raise RuntimeError(
+                "skip_data_parallel_grad_sync=True is not supported by every "
+                "sharder in this DMP plan"
+            )
         self._optim: CombinedOptimizer = self._init_optim(self._dmp_wrapped_module)
 
         if init_parameters:
             self._init_parameters(self.module)
 
-        if init_data_parallel:
+        if init_data_parallel and not self._skip_data_parallel_grad_sync:
             self.init_data_parallel()
+        elif (
+            init_data_parallel
+            and self._skip_data_parallel_grad_sync
+            and self.device.type != "meta"
+        ):
+            self._dmp_wrapped_module.to(self.device)
 
         self.model_trackers: Dict[str, ModelDeltaTracker] = {}
 
@@ -491,6 +541,11 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         See init_data_parallel c-tor argument for usage.
         It's safe to call this method multiple times.
         """
+        if self._skip_data_parallel_grad_sync:
+            raise RuntimeError(
+                "init_data_parallel() cannot be called on a DMP constructed with "
+                "skip_data_parallel_grad_sync=True"
+            )
         if not self._ddp_wrapped:
             # Allocate any 'meta' tensors
             if self.init_parameters:
@@ -614,6 +669,8 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         # shardable module
         module_sharding_plan = self._plan.get_plan_for_module(path)
         if module_sharding_plan:
+            if self._skip_data_parallel_grad_sync:
+                mark_data_parallel_skip_grad_sync(module)
             sharder_key = type(module)
             sharded_module = self._sharder_map[sharder_key].shard(
                 module,
