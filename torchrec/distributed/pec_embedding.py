@@ -15,9 +15,11 @@
 # AttributeError. Keeping annotations as runtime objects avoids that path.
 # For the same reason, do not use string forward references in dataclass fields.
 
+from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple, Type
+from functools import partial
+from typing import Any, cast, Dict, Iterator, List, Sequence, Tuple, Type
 
 import torch
 import torch.nn as nn
@@ -57,6 +59,32 @@ from torchrec.distributed.types import (
 from torchrec.modules.pec_embedding_modules import PECEmbeddingCollection
 from torchrec.modules.utils import construct_jagged_tensors
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
+
+
+def _prepare_grad_recat(
+    features: KeyedJaggedTensor,
+    sharding_ctx: SequenceShardingContext,
+    embedding_dim: int,
+) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+    """Returns the gradient permutation and rank-ordered partition lengths.
+
+    Both tensors are None when the rank has no local features. An empty
+    OL/NOL partition keeps its feature/batch slots and has zero lengths.
+    """
+    grad_recat = sharding_ctx.sparse_features_recat
+    if grad_recat is None:
+        return None, None
+
+    # The recat is shared with ordinary EC. Only the lengths change
+    # when the previous batch is split into OL and NOL partitions.
+    lengths = features.lengths() * embedding_dim
+    batch_sizes = sharding_ctx.batch_size_per_rank
+    if not batch_sizes or len(set(batch_sizes)) == 1:
+        lengths = lengths.view(grad_recat.numel(), -1)
+
+    forward_recat = torch.ops.fbgemm.invert_permute(grad_recat)
+    grad_recat_lengths = lengths.index_select(0, forward_recat.long())
+    return grad_recat, grad_recat_lengths
 
 
 def _mask_dist(
@@ -276,10 +304,15 @@ class PECEmbeddingCollectionContext(EmbeddingCollectionContext):
             created by merge_partitioned_embeddings. Backward fields are
             populated by set_backward_partition_contexts and read by
             PECAll2AllSeqWait during loss.backward().
+        learning_rates: Fused optimizer rates captured in this batch's forward,
+            used by both backward partitions across optimizer steps.
     """
 
     remapped_kjt_values: List[torch.Tensor] | None = None
     autograd_ctx_per_sharding: List[PECAll2AllSeqInfo] | None = None
+    # Both backward partitions use this batch's rates, even when NOL is
+    # applied after the next batch's optimizer.zero_grad().
+    learning_rates: list[float] | None = None
 
 
 def set_backward_partition_contexts(
@@ -679,6 +712,9 @@ class ShardedPECEmbeddingCollection(
         ]
 
         ctx.autograd_ctx_per_sharding = autograd_ctx_per_sharding
+        # Merge runs in forward for this batch, after the outer zero_grad and
+        # before its optimizer.step can install the next scheduled rate.
+        ctx.learning_rates = [group["lr"] for group in ec.fused_optimizer.param_groups]
 
         features_per_sharding = [
             sharding_ctx.features_before_input_dist
@@ -693,6 +729,34 @@ class ShardedPECEmbeddingCollection(
             need_indices=ec._need_indices,
             features_to_permute_indices=ec._features_to_permute_indices,
         )
+
+    def _set_learning_rates(self, learning_rates: Sequence[float]) -> None:
+        """Synchronizes EC learning rates to the fused backward kernels."""
+        optimizer = self._embedding_collection.fused_optimizer
+        groups = optimizer.param_groups
+        assert len(groups) == len(learning_rates)
+
+        for group, rate in zip(groups, learning_rates):
+            cast(dict[str, Any], group)["lr"] = rate
+
+        # Fused zero_grad copies rates to TBE without advancing optimizer state.
+        optimizer.zero_grad()
+
+    @contextmanager
+    def _with_batch_learning_rates(
+        self, learning_rates: Sequence[float]
+    ) -> Iterator[None]:
+        """Uses the originating batch's rates while applying its gradients."""
+        current_rates = [
+            group["lr"]
+            for group in self._embedding_collection.fused_optimizer.param_groups
+        ]
+
+        try:
+            self._set_learning_rates(learning_rates)
+            yield
+        finally:
+            self._set_learning_rates(current_rates)
 
     def grad_dist(
         self,
@@ -720,14 +784,16 @@ class ShardedPECEmbeddingCollection(
             List of awaitables, one per sharding type.
         """
         assert ctx.autograd_ctx_per_sharding is not None
+        assert ctx.learning_rates is not None
         ec = self._embedding_collection
 
         awaitables: List[Awaitable[None]] = []
-        for autograd_ctx, feature, lookup, sharding_type in zip(
+        for autograd_ctx, feature, lookup, sharding_type, sharding_ctx in zip(
             ctx.autograd_ctx_per_sharding,
             backward_features,
             ec._lookups,
             ec._sharding_type_to_sharding,
+            ctx.sharding_contexts,
         ):
             embedding_dim = ec._embedding_dim_for_sharding_type(sharding_type)
             grad_apply = (
@@ -737,6 +803,10 @@ class ShardedPECEmbeddingCollection(
             )
             assert grad_apply is not None
 
+            grad_recat, grad_recat_lengths = _prepare_grad_recat(
+                feature, sharding_ctx, embedding_dim
+            )
+
             grad_apply.dist()
             awaitables.append(
                 PECGradUpdateAwaitable(
@@ -744,6 +814,11 @@ class ShardedPECEmbeddingCollection(
                     feature,
                     lookup,
                     embedding_dim,
+                    learning_rate_context=partial(
+                        self._with_batch_learning_rates, ctx.learning_rates
+                    ),
+                    grad_recat=grad_recat,
+                    grad_recat_lengths=grad_recat_lengths,
                 )
             )
 

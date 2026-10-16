@@ -10,7 +10,7 @@ import copy
 import unittest
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, cast, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -41,6 +41,7 @@ from torchrec.distributed.types import (
 from torchrec.modules.embedding_configs import EmbeddingConfig
 from torchrec.modules.embedding_modules import EmbeddingCollection
 from torchrec.modules.pec_embedding_modules import PECEmbeddingCollection
+from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 from torchrec.test_utils import skip_if_asan_class
 
@@ -621,6 +622,80 @@ def _test_pec_grad_update(
 # Test data
 # =============================================================================
 
+
+def _test_pec_scheduled_grad_update(rank: int, world_size: int) -> None:
+    """Checks split backward against SGD at the originating batch's rate."""
+    with MultiProcessContext(rank, world_size, "nccl") as ctx:
+        torch.manual_seed(42)
+        reference = EmbeddingCollection(EMBEDDING_TABLES, device=torch.device("cpu"))
+        state = _pec_pre_forward(
+            EMBEDDING_TABLES,
+            ctx,
+            cast(
+                ModuleSharder[nn.Module],
+                PECEmbeddingCollectionSharder(fused_params={"learning_rate": 0.4}),
+            ),
+            CROSS_SHARD_KJT_INPUT_PER_RANK[rank],
+            reference,
+        )
+        optimizer = WarmupOptimizer(
+            state.sharded_pec._embedding_collection.fused_optimizer,
+            [WarmupStage(policy=WarmupPolicy.LINEAR, max_iters=4, value=0.25)],
+            lr=0.4,
+        )
+        # Citrine C2: foreach=True batches the reference's parameter updates.
+        ref_optimizer = torch.optim.SGD(reference.parameters(), lr=0.1, foreach=True)
+        deferred: list[Awaitable[None]] = []
+
+        for batch_idx in range(3):
+            optimizer.zero_grad()
+            rate = 0.1 + 0.075 * batch_idx
+
+            # The reference sums each trainer's mean gradient without PEC's
+            # partitioning or deferral, using an independently computed rate.
+            ref_optimizer.param_groups[0]["lr"] = rate
+            ref_optimizer.zero_grad()
+            for sender in range(world_size):
+                output = reference(CROSS_SHARD_KJT_INPUT_PER_RANK[sender][batch_idx])
+                torch.cat([jt.values() for jt in output.values()]).mean().backward()
+            ref_optimizer.step()
+
+            result = _pec_forward(state, batch_idx)
+            assert result.pec_ctx.learning_rates is not None
+            for captured_rate in result.pec_ctx.learning_rates:
+                assert abs(captured_rate - rate) < 1e-7
+
+            # The previous NOL update runs after this batch's rate was installed.
+            for awaitable in deferred:
+                awaitable.wait()
+            torch.cat([jt.values() for jt in result.jt_dict.values()]).mean().backward()
+            ol = state.sharded_pec.grad_dist(
+                result.pec_ctx, KJTList([result.bwd_ctx.ol_features]), True
+            )
+            deferred = state.sharded_pec.grad_dist(
+                result.pec_ctx, KJTList([result.bwd_ctx.nol_features]), False
+            )
+
+            # The optimizer advances once per batch; syncing the new rate here
+            # also exercises OL applied after a kernel's rate has changed.
+            optimizer.step()
+            optimizer.zero_grad()
+            for awaitable in ol:
+                awaitable.wait()
+            for group in optimizer.param_groups:
+                assert abs(group["lr"] - (rate + 0.075)) < 1e-7
+
+        # The final NOL update drains with its saved rate and preserves warmup.
+        for awaitable in deferred:
+            awaitable.wait()
+        assert optimizer._get_warmup_state() == (3, 0)
+        for group in optimizer.param_groups:
+            assert abs(group["lr"] - 0.325) < 1e-7
+        _verify_weights_match(
+            EMBEDDING_TABLES, state.sharded_pec, reference, ctx.device
+        )
+
+
 # Cross-shard data for uneven tables (table_0: 16 rows, table_1: 8 rows).
 # With world_size=2 RW sharding:
 #   table_0: block_size=8, shard 0 rows 0-7, shard 1 rows 8-15
@@ -690,6 +765,12 @@ CROSS_SHARD_KJT_INPUT_PER_RANK = [
 @skip_if_asan_class
 class ShardedPECEmbeddingCollectionTest(MultiProcessTestBase):
     """Multi-process tests for ShardedPECEmbeddingCollection."""
+
+    @unittest.skipIf(torch.cuda.device_count() <= 1, "Requires two local GPUs")
+    def test_scheduled_split_grad_update(self) -> None:
+        self._run_multi_process_test(
+            callable=_test_pec_scheduled_grad_update, world_size=2
+        )
 
     @unittest.skipIf(
         torch.cuda.device_count() <= 1,
