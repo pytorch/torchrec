@@ -5,6 +5,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 import copy
 import unittest
 from typing import cast, List, Optional, Tuple
@@ -13,6 +15,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from parameterized import parameterized
+from torchrec.distributed.comm_ops import set_gradient_division
 from torchrec.distributed.embedding import EmbeddingCollectionSharder
 from torchrec.distributed.embeddingbag import EmbeddingBagCollectionSharder
 from torchrec.distributed.fbgemm_qcomm_codec import (
@@ -25,7 +28,11 @@ from torchrec.distributed.pec_embedding import (
     PECEmbeddingCollectionSharder,
     ShardedPECEmbeddingCollection,
 )
-from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
+from torchrec.distributed.planner import (
+    EmbeddingShardingPlanner,
+    ParameterConstraints,
+    Topology,
+)
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
@@ -38,7 +45,35 @@ from torchrec.distributed.test_utils.test_sharding import copy_state_dict
 from torchrec.distributed.train_pipeline.pec_train_pipeline import TrainPipelinePEC
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingPlan
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
+from torchrec.optim.keyed import CombinedOptimizer, KeyedOptimizerWrapper
+from torchrec.optim.warmup import WarmupOptimizer, WarmupPolicy, WarmupStage
 from torchrec.test_utils import skip_if_asan_class
+
+
+def _create_warmup_optimizer(
+    model: DistributedModelParallel, num_batches: int
+) -> tuple[CombinedOptimizer, WarmupOptimizer]:
+    pec_modules = [
+        module
+        for module in model.modules()
+        if isinstance(module, ShardedPECEmbeddingCollection)
+    ]
+    assert len(pec_modules) == 1
+    sparse_optimizer = WarmupOptimizer(
+        pec_modules[0]._embedding_collection.fused_optimizer,
+        [WarmupStage(policy=WarmupPolicy.LINEAR, max_iters=num_batches, value=0.25)],
+        lr=0.4,
+    )
+    assert sparse_optimizer.param_groups, "Requires a fused PEC optimizer"
+    dense_optimizer = KeyedOptimizerWrapper(
+        dict(model.named_parameters()),
+        # Citrine C2: foreach=True batches the dense parameter updates.
+        lambda params: optim.SGD(params, lr=0.1, foreach=True),
+    )
+    return (
+        CombinedOptimizer([("sparse", sparse_optimizer), ("dense", dense_optimizer)]),
+        sparse_optimizer,
+    )
 
 
 def _test_pec_pipeline_numerical(
@@ -51,6 +86,7 @@ def _test_pec_pipeline_numerical(
     local_size: Optional[int] = None,
     qcomms_config: QCommsConfig | None = None,
     use_custom_ec_sharder: bool = False,
+    use_warmup: bool = False,
 ) -> None:
     """Compares PEC pipeline output with a non-pipelined forward.
 
@@ -61,6 +97,11 @@ def _test_pec_pipeline_numerical(
     The predictions must match exactly -- PEC's NOL deferral is index-safe.
     """
     with MultiProcessContext(rank, world_size, backend, local_size) as ctx:
+        torch.manual_seed(42)
+        # The reference uses the same gradient sum as PEC's custom backward.
+        # This process-local setting keeps normalization identical in both models.
+        set_gradient_division(False)
+
         all_tables: List[EmbeddingBagConfig | EmbeddingConfig] = []
         all_tables.extend(tables)
         all_tables.extend(ec_tables)
@@ -103,6 +144,14 @@ def _test_pec_pipeline_numerical(
                 world_size=world_size,
                 compute_device=ctx.device.type,
                 local_world_size=local_size,
+            ),
+            constraints=(
+                {
+                    table.name: ParameterConstraints(compute_kernels=["fused"])
+                    for table in ec_tables
+                }
+                if use_warmup
+                else None
             ),
         )
         plan: ShardingPlan = planner.collective_plan(sparse_arch, sharders, ctx.pg)
@@ -152,12 +201,22 @@ def _test_pec_pipeline_numerical(
         # Citrine C2: foreach=True for multi-tensor optimizer execution. Both
         # optimizers use the same setting so the numerical comparison below
         # stays exact.
-        optimizer_no_pipeline = optim.SGD(
+        optimizer_no_pipeline: torch.optim.Optimizer = optim.SGD(
             sharded_arch_no_pipeline.parameters(), lr=0.1, foreach=True
         )
-        optimizer_pipeline = optim.SGD(
+        optimizer_pipeline: torch.optim.Optimizer = optim.SGD(
             sharded_arch_pipeline.parameters(), lr=0.1, foreach=True
         )
+
+        warmup_no_pipeline = None
+        warmup_pipeline = None
+        if use_warmup:
+            optimizer_no_pipeline, warmup_no_pipeline = _create_warmup_optimizer(
+                sharded_arch_no_pipeline, len(batches)
+            )
+            optimizer_pipeline, warmup_pipeline = _create_warmup_optimizer(
+                sharded_arch_pipeline, len(batches)
+            )
 
         pipeline = TrainPipelinePEC(
             sharded_arch_pipeline,
@@ -165,8 +224,9 @@ def _test_pec_pipeline_numerical(
             ctx.device,
         )
 
-        # Skip the last 2 batches: the pipeline consumes them for its 2-ahead fill.
-        for batch in batches[:-2]:
+        # The warmup case drains all batches, including the final deferred update.
+        test_batches = batches if use_warmup else batches[:-2]
+        for batch in test_batches:
             optimizer_no_pipeline.zero_grad()
             loss, pred = sharded_arch_no_pipeline(batch)
             loss.backward()
@@ -176,6 +236,23 @@ def _test_pec_pipeline_numerical(
 
             # pyrefly: ignore [missing-attribute]
             torch.testing.assert_close(pred_pipeline.cpu(), pred.cpu())
+
+        if use_warmup:
+            assert warmup_pipeline is not None and warmup_no_pipeline is not None
+            assert warmup_pipeline._get_warmup_state() == (len(batches), 0)
+            assert warmup_no_pipeline._get_warmup_state() == (len(batches), 0)
+            for group in warmup_pipeline.param_groups:
+                assert abs(group["lr"] - 0.4) < 1e-7
+
+            # The final comparison includes embedding updates invisible to earlier
+            # predictions, as well as dense parameters trained by the outer step.
+            reference_params = dict(sharded_arch_no_pipeline.named_parameters())
+            for name, parameter in sharded_arch_pipeline.named_parameters():
+                torch.testing.assert_close(
+                    parameter,
+                    reference_params[name],
+                    msg=lambda message, name=name: f"{name}: {message}",
+                )
 
         # _pipeline_model (run during fill) must have discovered every sharded
         # PEC module in the model -- the pipeline's PEC index should match the
@@ -234,6 +311,7 @@ class TrainPipelinePECTest(MultiProcessTestBase):
                 ),
                 True,
             ),
+            ("warmup", None, False, True),
         ]
     )
     def test_pipeline_numerical(
@@ -241,6 +319,7 @@ class TrainPipelinePECTest(MultiProcessTestBase):
         name: str,
         qcomms_config: QCommsConfig | None,
         use_custom_ec_sharder: bool = False,
+        use_warmup: bool = False,
     ) -> None:
         """Verifies PEC pipeline predictions match the non-pipelined forward."""
         WORLD_SIZE = 2
@@ -274,6 +353,8 @@ class TrainPipelinePECTest(MultiProcessTestBase):
         all_tables.extend(ebc_tables)
         all_tables.extend(ec_tables)
 
+        torch.manual_seed(42)
+
         data = [
             ModelInput.generate(
                 # pyrefly: ignore [bad-argument-type]
@@ -294,4 +375,5 @@ class TrainPipelinePECTest(MultiProcessTestBase):
             data=data,
             qcomms_config=qcomms_config,
             use_custom_ec_sharder=use_custom_ec_sharder,
+            use_warmup=use_warmup,
         )

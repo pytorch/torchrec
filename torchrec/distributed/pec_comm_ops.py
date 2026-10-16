@@ -15,6 +15,7 @@
 # This is also why PECGradientApply is declared before PECAll2AllSeqInfo: the
 # fields referencing it must be real annotations, not string forward refs.
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any, Callable, List, Tuple
 
@@ -85,6 +86,27 @@ def _grad_dist(
     return req, output_buffer
 
 
+def _recat_gradient(
+    grad: torch.Tensor,
+    grad_recat: torch.Tensor,
+    grad_recat_lengths: torch.Tensor,
+) -> torch.Tensor:
+    """Restores feature order from the source-rank order returned by AllToAll."""
+    permute = (
+        torch.ops.fbgemm.permute_1D_sparse_data
+        if grad_recat_lengths.dim() == 1
+        else torch.ops.fbgemm.permute_2D_sparse_data
+    )
+    _, reordered, _ = permute(
+        grad_recat,
+        grad_recat_lengths,
+        grad.flatten(),
+        None,
+        grad.numel(),
+    )
+    return reordered.view_as(grad)
+
+
 class PECGradientApply:
     """Handles gradient AllToAll and application to TBE for one partition.
 
@@ -124,8 +146,10 @@ class PECGradientApply:
             return
 
         embedding_dim = self._grad.shape[1]
+
         if self._codec is not None:
             self._qcomm_ctx = self._codec.create_context()
+
         self._work, self._grad_buffer = _grad_dist(
             self._grad,
             input_splits=self._input_splits,
@@ -142,6 +166,8 @@ class PECGradientApply:
         features: KeyedJaggedTensor,
         lookup_fn: Callable[[KeyedJaggedTensor], torch.Tensor],
         embedding_dim: int,
+        grad_recat: torch.Tensor | None = None,
+        grad_recat_lengths: torch.Tensor | None = None,
     ) -> None:
         """Waits AllToAll and applies gradient to TBE via re-lookup + backward."""
         assert self._work is not None
@@ -149,10 +175,15 @@ class PECGradientApply:
 
         self._work.wait()
         grad = self._grad_buffer
+
         if self._codec is not None:
             grad = self._codec.decode(grad, self._qcomm_ctx)
 
         if features.values().numel() > 0:
+            if grad_recat is not None:
+                assert grad_recat_lengths is not None
+                grad = _recat_gradient(grad, grad_recat, grad_recat_lengths)
+
             with torch.enable_grad():
                 embs = lookup_fn(features).view(-1, embedding_dim)
                 if embs.numel() > 0:
@@ -272,7 +303,8 @@ class PECGradUpdateAwaitable(Awaitable[None]):
 
     Wraps a PECGradientApply instance. On wait(), calls apply() which
     waits on the AllToAll and pushes gradient through TBE's backward kernel
-    via re-lookup.
+    via re-lookup. The caller-provided context installs the originating batch's
+    learning rates during gradient application and restores the current rates.
     """
 
     def __init__(
@@ -281,12 +313,25 @@ class PECGradUpdateAwaitable(Awaitable[None]):
         features: KeyedJaggedTensor,
         lookup_fn: Callable[[KeyedJaggedTensor], torch.Tensor],
         embedding_dim: int,
+        learning_rate_context: Callable[[], AbstractContextManager[None]],
+        grad_recat: torch.Tensor | None,
+        grad_recat_lengths: torch.Tensor | None,
     ) -> None:
         super().__init__()
         self._applier = applier
         self._features = features
         self._lookup_fn = lookup_fn
         self._embedding_dim = embedding_dim
+        self._learning_rate_context = learning_rate_context
+        self._grad_recat = grad_recat
+        self._grad_recat_lengths = grad_recat_lengths
 
     def _wait_impl(self) -> None:
-        self._applier.apply(self._features, self._lookup_fn, self._embedding_dim)
+        with self._learning_rate_context():
+            self._applier.apply(
+                self._features,
+                self._lookup_fn,
+                self._embedding_dim,
+                self._grad_recat,
+                self._grad_recat_lengths,
+            )
