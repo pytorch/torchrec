@@ -27,7 +27,11 @@ from torchrec.distributed.embeddingbag import (
     EmbeddingBagCollectionSharder,
     ShardedEmbeddingBagCollection,
 )
-from torchrec.distributed.model_parallel import DistributedModelParallel
+from torchrec.distributed.model_parallel import (
+    DefaultDataParallelWrapper,
+    DistributedModelParallel,
+    find_ddp_modules,
+)
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     data_parallel,
@@ -110,6 +114,7 @@ def _shard_dp(
     sharder: ModuleSharder[nn.Module],
     ctx: MultiProcessContext,
     device: torch.device,
+    skip_data_parallel_grad_sync: bool = False,
 ) -> DistributedModelParallel:
     module_sharding_plan = construct_module_sharding_plan(
         module,
@@ -126,6 +131,7 @@ def _shard_dp(
         env=ShardingEnv.from_process_group(ctx.pg),
         sharders=[sharder],
         device=device,
+        skip_data_parallel_grad_sync=skip_data_parallel_grad_sync,
     )
 
 
@@ -143,8 +149,6 @@ def _run_dp_grad_sync_optout(
         default_module = _build_ebc(device) if is_ebc else _build_ec(device)
 
         frozen_module = _build_ebc(device) if is_ebc else _build_ec(device)
-        # Opt the frozen copy out of the DATA_PARALLEL DDP gradient reducer.
-        mark_data_parallel_skip_grad_sync(frozen_module)
 
         sharder = cast(
             ModuleSharder[nn.Module],
@@ -152,7 +156,13 @@ def _run_dp_grad_sync_optout(
         )
 
         default_dmp = _shard_dp(default_module, sharder, ctx, device)
-        frozen_dmp = _shard_dp(frozen_module, sharder, ctx, device)
+        frozen_dmp = _shard_dp(
+            frozen_module,
+            sharder,
+            ctx,
+            device,
+            skip_data_parallel_grad_sync=True,
+        )
 
         # Regression guard: the default DP module still gets a DDP reducer.
         default_lookups = _dp_lookups(default_dmp)
@@ -160,11 +170,29 @@ def _run_dp_grad_sync_optout(
             isinstance(lookup, DistributedDataParallel) for lookup in default_lookups
         ), "default DATA_PARALLEL module must keep the DistributedDataParallel wrap"
 
+        # Its already-sharded module still holds DDP, so the opt-out must fail.
+        try:
+            DistributedModelParallel(
+                module=default_dmp.module,
+                env=default_dmp._env,
+                device=device,
+                plan=ShardingPlan({}),
+                sharders=[sharder],
+                skip_data_parallel_grad_sync=True,
+            )
+        except RuntimeError as e:
+            assert "not supported by every sharder" in str(e), str(e)
+        else:
+            raise AssertionError(
+                "skip_data_parallel_grad_sync=True must reject residual DDP"
+            )
+
         # The frozen/opt-out module has raw lookups (no DDP, no reducer/buckets).
         frozen_lookups = _dp_lookups(frozen_dmp)
         assert not any(
             isinstance(lookup, DistributedDataParallel) for lookup in frozen_lookups
         ), "opt-out DATA_PARALLEL module must skip the DistributedDataParallel wrap"
+        assert find_ddp_modules(frozen_dmp) == []
 
         # The unwrapped DP lookup still forwards correctly (DDP is only needed
         # for the backward all-reduce). Check the pooled (EBC) forward against a
@@ -218,6 +246,74 @@ class DataParallelGradSyncOptOutTest(MultiProcessTestBase):
 
     def test_ec_dp_skip_grad_sync(self) -> None:
         self._run(is_ebc=False)
+
+
+class DistributedModelParallelSkipDataParallelGradSyncTest(unittest.TestCase):
+    def test_custom_wrapper_is_rejected_when_grad_sync_is_skipped(self) -> None:
+        with self.assertRaisesRegex(ValueError, "custom data_parallel_wrapper"):
+            DistributedModelParallel(
+                module=nn.Linear(4, 2),
+                skip_data_parallel_grad_sync=True,
+                data_parallel_wrapper=DefaultDataParallelWrapper(),
+            )
+
+    def test_skip_grad_sync_preserves_dense_module_forward(self) -> None:
+        module = nn.Linear(4, 2)
+        inputs = torch.randn(3, 4)
+        with torch.inference_mode():
+            expected = module(inputs)
+
+        # No process group, so construction would raise if DMP tried to build DDP.
+        dmp = DistributedModelParallel(
+            module=module,
+            plan=ShardingPlan({}),
+            env=ShardingEnv.from_local(world_size=1, rank=0),
+            sharders=[],
+            skip_data_parallel_grad_sync=True,
+        )
+        with torch.inference_mode():
+            torch.testing.assert_close(dmp(inputs), expected)
+        with self.assertRaisesRegex(RuntimeError, "skip_data_parallel_grad_sync=True"):
+            dmp.init_data_parallel()
+
+    def test_skip_grad_sync_materializes_meta_params(self) -> None:
+        dmp = DistributedModelParallel(
+            module=nn.Linear(4, 2, device="meta"),
+            plan=ShardingPlan({}),
+            env=ShardingEnv.from_local(world_size=1, rank=0),
+            sharders=[],
+            skip_data_parallel_grad_sync=True,
+        )
+        self.assertTrue(all(p.device.type == "cpu" for p in dmp.parameters()))
+
+    def test_init_parameters_is_idempotent_after_materialization(self) -> None:
+        dmp = DistributedModelParallel(
+            module=nn.Linear(4, 2, device="meta"),
+            plan=ShardingPlan({}),
+            env=ShardingEnv.from_local(world_size=1, rank=0),
+            sharders=[],
+            skip_data_parallel_grad_sync=True,
+        )
+
+        materialized_state = {
+            name: tensor.clone() for name, tensor in dmp.state_dict().items()
+        }
+        dmp._init_parameters(dmp.module)
+
+        for name, tensor in dmp.state_dict().items():
+            torch.testing.assert_close(tensor, materialized_state[name])
+
+    def test_init_data_parallel_false_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "requires init_data_parallel=True"):
+            DistributedModelParallel(
+                module=nn.Linear(4, 2, device="meta"),
+                plan=ShardingPlan({}),
+                env=ShardingEnv.from_local(world_size=1, rank=0),
+                sharders=[],
+                device=torch.device("cpu"),
+                init_data_parallel=False,
+                skip_data_parallel_grad_sync=True,
+            )
 
 
 class MarkDataParallelSkipGradSyncTest(unittest.TestCase):

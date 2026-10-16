@@ -124,6 +124,8 @@ def is_deferred_dp_supported(
     )
 
 
+# Keep this implementation self-contained: model re-packaging can combine current
+# train-pipeline code with an archived model_parallel module that lacks this symbol.
 def find_ddp_modules(module: torch.nn.Module) -> List[DistributedDataParallel]:
     """Returns all DDP instances in a module tree, including hidden lookups."""
     ddp_modules: List[DistributedDataParallel] = []
