@@ -10,6 +10,7 @@
 import itertools
 import logging
 import os
+from functools import lru_cache
 from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
@@ -105,6 +106,8 @@ except Exception:
 
 
 logger: logging.Logger = logging.getLogger()
+
+_UNIFORM_RECAT_CACHE_JK: str = "pytorch/torchrec:enable_uniform_recat_cache"
 
 
 def _check_pg_for_nccl_error(pg: dist.ProcessGroup) -> None:
@@ -223,12 +226,141 @@ def _check_int_overflow(
     return False
 
 
+def _get_recat_data(
+    local_split: int,
+    num_splits: int,
+    stagger: int,
+    device: Optional[torch.device],
+) -> Tuple[Tuple[int, ...], torch.Tensor]:
+    feature_order: List[int] = [
+        x + num_splits // stagger * y
+        for x in range(num_splits // stagger)
+        for y in range(stagger)
+    ]
+    recat = tuple(
+        i + j * local_split for i in range(local_split) for j in feature_order
+    )
+    try:
+        recat_tensor = torch.tensor(recat, device=device, dtype=torch.int32)
+    except RuntimeError as e:
+        recat_sample = recat if len(recat) <= 16 else recat[:8] + recat[-8:]
+        logger.error(
+            f"_get_recat: int32 recat tensor creation failed: {e}. "
+            f"recat_len={len(recat)}, "
+            f"recat_sample={recat_sample}, "
+            f"local_split={local_split}, "
+            f"num_splits={num_splits}, "
+            f"stagger={stagger}. "
+        )
+        raise
+    return recat, recat_tensor
+
+
+@lru_cache(maxsize=128)
+def _get_recat_data_cached(
+    local_split: int,
+    num_splits: int,
+    stagger: int,
+    device: Optional[torch.device],
+) -> Tuple[Tuple[int, ...], torch.Tensor]:
+    return _get_recat_data(local_split, num_splits, stagger, device)
+
+
+def _normalize_recat_device(
+    device: Optional[torch.device],
+) -> Optional[torch.device]:
+    if device is not None and device.type == "cuda" and device.index is None:
+        return torch.device("cuda", torch.cuda.current_device())
+    return device
+
+
+def _apply_variable_batch_per_rank_if_needed(
+    recat: Tuple[int, ...],
+    recat_tensor: torch.Tensor,
+    local_split: int,
+    batch_size_per_rank: Optional[List[int]],
+) -> torch.Tensor:
+    if batch_size_per_rank is None or is_torchdynamo_compiling():
+        return recat_tensor
+
+    vb_per_rank_condition = any(
+        bs != batch_size_per_rank[0] for bs in batch_size_per_rank
+    )
+
+    if not vb_per_rank_condition:
+        return recat_tensor
+
+    num_splits = len(batch_size_per_rank)
+    batch_size_per_feature = list(
+        itertools.chain.from_iterable(
+            itertools.repeat(x, local_split)
+            # pyrefly: ignore[not-iterable]
+            for x in batch_size_per_rank
+        )
+    )
+    permuted_batch_size_per_feature = [batch_size_per_feature[r] for r in recat]
+    input_offset = [0] + list(itertools.accumulate(batch_size_per_feature))
+    output_offset = [0] + list(itertools.accumulate(permuted_batch_size_per_feature))
+
+    _check_int_overflow(
+        "_get_recat",
+        batch_size_per_rank,
+        "batch_size_per_rank",
+        local_split=local_split,
+        num_splits=num_splits,
+    )
+    _check_int_overflow(
+        "_get_recat",
+        input_offset,
+        "input_offset",
+        local_split=local_split,
+        num_splits=num_splits,
+    )
+    _check_int_overflow(
+        "_get_recat",
+        output_offset,
+        "output_offset",
+        local_split=local_split,
+        num_splits=num_splits,
+    )
+
+    try:
+        input_offset_tensor = torch.tensor(
+            input_offset,
+            device=recat_tensor.device,
+            dtype=torch.int32,
+        )
+        output_offset_tensor = torch.tensor(
+            output_offset,
+            device=recat_tensor.device,
+            dtype=torch.int32,
+        )
+    except RuntimeError as e:
+        logger.error(
+            f"_get_recat: int32 tensor creation failed: {e}. "
+            f"batch_size_per_rank={batch_size_per_rank}, "
+            f"input_offset={input_offset}, "
+            f"output_offset={output_offset}, "
+            f"local_split={local_split}, "
+            f"num_splits={num_splits}. "
+        )
+        raise
+
+    return torch.ops.fbgemm.expand_into_jagged_permute(
+        recat_tensor,
+        input_offset_tensor,
+        output_offset_tensor,
+        output_offset[-1],
+    )
+
+
 def _get_recat(
     local_split: int,
     num_splits: int,
     stagger: int = 1,
     device: Optional[torch.device] = None,
     batch_size_per_rank: Optional[List[int]] = None,
+    cached: bool = False,
 ) -> Optional[torch.Tensor]:
     """
     Calculates relevant recat indices required to reorder AlltoAll collective.
@@ -241,6 +373,9 @@ def _get_recat(
         device (Optional[torch.device]): device on which buffer will be allocated.
         batch_size_per_rank (Optional[List[int]]): batch size per rank, needed for
             variable batch size.
+        cached (bool): whether to reuse the base recat data and tensor. Note:
+            Dynamo traces through lru_cache wrappers without preserving cache state,
+            so compiled execution does not benefit from this cache.
 
     Returns:
         Optional[torch.Tensor]: recat tensor, None if local rank is empty.
@@ -259,101 +394,27 @@ def _get_recat(
         if local_split == 0:
             return None
 
-        recat: List[int] = []
-
-        feature_order: List[int] = [
-            x + num_splits // stagger * y
-            for x in range(num_splits // stagger)
-            for y in range(stagger)
-        ]
-
-        for i in range(local_split):
-            for j in feature_order:  # range(num_splits):
-                recat.append(i + j * local_split)
-
-        vb_per_rank_condition: bool = False
-        if not is_torchdynamo_compiling():
-            vb_per_rank_condition = batch_size_per_rank is not None and any(
-                bs != batch_size_per_rank[0] for bs in batch_size_per_rank
+        device = _normalize_recat_device(device)
+        if cached:
+            recat, recat_tensor = _get_recat_data_cached(
+                local_split,
+                num_splits,
+                stagger,
+                device,
             )
-
-        # variable batch per rank
-        if vb_per_rank_condition:
-            batch_size_per_feature = list(
-                itertools.chain.from_iterable(
-                    itertools.repeat(x, local_split)
-                    # pyrefly: ignore[not-iterable]
-                    for x in batch_size_per_rank
-                )
-            )
-            permuted_batch_size_per_feature = [batch_size_per_feature[r] for r in recat]
-            input_offset = [0] + list(itertools.accumulate(batch_size_per_feature))
-            output_offset = [0] + list(
-                itertools.accumulate(permuted_batch_size_per_feature)
-            )
-
-            _check_int_overflow(
-                "_get_recat",
-                # pyre-ignore[6]
-                batch_size_per_rank,
-                "batch_size_per_rank",
-                local_split=local_split,
-                num_splits=num_splits,
-                stagger=stagger,
-            )
-            _check_int_overflow(
-                "_get_recat",
-                input_offset,
-                "input_offset",
-                local_split=local_split,
-                num_splits=num_splits,
-            )
-            _check_int_overflow(
-                "_get_recat",
-                output_offset,
-                "output_offset",
-                local_split=local_split,
-                num_splits=num_splits,
-            )
-
-            try:
-                recat_tensor = torch.tensor(
-                    recat,
-                    device=device,
-                    dtype=torch.int32,
-                )
-                input_offset_tensor = torch.tensor(
-                    input_offset,
-                    device=device,
-                    dtype=torch.int32,
-                )
-                output_offset_tensor = torch.tensor(
-                    output_offset,
-                    device=device,
-                    dtype=torch.int32,
-                )
-            except RuntimeError as e:
-                logger.error(
-                    f"_get_recat: int32 tensor creation failed: {e}. "
-                    f"batch_size_per_rank={batch_size_per_rank}, "
-                    f"input_offset={input_offset}, "
-                    f"output_offset={output_offset}, "
-                    f"local_split={local_split}, "
-                    f"num_splits={num_splits}, "
-                    f"stagger={stagger}. "
-                )
-                raise
-
-            recat = torch.ops.fbgemm.expand_into_jagged_permute(
-                recat_tensor,
-                input_offset_tensor,
-                output_offset_tensor,
-                output_offset[-1],
-            )
-            # pyrefly: ignore [bad-return]
-            return recat
         else:
-            return torch.tensor(recat, device=device, dtype=torch.int32)
+            recat, recat_tensor = _get_recat_data(
+                local_split,
+                num_splits,
+                stagger,
+                device,
+            )
+        return _apply_variable_batch_per_rank_if_needed(
+            recat,
+            recat_tensor,
+            local_split,
+            batch_size_per_rank,
+        )
 
 
 class _MergePooledEmbeddingsModuleImpl(torch.nn.Module):
@@ -739,12 +800,19 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
                 keys=keys,
             )
 
-        self._recat: Optional[torch.Tensor] = _get_recat(
+        self._use_cached_recat = torch._utils_internal.justknobs_check(
+            _UNIFORM_RECAT_CACHE_JK,
+            default=False,
+        )
+        # Name-mangle the backing tensor to protect cached storage from accidental
+        # mutation outside this class.
+        self.__recat = _get_recat(
             local_split=splits[pg.rank()],
             num_splits=len(splits),
             stagger=stagger,
             device=device,
             batch_size_per_rank=self._stride_per_rank,
+            cached=self._use_cached_recat,
         )
         if self._workers == 1:
             return
@@ -854,6 +922,20 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
         self._input_tensors.clear()
         return size
 
+    @property
+    def _recat(self) -> Optional[torch.Tensor]:
+        # `_recat` already escapes this class through
+        # `SequenceShardingContext.sparse_features_recat`.
+        if self.__recat is None:
+            return None
+        if self._use_cached_recat:
+            # Return a copy of cached data so downstream mutation (if any)
+            # cannot corrupt shared storage.
+            return self.__recat.clone()
+        # Without caching, `_get_recat` creates a new tensor for this awaitable anyway
+        # So no need to copy
+        return self.__recat
+
     def _wait_impl(self) -> KeyedJaggedTensor:
         """
         Overwrites wait function as we don't handle callbacks here.
@@ -877,7 +959,7 @@ class KJTAllToAllTensorsAwaitable(Awaitable[KeyedJaggedTensor]):
             tensors=self._output_tensors,
             variable_stride_per_key=self._input.variable_stride_per_key(),
             num_workers=self._workers,
-            recat=self._recat,
+            recat=self.__recat,
             stride_per_rank=self._stride_per_rank,
             stagger=self._stagger,
         )
