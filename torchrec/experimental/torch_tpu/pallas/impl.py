@@ -5,8 +5,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+from __future__ import annotations
+
 import torch
-from torch_tpu._internal import pallas  # pyre-ignore[21]
+from torch_tpu._internal import pallas  # pyrefly: ignore[missing-import]
 from torchrec.experimental.torch_tpu.pallas import (
     batch_index,
     lookup,
@@ -15,6 +17,7 @@ from torchrec.experimental.torch_tpu.pallas import (
     pooled_lookup_offset,
     pooled_lookup_offset_bwd,
     pooled_lookup_padded,
+    segment_csr,
 )
 
 _fwd = pallas.jax_op("torchrec_pallas::embedding_lookup", lookup.embedding_lookup_jax)
@@ -70,6 +73,21 @@ _batch_index_select_sc_bwd = pallas.jax_op(
     "torchrec_pallas::batch_index_select_dim0_backward",
     batch_index.batch_index_select_bwd_sc,
 )
+_segment_sum_csr_sc = pallas.jax_op(
+    "torchrec_pallas::segment_sum_csr",
+    segment_csr.segment_sum_csr_sc,
+)
+
+
+def segment_sum_csr_tpu(
+    batch_size: int, csr_seg: torch.Tensor, values: torch.Tensor
+) -> torch.Tensor:
+    output_dtype = values.dtype
+    # TODO: Re-evaluate the int32
+    csr_seg = csr_seg.to(torch.int32)
+    if values.dtype == torch.int64:
+        values = values.to(torch.int32)
+    return _segment_sum_csr_sc(batch_size, csr_seg, values).to(output_dtype)
 
 
 def embedding_lookup_tpu(indices, weights, emb_dim):

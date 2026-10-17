@@ -197,10 +197,10 @@ def permute_pooled_embs_auto_grad_split(
     ).to("tpu")
 
 
-def segment_sum_csr_tpu(batch_size, csr_seg, values):
-    return torch.ops.fbgemm.segment_sum_csr(
-        batch_size, csr_seg.to("cpu"), values.to("cpu")
-    ).to(csr_seg.device)
+def segment_sum_csr_tpu(
+    batch_size: int, csr_seg: torch.Tensor, values: torch.Tensor
+) -> torch.Tensor:
+    return impl.segment_sum_csr_tpu(batch_size, csr_seg, values)
 
 
 def asynchronous_complete_cumsum_tpu(array):
