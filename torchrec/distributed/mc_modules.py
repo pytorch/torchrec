@@ -35,7 +35,9 @@ from torchrec.distributed.embedding_sharding import (
     EmbeddingSharding,
     EmbeddingShardingContext,
     EmbeddingShardingInfo,
+    FusedKJTListSplitsAwaitable,
     KJTListSplitsAwaitable,
+    KJTSplitsAllToAllMeta,
 )
 from torchrec.distributed.embedding_types import (
     BaseEmbeddingSharder,
@@ -316,7 +318,6 @@ class ShardedManagedCollisionCollection(
         use_index_dedup: bool = False,
         restore_dedup_feature_boundary: bool = True,
     ) -> None:
-        # pyrefly: ignore[missing-attribute]
         super().__init__()
         self.need_preprocess: bool = module.need_preprocess
         self._device = device
@@ -838,7 +839,6 @@ class ShardedManagedCollisionCollection(
             features_by_sharding.append(dedup_features)
         return features_by_sharding
 
-    # pyrefly: ignore[bad-override]
     def _has_2d_weights(self, features: KeyedJaggedTensor) -> bool:
         """Check if features have 2D weights (e.g., embedding vectors)."""
         weights = features.weights_or_none()
@@ -1017,6 +1017,9 @@ class ShardedManagedCollisionCollection(
     ) -> Dict[str, JaggedTensor]:
 
         mcm = self._managed_collision_modules[table]
+        # A no_bag remap keeps the disable_fallback misses in place, mapped to row 0,
+        # so their lengths must stay as well.
+        mutate_miss_lengths = not getattr(mcm, "_no_bag", False)
         # only turn on include_readonly_suffix_feature when at least one feature in the table ends with the readonly suffix
         include_readonly_suffix_feature = any(
             1
@@ -1033,7 +1036,11 @@ class ShardedManagedCollisionCollection(
             # pyrefly: ignore[not-callable]
             mc_input = mcm.profile(mc_input)
             # pyrefly: ignore[not-callable]
-            mc_input = mcm.remap(mc_input, write_weights=write_weights)
+            mc_input = mcm.remap(
+                mc_input,
+                mutate_miss_lengths=mutate_miss_lengths,
+                write_weights=write_weights,
+            )
             # This is for the purpose of remap the global index back to local index since the offset is key by table
             mc_input_unify = {
                 table: JaggedTensor(
@@ -1055,7 +1062,11 @@ class ShardedManagedCollisionCollection(
             # pyrefly: ignore[not-callable]
             mc_input = mcm.profile(mc_input)
             # pyrefly: ignore[not-callable]
-            mc_input = mcm.remap(mc_input, write_weights=write_weights)
+            mc_input = mcm.remap(
+                mc_input,
+                mutate_miss_lengths=mutate_miss_lengths,
+                write_weights=write_weights,
+            )
             mc_input = self.global_to_local_index(mc_input)
         self._retrieve_and_track_hash_zch_identities_and_metadata(
             mcm, mc_input, mc_input[table].values()
@@ -1183,6 +1194,80 @@ class ShardedManagedCollisionCollection(
             need_indices=False,
             features_to_permute_indices=None,
         )
+
+    def lookup_remapped_lengths_mask(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        """
+        Sharded counterpart of the unsharded ``lookup_remapped_lengths_mask``: remaps
+        ``features`` with ``mutate_miss_lengths=True`` on the ranks owning their ids and
+        returns whether each sample keeps an id, e.g. hits a ``disable_fallback`` ZCH
+        table. Eval only: in train mode the remap would insert the ids and leave its
+        evictions to the next ``remap``, which asserts there are none. The input dists
+        are built on the first call, so pass the same keys as ``forward``.
+        """
+        # input_dist sets this for the next compute, which may belong to a batch
+        # already dist'ed by a pipeline.
+        use_2d_weights = self._use_2d_weights
+        ctx = self.create_context()
+        splits_awaitable = self.input_dist(ctx, features)
+        self._use_2d_weights = use_2d_weights
+        assert isinstance(splits_awaitable, KJTListSplitsAwaitable)
+        # A train pipeline overrides the input dists to return the splits for it to
+        # fuse, which this awaitable handles as well as plain splits awaitables.
+        dist_input = (
+            FusedKJTListSplitsAwaitable(
+                requests=[splits_awaitable],
+                contexts=[ctx],
+                pg=next(
+                    (
+                        awaitable.pg
+                        for awaitable in splits_awaitable.awaitables
+                        if isinstance(awaitable, KJTSplitsAllToAllMeta)
+                    ),
+                    None,
+                ),
+            )
+            .wait()[0]
+            .wait()
+        )
+        awaitables: List[Awaitable[torch.Tensor]] = []
+        for kjt, sharding_ctx, tables, splits, odist in zip(
+            dist_input,
+            ctx.sharding_contexts,
+            self._sharding_tables,
+            self._sharding_per_table_feature_splits,
+            self._output_dists,
+        ):
+            assert isinstance(sharding_ctx, SequenceShardingContext)
+            if not kjt.variable_stride_per_key():
+                sharding_ctx.lengths_after_input_dist = kjt.lengths().view(
+                    -1, kjt.stride()
+                )
+            kept: List[torch.Tensor] = []
+            for table, table_kjt in zip(tables, kjt.split(splits)):
+                values = table_kjt.values()
+                # One id per row, so the mutated lengths flag the kept ids.
+                # pyrefly: ignore[not-callable]
+                remapped = self._managed_collision_modules[table].remap(
+                    {
+                        table: JaggedTensor(
+                            values=values, lengths=torch.ones_like(values)
+                        )
+                    },
+                    mutate_miss_lengths=True,
+                )
+                kept.append(remapped[table].lengths())
+            awaitables.append(odist(torch.cat(kept).view(-1, 1), sharding_ctx))
+        kept_per_id = ManagedCollisionCollectionAwaitable(
+            awaitables_per_sharding=awaitables,
+            features_per_sharding=none_throws(
+                ctx.sharding_contexts[0].features_before_input_dist
+            ).split(self._sharding_feature_splits),
+            embedding_names_per_sharding=self._embedding_names_per_sharding,
+            reverse_indices=ctx.reverse_indices,
+        ).wait()
+        return torch.ops.fbgemm.segment_sum_csr(
+            1, kept_per_id.offsets(), kept_per_id.values()
+        ).to(torch.bool)
 
     def create_context(self) -> ManagedCollisionCollectionContext:
         return ManagedCollisionCollectionContext(sharding_contexts=[])
@@ -1402,7 +1487,6 @@ class ShardedQuantManagedCollisionCollection(
         ],
         qcomm_codecs_registry: Optional[Dict[str, QuantizedCommCodecs]] = None,
     ) -> None:
-        # pyrefly: ignore[missing-attribute]
         super().__init__()
         self._env: ShardingEnv = (
             env
@@ -1736,7 +1820,7 @@ class ShardedQuantManagedCollisionCollection(
             ret.append(sharding_ret)
         return ret
 
-    # pyrefly: ignore [bad-override, bad-param-name-override]
+    # pyrefly: ignore [bad-override]
     def compute(
         self,
         ctx: ManagedCollisionCollectionContext,
