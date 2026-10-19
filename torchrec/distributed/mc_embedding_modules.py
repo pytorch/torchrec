@@ -80,7 +80,6 @@ class BaseShardedManagedCollisionEmbeddingCollection(
         env: ShardingEnv,
         device: torch.device,
     ) -> None:
-        # pyrefly: ignore[missing-attribute]
         super().__init__()
 
         self._device = device
@@ -136,6 +135,16 @@ class BaseShardedManagedCollisionEmbeddingCollection(
                 ),
             )
         )
+        if not self.bagged:
+            # The sequence output dist sends back one row per id, so an EC cannot drop
+            # the disable_fallback misses: its remap must keep them in place.
+            for (
+                table,
+                mcm,
+            ) in self._managed_collision_collection._managed_collision_modules.items():
+                assert not getattr(mcm, "_disable_fallback", False) or getattr(
+                    mcm, "_no_bag", False
+                ), f"disable_fallback table {table} of an EC needs no_bag=True"
         self._free_features_storage_early: bool = False
         self._return_remapped_features: bool = module._return_remapped_features
         self._allow_in_place_embed_weight_update: bool = (
@@ -156,7 +165,6 @@ class BaseShardedManagedCollisionEmbeddingCollection(
             [0], device=self._device, dtype=torch.int
         )
 
-    # pyrefly: ignore[bad-override]
     def input_dist(
         self,
         ctx: ShrdCtx,
@@ -171,7 +179,6 @@ class BaseShardedManagedCollisionEmbeddingCollection(
 
     def _evict(self, evictions_per_table: Dict[str, Optional[torch.Tensor]]) -> None:
         open_slots = None
-        # pyrefly: ignore[bad-assignment]
         for table, evictions_indices_for_table in evictions_per_table.items():
             if evictions_indices_for_table is not None:
                 (tbe, logical_table_ids) = self._table_to_tbe_and_index[table]
@@ -274,6 +281,9 @@ class BaseShardedManagedCollisionEmbeddingCollection(
 
         # pyrefly: ignore[bad-return]
         return ebc_awaitable, kjt_awaitable
+
+    def lookup_remapped_lengths_mask(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        return self._managed_collision_collection.lookup_remapped_lengths_mask(features)
 
     def sharded_parameter_names(self, prefix: str = "") -> Iterator[str]:
         for fqn, _ in self.named_parameters():

@@ -784,7 +784,13 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
                         identities_0=identities_0,
                         identities_1=self._hash_zch_identities,
                         values=values,
-                        remapped_ids=remapped_ids,
+                        # With disable_fallback the logger expects the hits only,
+                        # which no_bag keeps in place among the misses mapped to 0.
+                        remapped_ids=(
+                            remapped_ids[hit_indices]
+                            if self._disable_fallback and self._no_bag
+                            else remapped_ids
+                        ),
                         hit_indices=hit_indices,
                         evicted_emb_indices=evictions,
                         metadata=metadata_0,
@@ -940,9 +946,12 @@ class HashZchManagedCollisionModule(ManagedCollisionModule):
             inserted_mask = (
                 torch.flatten(self._hash_zch_identities).data[remapped_ids] == raw_ids
             )
-            # Filter to only successfully inserted IDs.
-            remapped_ids = remapped_ids[inserted_mask]
-            weights = weights[inserted_mask]
+        else:
+            # A miss or a failed insert is -1, which would index the last slot.
+            inserted_mask = remapped_ids >= 0
+        # Filter to only successfully inserted IDs.
+        remapped_ids = remapped_ids[inserted_mask]
+        weights = weights[inserted_mask]
 
         assert self._hash_zch_runtime_meta is not None, (
             "_hash_zch_runtime_meta must be initialized before update. "
