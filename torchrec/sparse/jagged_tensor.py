@@ -1371,7 +1371,6 @@ def _jt_unflatten(values: List[Optional[torch.Tensor]], context: None) -> Jagged
             f"Invalid number of values provided for JaggedTensor: {len(values)}; "
             f"expected {legacy_num_fields} or {packed_num_fields}"
         )
-    # pyrefly: ignore[bad-argument-type]
     return JaggedTensor(*values)
 
 
@@ -2524,7 +2523,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             weights=kjt_weights,
             lengths=kjt_lens,
             stride=kjt_stride,
-            # pyrefly: ignore[bad-argument-type]
             stride_per_key_per_rank=kjt_stride_per_key_per_rank,
         ).sync()
         return kjt
@@ -2898,7 +2896,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             empty_int_list, device=self.device(), dtype=torch.int
                         ),
                         stride=self._stride,
-                        # pyrefly: ignore[bad-argument-type]
                         stride_per_key_per_rank=stride_per_key_per_rank,
                         stride_per_key=None,
                         length_per_key=None,
@@ -2945,7 +2942,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             lengths=_lengths,
                             offsets=None,
                             stride=self._stride,
-                            # pyrefly: ignore[bad-argument-type]
                             stride_per_key_per_rank=stride_per_key_per_rank,
                             stride_per_key=None,
                             length_per_key=split_length_per_key,
@@ -2982,7 +2978,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                             ],
                             offsets=None,
                             stride=self._stride,
-                            # pyrefly: ignore[bad-argument-type]
                             stride_per_key_per_rank=stride_per_key_per_rank,
                             stride_per_key=None,
                             length_per_key=split_length_per_key,
@@ -3102,7 +3097,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
             lengths=permuted_lengths.view(-1),
             offsets=None,
             stride=self._stride,
-            # pyrefly: ignore[bad-argument-type]
             stride_per_key_per_rank=permuted_stride_per_key_per_rank,
             stride_per_key=permuted_stride_per_key,
             length_per_key=permuted_length_per_key if len(permuted_keys) > 0 else None,
@@ -3507,7 +3501,6 @@ class KeyedJaggedTensor(Pipelineable, metaclass=JaggedTensorMeta):
                 values=values,
                 weights=weights,
                 lengths=lengths,
-                # pyrefly: ignore[bad-argument-type]
                 stride_per_key_per_rank=stride_per_key_per_rank,
             )
             return kjt.sync()
@@ -3623,11 +3616,8 @@ def _kjt_unflatten(
         )
     return KeyedJaggedTensor(
         context,
-        # pyrefly: ignore[bad-argument-type]
         *values[:-2],
-        # pyrefly: ignore[bad-argument-type, bad-keyword-argument]
         stride_per_key_per_rank=values[-2],
-        # pyrefly: ignore[bad-argument-type, bad-keyword-argument]
         inverse_indices=(context, values[-1]) if values[-1] is not None else None,
     )
 

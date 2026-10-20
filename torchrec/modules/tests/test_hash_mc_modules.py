@@ -99,7 +99,6 @@ class TestMCH(unittest.TestCase):
 
             torch.testing.assert_close(
                 #  `Union[Tensor, Module]`.
-                # pyrefly: ignore[bad-argument-type]
                 none_throws(m_infer.input_mapper._zch_size_per_training_rank),
                 torch.tensor([10, 10], dtype=torch.int64, device=device_str),
                 rtol=0,
@@ -107,7 +106,6 @@ class TestMCH(unittest.TestCase):
             )
             torch.testing.assert_close(
                 #  `Union[Tensor, Module]`.
-                # pyrefly: ignore[bad-argument-type]
                 none_throws(m_infer.input_mapper._train_rank_offsets),
                 torch.tensor([0, 10], dtype=torch.int64, device=device_str),
                 rtol=0,
@@ -865,7 +863,6 @@ class TestMCH(unittest.TestCase):
         self.assertTrue(m._eviction_policy_name is None)
         self.assertTrue(m._eviction_module is None)
 
-    # pyrefly: ignore
     @unittest.skipIf(
         torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
@@ -1301,7 +1298,6 @@ class TestMCH(unittest.TestCase):
             atol=0,
         )
 
-    # pyre-ignore[56]
     @unittest.skipIf(
         torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
@@ -1408,7 +1404,6 @@ class TestMCH(unittest.TestCase):
             )
         )
 
-    # pyre-ignore[56]
     @unittest.skipIf(
         torch.cuda.device_count() < 1,
         "Not enough GPUs, this test requires at least one GPU",
@@ -2066,7 +2061,6 @@ class TestVBEWithManagedCollision(unittest.TestCase):
             lengths=torch.tensor([3, 3, 2]),
             stride_per_key_per_rank=[[2], [1]],
             inverse_indices=(["user", "product"], torch.tensor([[0, 1, 0], [0, 0, 0]])),
-            # pyrefly: ignore[bad-argument-type]
         ).to("cuda")
 
     def test_mcc_preserves_kjt_attributes(self) -> None:
@@ -2079,7 +2073,6 @@ class TestVBEWithManagedCollision(unittest.TestCase):
             weights=torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]),
             stride_per_key_per_rank=self.kjt.stride_per_key_per_rank(),
             inverse_indices=self.kjt.inverse_indices(),
-            # pyrefly: ignore[bad-argument-type]
         ).to("cuda")
 
         # Pass through MCC
@@ -2199,7 +2192,6 @@ class TestVBEWithManagedCollision(unittest.TestCase):
 
             # Process each unique pooled group
             offset_per_key_per_pool = 0
-            # pyrefly: ignore[bad-assignment]
             for i_pooled in range(stride_per_key[i_table]):
                 length_of_pool = self.kjt.lengths()[i_length]
 
