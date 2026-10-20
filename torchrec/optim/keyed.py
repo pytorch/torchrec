@@ -399,10 +399,9 @@ class CombinedOptimizer(KeyedOptimizer):
     @property
     # pyrefly: ignore[bad-override]
     def state(self) -> Mapping[torch.Tensor, Any]:
-        ret = {}
+        ret: Dict[torch.Tensor, Any] = {}
         for _, opt in self._optims:
-            for param, state in opt.state.items():
-                ret[param] = state
+            ret.update(opt.state)
         return ret
 
     def post_load_state_dict(self) -> None:
