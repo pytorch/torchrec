@@ -28,6 +28,7 @@ from torchrec.distributed.embedding_types import (
 )
 from torchrec.distributed.logging_handlers import EventLoggingHandler, TorchrecComponent
 from torchrec.distributed.types import Awaitable, NoWait, ShardingEnv, ShardMetadata
+from torchrec.pt2.checks import is_torchdynamo_compiling
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.streamable import Multistreamable
 
@@ -151,13 +152,23 @@ class DpSparseFeaturesDist(BaseSparseFeaturesDist[KeyedJaggedTensor]):
         """
         No-op as sparse features are already distributed in data-parallel fashion.
 
+        Computes and caches `length_per_key` of the features, which the data-parallel
+        lookup needs to split them by group. Reading it here means the device-to-host
+        copy waits only for the work that produced the lengths; a pipelined train loop
+        runs input dist on its data-dist stream. Left to the lookup, which runs on the
+        compute stream, the same read blocks the host until the compute stream drains
+        (for example the previous step's backward).
+
         Args:
             sparse_features (SparseFeatures): input sparse features.
 
         Returns:
             Awaitable[Awaitable[SparseFeatures]]: awaitable of awaitable of SparseFeatures.
         """
-
+        if not is_torchdynamo_compiling() and torch._utils_internal.justknobs_check(
+            "pytorch/torchrec:enable_dp_input_dist_length_per_key"
+        ):
+            sparse_features.length_per_key()
         return NoWait(cast(Awaitable[KeyedJaggedTensor], NoWait(sparse_features)))
 
 
