@@ -33,10 +33,12 @@ from torchrec.distributed.test_utils.test_model import (
 )
 from torchrec.distributed.train_pipeline.pipeline_context import (
     EmbeddingTrainPipelineContext,
+    PrefetchEmbeddingTrainPipelineContext,
     TrainPipelineContext,
 )
 from torchrec.distributed.train_pipeline.runtime_forwards import (
     EmbeddingPipelinedForward,
+    InSyncPrefetchEmbeddingPipelinedForward,
     PipelinedForward,
 )
 from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
@@ -49,6 +51,7 @@ from torchrec.distributed.train_pipeline.utils import (
     _start_embedding_lookup,
     DataLoadingThread,
     find_ddp_modules,
+    start_embedding_lookup_post_prefetch,
     use_context_for_postprocs,
 )
 from torchrec.distributed.types import (
@@ -815,6 +818,80 @@ class StartEmbeddingLookupTest(unittest.TestCase):
                 self.assertCountEqual(
                     module_context.recorded_streams, setup.expected_recorded
                 )
+
+
+class _PostPrefetchProbeModule:
+    """Test double for a pipelined `ShardedModule`, replacing the TBE lookup.
+
+    Implements only the surface `start_embedding_lookup_post_prefetch` touches: a
+    `forward` carrying the module name, and a `compute_and_output_dist` that records
+    what it was handed instead of running a lookup.
+    """
+
+    def __init__(self) -> None:
+        self.awaitable = MagicMock()
+        self.calls: List[Tuple[object, object]] = []
+        # Assigned after construction, since the forward refers back to us.
+        self.forward: Optional[InSyncPrefetchEmbeddingPipelinedForward] = None
+
+    def compute_and_output_dist(self, ctx: object, data: object) -> MagicMock:
+        self.calls.append((ctx, data))
+        return self.awaitable
+
+
+class StartEmbeddingLookupPostPrefetchTest(unittest.TestCase):
+    """Tests the handoff contract of `start_embedding_lookup_post_prefetch`.
+
+    This is the lookup stage of `PrefetchTrainPipelineFusedSparseDist`. Unlike
+    `_start_embedding_lookup` it has no input-dist awaitable to wait on and no
+    cross-stream race to order, because the prefetch stage already resolved the
+    input dist and parked its output in the post-prefetch dicts.
+    """
+
+    _NAME = "sharded_ebc"
+
+    def _build(
+        self,
+    ) -> Tuple[
+        _PostPrefetchProbeModule,
+        PrefetchEmbeddingTrainPipelineContext,
+        _RecordingModuleContext,
+        _RecordingModuleContext,
+    ]:
+        """Builds a probe module and the context the prefetch stage would leave it."""
+        data = _RecordingModuleContext()
+        module_context = _RecordingModuleContext()
+        context = PrefetchEmbeddingTrainPipelineContext(
+            module_input_post_prefetch={self._NAME: data},
+            module_contexts_post_prefetch={self._NAME: module_context},
+        )
+        module = _PostPrefetchProbeModule()
+        module.forward = InSyncPrefetchEmbeddingPipelinedForward(
+            name=self._NAME,
+            args=CallArgs(args=[], kwargs={}),
+            module=cast(ShardedModule, module),
+            context=context,
+        )
+        return module, context, data, module_context
+
+    def test_consumes_post_prefetch_handoff(self) -> None:
+        """The lookup runs on the prefetched input and leaves the a2a for the forward.
+
+        Both post-prefetch entries are popped: the pipeline reuses the same context
+        object across iterations, so an entry left behind would be handed to a later
+        batch's lookup.
+        """
+        module, context, data, module_context = self._build()
+
+        start_embedding_lookup_post_prefetch(
+            module=cast(ShardedModule, module),
+            context=context,
+        )
+
+        self.assertEqual(module.calls, [(module_context, data)])
+        self.assertEqual(context.embedding_a2a_requests, {self._NAME: module.awaitable})
+        self.assertEqual(context.module_input_post_prefetch, {})
+        self.assertEqual(context.module_contexts_post_prefetch, {})
 
 
 class _RetryableDataError(Exception):

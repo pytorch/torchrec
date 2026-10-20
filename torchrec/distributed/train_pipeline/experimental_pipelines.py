@@ -46,15 +46,26 @@ from torchrec.distributed.train_pipeline.pipeline_context import (
     CPUEmbeddingTrainPipelineContext,
     In,
     Out,
+    PrefetchEmbeddingTrainPipelineContext,
     PrefetchTrainPipelineContext,
     TrainPipelineContext,
 )
 from torchrec.distributed.train_pipeline.runtime_forwards import (
     CPUEmbeddingPipelinedForward,
+    InSyncPrefetchEmbeddingPipelinedForward,
     PipelinedForward,
     PrefetchPipelinedForward,
 )
-from torchrec.distributed.train_pipeline.train_pipelines import TrainPipelineSparseDist
+
+# EventLoggingHandler and TorchrecComponent are re-imported from train_pipelines
+# rather than from logging_handlers, to pick up the no-op shims it falls back to
+# when an old torch package lacks those symbols.
+from torchrec.distributed.train_pipeline.train_pipelines import (
+    EventLoggingHandler,
+    PrefetchTrainPipelineSparseDist,
+    TorchrecComponent,
+    TrainPipelineSparseDist,
+)
 from torchrec.distributed.train_pipeline.types import PipelineState
 from torchrec.distributed.train_pipeline.utils import (
     _batch_tensor_size,
@@ -66,6 +77,7 @@ from torchrec.distributed.train_pipeline.utils import (
     _wait_for_batch,
     FutureDeque,
     prefetch_embeddings,
+    start_embedding_lookup_post_prefetch,
     use_context_for_postprocs,
 )
 from torchrec.distributed.types import LazyNoWait, ShardingType
@@ -2122,3 +2134,202 @@ class EvalPipelinePrefetchSparseDist(TrainPipelineSparseDist[In, Out]):
                     self._data_dist_stream,
                     self._default_stream,
                 )
+
+
+class PrefetchTrainPipelineFusedSparseDist(PrefetchTrainPipelineSparseDist[In, Out]):
+    """
+    Variant of PrefetchTrainPipelineSparseDist that hoists the embedding lookup out of
+    the traced model forward into an explicit pipeline stage, so that it can be ordered
+    ahead of the next batch's input dist.
+
+    Two NCCL collectives compete in every iteration:
+
+        - batch i's embedding output all2all, issued by
+          `ShardedModule.compute_and_output_dist`. The forward blocks on it within
+          microseconds, so it is on the critical path.
+        - batch i+1's sparse input-dist tensor all2all, issued by
+          `wait_sparse_data_dist`. It has a full iteration before batch i+1's prefetch
+          needs it, so it has slack.
+
+    In PrefetchTrainPipelineSparseDist the lookup happens inside the traced forward,
+    which puts it after `wait_sparse_data_dist`: the collective with slack enters the
+    NCCL queue first and the critical one stalls behind it. Making the lookup a stage
+    lets this pipeline issue the two in the opposite order.
+
+    Order of operations within one iteration - note the calls concern *different*
+    batches, so the reordering does not violate any batch's own
+    wait_sdd -> prefetch -> lookup dependency chain:
+
+        wait_for_batch(batches[0])                       batch i
+        enqueue_batch()                                  batch i+2  H2D
+        start_embedding_lookup(batches[0], contexts[0])  batch i    CRITICAL a2a
+        wait_sparse_data_dist(contexts[1])               batch i+1  issued 2nd
+        forward(batches[0])                              batch i
+        _prefetch(contexts[1])                           batch i+1
+        backward + optimizer.step()                      batch i
+        start_sparse_data_dist(batches[2], contexts[2])  batch i+2  splits a2a
+
+    The lookup runs on the default (current) stream rather than a dedicated one. That
+    forgoes overlap with the previous iteration's optimizer, but keeps the pipeline free
+    of the fused-TBE assumption that TrainPipelineFusedSparseDist makes, so feature
+    processors and non-fused sparse optimizers are supported.
+
+    NOTE: This pipeline is experimental, users should always run NE parity tests.
+
+    Args:
+        model (torch.nn.Module): model to pipeline.
+        optimizer (torch.optim.Optimizer): optimizer to use.
+        device (torch.device): cuda or mtia device where all pipeline stages execute.
+        execute_all_batches (bool): executes remaining batches in pipeline after
+            exhausting dataloader iterator.
+        apply_jit (bool): apply torch.jit.script to non-pipelined (unsharded) modules.
+        pipeline_postproc (bool): pipeline postproc modules.
+        custom_model_fwd (Optional[Callable]): custom forward returning (losses, output).
+        enable_inplace_copy_batch (bool): in-place device transfer.
+        free_features_storage_early (bool): free input KJT storage after input dist.
+        clear_data_dist_inputs (bool): clear input dist tensors after use.
+        async_inplace_copy (bool): offload the in-place H2D copy dispatch to a
+            background thread.
+
+    Raises:
+        RuntimeError: if `device` is neither cuda nor mtia.
+    """
+
+    # The PipelinedForward class that is used in _rewrite_model
+    # pyrefly: ignore [bad-override]
+    _pipelined_forward_type = InSyncPrefetchEmbeddingPipelinedForward
+
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        execute_all_batches: bool = True,
+        apply_jit: bool = False,
+        pipeline_postproc: bool = True,
+        custom_model_fwd: Optional[
+            Callable[[Optional[In]], Tuple[torch.Tensor, Out]]
+        ] = None,
+        enable_inplace_copy_batch: bool = False,
+        free_features_storage_early: bool = False,
+        clear_data_dist_inputs: bool = False,
+        async_inplace_copy: bool = False,
+    ) -> None:
+        if device.type not in ["cuda", "mtia"]:
+            raise RuntimeError(
+                f"PrefetchTrainPipelineFusedSparseDist requires a cuda or mtia device, "
+                f"got '{device.type}'. The prefetch stage is a no-op without a "
+                f"data-dist stream, which leaves the embedding lookup with no input."
+            )
+
+        super().__init__(
+            model=model,
+            optimizer=optimizer,
+            device=device,
+            execute_all_batches=execute_all_batches,
+            apply_jit=apply_jit,
+            pipeline_postproc=pipeline_postproc,
+            custom_model_fwd=custom_model_fwd,
+            enable_inplace_copy_batch=enable_inplace_copy_batch,
+            free_features_storage_early=free_features_storage_early,
+            clear_data_dist_inputs=clear_data_dist_inputs,
+            async_inplace_copy=async_inplace_copy,
+            context_type=PrefetchEmbeddingTrainPipelineContext,
+        )
+
+        # Overrides the parent's freshly allocated stream. Here the lookup that consumes
+        # the prefetched data really does run on the current stream, so the
+        # record_stream(forward_stream) calls inside prefetch_embeddings register the
+        # stream that actually reads the data.
+        self._default_stream = torch.get_device_module(self._device).current_stream()
+
+    def start_embedding_lookup(
+        self,
+        batch: Optional[In],
+        context: PrefetchEmbeddingTrainPipelineContext,
+    ) -> None:
+        """
+        Runs compute_and_output_dist for every pipelined module on the current stream,
+        leaving the resulting awaitables in `context.embedding_a2a_requests` for the
+        forward to pick up.
+        """
+        if batch is None:
+            return
+
+        with record_function(f"## start_embedding_lookup {context.index} ##"):
+            for module in self._pipelined_modules:
+                start_embedding_lookup_post_prefetch(module, context)
+
+    @EventLoggingHandler.event_logger(
+        TorchrecComponent.TRAIN_PIPELINE, n=1000, add_wait_counter=True
+    )
+    def progress(self, dataloader_iter: Iterator[In]) -> Out:
+        """
+        Executes one training iteration.
+
+        Stage placement mirrors PrefetchTrainPipelineSparseDist (3 batches in flight,
+        prefetch after forward, start_sparse_data_dist last), with the embedding lookup
+        pulled out of the forward and issued before batch i+1's wait_sparse_data_dist.
+
+        Args:
+            dataloader_iter: Iterator that produces training batches.
+
+        Returns:
+            Model output from the current batch.
+
+        Raises:
+            StopIteration: if the dataloader iterator is exhausted.
+        """
+        if not self._model_attached:
+            self.attach(self._model)
+
+        self.fill_pipeline(dataloader_iter)
+
+        if not self.batches:
+            raise StopIteration
+
+        self._set_module_context(self.contexts[0])
+        context = cast(PrefetchEmbeddingTrainPipelineContext, self.contexts[0])
+
+        if self._model.training:
+            with record_function("## zero_grad ##"):
+                self._optimizer.zero_grad()
+
+        with record_function("## wait_for_batch ##"):
+            _wait_for_batch(cast(In, self.batches[0]), self._prefetch_stream)
+
+        # batch i+2: load data and copy to gpu
+        self.enqueue_batch(dataloader_iter)
+
+        # Issue batch i's embedding output all2all before batch i+1's input-dist
+        # all2all, so the collective the forward is about to block on claims NCCL
+        # channels ahead of the one with a full iteration of slack. This ordering is
+        # the reason this pipeline exists.
+        self.start_embedding_lookup(self.batches[0], context)
+
+        if len(self.batches) >= 2:
+            self.wait_sparse_data_dist(self.contexts[1])
+
+        with record_function(f"## forward {context.index} ##"):
+            losses, output = self._model_fwd(self.batches[0])
+
+        # Prefetch for batch i+1 after forward. The tensor data all2all has had the
+        # entire forward pass to complete, so prefetch_embeddings' request.wait()
+        # should resolve quickly.
+        if len(self.batches) >= 2:
+            self._prefetch(cast(PrefetchTrainPipelineContext, self.contexts[1]))
+
+        if self._model.training:
+            self._backward(losses)
+
+            with record_function("## optimizer ##"):
+                self._optimizer.step()
+
+        # Start sparse data dist for batch i+2 at the end, so it overlaps
+        # with the next iteration's early phases.
+        if len(self.batches) >= 3:
+            self.start_sparse_data_dist(self.batches[2], self.contexts[2])
+
+        self.dequeue_batch()
+
+        return output

@@ -110,6 +110,18 @@ class EmbeddingTrainPipelineContext(TrainPipelineContext):
 
 
 @dataclass
+class PrefetchEmbeddingTrainPipelineContext(
+    PrefetchTrainPipelineContext, EmbeddingTrainPipelineContext
+):
+    """Context for PrefetchTrainPipelineFusedSparseDist.
+
+    Combines the post-prefetch handoff dicts from PrefetchTrainPipelineContext with
+    the embedding_a2a_requests dict from EmbeddingTrainPipelineContext, since that
+    pipeline runs both a prefetch stage and a hoisted embedding-lookup stage.
+    """
+
+
+@dataclass
 class PECTrainPipelineContext(EmbeddingTrainPipelineContext):
     """Context for TrainPipelinePEC.
 

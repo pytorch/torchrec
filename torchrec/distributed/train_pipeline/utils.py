@@ -87,6 +87,7 @@ from torchrec.distributed.train_pipeline.pipeline_context import (
     EmbeddingTrainPipelineContext,
     In,
     Out,  # noqa
+    PrefetchEmbeddingTrainPipelineContext,
     PrefetchTrainPipelineContext,
     TrainPipelineContext,
 )
@@ -96,6 +97,7 @@ from torchrec.distributed.train_pipeline.runtime_forwards import (
     CPUEmbeddingPipelinedForward,
     EmbeddingPipelinedForward,
     InSyncEmbeddingPipelinedForward,
+    InSyncPrefetchEmbeddingPipelinedForward,
     KJTAllToAllForward,
     PipelinedForward,
     PrefetchPipelinedForward,
@@ -438,6 +440,31 @@ def _start_embedding_lookup(
         _start_embedding_lookup_legacy(
             module, context, source_stream, target_stream, stream_context
         )
+
+
+def start_embedding_lookup_post_prefetch(
+    module: ShardedModule,
+    context: PrefetchEmbeddingTrainPipelineContext,
+) -> None:
+    """Runs compute_and_output_dist on the main stream using prefetched input.
+
+    Unlike `_start_embedding_lookup`, the input KJT comes from the prefetch stage's
+    handoff dicts rather than from a pending input-dist awaitable, so there is no
+    input-dist wait to order against the data-dist stream here. The prefetch stage
+    already popped both entries off `module_contexts`.
+
+    Args:
+        module: A pipelined sharded module.
+        context: Context whose post-prefetch dicts hold this module's input.
+    """
+    # pyrefly: ignore[missing-attribute]
+    name = module.forward.name
+    data = context.module_input_post_prefetch.pop(name)
+    module_context = context.module_contexts_post_prefetch.pop(name)
+
+    context.embedding_a2a_requests[name] = module.compute_and_output_dist(
+        module_context, data
+    )
 
 
 def _fuse_input_dist_splits(context: TrainPipelineContext) -> None:
@@ -900,7 +927,10 @@ def prefetch_embeddings(
 
     for sharded_module in pipelined_modules:
         forward = sharded_module.forward
-        assert isinstance(forward, PrefetchPipelinedForward)
+        assert isinstance(
+            forward,
+            (PrefetchPipelinedForward, InSyncPrefetchEmbeddingPipelinedForward),
+        )
 
         assert forward._name in context.input_dist_tensors_requests
         request = context.input_dist_tensors_requests.pop(forward._name)
