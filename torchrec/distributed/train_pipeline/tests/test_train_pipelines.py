@@ -12,7 +12,19 @@ import unittest
 from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
 from functools import partial
-from typing import cast, Generator, List, Optional, Tuple, Type, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -40,9 +52,11 @@ from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
 )
+from torchrec.distributed.test_utils.table_config import ManagedCollisionConfig
 from torchrec.distributed.test_utils.test_model import (
     ModelInput,
     TestNegSamplingModule,
+    TestOverArch,
     TestSparseNN,
 )
 from torchrec.distributed.test_utils.test_sharding import (
@@ -51,6 +65,9 @@ from torchrec.distributed.test_utils.test_sharding import (
 )
 from torchrec.distributed.tests.test_fp_embeddingbag_utils import (
     create_module_and_freeze,
+)
+from torchrec.distributed.train_pipeline.experimental_pipelines import (
+    PrefetchTrainPipelineFusedSparseDist,
 )
 from torchrec.distributed.train_pipeline.pipeline_context import TrainPipelineContext
 from torchrec.distributed.train_pipeline.pipeline_stage import (
@@ -61,6 +78,7 @@ from torchrec.distributed.train_pipeline.pipeline_stage import (
 from torchrec.distributed.train_pipeline.postproc import PipelinedPostproc
 from torchrec.distributed.train_pipeline.runtime_forwards import (
     EmbeddingPipelinedForward,
+    InSyncPrefetchEmbeddingPipelinedForward,
     PipelinedForward,
 )
 from torchrec.distributed.train_pipeline.tests.test_train_pipelines_base import (
@@ -2052,6 +2070,633 @@ class PrefetchTrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
                 torch.testing.assert_close(pred, pred_pipeline, rtol=0, atol=0)
             else:
                 torch.testing.assert_close(pred, pred_pipeline)
+
+
+class ConvOverArch(TestOverArch):
+    """Over arch with a Conv1d between the regroup and the DHN arch.
+
+    Convolution is one of the few ops for which Inductor *chooses* a memory
+    layout (channels-last vs contiguous) instead of inheriting its input's, and
+    then hardcodes the resulting strides into the generated kernel. That is what
+    turns a change in the compiled graph's shape into a hard
+    `assert_size_stride` failure rather than a recompile. The default
+    `TestOverArch` is pure matmul and never exercises that path.
+
+    The conv is placed downstream of the embedding output so that the tensor
+    whose provenance the pipeline changes is the one feeding the layout choice.
+    """
+
+    _CONV_CHANNELS = 8
+
+    def __init__(
+        self,
+        tables: List[EmbeddingBagConfig],
+        weighted_tables: List[EmbeddingBagConfig],
+        embedding_names: Optional[List[str]] = None,
+        device: Optional[torch.device] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(tables, weighted_tables, embedding_names, device, **kwargs)
+        # Conv1d does not need the sequence length up front, only the channel
+        # count, so the flat feature width stays a forward-time detail.
+        self.conv: nn.Module = nn.Conv1d(
+            self._CONV_CHANNELS,
+            self._CONV_CHANNELS,
+            kernel_size=3,
+            padding=1,
+            device=device,
+        )
+
+    def forward(self, dense: torch.Tensor, sparse: KeyedTensor) -> torch.Tensor:
+        x = torch.cat([dense] + self.sparse_grouped(sparse), dim=1)
+        width = x.size(1)
+        pad = -width % self._CONV_CHANNELS
+        if pad:
+            x = nn.functional.pad(x, (0, pad))
+        x = self.conv(x.view(x.size(0), self._CONV_CHANNELS, -1))
+        return self.dhn_arch(x.flatten(1)[:, :width])
+
+
+class PrefetchTrainPipelineFusedSparseDistTest(TrainPipelineSparseDistTestBase):
+    _NUM_BATCHES = 12
+    _BATCH_SIZE = 32
+    _FUSED_PARAMS: dict[str, object] = {"stochastic_rounding": False}
+
+    def _assert_equal_to_non_pipelined(
+        self,
+        sharding_type: str,
+        kernel_type: str = EmbeddingComputeKernel.FUSED.value,
+        fused_params: Optional[dict[str, object]] = None,
+        model: Optional[nn.Module] = None,
+        postproc_module: Optional[nn.Module] = None,
+        pipeline_class: Type[PrefetchTrainPipelineSparseDist] = (
+            PrefetchTrainPipelineFusedSparseDist
+        ),
+        compile_over_arch: bool = False,
+    ) -> None:
+        """Runs the pipeline against a non-pipelined reference and compares predictions.
+
+        Args:
+            sharding_type: sharding type for both models.
+            kernel_type: compute kernel for both models.
+            fused_params: fused params for both models, defaults to `_FUSED_PARAMS`.
+                The pipelined model additionally gets `prefetch_pipeline=True`.
+            model: unsharded model, defaults to the base class' TestSparseNN.
+            postproc_module: postproc module to place in front of the sparse arch.
+                Ignored when `model` is given.
+            pipeline_class: pipeline under test. Parameterized so the same parity
+                gate can be run against PrefetchTrainPipelineSparseDist as a
+                control.
+            compile_over_arch: wrap the over arch of both models in
+                `torch.compile`. Only the dense submodule downstream of the
+                embedding output is compiled, mirroring how APS compiles
+                individual modules rather than the whole DMP.
+        """
+        data = self._generate_data(
+            num_batches=self._NUM_BATCHES,
+            batch_size=self._BATCH_SIZE,
+        )
+        dataloader = iter(data)
+
+        fused_params = fused_params if fused_params is not None else self._FUSED_PARAMS
+        fused_params_pipelined = {**fused_params, "prefetch_pipeline": True}
+
+        if model is None:
+            model = self._setup_model(postproc_module=postproc_module)
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params
+        )
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, fused_params_pipelined
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        if compile_over_arch:
+            # Must happen before the pipeline is constructed: _rewrite_model
+            # traces the model to find the modules it will swap forwards on.
+            for m in (sharded_model, sharded_model_pipelined):
+                # pyrefly: ignore[missing-attribute, bad-argument-type]
+                m.module.over = torch.compile(m.module.over, backend="inductor")
+
+        pipeline = pipeline_class(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+        )
+
+        for batch in data:
+            # Forward + backward w/o pipelining
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+
+            # Forward + backward w/ pipelining
+            pred_pipeline = pipeline.progress(dataloader)
+
+            torch.testing.assert_close(pred, pred_pipeline, rtol=0, atol=0)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    @settings(max_examples=3, deadline=None)
+    @given(
+        sharding_type=st.sampled_from(
+            [
+                ShardingType.TABLE_WISE.value,
+                ShardingType.ROW_WISE.value,
+                ShardingType.COLUMN_WISE.value,
+            ]
+        ),
+    )
+    def test_equal_to_non_pipelined(self, sharding_type: str) -> None:
+        """
+        Primary gate: hoisting the lookup out of the forward must not change losses or
+        predictions relative to the non-pipelined baseline.
+        """
+        self._assert_equal_to_non_pipelined(sharding_type=sharding_type)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_equal_to_non_pipelined_uvm_caching(self) -> None:
+        """
+        The prefetch stage is only a real prefetch for cached kernels: for plain FUSED
+        the lookup-level prefetch is filtered out and only the post-prefetch handoff
+        happens. This covers the path where the cache is actually populated.
+        """
+        self._assert_equal_to_non_pipelined(
+            sharding_type=ShardingType.TABLE_WISE.value,
+            kernel_type=EmbeddingComputeKernel.FUSED_UVM_CACHING.value,
+            fused_params={**self._FUSED_PARAMS, "cache_load_factor": 0.4},
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_equal_to_non_pipelined_managed_collision(self) -> None:
+        """
+        Managed-collision modules make compute_and_output_dist return a 2-tuple of
+        awaitables, which exercises the `is_mc_module` branch of the pipelined forward.
+        ZCH only supports row-wise sharding.
+
+        The model is built here rather than via `_setup_model(zch=True)`, whose
+        `zch_kwargs` are plain dicts that `TestEBCSparseArchZCH` no longer accepts.
+        """
+        zch_kwargs = {
+            table.name: ManagedCollisionConfig(
+                mc_type="sort-zch",
+                input_hash_size=4000,
+            )
+            for table in self.tables + self.weighted_tables
+        }
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            dense_device=self.device,
+            sparse_device=torch.device("meta"),
+            zch_kwargs=zch_kwargs,
+        )
+        self._assert_equal_to_non_pipelined(
+            sharding_type=ShardingType.ROW_WISE.value,
+            model=model,
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_equal_to_non_pipelined_postproc(self) -> None:
+        """
+        The pipeline defaults to pipeline_postproc=True, so a postproc module in front
+        of the sparse arch is run one stage ahead.
+        """
+        # Distinct feature names: TestNegSamplingModule concatenates these onto the
+        # batch, and KJT keys have to stay unique.
+        extra_tables = [
+            EmbeddingBagConfig(
+                num_embeddings=(i + 1) * 100,
+                embedding_dim=(i + 1) * 4,
+                name="extra_table_" + str(i),
+                feature_names=["extra_feature_" + str(i)],
+            )
+            for i in range(2)
+        ]
+        extra_input = ModelInput.generate(
+            tables=extra_tables,
+            weighted_tables=[],
+            batch_size=self._BATCH_SIZE,
+            world_size=1,
+            num_float_features=10,
+            randomize_indices=False,
+        )[0].to(self.device)
+
+        self._assert_equal_to_non_pipelined(
+            sharding_type=ShardingType.TABLE_WISE.value,
+            postproc_module=TestNegSamplingModule(extra_input=extra_input),
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_equal_to_non_pipelined_feature_processor(self) -> None:
+        """
+        Feature-processed EBC is the case TrainPipelineFusedSparseDist cannot handle,
+        because it runs the lookup on a stream that is not ordered after the previous
+        optimizer. This pipeline runs the lookup on the default stream, so it can.
+        """
+        # don't need weighted tables here
+        self.weighted_tables = []
+
+        sharder = cast(
+            ModuleSharder[nn.Module], FeatureProcessedEmbeddingBagCollectionSharder()
+        )
+
+        class DummyWrapper(nn.Module):
+            def __init__(self, sparse_arch: nn.Module) -> None:
+                super().__init__()
+                self.m = sparse_arch
+
+            def forward(self, model_input: ModelInput) -> Tuple[
+                torch.Tensor,
+                torch.Tensor,
+            ]:
+                return self.m(model_input.idlist_features)
+
+        max_feature_lengths = [10, 10, 12, 12]
+        sparse_arch = DummyWrapper(
+            create_module_and_freeze(
+                tables=self.tables,
+                device=self.device,
+                use_fp_collection=False,
+                max_feature_lengths=max_feature_lengths,
+            )
+        )
+        compute_kernel = EmbeddingComputeKernel.FUSED.value
+        module_sharding_plan = construct_module_sharding_plan(
+            cast(nn.Module, sparse_arch.m._fp_ebc),
+            per_param_sharding={
+                table.name: table_wise(rank=0, compute_kernel=compute_kernel)
+                for table in self.tables
+            },
+            local_size=1,
+            world_size=1,
+            device_type=self.device.type,
+            sharder=sharder,
+        )
+        sharded_sparse_arch_no_pipeline = DistributedModelParallel(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"m._fp_ebc": module_sharding_plan}),
+            env=ShardingEnv.from_process_group(self.pg),
+            sharders=[sharder],
+            device=self.device,
+        )
+        sharded_sparse_arch_pipeline = DistributedModelParallel(
+            module=copy.deepcopy(sparse_arch),
+            plan=ShardingPlan({"m._fp_ebc": module_sharding_plan}),
+            env=ShardingEnv.from_process_group(self.pg),
+            sharders=[sharder],
+            device=self.device,
+        )
+        copy_state_dict(
+            sharded_sparse_arch_no_pipeline.state_dict(),
+            sharded_sparse_arch_pipeline.state_dict(),
+        )
+
+        data = self._generate_data(
+            num_batches=5, batch_size=1, max_feature_lengths=max_feature_lengths
+        )
+        dataloader = iter(data)
+
+        # Citrine C2: use the multi-tensor optimizer implementation.
+        optimizer_no_pipeline = optim.SGD(
+            sharded_sparse_arch_no_pipeline.parameters(), lr=0.1, foreach=True
+        )
+        optimizer_pipeline = optim.SGD(
+            sharded_sparse_arch_pipeline.parameters(), lr=0.1, foreach=True
+        )
+
+        pipeline = PrefetchTrainPipelineFusedSparseDist(
+            model=sharded_sparse_arch_pipeline,
+            optimizer=optimizer_pipeline,
+            device=self.device,
+        )
+
+        for batch in data[:-2]:
+            batch = batch.to(self.device)
+            optimizer_no_pipeline.zero_grad()
+            loss, pred = sharded_sparse_arch_no_pipeline(batch)
+            loss.backward()
+            optimizer_no_pipeline.step()
+
+            pred_pipeline = pipeline.progress(dataloader)
+            torch.testing.assert_close(pred_pipeline.cpu(), pred.cpu(), rtol=0, atol=0)
+
+        self.assertEqual(len(pipeline._pipelined_modules), 1)
+        self.assertIsInstance(
+            pipeline._pipelined_modules[0],
+            ShardedFeatureProcessedEmbeddingBagCollection,
+        )
+
+    def _setup_pipeline(
+        self,
+        num_batches: int,
+        execute_all_batches: bool = True,
+    ) -> Tuple[
+        PrefetchTrainPipelineFusedSparseDist,
+        Iterator[ModelInput],
+        nn.Module,
+        optim.Optimizer,
+    ]:
+        """Builds a table-wise FUSED pipeline and a dataloader over `num_batches`."""
+        data = self._generate_data(num_batches=num_batches, batch_size=self._BATCH_SIZE)
+        sharded_model, optimizer = self._generate_sharded_model_and_optimizer(
+            self._setup_model(),
+            ShardingType.TABLE_WISE.value,
+            EmbeddingComputeKernel.FUSED.value,
+            {**self._FUSED_PARAMS, "prefetch_pipeline": True},
+        )
+        pipeline = PrefetchTrainPipelineFusedSparseDist(
+            model=sharded_model,
+            optimizer=optimizer,
+            device=self.device,
+            execute_all_batches=execute_all_batches,
+        )
+        return pipeline, iter(data), sharded_model, optimizer
+
+    def _count_outputs_until_exhausted(
+        self, num_batches: int, execute_all_batches: bool
+    ) -> int:
+        """Runs a pipeline to exhaustion and returns how many outputs it produced."""
+        pipeline, dataloader, _, _ = self._setup_pipeline(
+            num_batches, execute_all_batches=execute_all_batches
+        )
+        num_outputs = 0
+        while True:
+            try:
+                pipeline.progress(dataloader)
+            except StopIteration:
+                return num_outputs
+            num_outputs += 1
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_drain(self) -> None:
+        """
+        A dataloader with N batches yields exactly N outputs, then StopIteration. The
+        last two iterations run with fewer than 3 batches in flight, which is where a
+        missing len() guard would surface as a KeyError on the post-prefetch dicts.
+        """
+        num_batches = 6
+        self.assertEqual(
+            self._count_outputs_until_exhausted(num_batches, execute_all_batches=True),
+            num_batches,
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_pipeline_drop_in_flight_batches(self) -> None:
+        """
+        With `execute_all_batches` off the pipeline stops as soon as the dataloader is
+        exhausted, dropping the 2 batches still in flight rather than draining them.
+        """
+        num_batches = 6
+        self.assertEqual(
+            self._count_outputs_until_exhausted(num_batches, execute_all_batches=False),
+            num_batches - 2,
+        )
+
+    def _record_stage_order(
+        self, pipeline: PrefetchTrainPipelineFusedSparseDist
+    ) -> List[Tuple[str, Optional[int]]]:
+        """Shadows each stage method with a wrapper that records what it ran on.
+
+        Every stage takes the context of the batch it acts on, and a context's
+        `index` is that batch's position in the dataloader, so recording the pair
+        makes visible both the order of the stages and which batch each one is for.
+        The returned list is appended to as `progress` runs.
+        """
+        order: List[Tuple[str, Optional[int]]] = []
+
+        def spy(stage: str, method: Callable[..., Any]) -> Callable[..., Any]:
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
+                context = next(a for a in args if isinstance(a, TrainPipelineContext))
+                order.append((stage, context.index))
+                return method(*args, **kwargs)
+
+            return wrapper
+
+        for stage in (
+            "start_embedding_lookup",
+            "wait_sparse_data_dist",
+            "_prefetch",
+            "start_sparse_data_dist",
+        ):
+            setattr(pipeline, stage, spy(stage, getattr(pipeline, stage)))
+        return order
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_stage_order_within_iteration(self) -> None:
+        """
+        The reordering this pipeline exists for: batch i's embedding lookup is issued
+        before batch i+1's `wait_sparse_data_dist`, so the output all2all the forward
+        is about to block on claims NCCL channels ahead of the input-dist all2all that
+        has a full iteration of slack. The remaining stages keep
+        PrefetchTrainPipelineSparseDist's placement.
+        """
+        pipeline, dataloader, _, _ = self._setup_pipeline(num_batches=8)
+        # Two iterations to reach steady state: only with 3 batches in flight does
+        # progress reach every stage.
+        pipeline.progress(dataloader)
+        pipeline.progress(dataloader)
+
+        order = self._record_stage_order(pipeline)
+        pipeline.progress(dataloader)
+
+        self.assertIsNotNone(order[0][1])
+        batch_i = cast(int, order[0][1])
+        self.assertEqual(
+            order,
+            [
+                ("start_embedding_lookup", batch_i),
+                ("wait_sparse_data_dist", batch_i + 1),
+                ("_prefetch", batch_i + 1),
+                ("start_sparse_data_dist", batch_i + 2),
+            ],
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_detach_and_reattach_mid_train(self) -> None:
+        """
+        Unlike the pipeline it derives from, this one re-attaches a detached model at
+        the top of `progress` rather than running the stages against unpipelined
+        forwards. Detaching mid-train puts the original forwards back, and the next
+        `progress` restores the hoisted-lookup ones and resumes at parity.
+        """
+        num_batches = 8
+        sharding_type = ShardingType.TABLE_WISE.value
+        kernel_type = EmbeddingComputeKernel.FUSED.value
+        data = self._generate_data(num_batches=num_batches, batch_size=self._BATCH_SIZE)
+        dataloader = iter(data)
+
+        model = self._setup_model()
+        sharded_model, optimizer = self._generate_sharded_model_and_optimizer(
+            model, sharding_type, kernel_type, self._FUSED_PARAMS
+        )
+        (
+            sharded_model_pipelined,
+            optimizer_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model,
+            sharding_type,
+            kernel_type,
+            {**self._FUSED_PARAMS, "prefetch_pipeline": True},
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+        pipeline = PrefetchTrainPipelineFusedSparseDist(
+            model=sharded_model_pipelined,
+            optimizer=optimizer_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+        )
+
+        def step(batch: ModelInput) -> None:
+            """Advances both models by one batch and asserts they agree."""
+            optimizer.zero_grad()
+            loss, pred = sharded_model(batch.to(self.device))
+            loss.backward()
+            optimizer.step()
+            torch.testing.assert_close(
+                pred, pipeline.progress(dataloader), rtol=0, atol=0
+            )
+
+        ebcs = [
+            # pyrefly: ignore[missing-attribute]
+            sharded_model_pipelined.module.sparse.ebc,
+            # pyrefly: ignore[missing-attribute]
+            sharded_model_pipelined.module.sparse.weighted_ebc,
+        ]
+
+        for batch in data[:3]:
+            step(batch)
+        for ebc in ebcs:
+            self.assertIsInstance(ebc.forward, InSyncPrefetchEmbeddingPipelinedForward)
+
+        detached_model = pipeline.detach()
+        for ebc in ebcs:
+            self.assertNotIsInstance(
+                ebc.forward, InSyncPrefetchEmbeddingPipelinedForward
+            )
+        with torch.no_grad():
+            batch = data[3].to(self.device)
+            _, detached_pred = detached_model(batch)
+            _, pred = sharded_model(batch)
+            torch.testing.assert_close(detached_pred, pred, rtol=0, atol=0)
+
+        # Detach keeps the in-flight batches, so the pipeline resumes at data[3].
+        for batch in data[3:]:
+            step(batch)
+        for ebc in ebcs:
+            self.assertIsInstance(ebc.forward, InSyncPrefetchEmbeddingPipelinedForward)
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+
+    def _assert_compiled_equal_to_non_pipelined(
+        self,
+        pipeline_class: Type[PrefetchTrainPipelineSparseDist],
+    ) -> None:
+        """Parity gate with a conv-bearing over arch compiled by the shared helper."""
+        # Compile caches are process-global; without this the second arm reuses
+        # the first arm's compiled artifacts and the comparison is meaningless.
+        torch._dynamo.reset()
+        model = TestSparseNN(
+            tables=self.tables,
+            weighted_tables=self.weighted_tables,
+            dense_device=self.device,
+            sparse_device=torch.device("meta"),
+            over_arch_clazz=ConvOverArch,
+        )
+        self._assert_equal_to_non_pipelined(
+            sharding_type=ShardingType.TABLE_WISE.value,
+            model=model,
+            pipeline_class=pipeline_class,
+            compile_over_arch=True,
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_compiled_equal_to_non_pipelined(self) -> None:
+        """
+        The eager parity tests above do not cover PT2: hoisting the embedding
+        lookup out of the traced forward changes what the compiled region sees,
+        which can leave Inductor's layout plan disagreeing with the tensors it
+        actually gets at runtime. On an APS ads model that surfaced as
+
+            assert_tensor_metadata(buf8, (80, 80, 3, 1), (240, 1, 80, 80),
+                                   torch.float32,
+                                   'torch.ops.aten.convolution_backward.default')
+            AssertionError: expected size 80==80, stride 3==1 at dim=1
+
+        in the compiled backward on the first batch.
+        """
+        self._assert_compiled_equal_to_non_pipelined(
+            PrefetchTrainPipelineFusedSparseDist
+        )
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_compiled_equal_to_non_pipelined_prefetch_control(self) -> None:
+        """
+        Control arm for `test_compiled_equal_to_non_pipelined`: identical model,
+        sharding and compile setup, run through the pipeline this one derives
+        from. A failure here means the compiled setup itself is at fault; a pass
+        here alongside a failure there isolates the regression to the hoisted
+        lookup.
+        """
+        self._assert_compiled_equal_to_non_pipelined(PrefetchTrainPipelineSparseDist)
+
+    def test_non_cuda_device_raises(self) -> None:
+        """
+        The prefetch stage early-returns when there is no data-dist stream, which would
+        leave the lookup with no input. Fail loudly at construction instead.
+        """
+        model = nn.Linear(1, 1)
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "requires a cuda or mtia device",
+        ):
+            # Citrine C2: use the multi-tensor optimizer implementation.
+            PrefetchTrainPipelineFusedSparseDist(
+                model=model,
+                optimizer=optim.SGD(model.parameters(), lr=0.1, foreach=True),
+                device=torch.device("cpu"),
+            )
 
 
 class TrainPipelineSparseDistLiteTest(TrainPipelineSparseDistTestBase):

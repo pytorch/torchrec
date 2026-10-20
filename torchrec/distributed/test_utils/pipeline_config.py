@@ -20,6 +20,7 @@ from torchrec.distributed.train_pipeline import (
 from torchrec.distributed.train_pipeline.experimental_pipelines import (
     EvalPipelineCPUSparse,
     EvalPipelinePrefetchSparseDist,
+    PrefetchTrainPipelineFusedSparseDist,
     TrainEvalHybridPipelineBase,
     TrainPipelinePrefetchEMS,
     TrainPipelineSparseDistBwdOpt,
@@ -52,6 +53,8 @@ class PipelineConfig:
             - "fused": Pipeline with fused sparse distribution
             - "semi": Semi-synchronous training pipeline
             - "prefetch": Pipeline with prefetching for sparse distribution
+            - "prefetch-fused": "prefetch" with the embedding lookup hoisted out of
+              the forward and issued before the next batch's input dist
             Default is "base".
         emb_lookup_stream (str): The stream to use for embedding lookups.
             Only used by certain pipeline types (e.g., "fused").
@@ -98,6 +101,7 @@ class PipelineConfig:
             "sparse",
             "sparse_lite",
             "prefetch",
+            "prefetch-fused",
             "eval-prefetch",
             "pec",
         ):
@@ -130,6 +134,7 @@ class PipelineConfig:
                 - "fused": Pipeline with fused sparse distribution
                 - "semi": Semi-synchronous training pipeline
                 - "prefetch": Pipeline with prefetching for sparse distribution
+                - "prefetch-fused": "prefetch" with a hoisted embedding lookup
             emb_lookup_stream (str): The stream to use for embedding lookups.
                 Only used by certain pipeline types (e.g., "fused").
             model (nn.Module): The model to be trained.
@@ -155,6 +160,7 @@ class PipelineConfig:
             "fused": TrainPipelineFusedSparseDist,
             "semi": TrainPipelineSemiSync,
             "prefetch": PrefetchTrainPipelineSparseDist,
+            "prefetch-fused": PrefetchTrainPipelineFusedSparseDist,
             "hybrid_base": TrainEvalHybridPipelineBase,
             "eval-sdd": EvalPipelineSparseDist,
             "eval-fused": EvalPipelineFusedSparseDist,

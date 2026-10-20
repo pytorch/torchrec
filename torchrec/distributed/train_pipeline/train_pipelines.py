@@ -2338,6 +2338,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
         free_features_storage_early: bool = False,
         clear_data_dist_inputs: bool = False,
         async_inplace_copy: bool = False,
+        context_type: Type[PrefetchTrainPipelineContext] = PrefetchTrainPipelineContext,
     ) -> None:
         super().__init__(
             model=model,
@@ -2345,7 +2346,7 @@ class PrefetchTrainPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             device=device,
             execute_all_batches=execute_all_batches,
             apply_jit=apply_jit,
-            context_type=PrefetchTrainPipelineContext,
+            context_type=context_type,
             pipeline_postproc=pipeline_postproc,
             custom_model_fwd=custom_model_fwd,
             enable_inplace_copy_batch=enable_inplace_copy_batch,

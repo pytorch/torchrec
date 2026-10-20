@@ -61,7 +61,7 @@ from torchrec.distributed.train_pipeline.pipeline_context import (
     TrainPipelineContext,
 )
 from torchrec.distributed.train_pipeline.types import CallArgs
-from torchrec.distributed.types import Awaitable, LazyNoWait
+from torchrec.distributed.types import Awaitable, LazyAwaitable, LazyNoWait
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.streamable import Multistreamable
 
@@ -328,6 +328,29 @@ class InSyncEmbeddingPipelinedForward(EmbeddingPipelinedForward):
         else:
             # pyrefly: ignore[bad-argument-type]
             embeddings.record_stream(cur_stream)
+
+
+class InSyncPrefetchEmbeddingPipelinedForward(InSyncEmbeddingPipelinedForward):
+    """Returns a hoisted lookup's pending awaitable without waiting on it.
+
+    Deferring the wait until the embeddings reach a torch function preserves the
+    graph break and real-tensor layout guards required by ``torch.compile``.
+    """
+
+    def __call__(self, *input, **kwargs) -> Union[
+        LazyAwaitable[Multistreamable],
+        Tuple[LazyAwaitable[KeyedTensor], LazyAwaitable[Optional[KeyedJaggedTensor]]],
+    ]:
+        if self._name not in self._context.embedding_a2a_requests:
+            available_names = list(self._context.embedding_a2a_requests.keys())
+            raise AssertionError(
+                f"Invalid PipelinedForward usage, embedding lookup of {self._name} "
+                f"is not available, probably consumed by others. "
+                f"Each embedding module (EBC, EC, etc.) can only be invoked "
+                f"once per forward pass when using pipelined training. "
+                f"Available embedding_a2a names: {available_names}."
+            )
+        return self._context.embedding_a2a_requests.pop(self._name)
 
 
 class PECPipelinedForward(InSyncEmbeddingPipelinedForward):
