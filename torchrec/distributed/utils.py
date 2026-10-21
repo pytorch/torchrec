@@ -772,7 +772,7 @@ def add_params_from_parameter_sharding(
         fused_params.update(key_value_params_dict)
 
     # warn if cache_params were set but have no effect: data_parallel and dense
-    # tables are fully replicated on each device without a cache
+    # tables are not backed by a cache
     if parameter_sharding.cache_params is not None:
         if parameter_sharding.sharding_type == ShardingType.DATA_PARALLEL.value:
             logger.warning(
@@ -783,8 +783,7 @@ def add_params_from_parameter_sharding(
             )
         elif parameter_sharding.compute_kernel == EmbeddingComputeKernel.DENSE.value:
             logger.warning(
-                f"Compute Kernel is {parameter_sharding.compute_kernel}, so the "
-                "table is fully replicated on each device without a cache; "
+                f"Compute Kernel is {parameter_sharding.compute_kernel}, so "
                 "cache_params (e.g. cache_algorithm, cache_load_factor) have no "
                 "effect and will be ignored"
             )
