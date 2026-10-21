@@ -409,6 +409,45 @@ class MultiLabelPrecisionMetricTest(unittest.TestCase):
         ]
         self.assertAlmostEqual(window_precision.item(), 1.0, places=4)
 
+    def test_rejects_a_narrowed_label_set(self) -> None:
+        """A checkpoint with more labels must not load into fewer.
+
+        State is named per label, so dropping labels leaves keys nobody claims.
+        Absorbing them would discard real measurements, so the load should
+        raise rather than succeed quietly.
+        """
+        variant = self._create_metric(num_labels=3)
+        default = self._create_metric(num_labels=1)
+
+        self._assert_rejects_source_only_keys(variant, default)
+
+    def test_rejects_a_renamed_label_set(self) -> None:
+        """Same label count, different names, so the keys do not line up.
+
+        Loading anyway would file one label's counters under another's name.
+        """
+        cat = self._create_metric(num_labels=1, label_names=["cat"])
+        dog = self._create_metric(num_labels=1, label_names=["dog"])
+
+        self._assert_rejects_source_only_keys(cat, dog)
+
+    def _assert_rejects_source_only_keys(
+        self, src: MultiLabelPrecisionMetric, dst: MultiLabelPrecisionMetric
+    ) -> None:
+        """The strict load must fail on exactly the keys only the source has.
+
+        Any other RuntimeError, from a broken hook or a bad checkpoint, would
+        name different keys or none.
+        """
+        source_only = set(src.state_dict()) - set(dst.state_dict())
+        self.assertTrue(source_only)
+        with self.assertRaises(RuntimeError):
+            dst.load_state_dict(src.state_dict(), strict=True)
+        # `strict` only decides whether to raise. The keys are collected either way.
+        incompatible = dst.load_state_dict(src.state_dict(), strict=False)
+        self.assertEqual(set(incompatible.unexpected_keys), source_only)
+        self.assertEqual(incompatible.missing_keys, [])
+
 
 if __name__ == "__main__":
     unittest.main()

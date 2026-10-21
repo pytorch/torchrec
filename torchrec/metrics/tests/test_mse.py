@@ -7,13 +7,14 @@
 
 # pyre-strict
 
+import copy
 import unittest
 from functools import partial, update_wrapper
-from typing import Callable, Dict, Optional, Type
+from typing import Callable, Dict, Optional, Set, Tuple, Type
 
 import torch
 from torchrec.metrics.mse import compute_mse, compute_r_squared, compute_rmse, MSEMetric
-from torchrec.metrics.rec_metric import RecComputeMode, RecMetric
+from torchrec.metrics.rec_metric import RecComputeMode, RecMetric, RecTaskInfo
 from torchrec.metrics.test_utils import (
     metric_test_helper,
     rec_metric_gpu_sync_test_launcher,
@@ -257,3 +258,86 @@ class MSEGPUSyncTest(unittest.TestCase):
             batch_window_size=20,
             entry_point=sync_test_helper,
         )
+
+
+# The two states include_r_squared adds. The golden snapshot records both key
+# sets. The tests below check that a checkpoint loads strictly between them.
+_R_SQUARED_KEYS: Set[str] = {
+    "_metrics_computations.0.label_squared_sum",
+    "_metrics_computations.0.label_sum",
+}
+
+
+class MSECheckpointCompatibilityTest(unittest.TestCase):
+    """Loading a checkpoint across include_r_squared, in both directions.
+
+    Whether the load survives is not a property of the key sets, so the golden
+    snapshot in `test_metric_fqn_backward_compatibility.py` cannot answer it.
+    """
+
+    @staticmethod
+    def _build(include_r_squared: bool = False) -> MSEMetric:
+        return MSEMetric(
+            world_size=1,
+            my_rank=0,
+            batch_size=32,
+            tasks=[RecTaskInfo(name="task1")],
+            compute_mode=RecComputeMode.UNFUSED_TASKS_COMPUTATION,
+            window_size=100,
+            include_r_squared=include_r_squared,
+        )
+
+    @staticmethod
+    def _update(metric: MSEMetric) -> None:
+        """One real batch, so the checkpoint holds measurements, not zeros."""
+        generator = torch.Generator().manual_seed(0)
+        metric.update(
+            predictions={"task1": torch.rand(32, generator=generator)},
+            labels={"task1": torch.rand(32, generator=generator)},
+            weights={"task1": torch.rand(32, generator=generator)},
+        )
+
+    def _build_pair(self) -> Tuple[MSEMetric, MSEMetric]:
+        default = self._build()
+        variant = self._build(include_r_squared=True)
+        default_keys = set(default.state_dict())
+        variant_keys = set(variant.state_dict())
+        # Exact in both directions: a variant that added nothing would make the
+        # loads below same-config.
+        self.assertEqual(default_keys - variant_keys, set())
+        self.assertEqual(variant_keys - default_keys, _R_SQUARED_KEYS)
+        return default, variant
+
+    def _assert_loads(self, src: MSEMetric, dst: MSEMetric) -> None:
+        """Strict-load one batch of src into dst. Shared states come back
+        exactly, and states only dst has keep their defaults."""
+        defaults = copy.deepcopy(dst.state_dict())
+        self._update(src)
+        saved = src.state_dict()
+        # Load a copy: torchmetrics adopts the loaded tensors as its state.
+        dst.load_state_dict(copy.deepcopy(saved), strict=True)
+        loaded = dst.state_dict()
+        self.assertEqual(set(loaded), set(defaults))
+        for key, value in loaded.items():
+            want = saved[key] if key in saved else defaults[key]
+            torch.testing.assert_close(value, want, rtol=0, atol=0)
+
+    def test_r_squared_checkpoint_loads_into_default(self) -> None:
+        """`mse.py` registers the r_squared states unconditionally and only
+        toggles `persistent`. That leaves them in torchmetrics' `_defaults`, so
+        a default-configured metric can still pop them off a checkpoint that
+        has them. Moving the registration itself behind the flag moves no
+        `state_dict` key, so the golden snapshot stays green.
+        """
+        default, variant = self._build_pair()
+        self._assert_loads(variant, default)
+
+    def test_default_checkpoint_loads_into_r_squared(self) -> None:
+        """The other direction: turning r_squared on and resuming.
+
+        The older checkpoint carries none of the r_squared keys. torchmetrics
+        restores only the states a checkpoint has and never reports the rest
+        as missing, so the load tolerates their absence.
+        """
+        default, variant = self._build_pair()
+        self._assert_loads(default, variant)
