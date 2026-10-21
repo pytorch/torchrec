@@ -298,10 +298,22 @@ class TimestampBasedEvictionPolicy(VirtualTableEvictionPolicy):
     max_inference_id_num_per_rank: int = (
         0  # if > 0, hard cap on rows kept per rank at publish on top of TTL; 0 means no cap (TTL is a soft cap only)
     )
+    min_inference_id_num_per_rank: int = (
+        0  # if > 0, keep at least this many most-recently-accessed rows per rank at publish even if they are past the TTL; 0 means no floor. Must be <= max_inference_id_num_per_rank
+    )
 
     def __post_init__(self) -> None:
         if self.inference_eviction_ttl_mins is None:
             self.inference_eviction_ttl_mins = self.eviction_ttl_mins
+        if self.min_inference_id_num_per_rank > self.max_inference_id_num_per_rank:
+            raise ValueError(
+                "min_inference_id_num_per_rank "
+                f"({self.min_inference_id_num_per_rank}) cannot exceed "
+                f"max_inference_id_num_per_rank "
+                f"({self.max_inference_id_num_per_rank}). The publish row-count "
+                "floor is enforced on top of the cap, so a cap must be set and "
+                "must be >= the floor."
+            )
 
 
 @dataclass
