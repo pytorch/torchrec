@@ -167,6 +167,10 @@ def _safe_tolist_2d(tensor: torch.Tensor) -> List[List[int]]:
     Killswitch: pytorch/torchrec:killswitch_safe_tolist (default on). When off,
     falls back to plain tensor.tolist() — the literal pre-fix call — so the
     revert path is bit-exact, not just behaviorally equivalent.
+    TORCHREC_PINNED_SAFE_TOLIST="1" selects the helper's pinned destination;
+    an unset variable or any other value selects pageable staging. Both modes
+    retain its explicit current-stream wait. The existing killswitch controls
+    whether this wrapper uses that helper at all.
     """
     if not tensor.is_cuda:
         return tensor.tolist()

@@ -10,6 +10,7 @@
 import abc
 import logging
 import operator
+import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -81,10 +82,11 @@ def _cuda_to_cpu_safe(tensor: torch.Tensor) -> torch.Tensor:
 
     copy_(non_blocking=True) takes the other branch in copy_kernel_cuda
     (aten/src/ATen/native/cuda/Copy.cu) and issues cudaMemcpyAsync directly,
-    which on AMD is hipMemcpyAsync — stream-scoped, not device-wide. The host
-    still blocks inside the memcpy until upstream work on the current stream
-    completes (pageable D2H is implicitly host-synchronous), but other streams
-    on the device keep running, so the device-wide-sync amplification is gone.
+    which on AMD is hipMemcpyAsync — stream-scoped, not device-wide. The
+    destination uses pinned memory only when TORCHREC_PINNED_SAFE_TOLIST is
+    exactly "1". Otherwise it is pageable, and the runtime may add staging or
+    waits. The explicit current-stream sync below waits until the CPU data is
+    ready in either mode.
 
     Stays on the current stream by design. A dedicated D2H stream + pinned
     destination would also detach from upstream waits on the current stream
@@ -96,9 +98,18 @@ def _cuda_to_cpu_safe(tensor: torch.Tensor) -> torch.Tensor:
     callers must short-circuit before reaching this helper.
     """
     src = tensor.contiguous()
-    cpu_buf = torch.empty(src.shape, dtype=src.dtype, device="cpu")
-    cpu_buf.copy_(src, non_blocking=True)
-    torch.cuda.current_stream(src.device).synchronize()
+    use_pinned_destination = os.environ.get("TORCHREC_PINNED_SAFE_TOLIST") == "1"
+    cpu_buf = torch.empty(
+        src.shape,
+        dtype=src.dtype,
+        device="cpu",
+        pin_memory=use_pinned_destination,
+    )
+    if use_pinned_destination and src.numel() > 0 and not cpu_buf.is_pinned():
+        raise RuntimeError("Pinned CUDA readback destination allocation failed")
+    with record_function("torchrec::_cuda_to_cpu_safe_d2h"):
+        cpu_buf.copy_(src, non_blocking=True)
+        torch.cuda.current_stream(src.device).synchronize()
     return cpu_buf
 
 
@@ -118,6 +129,9 @@ def _safe_tolist(tensor: torch.Tensor) -> List[int]:
 
     Killswitch: pytorch/torchrec:killswitch_safe_tolist (default on). Set to
     False to fall back to plain .tolist() if this path causes regressions.
+    TORCHREC_PINNED_SAFE_TOLIST="1" selects pinned staging inside the enabled
+    helper; an unset variable or any other value selects pageable staging.
+    The variable is read on each helper call; configure it at workflow launch.
 
     NOTE: The return type must be List[int], not Any. This function is called
     from TorchScript-able code paths (KeyedJaggedTensor). Using Any breaks
