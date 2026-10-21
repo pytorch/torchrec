@@ -11,7 +11,7 @@ import itertools
 import logging
 import os
 from functools import lru_cache
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, cast, Dict, List, Optional, Tuple
 
 import torch
 import torch.distributed as dist
@@ -27,11 +27,15 @@ from torchrec.distributed.comm_ops import (
     alltoall_pooled,
     alltoall_sequence,
     AllToAllSingle,
+    fold_row_permute_into_seq_decode,
     get_gradient_division,
     pg_name,
+    precompute_seq_a2a_send,
     reduce_scatter_base_pooled,
     reduce_scatter_v_per_feature_pooled,
     reduce_scatter_v_pooled,
+    SeqA2APrecomputedSend,
+    SIDE_STREAM_OUTPUT_ENCODE_ENV,
     variable_batch_alltoall_pooled,
 )
 from torchrec.distributed.embedding_types import KJTList
@@ -2118,7 +2122,11 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
         super().__init__()
         self._tensor_awaitable = tensor_awaitable
 
-        if unbucketize_permute_tensor is not None:
+        if unbucketize_permute_tensor is not None and not (
+            fold_row_permute_into_seq_decode(
+                tensor_awaitable, unbucketize_permute_tensor
+            )
+        ):
             self.callbacks.append(
                 lambda ret: torch.index_select(
                     ret.view(-1, embedding_dim),
@@ -2137,6 +2145,19 @@ class SequenceEmbeddingsAwaitable(Awaitable[torch.Tensor]):
 
         ret = self._tensor_awaitable.wait()
         return ret
+
+
+_side_stream_output_encode_skips: Dict[str, int] = {}
+_side_stream_output_encode_used_logged: bool = False
+
+
+def log_side_stream_output_encode_skip(reason: str) -> None:
+    """Logs why the side-stream output encode was skipped, at the 1st, 10th,
+    100th and 1000th occurrence of each reason and every 10000th after that."""
+    count = _side_stream_output_encode_skips.get(reason, 0) + 1
+    _side_stream_output_encode_skips[reason] = count
+    if count in (1, 10, 100, 1000) or count % 10000 == 0:
+        logger.info(f"[kvzch-side-encode] skipped ({count}x): {reason}")
 
 
 class SequenceEmbeddingsAllToAll(nn.Module):
@@ -2197,6 +2218,113 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             torch.tensor(backward_recat, device=device, dtype=torch.int),
         )
         self._codecs = codecs
+        self._precomputed_send: Optional[SeqA2APrecomputedSend] = None
+
+    def precompute_send(
+        self,
+        local_embs: torch.Tensor,
+        lengths: torch.Tensor,
+        sparse_features_recat: Optional[torch.Tensor] = None,
+        batch_size_per_rank: Optional[List[int]] = None,
+    ) -> bool:
+        """Runs the forward permute and encode of a later uniform-batch `forward`
+        on the current stream, so that it can run off the stream calling `forward`.
+
+        Only with ``TORCHREC_KVZCH_SIDE_STREAM_OUTPUT_ENCODE=1``. `forward` uses the
+        result only for the same ``local_embs``, ``lengths`` and
+        ``sparse_features_recat`` tensors, waits on an event recorded here, and
+        otherwise computes them as usual. The encode is identical wherever it
+        runs except for stochastic rounding, which consumes random state, so that
+        is excluded.
+
+        Args:
+            local_embs (torch.Tensor): input embeddings of the later `forward`.
+            lengths (torch.Tensor): lengths of sparse features after AlltoAll.
+            sparse_features_recat (Optional[torch.Tensor]): recat of the sparse
+                feature input dist that the later `forward` gets.
+            batch_size_per_rank (Optional[List[int]]): batch size per rank that the
+                later `forward` gets.
+
+        Returns:
+            bool: whether a precomputed send is now pending.
+        """
+        self._precomputed_send = None
+        if os.environ.get(SIDE_STREAM_OUTPUT_ENCODE_ENV, "0") != "1":
+            return False
+        reason = self._precompute_send_skip_reason(local_embs, batch_size_per_rank)
+        if reason is not None:
+            log_side_stream_output_encode_skip(reason)
+            return False
+        if sparse_features_recat is not None:
+            if sparse_features_recat.is_cuda:
+                # Allocated by the input dist on another stream; read on this one.
+                sparse_features_recat.record_stream(
+                    torch.get_device_module(local_embs.device).current_stream()
+                )
+            forward_recat_tensor = torch.ops.fbgemm.invert_permute(
+                sparse_features_recat
+            )
+            recat_source = sparse_features_recat
+        else:
+            forward_recat_tensor = cast(torch.Tensor, self._forward_recat_tensor)
+            recat_source = forward_recat_tensor
+        self._precomputed_send = precompute_seq_a2a_send(
+            local_embs,
+            lengths,
+            forward_recat_tensor,
+            self._num_splits,
+            self._codecs,
+            recat_source=recat_source,
+        )
+        return True
+
+    def _precompute_send_skip_reason(
+        self,
+        local_embs: torch.Tensor,
+        batch_size_per_rank: Optional[List[int]],
+    ) -> Optional[str]:
+        if self._pg.size() <= 1:
+            return "world size 1"
+        if local_embs.requires_grad:
+            return "rows require grad"
+        if batch_size_per_rank is not None and len(set(batch_size_per_rank)) > 1:
+            return "variable batch size"
+        if self._codecs is not None:
+            rounding_mode = getattr(self._codecs.forward, "_rounding_mode", None)
+            if rounding_mode is not None and int(rounding_mode) == 3:
+                return "stochastic rounding"
+        return None
+
+    def clear_precomputed_send(self) -> None:
+        self._precomputed_send = None
+
+    def _take_precomputed_send(
+        self,
+        local_embs: torch.Tensor,
+        lengths: torch.Tensor,
+        recat_source: torch.Tensor,
+        variable_batch_size: bool,
+    ) -> Optional[SeqA2APrecomputedSend]:
+        global _side_stream_output_encode_used_logged
+        send = self._precomputed_send
+        self._precomputed_send = None
+        if send is None:
+            return None
+        reason = (
+            "variable batch size"
+            if variable_batch_size
+            else send.mismatch(local_embs, lengths, recat_source, self._codecs)
+        )
+        if reason is not None:
+            log_side_stream_output_encode_skip(f"unused precompute: {reason}")
+            return None
+        if not _side_stream_output_encode_used_logged:
+            _side_stream_output_encode_used_logged = True
+            logger.info(
+                "[kvzch-side-encode] using the precomputed sequence all-to-all "
+                "permute and encode"
+            )
+        return send
 
     def forward(
         self,
@@ -2239,6 +2367,24 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             forward_recat_tensor = self._forward_recat_tensor
             backward_recat_tensor = self._backward_recat_tensor
 
+        precomputed_send = None
+        if os.environ.get(SIDE_STREAM_OUTPUT_ENCODE_ENV, "0") == "1":
+            precomputed_send = self._take_precomputed_send(
+                local_embs,
+                lengths,
+                cast(
+                    torch.Tensor,
+                    (
+                        sparse_features_recat
+                        if sparse_features_recat is not None
+                        else self._forward_recat_tensor
+                    ),
+                ),
+                variable_batch_size,
+            )
+        else:
+            self.clear_precomputed_send()
+
         tensor_awaitable = alltoall_sequence(
             a2a_sequence_embs_tensor=local_embs,
             # pyrefly: ignore[bad-argument-type]
@@ -2251,6 +2397,7 @@ class SequenceEmbeddingsAllToAll(nn.Module):
             variable_batch_size=variable_batch_size,
             group=self._pg,
             codecs=self._codecs,
+            precomputed_send=precomputed_send,
         )
         return SequenceEmbeddingsAwaitable(
             tensor_awaitable=tensor_awaitable,

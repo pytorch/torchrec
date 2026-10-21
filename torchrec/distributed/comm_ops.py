@@ -173,6 +173,15 @@ def _strip_splits(tensor: Tensor, padded: List[int], splits: List[int]) -> Tenso
     return torch.cat([chunk[:s] for chunk, s in zip(tensor.split(padded), splits)])
 
 
+SEQ_PERMUTE_BEFORE_DECODE_ENV = "TORCHREC_SEQ_A2A_PERMUTE_BEFORE_DECODE"
+SIDE_STREAM_OUTPUT_ENCODE_ENV = "TORCHREC_KVZCH_SIDE_STREAM_OUTPUT_ENCODE"
+SEQ_A2A_BWD_RECORD_STREAM_ENV = "TORCHREC_SEQ_A2A_BWD_RECORD_STREAM"
+
+
+def _seq_a2a_bwd_record_stream() -> bool:
+    return os.environ.get(SEQ_A2A_BWD_RECORD_STREAM_ENV, "0") == "1"
+
+
 """
 Some commonly used notations for comm ops:
     B - batch size
@@ -233,6 +242,9 @@ class Request(Awaitable[W]):
         self.pg: dist.ProcessGroup = pg
         self.req: Optional[dist.Work] = None
         self.tensor: Optional[W] = None
+        # Input of an in-flight async collective; the collective still reads it
+        # after the op that launched it returns.
+        self.send_tensor: Optional[torch.Tensor] = None
         self.a2ai = None  # type: ignore
         self.qcomm_ctx = None  # type: ignore
         self.rsi = None  # type: ignore
@@ -343,6 +355,10 @@ class All2AllSequenceInfo:
         codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
         permuted_lengths_after_sparse_data_all2all (Optional[Tensor]): lengths of sparse
             features before AlltoAll.
+        decode_row_permute (Optional[Tensor]): rows of the received embeddings to
+            select before decoding; set by `fold_row_permute_into_seq_decode`.
+        precomputed_send (Optional[SeqA2APrecomputedSend]): forward permute and
+            encode already run by `precompute_seq_a2a_send`.
     """
 
     embedding_dim: int
@@ -354,6 +370,8 @@ class All2AllSequenceInfo:
     variable_batch_size: bool = False
     codecs: Optional[QuantizedCommCodecs] = None
     permuted_lengths_after_sparse_data_all2all: Optional[Tensor] = None
+    decode_row_permute: Optional[Tensor] = None
+    precomputed_send: Optional["SeqA2APrecomputedSend"] = None
 
 
 @dataclass
@@ -1000,6 +1018,7 @@ def alltoall_sequence(
     variable_batch_size: bool = False,
     group: Optional[dist.ProcessGroup] = None,
     codecs: Optional[QuantizedCommCodecs] = None,
+    precomputed_send: Optional["SeqA2APrecomputedSend"] = None,
 ) -> Awaitable[Tensor]:
     """
     Performs AlltoAll operation for sequence embeddings. Each process splits the input
@@ -1023,6 +1042,9 @@ def alltoall_sequence(
         group (Optional[dist.ProcessGroup]): the process group to work on. If None, the
             default process group will be used.
         codecs (Optional[QuantizedCommCodecs]): quantized communication codecs.
+        precomputed_send (Optional[SeqA2APrecomputedSend]): forward permute and
+            encode of ``a2a_sequence_embs_tensor`` already run by
+            `precompute_seq_a2a_send`; the caller must have checked it matches.
 
     Returns:
         Awaitable[List[Tensor]]: async work handle (`Awaitable`), which can be `wait()` later to get the resulting tensor.
@@ -1046,6 +1068,7 @@ def alltoall_sequence(
         output_splits=output_splits,
         variable_batch_size=variable_batch_size,
         codecs=codecs,
+        precomputed_send=precomputed_send,
     )
     # sequence of embeddings, bags are definitely non-uniform
 
@@ -2137,6 +2160,152 @@ class Variable_Batch_All2All_Pooled_Wait(Function):
         return (None, None, myreq.dummy_tensor)
 
 
+def _seq_a2a_permute_and_encode(
+    sharded_input_embeddings: Tensor,
+    lengths_after_sparse_data_all2all: Tensor,
+    forward_recat_tensor: Optional[Tensor],
+    variable_batch_size: bool,
+    world_size: int,
+    codecs: Optional[QuantizedCommCodecs],
+) -> Tuple[Optional[Tensor], Tensor, Any]:
+    local_T = lengths_after_sparse_data_all2all.shape[0]
+    permuted_lengths_after_sparse_data_all2all = None
+    if local_T > 0:
+        with record_function("## All2All_Seq_fwd_permute ##"):
+            if not variable_batch_size:
+                (
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_input_embeddings,
+                    _,
+                ) = _permute_2D_sparse_data(
+                    forward_recat_tensor,
+                    lengths_after_sparse_data_all2all.view(local_T * world_size, -1),
+                    sharded_input_embeddings.view(-1),
+                    None,
+                    sharded_input_embeddings.numel(),
+                )
+            else:
+                (
+                    permuted_lengths_after_sparse_data_all2all,
+                    sharded_input_embeddings,
+                    _,
+                ) = torch.ops.fbgemm.permute_1D_sparse_data(
+                    forward_recat_tensor,
+                    lengths_after_sparse_data_all2all.view(-1),
+                    sharded_input_embeddings.view(-1),
+                    None,
+                    sharded_input_embeddings.numel(),
+                )
+
+    qcomm_ctx = None
+    if codecs is not None:
+        qcomm_ctx = codecs.forward.create_context()
+        sharded_input_embeddings = codecs.forward.encode(
+            sharded_input_embeddings, qcomm_ctx
+        )
+    return (
+        permuted_lengths_after_sparse_data_all2all,
+        sharded_input_embeddings,
+        qcomm_ctx,
+    )
+
+
+@dataclass
+class SeqA2APrecomputedSend:
+    """Forward permute and encode of an `alltoall_sequence` input, run ahead.
+
+    Attributes:
+        local_embs (Tensor): the input it was computed from; holding it keeps its
+            storage from being reused, so a matching data_ptr means the same rows.
+        lengths (Tensor): lengths after the sparse data all-to-all it used.
+        forward_recat_tensor (Tensor): recat tensor it used.
+        recat_source (Tensor): tensor ``forward_recat_tensor`` was derived from:
+            the sparse features recat it inverted, or ``forward_recat_tensor``.
+        codecs (Optional[QuantizedCommCodecs]): codecs it used.
+        permuted_lengths (Optional[Tensor]): permuted lengths (times embedding dim).
+        send_tensor (Tensor): permuted and encoded all-to-all input.
+        qcomm_ctx (Any): quantization context of the encode.
+        ready (torch.Event): recorded on the producing stream after the encode.
+    """
+
+    local_embs: Tensor
+    lengths: Tensor
+    forward_recat_tensor: Tensor
+    recat_source: Tensor
+    codecs: Optional[QuantizedCommCodecs]
+    permuted_lengths: Optional[Tensor]
+    send_tensor: Tensor
+    qcomm_ctx: Any
+    ready: torch.Event
+
+    def mismatch(
+        self,
+        local_embs: Tensor,
+        lengths: Tensor,
+        recat_source: Tensor,
+        codecs: Optional[QuantizedCommCodecs],
+    ) -> Optional[str]:
+        """Returns why an all-to-all of these inputs cannot use this send, or None.
+
+        The recat is compared by source tensor identity, not by the derived
+        forward recat: the forward pass rebuilds that with `invert_permute` on
+        every call, which is a deterministic function of the same, never
+        mutated, source tensor.
+        """
+        if not (
+            local_embs.data_ptr() == self.local_embs.data_ptr()
+            and local_embs.shape == self.local_embs.shape
+            and local_embs.stride() == self.local_embs.stride()
+            and local_embs.dtype == self.local_embs.dtype
+        ):
+            return "rows differ"
+        if not (
+            lengths.data_ptr() == self.lengths.data_ptr()
+            and lengths.shape == self.lengths.shape
+            and lengths.stride() == self.lengths.stride()
+        ):
+            return "lengths differ"
+        if recat_source is not self.recat_source:
+            return "recat differs"
+        if codecs is not self.codecs:
+            return "codecs differ"
+        return None
+
+
+def precompute_seq_a2a_send(
+    local_embs: Tensor,
+    lengths: Tensor,
+    forward_recat_tensor: Tensor,
+    world_size: int,
+    codecs: Optional[QuantizedCommCodecs],
+    recat_source: Optional[Tensor] = None,
+) -> SeqA2APrecomputedSend:
+    """Runs the non-variable-batch `All2All_Seq_Req` permute and encode on the
+    current stream, for a later all-to-all of the same ``local_embs``.
+    ``recat_source`` is the tensor ``forward_recat_tensor`` was derived from."""
+    permuted_lengths, send_tensor, qcomm_ctx = _seq_a2a_permute_and_encode(
+        local_embs,
+        lengths * local_embs.shape[1],
+        forward_recat_tensor,
+        False,
+        world_size,
+        codecs,
+    )
+    return SeqA2APrecomputedSend(
+        local_embs=local_embs,
+        lengths=lengths,
+        forward_recat_tensor=forward_recat_tensor,
+        recat_source=(forward_recat_tensor if recat_source is None else recat_source),
+        codecs=codecs,
+        permuted_lengths=permuted_lengths,
+        send_tensor=send_tensor,
+        qcomm_ctx=qcomm_ctx,
+        ready=torch.get_device_module(local_embs.device)
+        .current_stream()
+        .record_event(),
+    )
+
+
 class All2All_Seq_Req(Function):
     @staticmethod
     # pyrefly: ignore[bad-override]
@@ -2159,44 +2328,39 @@ class All2All_Seq_Req(Function):
         a2ai.input_splits = input_splits
         a2ai.output_splits = output_splits
 
-        local_T = lengths_after_sparse_data_all2all.shape[0]
-        if local_T > 0:
-            with record_function("## All2All_Seq_fwd_permute ##"):
-                if not variable_batch_size:
-                    (
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_input_embeddings,
-                        _,
-                    ) = _permute_2D_sparse_data(
-                        forward_recat_tensor,
-                        lengths_after_sparse_data_all2all.view(
-                            local_T * world_size, -1
-                        ),
-                        sharded_input_embeddings.view(-1),
-                        None,
-                        sharded_input_embeddings.numel(),
-                    )
-                else:
-                    (
-                        permuted_lengths_after_sparse_data_all2all,
-                        sharded_input_embeddings,
-                        _,
-                    ) = torch.ops.fbgemm.permute_1D_sparse_data(
-                        forward_recat_tensor,
-                        lengths_after_sparse_data_all2all.view(-1),
-                        sharded_input_embeddings.view(-1),
-                        None,
-                        sharded_input_embeddings.numel(),
-                    )
+        send = (
+            a2ai.precomputed_send
+            if os.environ.get(SIDE_STREAM_OUTPUT_ENCODE_ENV, "0") == "1"
+            else None
+        )
+        a2ai.precomputed_send = None
+        if send is not None:
+            # Computed on another stream by `precompute_seq_a2a_send`.
+            current_stream = torch.get_device_module(
+                send.send_tensor.device
+            ).current_stream()
+            current_stream.wait_event(send.ready)
+            send.send_tensor.record_stream(current_stream)
+            if send.permuted_lengths is not None:
+                send.permuted_lengths.record_stream(current_stream)
+            permuted_lengths_after_sparse_data_all2all = send.permuted_lengths
+            sharded_input_embeddings = send.send_tensor
+            qcomm_ctx = send.qcomm_ctx
         else:
-            permuted_lengths_after_sparse_data_all2all = None
+            (
+                permuted_lengths_after_sparse_data_all2all,
+                sharded_input_embeddings,
+                qcomm_ctx,
+            ) = _seq_a2a_permute_and_encode(
+                sharded_input_embeddings,
+                lengths_after_sparse_data_all2all,
+                forward_recat_tensor,
+                variable_batch_size,
+                world_size,
+                a2ai.codecs,
+            )
 
         if a2ai.codecs is not None:
-            codecs = none_throws(a2ai.codecs)
-            qcomm_ctx = codecs.forward.create_context()
-            sharded_input_embeddings = a2ai.codecs.forward.encode(
-                sharded_input_embeddings, qcomm_ctx
-            )
             output_splits = [
                 a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx)
                 for x in output_splits
@@ -2205,8 +2369,6 @@ class All2All_Seq_Req(Function):
                 a2ai.codecs.forward.calc_quantized_size(x, qcomm_ctx)
                 for x in input_splits
             ]
-        else:
-            qcomm_ctx = None
 
         sharded_output_embeddings = torch.empty(
             sum(output_splits),
@@ -2250,6 +2412,17 @@ class All2All_Seq_Req(Function):
         assert myreq.req is not None
         myreq.req.wait()
         sharded_grad_input = myreq.tensor
+        if _seq_a2a_bwd_record_stream():
+            # The a2a buffers were allocated on the stream that launched it, and
+            # wait() only orders this stream after the collective. Without this,
+            # freeing them lets the allocator reuse or unmap (expandable segments)
+            # memory the collective and the decode below may still be using.
+            current_stream = torch.get_device_module(
+                sharded_grad_input.device
+            ).current_stream()
+            sharded_grad_input.record_stream(current_stream)
+            if myreq.send_tensor is not None:
+                myreq.send_tensor.record_stream(current_stream)
         if a2ai.codecs is not None:
             codecs = none_throws(a2ai.codecs)
             sharded_grad_input = codecs.backward.decode(
@@ -2257,6 +2430,7 @@ class All2All_Seq_Req(Function):
             )
         myreq.req = None
         myreq.tensor = None
+        myreq.send_tensor = None
         myreq.dummy_tensor = None
 
         if permuted_lengths_after_sparse_data_all2all is not None:
@@ -2305,6 +2479,15 @@ class All2All_Seq_Req_Wait(Function):
         # pyrefly: ignore[missing-attribute]
         if a2ai.codecs is not None:
             codecs = none_throws(a2ai.codecs)
+            seq_info = cast(All2AllSequenceInfo, a2ai)
+            if seq_info.decode_row_permute is not None:
+                sharded_output_embeddings = _select_encoded_rows(
+                    none_throws(sharded_output_embeddings),
+                    seq_info.decode_row_permute,
+                    none_throws(seq_info.codecs).forward.calc_quantized_size(
+                        D, myreq.qcomm_ctx
+                    ),
+                )
             # pyrefly: ignore[missing-attribute]
             sharded_output_embeddings = codecs.forward.decode(
                 sharded_output_embeddings, myreq.qcomm_ctx
@@ -2320,6 +2503,11 @@ class All2All_Seq_Req_Wait(Function):
         pg = ctx.pg
         input_splits = a2ai.output_splits
         output_splits = a2ai.input_splits
+        if a2ai.decode_row_permute is not None:
+            raise RuntimeError(
+                "a row permute folded into the sequence all-to-all decode has no "
+                "backward"
+            )
 
         if a2ai.codecs is not None:
             codecs = none_throws(a2ai.codecs)
@@ -2354,9 +2542,67 @@ class All2All_Seq_Req_Wait(Function):
             )
         myreq.req = req
         myreq.tensor = sharded_grad_input
+        if _seq_a2a_bwd_record_stream():
+            myreq.send_tensor = sharded_grad_output
         myreq.qcomm_ctx = qcomm_ctx
 
         return (None, None, myreq.dummy_tensor)
+
+
+def _select_encoded_rows(
+    encoded: Tensor, row_permute: Tensor, row_numel: int
+) -> Tensor:
+    rows = encoded.view(-1, row_numel)
+    row_bytes = row_numel * encoded.element_size()
+    # Gathering rows of wider elements is several times faster than byte rows.
+    for dtype in (torch.int64, torch.int32, torch.int16):
+        if row_bytes % dtype.itemsize == 0:
+            rows = rows.view(dtype)
+            break
+    return torch.index_select(rows, 0, row_permute).view(encoded.dtype).view(-1)
+
+
+def fold_row_permute_into_seq_decode(
+    tensor_awaitable: Awaitable[Tensor], row_permute: Tensor
+) -> bool:
+    """Makes a pending `alltoall_sequence` select ``row_permute`` rows before decoding.
+
+    MX4 groups decode independently, so when each embedding row is a whole number
+    of groups, selecting encoded rows and then decoding is bit-identical to decoding
+    and then selecting, and the gather moves about 1/7 of the bytes. Only applies
+    with ``TORCHREC_SEQ_A2A_PERMUTE_BEFORE_DECODE=1`` and when nothing can
+    backpropagate through the request, since the folded select has no backward.
+
+    Args:
+        tensor_awaitable (Awaitable[Tensor]): awaitable returned by
+            `alltoall_sequence`.
+        row_permute (Tensor): row indices to select from the received embeddings.
+
+    Returns:
+        bool: whether the select was folded; if not, the caller must apply it.
+    """
+    if os.environ.get(SEQ_PERMUTE_BEFORE_DECODE_ENV, "0") != "1":
+        return False
+    if (
+        not isinstance(tensor_awaitable, Request)
+        or tensor_awaitable.wait_function is not All2All_Seq_Req_Wait
+        or tensor_awaitable.dummy_tensor.requires_grad
+    ):
+        return False
+    a2ai = tensor_awaitable.a2ai
+    qcomm_ctx = tensor_awaitable.qcomm_ctx
+    if not isinstance(a2ai, All2AllSequenceInfo) or a2ai.codecs is None:
+        return False
+    codec = a2ai.codecs.forward
+    if (
+        getattr(codec, "_comm_precision", None) != SparseType.MX4
+        or getattr(codec, "_loss_scale", None) is not None
+        or qcomm_ctx is None
+        or a2ai.embedding_dim % qcomm_ctx.mx_group_size != 0
+    ):
+        return False
+    a2ai.decode_row_permute = row_permute
+    return True
 
 
 class All2Allv_Req(Function):

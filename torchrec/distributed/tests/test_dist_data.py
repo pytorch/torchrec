@@ -9,10 +9,13 @@
 
 import contextlib
 import itertools
+import os
 import random
 import unittest
 import unittest.mock
 from typing import (
+    Any,
+    Callable,
     cast,
     Dict,
     Generator,
@@ -33,6 +36,15 @@ import torchrec.distributed.embedding_sharding as embedding_sharding
 from hypothesis import given, settings
 from pyre_extensions import none_throws
 from torchrec.distributed._collective_tag import _collective_tag_from
+from torchrec.distributed.comm_ops import (
+    All2All_Seq_Req,
+    All2AllSequenceInfo,
+    precompute_seq_a2a_send,
+    Request,
+    SEQ_PERMUTE_BEFORE_DECODE_ENV,
+    SeqA2APrecomputedSend,
+    SIDE_STREAM_OUTPUT_ENCODE_ENV,
+)
 from torchrec.distributed.dist_data import (
     _check_pg_for_nccl_error,
     _get_recat,
@@ -45,6 +57,7 @@ from torchrec.distributed.dist_data import (
     PooledEmbeddingsAllToAll,
     PooledEmbeddingsReduceScatter,
     SequenceEmbeddingsAllToAll,
+    SequenceEmbeddingsAwaitable,
     SplitsAllToAllAwaitable,
     VariableBatchPooledEmbeddingsAllToAll,
 )
@@ -58,6 +71,7 @@ from torchrec.distributed.fbgemm_qcomm_codec import (
     get_qcomm_codecs,
     QCommsConfig,
 )
+from torchrec.distributed.sharding.sequence_sharding import SequenceShardingContext
 from torchrec.distributed.test_utils.multi_process import (
     MultiProcessContext,
     MultiProcessTestBase,
@@ -71,6 +85,7 @@ from torchrec.distributed.types import (
     EmbeddingEvent,
     NoWait,
     NullShardingContext,
+    QuantizedCommCodecs,
 )
 from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor
 
@@ -1596,6 +1611,325 @@ class TestJaggedTensorAllToAll(MultiProcessTestBase):
         world_size = 2
         self._run_multi_process_test(
             callable=self._test_jt_all_to_all, world_size=world_size
+        )
+
+
+def _seq_a2a_awaitable(
+    pg: dist.ProcessGroup,
+    device: torch.device,
+    embs: torch.Tensor,
+    lengths: torch.Tensor,
+    splits: List[int],
+    row_permute: torch.Tensor,
+    num_features: int,
+) -> SequenceEmbeddingsAwaitable:
+    # Calls the request directly: alltoall_sequence skips it when world_size == 1.
+    recat = SequenceEmbeddingsAllToAll(pg, [num_features] * pg.size(), device=device)
+    a2ai = All2AllSequenceInfo(
+        embedding_dim=embs.shape[1],
+        lengths_after_sparse_data_all2all=lengths,
+        forward_recat_tensor=cast(torch.Tensor, recat._forward_recat_tensor),
+        backward_recat_tensor=cast(torch.Tensor, recat._backward_recat_tensor),
+        input_splits=list(splits),
+        output_splits=list(splits),
+        codecs=get_qcomm_codecs(
+            QCommsConfig(
+                forward_precision=CommType.MX4,
+                backward_precision=CommType.BF16,
+                mx4_quantize_dim=32,
+            )
+        ),
+    )
+    myreq: Request[torch.Tensor] = Request(pg, device=device)
+    All2All_Seq_Req.apply(pg, myreq, a2ai, embs)
+    return SequenceEmbeddingsAwaitable(myreq, row_permute, embs.shape[1])
+
+
+def _run_seq_permute_before_decode(rank: int, world_size: int) -> None:
+    with MultiProcessContext(rank, world_size, backend="nccl") as ctx:
+        pg = none_throws(ctx.pg)
+        device = ctx.device
+        num_features, batch_size, length, dim = 2, 3, 5, 128
+        rows_per_rank = num_features * batch_size * length
+        lengths = torch.full(
+            (num_features, world_size * batch_size), length, device=device
+        )
+        embs = torch.randn(rows_per_rank * world_size, dim, device=device) * 100
+        embs[1] = 0
+        splits = [rows_per_rank] * world_size
+        row_permute = torch.randperm(rows_per_rank * world_size, device=device)
+        for requires_grad in (False, True):
+            outputs = []
+            folded = []
+            for enabled in (False, True):
+                os.environ[SEQ_PERMUTE_BEFORE_DECODE_ENV] = "1" if enabled else "0"
+                awaitable = _seq_a2a_awaitable(
+                    pg,
+                    device,
+                    embs.clone().requires_grad_(requires_grad),
+                    lengths,
+                    splits,
+                    row_permute,
+                    num_features,
+                )
+                request = cast(Request[torch.Tensor], awaitable._tensor_awaitable)
+                a2ai = cast(All2AllSequenceInfo, request.a2ai)
+                folded.append(a2ai.decode_row_permute is not None)
+                outputs.append(awaitable.wait())
+            os.environ.pop(SEQ_PERMUTE_BEFORE_DECODE_ENV)
+            assert folded == [False, not requires_grad], folded
+            assert torch.equal(
+                outputs[0].detach().view(torch.int32),
+                outputs[1].detach().view(torch.int32),
+            )
+
+
+class SeqPermuteBeforeDecodeTest(MultiProcessTestBase):
+    @unittest.skipIf(not torch.cuda.is_available(), "MX4 comms need a GPU")
+    def test_permute_before_decode_is_bit_identical(self) -> None:
+        self._run_multi_process_test(
+            callable=_run_seq_permute_before_decode, world_size=1
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_permute_before_decode_is_bit_identical_across_ranks(self) -> None:
+        self._run_multi_process_test(
+            callable=_run_seq_permute_before_decode, world_size=2
+        )
+
+
+def _mx4_seq_codecs() -> QuantizedCommCodecs:
+    return get_qcomm_codecs(
+        QCommsConfig(
+            forward_precision=CommType.MX4,
+            backward_precision=CommType.BF16,
+            mx4_quantize_dim=32,
+        )
+    )
+
+
+def _seq_a2a_output(
+    pg: dist.ProcessGroup,
+    device: torch.device,
+    embs: torch.Tensor,
+    lengths: torch.Tensor,
+    splits: List[int],
+    recat: SequenceEmbeddingsAllToAll,
+    codecs: QuantizedCommCodecs,
+    precomputed_send: Optional[SeqA2APrecomputedSend],
+) -> torch.Tensor:
+    # Calls the request directly: alltoall_sequence skips it when world_size == 1.
+    a2ai = All2AllSequenceInfo(
+        embedding_dim=embs.shape[1],
+        lengths_after_sparse_data_all2all=lengths,
+        forward_recat_tensor=cast(torch.Tensor, recat._forward_recat_tensor),
+        backward_recat_tensor=cast(torch.Tensor, recat._backward_recat_tensor),
+        input_splits=list(splits),
+        output_splits=list(splits),
+        codecs=codecs,
+        precomputed_send=precomputed_send,
+    )
+    myreq: Request[torch.Tensor] = Request(pg, device=device)
+    All2All_Seq_Req.apply(pg, myreq, a2ai, embs)
+    return myreq.wait()
+
+
+def _side_stream_inputs(
+    world_size: int, device: torch.device
+) -> Tuple[torch.Tensor, torch.Tensor, List[int], int]:
+    num_features, batch_size, length, dim = 2, 3, 5, 128
+    rows_per_rank = num_features * batch_size * length
+    lengths = torch.full((num_features, world_size * batch_size), length, device=device)
+    embs = torch.randn(rows_per_rank * world_size, dim, device=device) * 100
+    return embs, lengths, [rows_per_rank] * world_size, num_features
+
+
+def _run_side_stream_output_encode(rank: int, world_size: int) -> None:
+    with MultiProcessContext(rank, world_size, backend="nccl") as ctx:
+        pg = none_throws(ctx.pg)
+        device = ctx.device
+        embs, lengths, splits, num_features = _side_stream_inputs(world_size, device)
+        recat = SequenceEmbeddingsAllToAll(
+            pg, [num_features] * world_size, device=device
+        )
+        codecs = _mx4_seq_codecs()
+        expected = _seq_a2a_output(
+            pg, device, embs, lengths, splits, recat, codecs, None
+        )
+        side = torch.cuda.Stream(device=device)
+        side.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(side):
+            # Keeps the encode running when the all-to-all is enqueued, so a
+            # missing wait on its event shows up as a mismatch.
+            torch.cuda._sleep(200_000_000)
+            send = precompute_seq_a2a_send(
+                embs,
+                lengths,
+                cast(torch.Tensor, recat._forward_recat_tensor),
+                world_size,
+                codecs,
+            )
+        actual = _seq_a2a_output(pg, device, embs, lengths, splits, recat, codecs, send)
+        assert torch.equal(expected.view(torch.int32), actual.view(torch.int32))
+        forward_recat = cast(torch.Tensor, recat._forward_recat_tensor)
+        assert send.mismatch(embs, lengths, forward_recat, codecs) is None
+        assert send.mismatch(embs.clone(), lengths, forward_recat, codecs) == (
+            "rows differ"
+        )
+        assert send.mismatch(embs, lengths.clone(), forward_recat, codecs) == (
+            "lengths differ"
+        )
+        assert send.mismatch(embs, lengths, forward_recat.clone(), codecs) == (
+            "recat differs"
+        )
+        assert send.mismatch(embs, lengths, forward_recat, None) == "codecs differ"
+
+
+def _alltoall_sequence_without_shortcut(
+    used: List[bool],
+) -> Callable[..., Awaitable[torch.Tensor]]:
+    # alltoall_sequence returns its input untouched when world_size == 1; this
+    # runs the request anyway so a single GPU exercises the real path.
+    def run(**kwargs: Any) -> Awaitable[torch.Tensor]:
+        embs = kwargs["a2a_sequence_embs_tensor"]
+        used.append(kwargs["precomputed_send"] is not None)
+        a2ai = All2AllSequenceInfo(
+            embedding_dim=embs.shape[1],
+            lengths_after_sparse_data_all2all=kwargs[
+                "lengths_after_sparse_data_all2all"
+            ],
+            forward_recat_tensor=kwargs["forward_recat_tensor"],
+            backward_recat_tensor=kwargs["backward_recat_tensor"],
+            input_splits=kwargs["input_splits"],
+            output_splits=kwargs["output_splits"],
+            variable_batch_size=kwargs["variable_batch_size"],
+            codecs=kwargs["codecs"],
+            precomputed_send=kwargs["precomputed_send"],
+        )
+        myreq: Request[torch.Tensor] = Request(kwargs["group"], device=embs.device)
+        All2All_Seq_Req.apply(kwargs["group"], myreq, a2ai, embs)
+        return myreq
+
+    return run
+
+
+def _run_side_stream_output_encode_module(rank: int, world_size: int) -> None:
+    with MultiProcessContext(rank, world_size, backend="nccl") as ctx:
+        pg = none_throws(ctx.pg)
+        device = ctx.device
+        embs, lengths, splits, num_features = _side_stream_inputs(world_size, device)
+        batch_size = lengths.shape[1] // world_size
+        a2a = SequenceEmbeddingsAllToAll(
+            pg, [num_features] * world_size, device=device, codecs=_mx4_seq_codecs()
+        )
+        # As in training: the intra-a2a context sets the input dist's recat and a
+        # uniform batch_size_per_rank, and forward re-inverts the recat each call.
+        sharding_ctx = SequenceShardingContext(
+            sparse_features_recat=_get_recat(
+                local_split=num_features,
+                num_splits=world_size,
+                device=device,
+                batch_size_per_rank=[batch_size] * world_size,
+            ),
+            batch_size_per_rank=[batch_size] * world_size,
+        )
+        assert sharding_ctx.sparse_features_recat is not None
+        used: List[bool] = []
+
+        def run(precompute_lengths: Optional[torch.Tensor]) -> torch.Tensor:
+            if precompute_lengths is not None:
+                side = torch.cuda.Stream(device=device)
+                side.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(side):
+                    torch.cuda._sleep(200_000_000)
+                    assert a2a.precompute_send(
+                        embs,
+                        precompute_lengths,
+                        sparse_features_recat=sharding_ctx.sparse_features_recat,
+                        batch_size_per_rank=sharding_ctx.batch_size_per_rank,
+                    )
+            return a2a(
+                local_embs=embs,
+                lengths=lengths,
+                input_splits=splits,
+                output_splits=splits,
+                batch_size_per_rank=sharding_ctx.batch_size_per_rank,
+                sparse_features_recat=sharding_ctx.sparse_features_recat,
+            ).wait()
+
+        skip_reason = SequenceEmbeddingsAllToAll._precompute_send_skip_reason
+
+        def skip_reason_ignoring_world_size(
+            self: SequenceEmbeddingsAllToAll,
+            local_embs: torch.Tensor,
+            batch_size_per_rank: Optional[List[int]],
+        ) -> Optional[str]:
+            reason = skip_reason(self, local_embs, batch_size_per_rank)
+            return None if reason == "world size 1" else reason
+
+        with contextlib.ExitStack() as stack:
+            if world_size == 1:
+                stack.enter_context(
+                    patch(
+                        "torchrec.distributed.dist_data.alltoall_sequence",
+                        _alltoall_sequence_without_shortcut(used),
+                    )
+                )
+                stack.enter_context(
+                    patch.object(
+                        SequenceEmbeddingsAllToAll,
+                        "_precompute_send_skip_reason",
+                        skip_reason_ignoring_world_size,
+                    )
+                )
+            expected = run(None)
+            os.environ[SIDE_STREAM_OUTPUT_ENCODE_ENV] = "1"
+            try:
+                # Same tensors: uses the precomputed send. Other lengths: recomputes.
+                for precompute_lengths in (lengths, lengths.clone()):
+                    actual = run(precompute_lengths)
+                    assert a2a._precomputed_send is None
+                    assert torch.equal(
+                        expected.view(torch.int32), actual.view(torch.int32)
+                    )
+            finally:
+                os.environ.pop(SIDE_STREAM_OUTPUT_ENCODE_ENV)
+        if world_size == 1:
+            assert used == [False, True, False], used
+
+
+class SideStreamOutputEncodeTest(MultiProcessTestBase):
+    @unittest.skipIf(not torch.cuda.is_available(), "MX4 comms need a GPU")
+    def test_precomputed_send_is_bit_identical_and_stream_ordered(self) -> None:
+        self._run_multi_process_test(
+            callable=_run_side_stream_output_encode, world_size=1
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_precomputed_send_is_bit_identical_across_ranks(self) -> None:
+        self._run_multi_process_test(
+            callable=_run_side_stream_output_encode, world_size=2
+        )
+
+    @unittest.skipIf(not torch.cuda.is_available(), "MX4 comms need a GPU")
+    def test_module_precompute_send_with_input_dist_recat(self) -> None:
+        self._run_multi_process_test(
+            callable=_run_side_stream_output_encode_module, world_size=1
+        )
+
+    @unittest.skipIf(
+        torch.cuda.device_count() <= 1,
+        "Not enough GPUs, this test requires at least two GPUs",
+    )
+    def test_module_precompute_send_is_bit_identical(self) -> None:
+        self._run_multi_process_test(
+            callable=_run_side_stream_output_encode_module, world_size=2
         )
 
 
