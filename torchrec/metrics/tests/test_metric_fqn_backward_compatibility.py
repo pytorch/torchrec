@@ -31,6 +31,7 @@ To update the golden snapshot after intentional changes, from fbcode:
 import contextlib
 import copy
 import inspect
+import io
 import json
 import os
 import sys
@@ -1275,9 +1276,10 @@ class MetricCoverageTest(unittest.TestCase):
             )
 
 
-# Cross-config state_dict tests: detect config-dependent keys and verify
-# cross-config loads succeed with strict=True. New conditional-state params
-# must be added to KNOWN_CONDITIONAL_STATE with a proper always-pop hook.
+# Cross-config state_dict tests: detect params whose value changes the
+# state_dict keys, and how a checkpoint loads across them. New
+# conditional-state params must be added to KNOWN_CONDITIONAL_STATE and
+# CROSS_CONFIG_LOAD_OUTCOMES.
 
 _BATCH_SIZE_STAGES_ALTERNATIVE: List[BatchSizeStage] = [
     BatchSizeStage(batch_size=256, max_iters=1),
@@ -1324,7 +1326,9 @@ _PARAM_ALTERNATIVES: Dict[str, List[Any]] = {
     "batch_size_stages": [_BATCH_SIZE_STAGES_ALTERNATIVE],
     "description": ["test_description"],
     "is_negative_task_mask": [[True]],
-    "label_names": [["label_a", "label_b"]],
+    # One name, matching the default num_labels=1. Two names build and write
+    # keys but cannot take a batch.
+    "label_names": [["label_a"]],
     # default + 1.0 is 1.0, which collides with max_prediction and trips the
     # min < max check, so the auto-generated value is never usable.
     "min_prediction": [0.1],
@@ -1456,18 +1460,26 @@ UNVERIFIABLE_PARAMS: Dict[Tuple[str, str], str] = {
     ): "state_dict is empty under every probed value",
 }
 
-# Subset with proper always-pop hooks (cross-config load tests use these).
-RECMETRIC_CONDITIONAL_STATE: Dict[Tuple[Type[RecMetric], str], List[Any]] = {
-    (MSEMetric, "include_r_squared"): [True],
-    (TowerQPSMetric, "batch_size_stages"): [_BATCH_SIZE_STAGES_ALTERNATIVE],
-}
-
-_RECMETRIC_COMMON_KWARGS: Dict[str, Any] = {
-    "world_size": 1,
-    "my_rank": 0,
-    "batch_size": 32,
-    "compute_mode": RecComputeMode.UNFUSED_TASKS_COMPUTATION,
-    "window_size": 100,
+# How a transfer-learning load goes across each param above, as
+# (variant value, default -> variant, variant -> default). The keys must match
+# KNOWN_CONDITIONAL_STATE, so a param that starts changing the keys needs a
+# declared outcome too.
+CROSS_CONFIG_LOAD_OUTCOMES: Dict[Tuple[str, str], Tuple[Any, str, str]] = {
+    ("MSEMetric", "include_r_squared"): (True, "loads", "loads"),
+    ("MultiLabelPrecisionMetric", "label_names"): (["label_a"], "rejects", "rejects"),
+    # Widening loads, leaving the new label's state at its defaults. Narrowing
+    # leaves keys nobody claims.
+    ("MultiLabelPrecisionMetric", "num_labels"): (2, "loads", "rejects"),
+    ("ThroughputMetric", "batch_size_stages"): (
+        _BATCH_SIZE_STAGES_ALTERNATIVE,
+        "loads",
+        "loads",
+    ),
+    ("TowerQPSMetric", "batch_size_stages"): (
+        _BATCH_SIZE_STAGES_ALTERNATIVE,
+        "loads",
+        "loads",
+    ),
 }
 
 _THROUGHPUT_COMMON_KWARGS: Dict[str, Any] = {
@@ -1675,104 +1687,132 @@ class ConditionalStateRegistryTest(unittest.TestCase):
         self.assertEqual(unverifiable, UNVERIFIABLE_PARAMS)
 
 
+def _populate(metric: torch.nn.Module) -> None:
+    """Feed one real batch. A configuration that cannot take a batch fails
+    here."""
+    if isinstance(metric, ThroughputMetric):
+        metric.update()
+        return
+    assert isinstance(metric, RecMetric)
+    generator = torch.Generator().manual_seed(0)
+    size = metric._batch_size
+    names = [task.name for task in metric._tasks]
+
+    def binary() -> torch.Tensor:
+        return torch.randint(0, 2, (size,), generator=generator).double()
+
+    # Binary predictions suit both probability metrics and the integer-encoded
+    # multi-label one, which reads fractional predictions as no label at all.
+    metric.update(
+        predictions={name: binary() for name in names},
+        labels={name: binary() for name in names},
+        weights={name: torch.rand(size, generator=generator) for name in names},
+    )
+
+
+# A value no metric state starts at.
+_SENTINEL = 17
+
+
+def _saved_state(src: torch.nn.Module) -> Dict[str, Any]:
+    """src's state after one real batch. A tensor the batch left at its initial
+    value, such as elapsed time before warmup ends, is set to `_SENTINEL`, so a
+    load that skips it cannot match the destination's default."""
+    initial = copy.deepcopy(src.state_dict())
+    _populate(src)
+    state = src.state_dict()
+    for key, value in state.items():
+        if _same(value, initial[key]):
+            value.fill_(_SENTINEL)
+    return state
+
+
+def _same(a: torch.Tensor, b: torch.Tensor) -> bool:
+    # torch.equal compares values across dtypes, so 3 == 3.0 would pass.
+    return a.dtype == b.dtype and torch.equal(a, b)
+
+
+def _build_recmetric(metric_cls: Type[RecMetric], **overrides: Any) -> RecMetric:
+    return build_metric(metric_cls, **{**_construction_kwargs(metric_cls), **overrides})
+
+
+def _build_throughput(**overrides: Any) -> ThroughputMetric:
+    return ThroughputMetric(**{**_THROUGHPUT_COMMON_KWARGS, **overrides})
+
+
+def _builder(cls_name: str) -> Callable[..., torch.nn.Module]:
+    if cls_name == "ThroughputMetric":
+        return _build_throughput
+    metric_cls = next(
+        cls for cls in _discover_all_recmetric_subclasses() if cls.__name__ == cls_name
+    )
+    return partial(_build_recmetric, metric_cls)
+
+
 class CrossConfigLoadTest(unittest.TestCase):
 
-    def _make_common_kwargs(self) -> Dict[str, Any]:
-        return {**_RECMETRIC_COMMON_KWARGS, "tasks": [create_test_task("task1")]}
+    @unittest.skipIf(
+        sys.version_info < (3, 11),
+        "concurrent.futures._base.Future is type but not a class",
+    )
+    def test_cross_config_loads_are_exactly_declared(self) -> None:
+        """Every param that changes the keys must declare how a cross-config
+        load goes in both directions, and the observed outcome must match."""
+        self.assertEqual(set(CROSS_CONFIG_LOAD_OUTCOMES), KNOWN_CONDITIONAL_STATE)
+        for (cls_name, param), (value, to_variant, to_default) in sorted(
+            CROSS_CONFIG_LOAD_OUTCOMES.items(), key=lambda item: item[0]
+        ):
+            with self.subTest(pair=(cls_name, param)):
+                build = _builder(cls_name)
+                variant = {param: value}
+                # Otherwise each load would put a config back into itself.
+                self.assertNotEqual(
+                    set(build().state_dict()), set(build(**variant).state_dict())
+                )
+                # Fresh modules per direction: a load mutates its destination.
+                with self.subTest(direction="default -> variant"):
+                    self._assert_checkpoint_load(build(), build(**variant), to_variant)
+                with self.subTest(direction="variant -> default"):
+                    self._assert_checkpoint_load(build(**variant), build(), to_default)
 
-    def _assert_cross_config_load(
-        self,
-        metric_cls: Type[RecMetric],
-        param_name: str,
-        alt_value: Any,
-        direction: str,
+    def _assert_checkpoint_load(
+        self, src: torch.nn.Module, dst: torch.nn.Module, expected_outcome: str
     ) -> None:
-        common_kwargs = self._make_common_kwargs()
-        if direction == "variant_to_default":
-            src = metric_cls(**common_kwargs, **{param_name: alt_value})
-            dst = metric_cls(**common_kwargs)
-        else:
-            src = metric_cls(**common_kwargs)
-            dst = metric_cls(**common_kwargs, **{param_name: alt_value})
-        dst.load_state_dict(src.state_dict(), strict=True)
-
-    def test_cross_config_load_variant_to_default(self) -> None:
-        for (
-            metric_cls,
-            param_name,
-        ), alternatives in RECMETRIC_CONDITIONAL_STATE.items():
-            for alt_value in alternatives:
-                with self.subTest(
-                    metric=metric_cls.__name__,
-                    param=param_name,
-                    direction="variant_to_default",
-                ):
-                    self._assert_cross_config_load(
-                        metric_cls, param_name, alt_value, "variant_to_default"
-                    )
-
-    def test_cross_config_load_default_to_variant(self) -> None:
-        for (
-            metric_cls,
-            param_name,
-        ), alternatives in RECMETRIC_CONDITIONAL_STATE.items():
-            for alt_value in alternatives:
-                with self.subTest(
-                    metric=metric_cls.__name__,
-                    param=param_name,
-                    direction="default_to_variant",
-                ):
-                    self._assert_cross_config_load(
-                        metric_cls, param_name, alt_value, "default_to_variant"
-                    )
-
-    def test_throughput_cross_config_load_variant_to_default(self) -> None:
-        variant = ThroughputMetric(
-            **_THROUGHPUT_COMMON_KWARGS,
-            batch_size_stages=_BATCH_SIZE_STAGES_ALTERNATIVE,
-        )
-        default = ThroughputMetric(**_THROUGHPUT_COMMON_KWARGS)
-        default.load_state_dict(variant.state_dict(), strict=True)
-
-    def test_throughput_cross_config_load_default_to_variant(self) -> None:
-        default = ThroughputMetric(**_THROUGHPUT_COMMON_KWARGS)
-        variant = ThroughputMetric(
-            **_THROUGHPUT_COMMON_KWARGS,
-            batch_size_stages=_BATCH_SIZE_STAGES_ALTERNATIVE,
-        )
-        variant.load_state_dict(default.state_dict(), strict=True)
-
-    def test_multi_label_precision_cross_config_load_fails_without_hook(self) -> None:
-        variant_kwargs: Dict[str, Any] = {
-            **self._make_common_kwargs(),
-            "num_labels": 3,
-        }
-        default_kwargs: Dict[str, Any] = {
-            **self._make_common_kwargs(),
-            "num_labels": 1,
-        }
-        variant = MultiLabelPrecisionMetric(**variant_kwargs)
-        default = MultiLabelPrecisionMetric(**default_kwargs)
-
-        with self.assertRaises(RuntimeError):
-            default.load_state_dict(variant.state_dict(), strict=True)
-
-    def test_multi_label_precision_label_names_cross_config_load_fails(self) -> None:
-        kwargs_a: Dict[str, Any] = {
-            **self._make_common_kwargs(),
-            "num_labels": 1,
-            "label_names": ["cat"],
-        }
-        kwargs_b: Dict[str, Any] = {
-            **self._make_common_kwargs(),
-            "num_labels": 1,
-            "label_names": ["dog"],
-        }
-        variant_a = MultiLabelPrecisionMetric(**kwargs_a)
-        variant_b = MultiLabelPrecisionMetric(**kwargs_b)
-
-        with self.assertRaises(RuntimeError):
-            variant_b.load_state_dict(variant_a.state_dict(), strict=True)
+        """Load a populated src into dst the way transfer learning does: a
+        checkpoint round trip, then a strict load. "rejects" must fail only on
+        keys from the config difference. "loads" must keep the destination's
+        keys, restore every shared state, and leave the rest at defaults."""
+        self.assertIn(expected_outcome, ("loads", "rejects"))
+        buffer = io.BytesIO()
+        torch.save(_saved_state(src), buffer)
+        buffer.seek(0)
+        checkpoint = torch.load(buffer)
+        # torchmetrics restores a state by adopting the checkpoint's tensor, so
+        # a later in-place change would alter the checkpoint too.
+        saved = copy.deepcopy(checkpoint)
+        defaults = copy.deepcopy(dst.state_dict())
+        # `strict` only decides whether key differences raise. Any other load
+        # error still raises.
+        incompatible = dst.load_state_dict(checkpoint, strict=False)
+        unexpected = set(incompatible.unexpected_keys)
+        missing = set(incompatible.missing_keys)
+        if expected_outcome == "rejects":
+            self.assertTrue(unexpected or missing, "The strict load succeeded.")
+            checkpoint_only = set(saved) - set(defaults)
+            destination_only = set(defaults) - set(saved)
+            # Whatever is left is a key outside the config difference.
+            self.assertEqual(unexpected - checkpoint_only, set())
+            self.assertEqual(missing - destination_only, set())
+            return
+        self.assertEqual(unexpected | missing, set(), "A strict load would fail.")
+        loaded = dst.state_dict()
+        self.assertEqual(set(loaded), set(defaults))
+        for key, value in loaded.items():
+            if key in saved:
+                # A saved value equal to the default would hide a skipped restore.
+                self.assertFalse(_same(saved[key], defaults[key]), key)
+            want = saved[key] if key in saved else defaults[key]
+            self.assertTrue(_same(value, want), key)
 
 
 def generate_schema_case_entries() -> Dict[str, Dict[str, Any]]:
