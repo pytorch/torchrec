@@ -57,7 +57,7 @@ Rank 3 sends table_0, shard_1 to Rank 0
 
 NOTE: table_1 comes first due to its source rank being 'first'
 On Rank 0:output_tensor = [
-    <table_1, shard_0>, # from rank 2
+    <table_1, shard_1>, # from rank 2
     <table_0, shard_1>  # from rank 3
 ]
 
@@ -71,8 +71,8 @@ Rank 0 sends table_1 to Rank 1
 Rank 0 sends table_2 to Rank 1
 
 output_tensor = [
-    <table_0, shard_y>,
-    <table_1, shard_y>
+    <table_1, shard_y>,
+    <table_2, shard_y>
 ]
 
 Example 3: NOTE: ordered by shard if table and rank are the same
@@ -80,7 +80,7 @@ Rank 0 sends table_1, shard_0 to Rank 1
 Rank 0 sends table_1, shard_1 to Rank 1
 
 Rank 1: output_tensor = [
-    <table_0, shard_0>,
+    <table_1, shard_0>,
     <table_1, shard_1>
 ]
 """
