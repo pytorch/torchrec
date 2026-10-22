@@ -13,7 +13,10 @@ import inspect
 import itertools
 import json
 import logging
+import os
 import tempfile
+import threading
+import time
 from dataclasses import dataclass
 from math import isfinite, sqrt
 from typing import (
@@ -2697,6 +2700,197 @@ class ZeroCollisionEmbeddingCache(ZeroCollisionKeyValueEmbedding):
         )
 
 
+_HOST_MEM_LOG_SECS_ENV = "TORCHREC_KVZCH_HOST_MEM_LOG_SECS"
+_HOST_MEM_VMSTAT_KEYS = (
+    "numa_miss",
+    "numa_foreign",
+    "numa_other",
+    "pgscan_kswapd",
+    "pgscan_direct",
+    "pgsteal_kswapd",
+    "pgsteal_direct",
+    "allocstall_normal",
+    "allocstall_movable",
+    "compact_stall",
+    "pgmajfault",
+)
+_host_mem_logger_started: bool = False
+
+
+def _read_host_mem_stats() -> str:
+    parts = []
+    node_root = "/sys/devices/system/node"
+    for node in sorted(d for d in os.listdir(node_root) if d.startswith("node")):
+        fields = {}
+        with open(os.path.join(node_root, node, "meminfo")) as f:
+            for line in f:
+                # "Node 0 MemFree:  123 kB"
+                tokens = line.split()
+                if len(tokens) >= 4:
+                    fields[tokens[2].rstrip(":")] = int(tokens[3]) // (1024 * 1024)
+        if not any(fields.get(k) for k in ("MemFree", "FilePages", "AnonPages")):
+            continue
+        parts.append(
+            f"{node} free={fields.get('MemFree')}G file={fields.get('FilePages')}G"
+            f" anon={fields.get('AnonPages')}G"
+        )
+    with open("/proc/vmstat") as f:
+        vm = dict(line.split() for line in f)
+    parts.append(" ".join(f"{k}={vm.get(k)}" for k in _HOST_MEM_VMSTAT_KEYS))
+    rss_kb = 0
+    with open("/proc/self/status") as f:
+        for line in f:
+            if line.startswith("VmRSS:"):
+                rss_kb = int(line.split()[1])
+    # Pinned host memory held by the PyTorch caching host allocator in this rank.
+    host_memory_stats = getattr(torch.cuda, "host_memory_stats", None)
+    pinned = (
+        host_memory_stats()
+        if torch.cuda.is_available() and host_memory_stats is not None
+        else {}
+    )
+    parts.append(
+        f"rank_rss={rss_kb // (1024 * 1024)}G"
+        f" pinned_held={pinned.get('allocated_bytes.current', 0) // 2**30}G"
+        f" pinned_active={pinned.get('active_bytes.current', 0) // 2**30}G"
+        f" pinned_blocks={pinned.get('allocations.current', 0)}"
+        f" pinned_active_blocks={pinned.get('active_requests.current', 0)}"
+        f" pinned_peak={pinned.get('allocated_bytes.peak', 0) // 2**30}G"
+        f" pinned_host_allocs={pinned.get('num_host_alloc', 0)}"
+        f" pinned_host_alloc_s={pinned.get('host_alloc_time.total', 0) / 1e6:.1f}"
+    )
+    return " | ".join(parts)
+
+
+_PINNED_TRIM_MIN_IDLE_GB_ENV = "TORCHREC_KVZCH_PINNED_TRIM_MIN_IDLE_GB"
+_PINNED_TRIM_EVERY_N_CALLS_ENV = "TORCHREC_KVZCH_PINNED_TRIM_EVERY_N_CALLS"
+_PINNED_TRIM_MIN_INTERVAL_SECS_ENV = "TORCHREC_KVZCH_PINNED_TRIM_MIN_INTERVAL_SECS"
+
+
+class _PinnedHostCacheTrimmer:
+    """Returns idle cached pinned host blocks to the OS once they pile up.
+
+    PyTorch's caching host allocator never releases a freed pinned block on its
+    own, so a producer queue that deepens while training stalls (e.g. the
+    pinned DPP batch queue during a checkpoint) leaves its high-water mark
+    pinned and resident for the rest of the job. Every ``every_n_calls`` calls,
+    and at most once per ``min_interval_s``, this releases all cached blocks if
+    ``held - active`` is at least ``min_idle_gb``. Only blocks that are free
+    and whose stream events completed are released, so results do not change;
+    the cost is the cudaFreeHost time now and a cudaHostAlloc if the queue
+    deepens again.
+    """
+
+    def __init__(
+        self, min_idle_gb: float, every_n_calls: int, min_interval_s: float
+    ) -> None:
+        self._min_idle_bytes = int(min_idle_gb * 2**30)
+        self._every_n_calls: int = max(1, every_n_calls)
+        self._min_interval_s = min_interval_s
+        self._calls = 0
+        self._last_trim_s: Optional[float] = None
+        self._host_allocs_after_last_trim = 0
+        self._host_alloc_us_after_last_trim = 0.0
+        self.num_trims = 0
+
+    @classmethod
+    def from_env(cls) -> Optional["_PinnedHostCacheTrimmer"]:
+        min_idle_gb = float(os.environ.get(_PINNED_TRIM_MIN_IDLE_GB_ENV, "0"))
+        if (
+            min_idle_gb <= 0
+            or not hasattr(torch._C, "_host_emptyCache")
+            or not hasattr(torch.cuda, "host_memory_stats")
+        ):
+            return None
+        return cls(
+            min_idle_gb=min_idle_gb,
+            every_n_calls=int(os.environ.get(_PINNED_TRIM_EVERY_N_CALLS_ENV, "100")),
+            min_interval_s=float(
+                os.environ.get(_PINNED_TRIM_MIN_INTERVAL_SECS_ENV, "900")
+            ),
+        )
+
+    def maybe_trim(self) -> bool:
+        self._calls += 1
+        if self._calls % self._every_n_calls != 0:
+            return False
+        now = time.monotonic()
+        if (
+            self._last_trim_s is not None
+            and now - self._last_trim_s < self._min_interval_s
+        ):
+            return False
+        before = torch.cuda.host_memory_stats()
+        held = before.get("allocated_bytes.current", 0)
+        idle = held - before.get("active_bytes.current", 0)
+        if idle < self._min_idle_bytes:
+            return False
+        torch._C._host_emptyCache()
+        after = torch.cuda.host_memory_stats()
+        elapsed_s = time.monotonic() - now
+        # Allocations since the previous trim are what that trim cost later.
+        realloc_count = (
+            before.get("num_host_alloc", 0) - self._host_allocs_after_last_trim
+        )
+        realloc_s = (
+            before.get("host_alloc_time.total", 0) - self._host_alloc_us_after_last_trim
+        ) / 1e6
+        self._host_allocs_after_last_trim = after.get("num_host_alloc", 0)
+        self._host_alloc_us_after_last_trim = after.get("host_alloc_time.total", 0)
+        self._last_trim_s = time.monotonic()
+        self.num_trims += 1
+        logger.info(
+            f"[kvzch-pinned-trim] #{self.num_trims} held {held / 2**30:.1f}G"
+            f" -> {after.get('allocated_bytes.current', 0) / 2**30:.1f}G"
+            f" (idle {idle / 2**30:.1f}G, blocks"
+            f" {before.get('allocations.current', 0)}"
+            f" -> {after.get('allocations.current', 0)}) in {elapsed_s:.2f}s;"
+            f" host allocs since previous trim: {realloc_count}"
+            f" ({realloc_s:.1f}s)"
+        )
+        return True
+
+
+_pinned_trimmer: Optional[_PinnedHostCacheTrimmer] = None
+_pinned_trimmer_initialized: bool = False
+
+
+def _maybe_trim_pinned_host_cache() -> None:
+    global _pinned_trimmer, _pinned_trimmer_initialized
+    if float(os.environ.get(_PINNED_TRIM_MIN_IDLE_GB_ENV, "0")) <= 0:
+        return
+    if not _pinned_trimmer_initialized:
+        _pinned_trimmer_initialized = True
+        _pinned_trimmer = _PinnedHostCacheTrimmer.from_env()
+        if _pinned_trimmer is not None:
+            logger.info(
+                f"{_PINNED_TRIM_MIN_IDLE_GB_ENV} set: trimming idle cached pinned"
+                " host memory from the KVZCH enrichment cache forward"
+            )
+    if _pinned_trimmer is not None and not torch.compiler.is_compiling():
+        _pinned_trimmer.maybe_trim()
+
+
+def _maybe_start_host_mem_logger() -> None:
+    """Log per-NUMA-node memory and /proc/vmstat reclaim/NUMA counters every
+    TORCHREC_KVZCH_HOST_MEM_LOG_SECS seconds from local rank 0 (host-wide view)."""
+    global _host_mem_logger_started
+    interval_s = float(os.environ.get(_HOST_MEM_LOG_SECS_ENV, "0"))
+    if _host_mem_logger_started or interval_s <= 0 or get_local_rank() != 0:
+        return
+    _host_mem_logger_started = True
+
+    def _run() -> None:
+        while True:
+            try:
+                logger.info(f"[kvzch-host-mem] {_read_host_mem_stats()}")
+            except (OSError, ValueError, IndexError) as e:
+                logger.warning(f"[kvzch-host-mem] read failed: {e}")
+            time.sleep(interval_s)
+
+    threading.Thread(target=_run, name="kvzch_host_mem_logger", daemon=True).start()
+
+
 class ZeroCollisionEmbeddingEnrichmentCache(ZeroCollisionKeyValueEmbedding):
     def __init__(
         self,
@@ -2712,10 +2906,35 @@ class ZeroCollisionEmbeddingEnrichmentCache(ZeroCollisionKeyValueEmbedding):
             backend_type,
             True,  # embedding_cache_mode
         )
+        _maybe_start_host_mem_logger()
 
     @property
     def direct_backend_gather_enabled(self) -> bool:
         return self.emb_module.direct_backend_gather_enabled
+
+    def prefetch_direct_backend_gather(
+        self, features: KeyedJaggedTensor
+    ) -> torch.Tensor:
+        """Prefetch direct-gather rows on the current stream for a later forward."""
+        if not self.direct_backend_gather_enabled:
+            raise ValueError("Direct backend gather must be enabled for prefetch")
+        self.emb_module.prefetch(
+            indices=features.values().long(),
+            offsets=features.offsets().long(),
+            weights=features.weights_or_none(),
+        )
+        output = self.get_prefetched_direct_backend_output()
+        if output is None:
+            raise RuntimeError("Direct backend prefetch did not produce rows")
+        return output
+
+    def get_prefetched_direct_backend_output(self) -> Optional[torch.Tensor]:
+        """Return the SSD-owned pending rows without consuming them."""
+        return self.emb_module.get_prefetched_direct_backend_output()
+
+    def clear_prefetched_direct_backend_output(self) -> None:
+        """Drop pending rows without resetting the owner-local cache."""
+        self.emb_module.clear_prefetched_direct_backend_output()
 
     def owner_local_cache_last_hit_counts(self) -> Optional[Tuple[int, int]]:
         return self.emb_module.owner_local_cache_last_hit_counts()
@@ -2725,6 +2944,7 @@ class ZeroCollisionEmbeddingEnrichmentCache(ZeroCollisionKeyValueEmbedding):
         self.emb_module.reset_enrichment_cache()
 
     def forward(self, features: KeyedJaggedTensor) -> torch.Tensor:
+        _maybe_trim_pinned_host_cache()
         # in the case of embedding_cache_mode, we don't need backward pass, so call forward in no_grad mode
         with torch.no_grad():
             return super().forward(features)

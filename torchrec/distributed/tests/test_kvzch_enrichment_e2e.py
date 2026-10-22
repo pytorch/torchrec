@@ -30,8 +30,11 @@ against a plain DRAM_VIRTUAL_TABLE (no enrichment). This file extends coverage
 to the enrichment-enabled path.
 """
 
+import os
 import time
+import unittest
 from typing import Any, cast, List, Optional
+from unittest import mock
 
 import torch
 import torch.nn as nn
@@ -43,7 +46,15 @@ from fbgemm_gpu.tbe.ssd.ssd_config import (
     KVZCHTBEConfig,
 )
 from torchrec.distributed import DistributedModelParallel
-from torchrec.distributed.embedding_types import EmbeddingComputeKernel
+from torchrec.distributed.batched_embedding_kernel import (
+    _PinnedHostCacheTrimmer,
+    ZeroCollisionEmbeddingEnrichmentCache,
+    ZeroCollisionKeyValueEmbedding,
+)
+from torchrec.distributed.embedding_types import (
+    EmbeddingComputeKernel,
+    GroupedEmbeddingConfig,
+)
 from torchrec.distributed.global_settings import set_propogate_device
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
@@ -1053,3 +1064,197 @@ class TestKvzchEnrichmentE2E(MultiProcessTestBase):
             world_size=world_size,
             backend="nccl",
         )
+
+
+class _DirectPrefetchBackend(nn.Module):
+    direct_backend_gather_enabled = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.pending: Optional[torch.Tensor] = None
+        self.prefetch_calls = 0
+        self.indices_dtype: Optional[torch.dtype] = None
+        self.offsets_dtype: Optional[torch.dtype] = None
+
+    def prefetch(
+        self,
+        indices: torch.Tensor,
+        offsets: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
+    ) -> None:
+        self.prefetch_calls += 1
+        self.indices_dtype, self.offsets_dtype = indices.dtype, offsets.dtype
+        self.pending = torch.stack((indices.float(), indices.float() + 1), dim=1)
+
+    def get_prefetched_direct_backend_output(self) -> Optional[torch.Tensor]:
+        return self.pending
+
+    def clear_prefetched_direct_backend_output(self) -> None:
+        self.pending = None
+
+    def reset_enrichment_cache(self) -> None:
+        raise AssertionError("Dropping a prefetch must not reset the owner cache")
+
+    def forward(
+        self,
+        indices: torch.Tensor,
+        offsets: torch.Tensor,
+        weights: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        rows = self.pending
+        self.pending = None
+        if rows is None:
+            rows = torch.stack((indices.float(), indices.float() + 1), dim=1)
+        return rows.reshape(-1)
+
+
+class DirectPrefetchWrapperTest(unittest.TestCase):
+    def _cache(
+        self,
+    ) -> tuple[ZeroCollisionEmbeddingEnrichmentCache, _DirectPrefetchBackend]:
+        backend = _DirectPrefetchBackend()
+
+        def initialize_backend(
+            cache: ZeroCollisionEmbeddingEnrichmentCache, *args: Any, **kwargs: Any
+        ) -> None:
+            nn.Module.__init__(cache)
+            cache._emb_module = cast(Any, backend)
+            cache._optim = mock.Mock()
+
+        with mock.patch.object(
+            ZeroCollisionKeyValueEmbedding, "__init__", initialize_backend
+        ):
+            cache = ZeroCollisionEmbeddingEnrichmentCache(
+                config=mock.Mock(spec=GroupedEmbeddingConfig),
+                device=torch.device("cpu"),
+            )
+        return cache, backend
+
+    @staticmethod
+    def _features() -> KeyedJaggedTensor:
+        return KeyedJaggedTensor.from_lengths_sync(
+            keys=[FEATURE_NAME],
+            values=torch.tensor([3, 1], dtype=torch.int32),
+            lengths=torch.ones(2, dtype=torch.int32),
+        )
+
+    def test_default_forward_starts_no_sampler_or_allocator_trim(self) -> None:
+        from torchrec.distributed import batched_embedding_kernel as kernel
+
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "TORCHREC_KVZCH_HOST_MEM_LOG_SECS": "0",
+                    "TORCHREC_KVZCH_PINNED_TRIM_MIN_IDLE_GB": "0",
+                },
+            ),
+            mock.patch.object(kernel, "_host_mem_logger_started", False),
+            mock.patch.object(kernel, "_pinned_trimmer_initialized", False),
+            mock.patch.object(kernel, "_pinned_trimmer", None),
+            mock.patch.object(kernel.threading, "Thread") as thread,
+            mock.patch.object(torch._C, "_host_emptyCache", create=True) as trim,
+        ):
+            cache, backend = self._cache()
+            rows = cache(self._features())
+        torch.testing.assert_close(rows, torch.tensor([3.0, 4.0, 1.0, 2.0]))
+        self.assertEqual(backend.prefetch_calls, 0)
+        thread.assert_not_called()
+        trim.assert_not_called()
+
+    def test_public_prefetch_is_consumed_by_forward_with_long_indices(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "TORCHREC_KVZCH_HOST_MEM_LOG_SECS": "0",
+                "TORCHREC_KVZCH_PINNED_TRIM_MIN_IDLE_GB": "0",
+            },
+        ):
+            cache, backend = self._cache()
+            features = self._features()
+            prefetched = cache.prefetch_direct_backend_gather(features)
+            self.assertIs(cache.get_prefetched_direct_backend_output(), prefetched)
+            rows = cache(features)
+        self.assertEqual(backend.indices_dtype, torch.int64)
+        self.assertEqual(backend.offsets_dtype, torch.int64)
+        torch.testing.assert_close(rows, prefetched.reshape(-1))
+        self.assertIsNone(cache.get_prefetched_direct_backend_output())
+
+    def test_public_clear_drops_ssd_state_without_resetting_owner_cache(self) -> None:
+        with mock.patch.dict(os.environ, {"TORCHREC_KVZCH_HOST_MEM_LOG_SECS": "0"}):
+            cache, _ = self._cache()
+            cache.prefetch_direct_backend_gather(self._features())
+            cache.clear_prefetched_direct_backend_output()
+        self.assertIsNone(cache.get_prefetched_direct_backend_output())
+
+
+def _host_stats(held: int, active: int) -> dict[str, int]:
+    return {"allocated_bytes.current": held, "active_bytes.current": active}
+
+
+class TestPinnedHostCacheTrimmer(unittest.TestCase):
+    def test_off_unless_the_env_is_set(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(_PinnedHostCacheTrimmer.from_env())
+
+    def test_trims_only_when_idle_reaches_the_threshold(self) -> None:
+        trimmer = _PinnedHostCacheTrimmer(
+            min_idle_gb=1, every_n_calls=2, min_interval_s=0
+        )
+        stats = [_host_stats(3 << 30, (2 << 30) + 1)]
+        with (
+            mock.patch.object(
+                torch.cuda, "host_memory_stats", side_effect=lambda: stats[0]
+            ),
+            mock.patch.object(torch._C, "_host_emptyCache", create=True) as empty,
+        ):
+            self.assertFalse(trimmer.maybe_trim())  # call 1: not a check step
+            self.assertFalse(trimmer.maybe_trim())  # call 2: idle < 1 GiB
+            stats[0] = _host_stats(3 << 30, 1 << 30)
+            self.assertFalse(trimmer.maybe_trim())
+            self.assertTrue(trimmer.maybe_trim())  # call 4: idle == 2 GiB
+        empty.assert_called_once()
+
+    def test_respects_the_min_interval(self) -> None:
+        trimmer = _PinnedHostCacheTrimmer(
+            min_idle_gb=1, every_n_calls=1, min_interval_s=3600
+        )
+        with (
+            mock.patch.object(
+                torch.cuda, "host_memory_stats", return_value=_host_stats(8 << 30, 0)
+            ),
+            mock.patch.object(torch._C, "_host_emptyCache", create=True) as empty,
+        ):
+            self.assertTrue(trimmer.maybe_trim())
+            self.assertFalse(trimmer.maybe_trim())
+        empty.assert_called_once()
+
+    @unittest.skipIf(not torch.cuda.is_available(), "requires a CUDA device")
+    def test_releases_idle_pinned_blocks_and_keeps_live_ones(self) -> None:
+        mb = 1 << 20
+        device = torch.accelerator.current_accelerator(True)
+        sink = torch.empty(64 * mb, dtype=torch.uint8, device=device)
+        live = torch.full((8 * mb,), 7, dtype=torch.uint8, pin_memory=True)
+        # A queue that deepens (stall) and drains leaves its high-water cached.
+        queue = [
+            torch.empty(n * mb, dtype=torch.uint8, pin_memory=True)
+            for n in (20, 40, 33, 60, 17, 48)
+        ]
+        for t in queue:
+            sink[: t.numel()].copy_(t, non_blocking=True)
+        del queue, t
+        torch.cuda.synchronize()
+        before = torch.cuda.host_memory_stats()
+        trimmer = _PinnedHostCacheTrimmer(
+            min_idle_gb=0, every_n_calls=1, min_interval_s=0
+        )
+        self.assertTrue(trimmer.maybe_trim())
+        after = torch.cuda.host_memory_stats()
+        self.assertLess(
+            after["allocated_bytes.current"], before["allocated_bytes.current"]
+        )
+        self.assertEqual(
+            after["allocated_bytes.current"], after["active_bytes.current"]
+        )
+        self.assertTrue(live.is_pinned())
+        self.assertTrue(bool((live == 7).all()))
