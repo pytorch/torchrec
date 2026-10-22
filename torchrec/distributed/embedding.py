@@ -98,6 +98,7 @@ from torchrec.distributed.utils import (
     add_params_from_parameter_sharding,
     convert_to_fbgemm_types,
     create_global_tensor_shape_stride_from_metadata,
+    init_data_parallel_state,
     maybe_annotate_embedding_event,
     merge_fused_params,
     none_throws,
@@ -670,9 +671,6 @@ class ShardedEmbeddingCollection(
         """
         Initialize data parallel for the embedding collection.
         """
-        # Opt-out: skip the DDP wrap; the raw DP lookup forwards on its own.
-        if self._skip_data_parallel_grad_sync:
-            return
         for index, (sharding, lookup) in enumerate(
             zip(
                 self._sharding_type_to_sharding.values(),
@@ -681,6 +679,9 @@ class ShardedEmbeddingCollection(
         ):
             # TODO: can move this into DpPooledEmbeddingSharding once all modules are composable
             if isinstance(sharding, DpSequenceEmbeddingSharding):
+                if self._skip_data_parallel_grad_sync:
+                    init_data_parallel_state(lookup, self._env.process_group)
+                    continue
                 self._lookups[index] = DistributedDataParallel(
                     module=lookup,
                     device_ids=(

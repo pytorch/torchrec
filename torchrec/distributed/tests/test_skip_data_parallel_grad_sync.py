@@ -13,6 +13,10 @@
 # without mutating the process-wide env at import time.
 import os
 import unittest
+from collections import OrderedDict
+from contextlib import ExitStack
+from copy import deepcopy
+from datetime import timedelta
 from typing import cast, List
 from unittest.mock import patch
 
@@ -35,11 +39,10 @@ from torchrec.distributed.model_parallel import (
 from torchrec.distributed.sharding_plan import (
     construct_module_sharding_plan,
     data_parallel,
+    table_wise,
 )
-from torchrec.distributed.test_utils.multi_process import (
-    MultiProcessContext,
-    MultiProcessTestBase,
-)
+from torchrec.distributed.test_utils.multi_process import MultiProcessTestBase
+from torchrec.distributed.test_utils.process_runner import SingleProcessContext
 from torchrec.distributed.types import ModuleSharder, ShardingEnv, ShardingPlan
 from torchrec.modules.embedding_configs import EmbeddingBagConfig, EmbeddingConfig
 from torchrec.modules.embedding_modules import (
@@ -48,7 +51,7 @@ from torchrec.modules.embedding_modules import (
     mark_data_parallel_skip_grad_sync,
     should_skip_data_parallel_grad_sync,
 )
-from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
+from torchrec.sparse.jagged_tensor import JaggedTensor, KeyedJaggedTensor, KeyedTensor
 from torchrec.test_utils import skip_if_asan_class
 
 _TABLE_NAME = "table_0"
@@ -112,23 +115,23 @@ def _resolve(output: object) -> object:
 def _shard_dp(
     module: nn.Module,
     sharder: ModuleSharder[nn.Module],
-    ctx: MultiProcessContext,
+    ctx: SingleProcessContext,
     device: torch.device,
     skip_data_parallel_grad_sync: bool = False,
 ) -> DistributedModelParallel:
     module_sharding_plan = construct_module_sharding_plan(
         module,
         per_param_sharding={_TABLE_NAME: data_parallel()},
-        local_size=ctx.local_size,
+        local_size=ctx.world_size,
         world_size=ctx.world_size,
         device_type=device.type,
     )
     return DistributedModelParallel(
         module=module,
         plan=ShardingPlan({"": module_sharding_plan}),
-        # pyre-ignore[6]: ctx.pg is typed Optional[ProcessGroup]; MultiProcessContext
-        # always initializes it before this call, so it is non-None here.
-        env=ShardingEnv.from_process_group(ctx.pg),
+        env=ShardingEnv.from_process_group(
+            cast(torch.distributed.ProcessGroup, ctx.pg)
+        ),
         sharders=[sharder],
         device=device,
         skip_data_parallel_grad_sync=skip_data_parallel_grad_sync,
@@ -141,7 +144,18 @@ def _run_dp_grad_sync_optout(
     backend: str,
     is_ebc: bool,
 ) -> None:
-    with MultiProcessContext(rank, world_size, backend) as ctx:
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "TORCHELASTIC_USE_AGENT_STORE": "False",
+                "RANK": str(rank),
+                "WORLD_SIZE": str(world_size),
+                "LOCAL_RANK": str(rank),
+            },
+        ),
+        SingleProcessContext(backend=backend, pg_timeout=timedelta(seconds=60)) as ctx,
+    ):
         # Force CPU/gloo: DATA_PARALLEL replication and the DDP-wrap decision are
         # device-independent, and this keeps the test runnable without GPUs.
         device = torch.device("cpu")
@@ -209,7 +223,7 @@ def _run_dp_grad_sync_optout(
             kjt = _input_kjt(device)
             # Relax the deterministic guard only around the forward (embedding kernels
             # have no deterministic CPU/CUDA variant), then restore it -- the flag is
-            # process-global even inside this MultiProcessContext subprocess.
+            # process-global even inside this subprocess.
             prev_deterministic = torch.are_deterministic_algorithms_enabled()
             torch.use_deterministic_algorithms(False)
             try:
@@ -227,18 +241,184 @@ def _run_dp_grad_sync_optout(
                 torch.use_deterministic_algorithms(prev_deterministic)
 
 
+def _run_startup_sync(rank: int, world_size: int, backend: str, mixed: bool) -> None:
+    """Check raw EBC/EC lookup and dense startup state on two ranks."""
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "TORCHELASTIC_USE_AGENT_STORE": "False",
+                "RANK": str(rank),
+                "WORLD_SIZE": str(world_size),
+                "LOCAL_RANK": str(rank),
+            },
+        ),
+        SingleProcessContext(backend=backend, pg_timeout=timedelta(seconds=60)) as ctx,
+        torch.random.fork_rng(devices=[]),
+        ExitStack() as cleanup,
+    ):
+        cleanup.callback(
+            torch.use_deterministic_algorithms,
+            torch.are_deterministic_algorithms_enabled(),
+            warn_only=torch.is_deterministic_algorithms_warn_only_enabled(),
+        )
+        torch.use_deterministic_algorithms(False)
+        env = ShardingEnv.from_process_group(
+            cast(torch.distributed.ProcessGroup, ctx.pg)
+        )
+        for is_ebc in (True, False):
+            torch.manual_seed(42)
+            embedding = (
+                _build_ebc(torch.device("cpu"))
+                if is_ebc
+                else _build_ec(torch.device("cpu"))
+            )
+            if mixed:
+                config_type = EmbeddingBagConfig if is_ebc else EmbeddingConfig
+                tables = [
+                    config_type(
+                        name=name,
+                        embedding_dim=8,
+                        num_embeddings=16,
+                        feature_names=[name],
+                    )
+                    for name in (_TABLE_NAME, "mp_table")
+                ]
+                embedding = (
+                    EmbeddingBagCollection(
+                        tables=cast(list[EmbeddingBagConfig], tables)
+                    )
+                    if is_ebc
+                    else EmbeddingCollection(tables=cast(list[EmbeddingConfig], tables))
+                )
+            module = nn.Module()
+            module.add_module("embedding", embedding)
+            torch.manual_seed(42 + rank)
+            module.add_module("dense", nn.Linear(8, 2))
+            module.register_buffer("dense_buffer", torch.tensor(float(rank)))
+            per_table = {_TABLE_NAME: data_parallel()}
+            if mixed:
+                per_table["mp_table"] = table_wise(rank=0, compute_kernel="dense")
+            plan = ShardingPlan(
+                {
+                    "embedding": construct_module_sharding_plan(
+                        embedding,
+                        per_table,
+                        local_size=world_size,
+                        world_size=world_size,
+                        device_type="cpu",
+                    )
+                }
+            )
+            sharders = [
+                cast(
+                    ModuleSharder[nn.Module],
+                    (
+                        EmbeddingBagCollectionSharder()
+                        if is_ebc
+                        else EmbeddingCollectionSharder()
+                    ),
+                )
+            ]
+            torch.manual_seed(42 + rank)
+            control = DistributedModelParallel(
+                deepcopy(module),
+                env=env,
+                device=torch.device("cpu"),
+                plan=plan,
+                sharders=sharders,
+            )
+            enabled_module = deepcopy(module)
+            torch.manual_seed(42 + rank)
+            enabled = DistributedModelParallel(
+                enabled_module,
+                env=env,
+                device=torch.device("cpu"),
+                plan=plan,
+                sharders=sharders,
+                skip_data_parallel_grad_sync=True,
+            )
+            unittest.TestCase().assertEqual(find_ddp_modules(enabled), [])
+            torch.testing.assert_close(
+                enabled.module.get_buffer("dense_buffer"), torch.tensor(float(rank))
+            )
+            checkpoint = OrderedDict({"dense.weight": torch.full((2, 8), 0.5)})
+            if not mixed:
+                control.load_state_dict(deepcopy(checkpoint), strict=False)
+                enabled.load_state_dict(deepcopy(checkpoint), strict=False)
+            mismatches = []
+            for name, parameter in enabled.named_parameters():
+                if not torch.equal(parameter, dict(control.named_parameters())[name]):
+                    mismatches.append(name)
+                if "mp_table" not in name:
+                    rank_zero = parameter.detach().clone()
+                    torch.distributed.broadcast(rank_zero, src=0, group=ctx.pg)
+                    torch.testing.assert_close(parameter, rank_zero)
+            all_mismatches: list[list[str] | None] = [None] * world_size
+            torch.distributed.all_gather_object(
+                all_mismatches, mismatches, group=ctx.pg
+            )
+            unittest.TestCase().assertEqual(all_mismatches, [[]] * world_size)
+            if not mixed:
+                features = KeyedJaggedTensor.from_lengths_sync(
+                    keys=[_FEATURE_NAME],
+                    values=torch.tensor([1, 2, 3]),
+                    lengths=torch.tensor([1, 0, 2]),
+                )
+                predictions = []
+                for model in (control, enabled):
+                    output = model.module.get_submodule("embedding")(features).wait()
+                    values = (
+                        cast(KeyedTensor, output).values()
+                        if is_ebc
+                        else cast(dict[str, JaggedTensor], output)[
+                            _FEATURE_NAME
+                        ].values()
+                    )
+                    predictions.append(model.module.get_submodule("dense")(values))
+                torch.testing.assert_close(predictions[0], predictions[1])
+            dense = cast(nn.Linear, enabled.module.get_submodule("dense"))
+            dense(torch.full((1, 8), float(rank + 1))).sum().backward()
+            torch.testing.assert_close(
+                dense.weight.grad, torch.full_like(dense.weight, float(rank + 1))
+            )
+
+
 @skip_if_asan_class
 class DataParallelGradSyncOptOutTest(MultiProcessTestBase):
     def _run(self, is_ebc: bool) -> None:
         # Hide CUDA only for this test (not at module import, which would leak into
         # other test modules). The spawned workers inherit the env before they import
         # torch, forcing MultiProcessContext onto its CPU/gloo path.
-        with patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": ""}):
+        with patch.dict(
+            os.environ,
+            {"CUDA_VISIBLE_DEVICES": "", "TORCHELASTIC_USE_AGENT_STORE": "False"},
+        ):
             self._run_multi_process_test(
                 callable=_run_dp_grad_sync_optout,
                 world_size=2,
                 backend="gloo",
                 is_ebc=is_ebc,
+            )
+
+    def test_startup_sync_and_partial_restore(self) -> None:
+        """Validate replicated weights, predictions and local backward."""
+        with patch.dict(
+            os.environ,
+            {"CUDA_VISIBLE_DEVICES": "", "TORCHELASTIC_USE_AGENT_STORE": "False"},
+        ):
+            self._run_multi_process_test(
+                callable=_run_startup_sync, world_size=2, backend="gloo", mixed=False
+            )
+
+    def test_startup_sync_with_mixed_dp_mp_tables(self) -> None:
+        """Keep model-parallel table shards out of the replicated-state broadcast."""
+        with patch.dict(
+            os.environ,
+            {"CUDA_VISIBLE_DEVICES": "", "TORCHELASTIC_USE_AGENT_STORE": "False"},
+        ):
+            self._run_multi_process_test(
+                callable=_run_startup_sync, world_size=2, backend="gloo", mixed=True
             )
 
     def test_ebc_dp_skip_grad_sync(self) -> None:
