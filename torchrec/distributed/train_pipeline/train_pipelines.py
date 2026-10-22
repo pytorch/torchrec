@@ -571,6 +571,12 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
         free_features_storage_early (bool): if True, free the original batch KJT
             tensor storage right after permute in input_dist.  Safe because
             PipelinedForward ignores the KJT args during model forward.
+        skip_batch_record_stream (bool): (regular copy only) replace the per-tensor
+            ``record_stream`` registrations of the copied batch on the default and
+            data_dist streams with one memcpy-stream wait on them per batch copy. Requires
+            every consumer of batch tensors to be ordered before the default or
+            data_dist stream, and the batch copy to run on the thread that frees
+            batches. Ignored when ``enable_inplace_copy_batch`` is set.
     """
 
     # The PipelinedForward class that is used in _rewrite_model
@@ -597,6 +603,7 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
         clear_data_dist_inputs: bool = False,
         async_inplace_copy: bool = False,
         async_next_batch: bool = False,
+        skip_batch_record_stream: bool = False,
     ) -> None:
         self._model = model
         self._optimizer = optimizer
@@ -605,6 +612,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
         self._apply_jit = apply_jit
         self._enqueue_batch_after_forward = enqueue_batch_after_forward
         self._enable_inplace_copy_batch = enable_inplace_copy_batch
+        self._skip_batch_record_stream: bool = (
+            skip_batch_record_stream
+            and not enable_inplace_copy_batch
+            and device.type in ["cuda", "mtia"]
+        )
         self._free_features_storage_early = free_features_storage_early
         self._batch_count = 0
         self._inplace_copy_batch_size_logged = False
@@ -616,7 +628,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
             f"enable_inplace_copy_batch: {enable_inplace_copy_batch} "
             f"async_inplace_copy: {async_inplace_copy} "
             f"async_next_batch: {async_next_batch} "
-            f"free_features_storage_early: {free_features_storage_early}"
+            f"free_features_storage_early: {free_features_storage_early} "
+            f"skip_batch_record_stream: {self._skip_batch_record_stream}"
         )
 
         if device.type == "cuda":
@@ -774,6 +787,26 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
             # This ensures that next iter model fwd uses cached results
             postproc_module.set_context(context)
 
+    def _wait_for_consumer_streams(self) -> None:
+        """
+        Makes the memcpy stream wait for all work already enqueued on the streams that
+        consume batch tensors (the default and data_dist streams). Calling it before
+        every batch copy stands in for ``record_stream`` of earlier batches on those
+        streams: a block freed on the CPU can only be reused by a later allocation on
+        the memcpy stream, and every consumer use of the freed tensor was enqueued
+        before the free, hence before this wait. Requires the batch copy and frees to
+        happen on the same thread. Subclasses with additional consumer streams should
+        override this to wait on them too.
+        """
+        if self._memcpy_stream is None:
+            return
+        for stream in [
+            torch.get_device_module(self._device).current_stream(),
+            self._data_dist_stream,
+        ]:
+            if stream is not None:
+                self._memcpy_stream.wait_stream(stream)
+
     def enqueue_batch(self, dataloader_iter: Iterator[In]) -> bool:
         """
         load a data batch from dataloader, and copy it from cpu to gpu
@@ -782,6 +815,8 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
         if self._enable_inplace_copy_batch:
             batch, context = self.inplace_copy_batch_to_gpu(dataloader_iter)
         else:
+            if self._skip_batch_record_stream:
+                self._wait_for_consumer_streams()
             batch, context = self.copy_batch_to_gpu(dataloader_iter)
         if batch is None:
             return False
@@ -860,8 +895,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
                 # uses on a block's own allocation stream). Skipping it drops ~780
                 # no-op calls per leaf tensor per step. Mirrors TrainPipelineBase.
                 # The gate is load-bearing: without in-place copy the destination is
-                # allocated on the memcpy stream and the registration IS required.
-                record_stream=not self._enable_inplace_copy_batch,
+                # allocated on the memcpy stream and the registration IS required,
+                # unless _wait_for_consumer_streams orders its reuse instead.
+                record_stream=not (
+                    self._enable_inplace_copy_batch or self._skip_batch_record_stream
+                ),
             )
 
     def _backward(self, losses: torch.Tensor) -> None:
@@ -1195,7 +1233,11 @@ class TrainPipelineSparseDist(TrainPipeline[In, Out], AsyncInplaceCopyMixin[In])
         with record_function(f"## start_sparse_data_dist {context.index} ##"):
             # pyrefly: ignore [bad-argument-type]
             with self._stream_context(self._data_dist_stream):
-                _wait_for_batch(batch, self._memcpy_stream)
+                _wait_for_batch(
+                    batch,
+                    self._memcpy_stream,
+                    record_stream=not self._skip_batch_record_stream,
+                )
 
                 # Temporarily set context for next iter to populate cache
                 with use_context_for_postprocs(self._pipelined_postprocs, context):
