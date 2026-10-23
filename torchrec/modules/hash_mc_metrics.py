@@ -116,7 +116,7 @@ class ScalarLogger(torch.nn.Module):
 
         self.register_buffer(
             ScalarLogger.STEPS_BUFFER,
-            torch.tensor(1, dtype=torch.int64),
+            torch.tensor(1, dtype=torch.int64, device=device),
             persistent=False,
         )
 
@@ -158,6 +158,9 @@ class ScalarLogger(torch.nn.Module):
         self._eviction_cnt: int = 0
         self._opt_in_cnt: int = 0
         self._sum_eviction_age: float = 0.0
+        self._pending_counts: Optional[torch.Tensor] = None
+        self._pending_eviction_age: Optional[torch.Tensor] = None
+        self._report_step: int = 1
 
         if backend is not None:
             self._backend: ScalarLoggerBackend = backend
@@ -175,13 +178,9 @@ class ScalarLogger(torch.nn.Module):
         # We only need to report metrics from rank0 (start_bucket = 0)
 
         return (
-            # pyrefly: ignore[bad-return]
             self._start_bucket == 0
             and self._total_cnt > 0
-            and
-            #  Module]` is not a function.
-            # pyrefly: ignore[unsupported-operation]
-            self._scalar_logger_steps % self._frequency == 0
+            and self._report_step % self._frequency == 0
         )
 
     def update(
@@ -201,24 +200,25 @@ class ScalarLogger(torch.nn.Module):
             ), "identity type and feature type must match for meaningful metrics collection."
             self._dtype_checked = True
 
+        # Only the rank owning bucket 0 reports; other ranks never read these counts.
+        if self._start_bucket != 0:
+            return
+
         remapped_identities_0 = torch.index_select(identities_0, 0, remapped_ids)[:, 0]
         remapped_identities_1 = torch.index_select(identities_1, 0, remapped_ids)[:, 0]
         empty_slot_cnt_before_process = remapped_identities_0 == -1
         empty_slot_cnt_after_process = remapped_identities_1 == -1
-        insert_cnt = int(torch.sum(empty_slot_cnt_before_process).item()) - int(
-            torch.sum(empty_slot_cnt_after_process).item()
+        insert_cnt = torch.sum(empty_slot_cnt_before_process) - torch.sum(
+            empty_slot_cnt_after_process
         )
 
-        self._insert_cnt += insert_cnt
         self._total_cnt += values.numel()
         if self._disable_fallback:
             hits = torch.isin(remapped_identities_0, values)
         else:
             # Cannot use isin() as it is possible that cache miss falls back to another element in values.
             hits = torch.eq(remapped_identities_0, values)
-        hit_cnt = int(torch.sum(hits).item())
-        self._hit_cnt += hit_cnt
-        self._collision_cnt += values.numel() - hit_cnt - insert_cnt
+        hit_cnt = torch.sum(hits)
 
         if self._disable_fallback:
             hit_values = values[hit_indices]
@@ -228,9 +228,13 @@ class ScalarLogger(torch.nn.Module):
 
         opt_in_ranges = self._opt_in_ranges.index_select(dim=0, index=train_buckets)
         opt_in_ids = torch.lt(remapped_ids, opt_in_ranges)
-        opt_in_ids_cnt = int(torch.sum(opt_in_ids).item())
-        # opt_in_cnt: # of ids assigned to opt-in block
-        self._opt_in_cnt += opt_in_ids_cnt
+        opt_in_ids_cnt = torch.sum(opt_in_ids)
+        counts = torch.stack((insert_cnt, hit_cnt, opt_in_ids_cnt))
+        self._pending_counts = (
+            counts
+            if self._pending_counts is None
+            else self._pending_counts.to(counts.device) + counts
+        )
 
         if evicted_emb_indices is not None and evicted_emb_indices.numel() > 0:
             deduped_evicted_indices = torch.unique(evicted_emb_indices)
@@ -242,13 +246,51 @@ class ScalarLogger(torch.nn.Module):
             now_c = int(time.time())
             cur_hour = now_c / ScalarLogger.SECONDS_IN_HOUR % ScalarLogger.MAX_HOURS
             if eviction_config is not None and eviction_config.single_ttl is not None:
-                self._sum_eviction_age += int(
+                # Truncate each update's age sum to an integer before accumulating.
+                eviction_age = (
                     torch.sum(
                         cur_hour
                         + eviction_config.single_ttl
                         - metadata[deduped_evicted_indices, 0]
-                    ).item()
+                    )
+                    .detach()
+                    .to(torch.int64)
                 )
+                self._pending_eviction_age = (
+                    eviction_age
+                    if self._pending_eviction_age is None
+                    else self._pending_eviction_age.to(eviction_age.device)
+                    + eviction_age
+                )
+
+    def _flush_pending_counts(self, unused_slots: Optional[torch.Tensor] = None) -> int:
+        """Fold pending device counters into host totals and return occupancy."""
+        pending = (self._pending_counts, self._pending_eviction_age, unused_slots)
+        device = next((t.device for t in pending if t is not None), None)
+        total_unused_slots = 0
+        if device is not None:
+            # Read counters, eviction age and occupancy back in one transfer.
+            packed = torch.cat(
+                [
+                    (
+                        torch.zeros(size, dtype=torch.int64, device=device)
+                        if t is None
+                        else t.reshape(-1).to(device=device, dtype=torch.int64)
+                    )
+                    for t, size in zip(pending, (3, 1, 1))
+                ]
+            )
+            insert_cnt, hit_cnt, opt_in_cnt, eviction_age, total_unused_slots = (
+                packed.to("cpu").tolist()
+            )
+            self._insert_cnt += insert_cnt
+            self._hit_cnt += hit_cnt
+            self._opt_in_cnt += opt_in_cnt
+            self._sum_eviction_age += eviction_age
+            self._pending_counts = None
+            self._pending_eviction_age = None
+        self._collision_cnt = self._total_cnt - self._hit_cnt - self._insert_cnt
+        return total_unused_slots
 
     def forward(
         self,
@@ -265,11 +307,13 @@ class ScalarLogger(torch.nn.Module):
         """
 
         if self.should_report():
+            total_unused_slots = self._flush_pending_counts(
+                torch.sum(identities[:, 0] == -1)
+            )
             hit_rate = round(self._hit_cnt / self._total_cnt, 3)
             insert_rate = round(self._insert_cnt / self._total_cnt, 3)
             collision_rate = round(self._collision_cnt / self._total_cnt, 3)
             eviction_rate = round(self._eviction_cnt / self._total_cnt, 3)
-            total_unused_slots = int(torch.sum(identities[:, 0] == -1).item())
             table_usage_ratio = round(
                 (self._zch_size - total_unused_slots) / self._zch_size, 3
             )
@@ -299,9 +343,7 @@ class ScalarLogger(torch.nn.Module):
                 log_message=log_message,
                 name=self._name,
                 run_type=run_type,
-                # pyre-ignore[6]: Expected `int` for 4th positional argument
-                # pyrefly: ignore[not-callable]
-                step=int(self._scalar_logger_steps.item()),
+                step=self._report_step,
                 rate_metrics={
                     "hit_rate": hit_rate,
                     "insert_rate": insert_rate,
@@ -324,3 +366,4 @@ class ScalarLogger(torch.nn.Module):
 
         # pyrefly: ignore [bad-argument-type, unsupported-operation]
         self._scalar_logger_steps += 1
+        self._report_step += 1

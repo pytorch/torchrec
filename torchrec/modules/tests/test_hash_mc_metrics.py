@@ -7,8 +7,11 @@
 
 # pyre-strict
 
+from __future__ import annotations
+
+import contextlib
 import unittest
-from typing import cast, Dict
+from typing import cast, Dict, Iterator
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -129,6 +132,7 @@ class ScalarLoggerTest(unittest.TestCase):
             metadata=None,
         )
 
+        sl._flush_pending_counts()
         self.assertEqual(sl._total_cnt, 5)
         self.assertEqual(sl._hit_cnt, 3)
         self.assertEqual(sl._insert_cnt, 2)
@@ -151,6 +155,7 @@ class ScalarLoggerTest(unittest.TestCase):
             identities_0, identities_1, values, remapped_ids, hit_indices, None, None
         )
 
+        sl._flush_pending_counts()
         self.assertEqual(sl._total_cnt, 4)
         self.assertEqual(sl._hit_cnt, 2)
         self.assertEqual(sl._insert_cnt, 2)
@@ -192,13 +197,17 @@ class ScalarLoggerTest(unittest.TestCase):
         # Step 1: 1 % 3 != 0 → False
         self.assertFalse(sl.should_report())
 
-        cast(torch.Tensor, sl._scalar_logger_steps).fill_(3)
+        identities = torch.zeros(10, 1, dtype=torch.int64)
+        sl.forward("eval", identities)
+        sl.forward("eval", identities)
         self.assertTrue(sl.should_report())
 
-        cast(torch.Tensor, sl._scalar_logger_steps).fill_(4)
+        sl.forward("eval", identities)
+        sl._total_cnt = 10
         self.assertFalse(sl.should_report())
 
-        cast(torch.Tensor, sl._scalar_logger_steps).fill_(6)
+        sl.forward("eval", identities)
+        sl.forward("eval", identities)
         self.assertTrue(sl.should_report())
 
     def test_should_report_only_on_rank0(self) -> None:
@@ -328,9 +337,193 @@ class ScalarLoggerTest(unittest.TestCase):
                 eviction_config=eviction_config,
             )
 
+        sl._flush_pending_counts()
         self.assertEqual(sl._eviction_cnt, 2)
         # sum_eviction_age = (cur_hour + ttl - metadata[0]) + (cur_hour + ttl - metadata[1])
         # cur_hour = 360000 / 3600 % (2^31 - 1) = 100
         # = (100 + 10 - 100) + (100 + 10 - 200) = 10 + (-90) = -80
         # The computation is sum, tested via the raw value
         self.assertAlmostEqual(sl._sum_eviction_age, -80.0, places=0)
+
+    def test_report_batches_occupancy_with_integer_counts(self) -> None:
+        backend = ConcreteBackend()
+        sl = _make_logger(backend)
+        identities = torch.full((10, 1), -1, dtype=torch.int64)
+        identities[:2, 0] = torch.tensor([0, 1], dtype=torch.int64)
+        values = torch.tensor([0, 1], dtype=torch.int64)
+        sl.update(identities, identities, values, values, values, None, None)
+        original_tolist = torch.Tensor.tolist
+        read_shapes: list[tuple[int, ...]] = []
+
+        def record_tolist(tensor: torch.Tensor) -> list[int]:
+            read_shapes.append(tuple(tensor.shape))
+            return original_tolist(tensor)
+
+        with patch.object(torch.Tensor, "tolist", record_tolist):
+            with torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CPU]
+            ) as profile:
+                sl.forward("eval", identities)
+
+        self.assertEqual([(5,)], read_shapes)
+        self.assertNotIn(
+            "aten::_local_scalar_dense",
+            {event.key for event in profile.key_averages()},
+        )
+        metrics = cast(Dict[str, float], backend.reported[0]["rate_metrics"])
+        self.assertEqual(1.0, metrics["hit_rate"])
+        self.assertEqual(0.0, metrics["insert_rate"])
+        self.assertEqual(0.2, metrics["table_usage_ratio"])
+
+    @contextlib.contextmanager
+    def _record_host_reads(self) -> Iterator[list[tuple[int, ...]]]:
+        original_tolist = torch.Tensor.tolist
+        read_shapes: list[tuple[int, ...]] = []
+
+        def record_tolist(tensor: torch.Tensor) -> list[int]:
+            read_shapes.append(tuple(tensor.shape))
+            return original_tolist(tensor)
+
+        with patch.object(torch.Tensor, "tolist", record_tolist):
+            yield read_shapes
+
+    def test_report_with_evictions_reads_host_once(self) -> None:
+        backend = ConcreteBackend()
+        sl = _make_logger(backend, frequency=1)
+        values = torch.tensor([0, 1], dtype=torch.int64)
+        before = torch.tensor([[0], [-1]], dtype=torch.int64)
+        after = torch.tensor([[0], [1]], dtype=torch.int64)
+        indices = torch.tensor([0, 1], dtype=torch.int64)
+        metadata = torch.tensor([[100.25], [100.5]], dtype=torch.float32)
+        config = HashZchEvictionConfig(features=[], single_ttl=10)
+
+        with patch("torchrec.modules.hash_mc_metrics.time") as mock_time:
+            mock_time.time.return_value = 360000
+            sl.update(
+                before, after, values, indices, indices, indices, metadata, config
+            )
+        pending_age = sl._pending_eviction_age
+        self.assertIsNotNone(pending_age)
+        self.assertEqual(torch.int64, cast(torch.Tensor, pending_age).dtype)
+
+        with self._record_host_reads() as read_shapes:
+            with torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CPU]
+            ) as profile:
+                sl.forward("eval", after)
+
+        # Counters, eviction age and occupancy come back in a single read.
+        self.assertEqual([(5,)], read_shapes)
+        self.assertNotIn(
+            "aten::_local_scalar_dense",
+            {event.key for event in profile.key_averages()},
+        )
+        metrics = cast(Dict[str, float], backend.reported[0]["rate_metrics"])
+        # Per-update age sum 9.75 + 9.5 = 19.25 truncates to 19 over 2 evictions.
+        self.assertEqual(9.5, metrics["avg_eviction_age"])
+        self.assertIsNone(sl._pending_eviction_age)
+
+    def test_flush_fills_missing_pending_values_with_zeros(self) -> None:
+        sl = _make_logger(ConcreteBackend())
+        sl._pending_eviction_age = torch.tensor(7, dtype=torch.int64)
+
+        with self._record_host_reads() as read_shapes:
+            unused_slots = sl._flush_pending_counts()
+
+        self.assertEqual([(5,)], read_shapes)
+        self.assertEqual(0, unused_slots)
+        self.assertEqual(7.0, sl._sum_eviction_age)
+        self.assertEqual(0, sl._insert_cnt)
+        self.assertEqual(0, sl._hit_cnt)
+        self.assertEqual(0, sl._opt_in_cnt)
+        self.assertIsNone(sl._pending_eviction_age)
+
+    def test_flush_with_nothing_pending_reads_nothing(self) -> None:
+        sl = _make_logger(ConcreteBackend())
+
+        with self._record_host_reads() as read_shapes:
+            unused_slots = sl._flush_pending_counts()
+
+        self.assertEqual([], read_shapes)
+        self.assertEqual(0, unused_slots)
+        self.assertEqual(0.0, sl._sum_eviction_age)
+
+    def test_updates_do_not_read_scalars_until_report(self) -> None:
+        backend = ConcreteBackend()
+        sl = _make_logger(backend, frequency=3)
+        values = torch.tensor([0, 1], dtype=torch.int64)
+        before = torch.tensor([[0], [-1]], dtype=torch.int64)
+        after = torch.tensor([[0], [1]], dtype=torch.int64)
+        indices = torch.tensor([0, 1], dtype=torch.int64)
+        metadata = torch.tensor([[100.25], [100.5]], dtype=torch.float32)
+        config = HashZchEvictionConfig(features=[], single_ttl=10)
+
+        with patch("torchrec.modules.hash_mc_metrics.time") as mock_time:
+            mock_time.time.return_value = 360000
+            with torch.profiler.profile(
+                activities=[torch.profiler.ProfilerActivity.CPU]
+            ) as profile:
+                for _ in range(2):
+                    sl.update(
+                        before,
+                        after,
+                        values,
+                        indices,
+                        indices,
+                        indices,
+                        metadata,
+                        config,
+                    )
+                    sl.forward("eval", after)
+            self.assertNotIn(
+                "aten::_local_scalar_dense",
+                {event.key for event in profile.key_averages()},
+            )
+            self.assertEqual([], backend.reported)
+            sl.update(
+                before,
+                after,
+                values,
+                indices,
+                indices,
+                indices,
+                metadata,
+                config,
+            )
+            sl.forward("eval", after)
+
+        self.assertEqual(1, len(backend.reported))
+        self.assertEqual(3, backend.reported[0]["step"])
+        metrics = cast(Dict[str, float], backend.reported[0]["rate_metrics"])
+        self.assertEqual(0.5, metrics["hit_rate"])
+        self.assertEqual(0.5, metrics["insert_rate"])
+        self.assertEqual(0.0, metrics["collision_rate"])
+        self.assertEqual(9.5, metrics["avg_eviction_age"])
+        self.assertIsNone(sl._pending_counts)
+        self.assertIsNone(sl._pending_eviction_age)
+        self.assertEqual(0, sl._total_cnt)
+
+    def test_update_skips_counting_on_non_reporting_rank(self) -> None:
+        backend = ConcreteBackend()
+        sl = _make_logger(backend, start_bucket=1)
+        values = torch.tensor([0, 1], dtype=torch.int64)
+        before = torch.tensor([[0], [-1]], dtype=torch.int64)
+        after = torch.tensor([[0], [1]], dtype=torch.int64)
+        indices = torch.tensor([0, 1], dtype=torch.int64)
+        metadata = torch.tensor([[100.25], [100.5]], dtype=torch.float32)
+        config = HashZchEvictionConfig(features=[], single_ttl=10)
+
+        with torch.profiler.profile(
+            activities=[torch.profiler.ProfilerActivity.CPU]
+        ) as profile:
+            sl.update(
+                before, after, values, indices, indices, indices, metadata, config
+            )
+
+        ops = {event.key for event in profile.key_averages()}
+        self.assertNotIn("aten::index_select", ops)
+        self.assertNotIn("aten::sum", ops)
+        self.assertIsNone(sl._pending_counts)
+        self.assertIsNone(sl._pending_eviction_age)
+        self.assertEqual(0, sl._total_cnt)
+        self.assertEqual(0, sl._eviction_cnt)
