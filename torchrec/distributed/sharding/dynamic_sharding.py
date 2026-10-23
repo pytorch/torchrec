@@ -33,58 +33,6 @@ class CommStrategy(Enum):
     OPT_INTRA_NODE_COMM = "opt_intra_node_comm"
 
 
-OrderedShardNamesWithSizes = List[Tuple[str, List[int]]]
-"""
-A type alias to represent an ordered shard name and the corresponding shard_size
-in dim 0 & 1 that were sent to the current rank.
-This is a flattened and pruned nested list, which orders the shards names and
-sizes in the following priority:
-1. Rank order
-2. Table order
-3. Shard order
-
-<table_x, shard_y> in below examples represent the 2d tensor correlated to a
-certain table `x`, allocated to rank `z`. The `y` here denotes the order of shards
-in the module attributes such as state_dict, sharding_plan, etc..
-
-`z` != `y` numerically, but the order of shards is based on the order of ranks allocated
-
-Example 1 NOTE: the ordering by rank:
-Rank 0 sends table_0, shard_0 to Rank 1.
-Rank 2 sends table_1, shard_0 to Rank 1.
-Rank 2 sends table_1, shard_1 to Rank 0
-Rank 3 sends table_0, shard_1 to Rank 0
-
-NOTE: table_1 comes first due to its source rank being 'first'
-On Rank 0:output_tensor = [
-    <table_1, shard_1>, # from rank 2
-    <table_0, shard_1>  # from rank 3
-]
-
-On Rank 1: output_tensor = [
-    <table_0, shard_0>, # from rank 0
-    <table_1, shard_0>  # from rank 2
-]
-
-Example 2: NOTE: ordered by table when ranks are the same
-Rank 0 sends table_1 to Rank 1
-Rank 0 sends table_2 to Rank 1
-
-output_tensor = [
-    <table_1, shard_y>,
-    <table_2, shard_y>
-]
-
-Example 3: NOTE: ordered by shard if table and rank are the same
-Rank 0 sends table_1, shard_0 to Rank 1
-Rank 0 sends table_1, shard_1 to Rank 1
-
-Rank 1: output_tensor = [
-    <table_1, shard_0>,
-    <table_1, shard_1>
-]
-"""
-
 ShardToRankMapping = Dict[int, List[Tuple[int, int, int, List[int]]]]
 """
 ShardToRankMapping is a type alias for a dictionary that maps source ranks to a list of shard metadata tuples.
@@ -374,6 +322,11 @@ def _prepare_shard_distribution_comm_ops(
 
     if len(receiving_shards_metadata) > 0:
 
+        # Order the incoming pieces by their column offset in the source table, since
+        # the loop below lays them out at increasing `tensor_col_offset` in the
+        # destination tensor. Any other order (e.g. by source rank) would reassemble
+        # the columns out of order whenever the source plan's ranks are not themselves
+        # in column order. Send/recv pairing is by `tag`, so it is unaffected.
         receiving_shards_metadata.sort(key=lambda x: x[0])
         dst_t = new_state_dict[extended_shard_name]
         local_shards_dst = dst_t.local_shards()
