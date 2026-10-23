@@ -35,15 +35,21 @@ import triton  # @manual
 import triton.language as tl  # @manual
 
 
-_CHUNK = 512  # sorted entries reduced per work item (bounds hot-row tail)
-_BUF = 16  # rows buffered per vectorized load
+# Sorted entries reduced per work item, picked per call from N (see _chunk_size).
+_CHUNK_MIN = 512
+_CHUNK_MAX = 8192
+# Rows per vectorized load, which is also the number of fp32 partial-sum lanes.
+# Narrow rows get more lanes; wide rows keep 32 so the [BUF, D] tile fits in VGPRs.
+_BUF_NARROW = 64
+_BUF_WIDE = 32
 _NUM_WARPS = 1
 _NUM_STAGES = 2
 
 
 @triton.jit
 def _seg_chunk(
-    g_ptr,  # grad_out gathered into sorted order, [N, D]
+    g_ptr,  # grad_out in its original (unsorted) order, [N, D]
+    perm_ptr,  # [N] sort permutation: sorted position i reads grad row perm[i]
     off_ptr,  # [num_rows + 1] segment offsets in the sorted array
     nchoff_ptr,  # [num_rows + 1] cumsum of chunks-per-row; nchoff[num_rows] = total
     out_ptr,  # [num_rows, D] fp32
@@ -79,25 +85,36 @@ def _seg_chunk(
     mask = col < D
     bo = tl.arange(0, BUF)
     acc = tl.zeros((BLOCK_D,), dtype=tl.float32)
+    # BUF independent fp32 lanes, folded once at the end: each lane sums only
+    # ~CHUNK/BUF rows, which keeps rounding error below a single serial accumulator.
+    lanes = tl.zeros((BUF, BLOCK_D), dtype=tl.float32)
     nfull = seg_s + ((seg_e - seg_s) // BUF) * BUF
     i = seg_s
     while i < nfull:
-        ridx = (i + bo).to(tl.int64)
+        ridx = tl.load(perm_ptr + i + bo).to(tl.int64)
         blk = tl.load(
             g_ptr + ridx[:, None] * D + col[None, :], mask=mask[None, :], other=0.0
         ).to(tl.float32)
-        acc += tl.sum(blk, axis=0)
+        lanes += blk
         i += BUF
     while i < seg_e:
-        acc += tl.load(g_ptr + i.to(tl.int64) * D + col, mask=mask, other=0.0).to(
-            tl.float32
-        )
+        ridx1 = tl.load(perm_ptr + i).to(tl.int64)
+        acc += tl.load(g_ptr + ridx1 * D + col, mask=mask, other=0.0).to(tl.float32)
         i += 1
+    acc += tl.sum(lanes, axis=0)
     oo = out_ptr + tl.cast(row, tl.int64) * D + col
     if nch_row == 1:
         tl.store(oo, acc, mask=mask)  # short row: single writer, no atomic
     else:
         tl.atomic_add(oo, acc, mask=mask)  # hot row: few bounded atomics, parallel
+
+
+def _chunk_size(n: int) -> int:
+    # Aim for ~N/2048 chunk programs: small N keeps short chunks so a hot row is
+    # split across enough programs; large N uses long chunks to cut per-program
+    # overhead and hot-row atomics. Host-side ints only (no device sync).
+    chunk = 1 << max(0, (n // 2048).bit_length() - 1)
+    return min(max(chunk, _CHUNK_MIN), _CHUNK_MAX)
 
 
 def _sorted_segment_reduce_backward(grad_out, reverse_indices, num_rows):
@@ -120,8 +137,17 @@ def _sorted_segment_reduce_backward(grad_out, reverse_indices, num_rows):
         out.index_add_(0, reverse_indices, grad_out)
         return out
 
-    sorted_idx, perm = torch.sort(reverse_indices)
-    g_sorted = grad_out.index_select(0, perm).contiguous()
+    # Radix sort cost scales with key width; row ids fit in fewer bits than int64.
+    # num_rows is a host int, so picking the key dtype adds no device sync.
+    if num_rows <= torch.iinfo(torch.int16).max:
+        key_dtype = torch.int16
+    elif num_rows <= torch.iinfo(torch.int32).max:
+        key_dtype = torch.int32
+    else:
+        key_dtype = reverse_indices.dtype
+    sorted_idx, perm = torch.sort(reverse_indices.to(key_dtype))
+    # _seg_chunk reads grad_out rows through perm, so the [N, D] gradient is never
+    # materialized in sorted order (that would be a full extra read + write of it).
     # Offsets straight from the SORTED indices: off[r] = #(idx < r). This is
     # atomic-free. The earlier counts.scatter_add_(0, sorted_idx, 1) version was a
     # HOT-ROW ATOMIC -- the sentinel/padding row appears in ~half the indices, so
@@ -130,27 +156,30 @@ def _sorted_segment_reduce_backward(grad_out, reverse_indices, num_rows):
     # 128-wide index_add this kernel replaces (showed up slow in the MI350 trace).
     # searchsorted exploits the sortedness to avoid all atomics, and is still
     # sync-free (output size num_rows+1 is host-known, no data-dependent read-back).
-    off = torch.searchsorted(sorted_idx, torch.arange(num_rows + 1, device=dev)).to(
-        torch.int64
-    )
+    off = torch.searchsorted(
+        sorted_idx, torch.arange(num_rows + 1, device=dev, dtype=key_dtype)
+    ).to(torch.int64)
     counts = off[1:] - off[:-1]
-    nch = (counts + _CHUNK - 1) // _CHUNK  # chunks per row
+    chunk = _chunk_size(N)
+    nch = (counts + chunk - 1) // chunk  # chunks per row
     nchoff = torch.cat([nch.new_zeros(1), nch.cumsum(0)])  # nchoff[-1] = total items
 
     out = torch.zeros(num_rows, D, dtype=torch.float32, device=dev)
     # Static host-known upper bound on total work items: sum(ceil(c_i/CHUNK))
     # <= num_rows + N/CHUNK. Excess programs early-exit in the kernel.
-    g_max = num_rows + reverse_indices.numel() // _CHUNK + 1
+    g_max = num_rows + N // chunk + 1
+    block_d = triton.next_power_of_2(D)
     _seg_chunk[(g_max,)](
-        g_sorted,
+        grad_out,
+        perm,
         off,
         nchoff,
         out,
         num_rows,
         D,
-        CHUNK=_CHUNK,
-        BLOCK_D=triton.next_power_of_2(D),
-        BUF=_BUF,
+        CHUNK=chunk,
+        BLOCK_D=block_d,
+        BUF=_BUF_NARROW if block_d <= 32 else _BUF_WIDE,
         num_warps=_NUM_WARPS,
         num_stages=_NUM_STAGES,
     )
