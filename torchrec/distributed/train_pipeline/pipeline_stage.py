@@ -552,6 +552,9 @@ class SparseDataDistUtil(Generic[In]):
 
         At that part, model.forward is not executed, so forward hook is not called.
         """
+        if not self._contexts:
+            # The data iterator was empty: no batch started a data dist.
+            return
         self.wait_sparse_data_dist()
         self._advance_context()
 
