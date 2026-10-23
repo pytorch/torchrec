@@ -12,12 +12,13 @@ import logging
 import pdb  # noqa
 import sys
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import torch
+import torch.distributed as dist
 from fbgemm_gpu.split_embedding_configs import EmbOptimType
 from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
     SparseType,
@@ -26,6 +27,10 @@ from fbgemm_gpu.split_table_batched_embeddings_ops_training import (
 from torch import nn
 from torch.autograd.profiler import record_function
 from torch.distributed import _remote_device
+from torch.distributed.utils import (
+    _sync_module_states,
+    _verify_param_shape_across_processes,
+)
 from torchrec import optim as trec_optim
 from torchrec.distributed.embedding_types import (
     EmbeddingComputeKernel,
@@ -49,7 +54,35 @@ from torchrec.types import CopyMixIn
 logger: logging.Logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
 _MAX_WEIGHT_CHUNKS: int = 16
+_DDP_BROADCAST_BUCKET_SIZE: int = 250 * 1024 * 1024
 _TWRW_MULTI_GROUP_JK: str = "pytorch/torchrec:enable_twrw_multi_group"
+
+
+def init_data_parallel_state(
+    module: nn.Module,
+    process_group: dist.ProcessGroup | None,
+    *,
+    params_to_ignore: Collection[str] = (),
+    broadcast_buffers: bool = True,
+) -> None:
+    """Mirror DistributedDataParallel.__init__ startup sync without a reducer."""
+    if process_group is None:
+        return
+    parameters: list[torch.Tensor] = [
+        param
+        for name, param in module.named_parameters()
+        if name not in params_to_ignore
+    ]
+    if parameters:
+        _verify_param_shape_across_processes(process_group, parameters)
+    _sync_module_states(
+        module,
+        process_group=process_group,
+        broadcast_bucket_size=_DDP_BROADCAST_BUCKET_SIZE,
+        src=0,
+        params_and_buffers_to_ignore=params_to_ignore,
+        broadcast_buffers=broadcast_buffers,
+    )
 
 
 def is_twrw_multi_group_enabled() -> bool:

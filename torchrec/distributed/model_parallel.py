@@ -82,6 +82,7 @@ from torchrec.distributed.utils import (
     append_prefix,
     copy_to_device,
     filter_state_dict,
+    init_data_parallel_state,
     sharded_model_copy,
 )
 from torchrec.modules.embedding_modules import mark_data_parallel_skip_grad_sync
@@ -262,6 +263,14 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         all_parameter_names = set(dict(dmp.named_parameters()).keys())
         if len(all_parameter_names - ddp_ignore_param_names) == 0:
             return
+        if dmp._skip_data_parallel_grad_sync:
+            init_data_parallel_state(
+                dmp._dmp_wrapped_module,
+                pg,
+                params_to_ignore=ddp_ignore_param_names,
+                broadcast_buffers=False,
+            )
+            return
         DistributedDataParallel._set_params_and_buffers_to_ignore_for_model(
             module=dmp._dmp_wrapped_module,
             params_and_buffers_to_ignore=ddp_ignore_param_names,
@@ -287,6 +296,8 @@ class DefaultDataParallelWrapper(DataParallelWrapper):
         env: ShardingEnv,
         device: torch.device,
     ) -> None:
+        if dmp._skip_data_parallel_grad_sync and env.process_group is None:
+            return
         if isinstance(dmp._dmp_wrapped_module, DistributedDataParallel) or isinstance(
             dmp._dmp_wrapped_module, FullyShardedDataParallel
         ):
@@ -370,10 +381,13 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
         data_parallel_wrapper (Optional[DataParallelWrapper]): custom wrapper for data
             parallel modules.
         model_tracker_config (Optional[DeltaTrackerConfig]): config for model tracker.
-        skip_data_parallel_grad_sync (bool): whether to omit gradient synchronization
-            for data-parallel modules. When ``True``, DMP omits both its outer data
-            parallel wrapper and supported inner data-parallel embedding wrappers,
-            and init_data_parallel() raises.
+        skip_data_parallel_grad_sync (bool): evaluation-only mode that omits DDP
+            gradient reducers. With a process group, startup broadcasts dense
+            parameters and supported DATA_PARALLEL lookup parameters and buffers
+            from rank 0. Source weights loaded afterward must match across ranks.
+            Backward produces local, unsynchronized gradients; fused embedding
+            optimizers update independently on each rank. Do not use this mode
+            for distributed training. Calling init_data_parallel() raises.
 
     Example::
 
@@ -489,6 +503,7 @@ class DistributedModelParallel(nn.Module, FusedOptimizerModule):
             and self.device.type != "meta"
         ):
             self._dmp_wrapped_module.to(self.device)
+            self._data_parallel_wrapper.wrap(self, self._env, self.device)
 
         self.model_trackers: Dict[str, ModelDeltaTracker] = {}
 
