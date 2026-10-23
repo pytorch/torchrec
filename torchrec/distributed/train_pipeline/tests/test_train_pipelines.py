@@ -708,73 +708,6 @@ class TrainPipelineSparseDistTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
-    def test_skip_batch_record_stream_equal_to_non_pipelined(self) -> None:
-        """
-        ``skip_batch_record_stream`` drops the record_stream registrations that keep
-        a freed batch block from being reused while the default stream still reads
-        it. Stalling the default stream before every step, and comparing only after
-        the loop, lets the CPU run steps ahead so the next batch copy lands in the
-        freed blocks; a missing wait shows up as a numerics mismatch.
-        """
-        data = self._generate_data(
-            num_batches=12,
-            batch_size=32,
-        )
-        dataloader = iter(data)
-
-        model = self._setup_model()
-        sharded_model, optim = self._generate_sharded_model_and_optimizer(
-            model,
-            ShardingType.TABLE_WISE.value,
-            EmbeddingComputeKernel.FUSED.value,
-            {},
-        )
-        (
-            sharded_model_pipelined,
-            optim_pipelined,
-        ) = self._generate_sharded_model_and_optimizer(
-            model,
-            ShardingType.TABLE_WISE.value,
-            EmbeddingComputeKernel.FUSED.value,
-            {},
-        )
-        copy_state_dict(
-            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
-        )
-
-        pipeline = self.pipeline_class(
-            model=sharded_model_pipelined,
-            optimizer=optim_pipelined,
-            device=self.device,
-            execute_all_batches=True,
-            skip_batch_record_stream=True,
-        )
-        self.assertTrue(pipeline._skip_batch_record_stream)
-
-        # The non-pipelined reference syncs the host on the default stream every
-        # step, so it runs to completion before the pipelined loop starts.
-        preds = []
-        for batch in data:
-            batch = batch.to(self.device)
-            optim.zero_grad()
-            loss, pred = sharded_model(batch)
-            loss.backward()
-            optim.step()
-            preds.append(pred)
-
-        preds_pipeline = []
-        for _ in data:
-            torch.cuda._sleep(50_000_000)
-            preds_pipeline.append(pipeline.progress(dataloader))
-
-        self.assertRaises(StopIteration, pipeline.progress, dataloader)
-        for pred, pred_pipeline in zip(preds, preds_pipeline):
-            torch.testing.assert_close(pred, pred_pipeline)
-
-    @unittest.skipIf(
-        not torch.cuda.is_available(),
-        "Not enough GPUs, this test requires at least one GPU",
-    )
     def test_async_inplace_copy_setup_and_lifecycle(self) -> None:
         """async_inplace_copy: flag-off is a no-op (plain deque, no worker);
         flag-on swaps in a FutureDeque + a worker that shuts down cleanly and
@@ -1506,6 +1439,217 @@ class TrainPipelineSparseDist2DShardingTest(unittest.TestCase):
         dmp.assert_called_once()
 
 
+class _NoConsumerWaitTrainPipelineSparseDist(TrainPipelineSparseDist):
+    """Skips the consumer-stream wait to reproduce the race it prevents."""
+
+    def _wait_for_consumer_streams(self) -> None:
+        pass
+
+
+class TrainPipelineSkipBatchRecordStreamTest(TrainPipelineSparseDistTestBase):
+    """`skip_batch_record_stream` replaces the per-tensor batch `record_stream` with
+    `_wait_for_consumer_streams` before each batch copy. These tests reproduce the
+    block-reuse race on real streams and show the wait prevents it."""
+
+    def _run_stalled_skip_batch_record_stream(
+        self, pipeline_class: Type[TrainPipelineSparseDist]
+    ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+        """
+        Trains a non-pipelined reference and a ``skip_batch_record_stream`` pipeline
+        on the same batches and returns both lists of predictions.
+
+        ``skip_batch_record_stream`` drops the record_stream registrations that keep
+        a freed batch block from being reused while the default stream still reads
+        it. Stalling the default stream before every step, and comparing only after
+        the loop, lets the CPU run steps ahead so the next batch copy lands in the
+        freed blocks.
+        """
+        data = self._generate_data(
+            num_batches=12,
+            batch_size=32,
+        )
+        dataloader = iter(data)
+
+        model = self._setup_model()
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            model,
+            ShardingType.TABLE_WISE.value,
+            EmbeddingComputeKernel.FUSED.value,
+            {},
+        )
+        (
+            sharded_model_pipelined,
+            optim_pipelined,
+        ) = self._generate_sharded_model_and_optimizer(
+            model,
+            ShardingType.TABLE_WISE.value,
+            EmbeddingComputeKernel.FUSED.value,
+            {},
+        )
+        copy_state_dict(
+            sharded_model.state_dict(), sharded_model_pipelined.state_dict()
+        )
+
+        pipeline = pipeline_class(
+            model=sharded_model_pipelined,
+            optimizer=optim_pipelined,
+            device=self.device,
+            execute_all_batches=True,
+            skip_batch_record_stream=True,
+        )
+        self.assertTrue(pipeline._skip_batch_record_stream)
+
+        # The non-pipelined reference syncs the host on the default stream every
+        # step, so it runs to completion before the pipelined loop starts.
+        preds = []
+        for batch in data:
+            batch = batch.to(self.device)
+            optim.zero_grad()
+            loss, pred = sharded_model(batch)
+            loss.backward()
+            optim.step()
+            preds.append(pred)
+
+        preds_pipeline = []
+        for _ in data:
+            torch.cuda._sleep(50_000_000)
+            preds_pipeline.append(pipeline.progress(dataloader))
+
+        self.assertRaises(StopIteration, pipeline.progress, dataloader)
+        torch.cuda.synchronize(self.device)
+        return preds, preds_pipeline
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_skip_batch_record_stream_equal_to_non_pipelined(self) -> None:
+        preds, preds_pipeline = self._run_stalled_skip_batch_record_stream(
+            TrainPipelineSparseDist
+        )
+        for pred, pred_pipeline in zip(preds, preds_pipeline):
+            torch.testing.assert_close(pred, pred_pipeline)
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_skip_batch_record_stream_corrupts_batches_without_consumer_wait(
+        self,
+    ) -> None:
+        """
+        Reproduces the race the consumer-stream wait prevents: the same stalled run
+        with ``_wait_for_consumer_streams`` overridden to a no-op reads batches that
+        the next copy has already overwritten. This also shows the batch
+        record_stream registrations really are skipped; with them in place there
+        would be no race to observe.
+        """
+        preds, preds_pipeline = self._run_stalled_skip_batch_record_stream(
+            _NoConsumerWaitTrainPipelineSparseDist
+        )
+        self.assertFalse(
+            all(
+                torch.equal(pred, pred_pipeline)
+                for pred, pred_pipeline in zip(preds, preds_pipeline)
+            )
+        )
+
+    def _consumer_read_after_block_reuse(
+        self,
+        pipeline: TrainPipelineSparseDist,
+        consumer_stream: torch.cuda.Stream,
+        wait_for_consumers: bool,
+    ) -> torch.Tensor:
+        """
+        Allocates a batch tensor on the memcpy stream, reads it on a stalled
+        ``consumer_stream``, frees it on the CPU without ``record_stream``, and
+        allocates the next batch on the memcpy stream, which reuses the freed block.
+        Returns what the consumer read: ones if it read before the reuse, twos if
+        the next batch overwrote the block first.
+        """
+        assert pipeline._memcpy_stream is not None
+        memcpy_stream = cast(torch.cuda.Stream, pipeline._memcpy_stream)
+        numel = 1 << 20
+        with torch.cuda.stream(memcpy_stream):
+            batch = torch.ones(numel, device=self.device)
+        consumer_stream.wait_stream(memcpy_stream)
+        with torch.cuda.stream(consumer_stream):
+            torch.cuda._sleep(100_000_000)
+            read = batch.clone()
+        batch_ptr = batch.data_ptr()
+        del batch
+
+        if wait_for_consumers:
+            pipeline._wait_for_consumer_streams()
+        with torch.cuda.stream(memcpy_stream):
+            next_batch = torch.full((numel,), 2.0, device=self.device)
+        self.assertEqual(next_batch.data_ptr(), batch_ptr)
+        torch.cuda.synchronize(self.device)
+        return read
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_wait_for_consumer_streams_orders_batch_block_reuse(self) -> None:
+        """
+        Stream-level repro on the pipeline's real streams: without the wait, the
+        next batch allocation on the memcpy stream overwrites a freed batch block
+        before a consumer stream (default or data_dist) reads it; with
+        ``_wait_for_consumer_streams`` the consumer reads the original values.
+        """
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            self._setup_model(),
+            ShardingType.TABLE_WISE.value,
+            EmbeddingComputeKernel.FUSED.value,
+            {},
+        )
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model,
+            optimizer=optim,
+            device=self.device,
+            skip_batch_record_stream=True,
+        )
+        assert pipeline._data_dist_stream is not None
+        data_dist_stream = cast(torch.cuda.Stream, pipeline._data_dist_stream)
+        for name, consumer_stream in (
+            ("default", torch.cuda.current_stream(self.device)),
+            ("data_dist", data_dist_stream),
+        ):
+            with self.subTest(consumer_stream=name):
+                read = self._consumer_read_after_block_reuse(
+                    pipeline, consumer_stream, wait_for_consumers=False
+                )
+                self.assertFalse(torch.equal(read, torch.ones_like(read)))
+
+                read = self._consumer_read_after_block_reuse(
+                    pipeline, consumer_stream, wait_for_consumers=True
+                )
+                torch.testing.assert_close(read, torch.ones_like(read))
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
+    def test_skip_batch_record_stream_ignored_with_inplace_copy(self) -> None:
+        """In-place copy allocates the batch on the consuming stream, so it never
+        needs the consumer-stream wait and keeps its own record_stream gate."""
+        sharded_model, optim = self._generate_sharded_model_and_optimizer(
+            self._setup_model(),
+            ShardingType.TABLE_WISE.value,
+            EmbeddingComputeKernel.FUSED.value,
+            {},
+        )
+        pipeline = TrainPipelineSparseDist(
+            model=sharded_model,
+            optimizer=optim,
+            device=self.device,
+            enable_inplace_copy_batch=True,
+            skip_batch_record_stream=True,
+        )
+        self.assertFalse(pipeline._skip_batch_record_stream)
+
+
 class TrainPipelineRecordStreamGateTest(unittest.TestCase):
     """`_wait_for_batch` gates its per-leaf `record_stream` on
     `enable_inplace_copy_batch`.
@@ -1551,55 +1695,6 @@ class TrainPipelineRecordStreamGateTest(unittest.TestCase):
                     mock_wait_for_batch.call_args.kwargs["record_stream"],
                     expected_record_stream,
                 )
-
-    @unittest.skipIf(
-        not torch.cuda.is_available(),
-        "Not enough GPUs, this test requires at least one GPU",
-    )
-    def test_consumer_stream_wait_replaces_record_stream(self) -> None:
-        """With skip_batch_record_stream, the default-stream registration is skipped
-        only because every regular batch copy is preceded by the memcpy-stream wait; the
-        flag is dropped under in-place copy, which never needed the wait."""
-        dmp = MagicMock(spec=DMPCollection)
-        dmp.training = True
-        inplace_pipeline = TrainPipelineSparseDist(
-            dmp,
-            MagicMock(spec=torch.optim.Optimizer),
-            device=torch.device("cuda"),
-            enable_inplace_copy_batch=True,
-            skip_batch_record_stream=True,
-        )
-        self.assertFalse(inplace_pipeline._skip_batch_record_stream)
-
-        pipeline = TrainPipelineSparseDist(
-            dmp,
-            MagicMock(spec=torch.optim.Optimizer),
-            device=torch.device("cuda"),
-            skip_batch_record_stream=True,
-        )
-        self.assertTrue(pipeline._skip_batch_record_stream)
-        context = TrainPipelineContext()
-        context.index = 0
-        pipeline.batches.append(MagicMock(spec=Pipelineable))
-        pipeline.contexts.append(context)
-        with patch(
-            "torchrec.distributed.train_pipeline.train_pipelines._wait_for_batch"
-        ) as mock_wait_for_batch:
-            pipeline._wait_for_batch()
-        self.assertFalse(mock_wait_for_batch.call_args.kwargs["record_stream"])
-
-        calls = []
-        with patch.object(
-            pipeline,
-            "_wait_for_consumer_streams",
-            side_effect=lambda: calls.append("wait"),
-        ), patch.object(
-            pipeline,
-            "copy_batch_to_gpu",
-            side_effect=lambda _: calls.append("copy") or (None, None),
-        ):
-            pipeline.enqueue_batch(iter([]))
-        self.assertEqual(calls, ["wait", "copy"])
 
 
 class TrainPipelineAttachDetachTest(TrainPipelineSparseDistTestBase):
@@ -3583,9 +3678,3 @@ class TrainPipelineSparseDistCompAutogradTest(TrainPipelineSparseDistTest):
     )
     def test_async_next_batch_setup_and_exhaustion(self) -> None:
         super().test_async_next_batch_setup_and_exhaustion()
-
-    @unittest.skip(
-        "skip_batch_record_stream is a base TrainPipelineSparseDist option that the compiled-autograd pipeline does not accept."
-    )
-    def test_skip_batch_record_stream_equal_to_non_pipelined(self) -> None:
-        super().test_skip_batch_record_stream_equal_to_non_pipelined()
