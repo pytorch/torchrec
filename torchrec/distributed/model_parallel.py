@@ -10,7 +10,6 @@
 import abc
 import copy
 import logging as logger
-import os
 from collections import defaultdict, OrderedDict
 from functools import wraps
 from typing import Any, Callable, cast, Dict, Iterator, List, Optional, Set, Tuple, Type
@@ -59,11 +58,6 @@ from torchrec.distributed.model_tracker.types import (
     Trackers,
 )
 from torchrec.distributed.planner import EmbeddingShardingPlanner, Topology
-from torchrec.distributed.sharded_relay_utils import (
-    allreduce_tensors_with_sharded_relay,
-    setup_sharded_relay,
-    ShardedRelayState,
-)
 from torchrec.distributed.sharding_plan import get_default_sharders
 from torchrec.distributed.types import (
     DMPCollectionConfig,
@@ -1289,7 +1283,6 @@ class DMPCollection(DistributedModelParallel):
         custom_all_reduce: Optional[Callable[[List[torch.Tensor]], None]] = None,
         submodule_configs: Optional[List[DMPCollectionConfig]] = None,
         rs_awaitable_hook_module: Optional[str] = None,
-        use_sharded_relay: bool = False,
         device_mesh_backend_override: Optional[Tuple[BackendConfig, ...]] = None,
     ) -> None:
         assert (
@@ -1424,73 +1417,6 @@ class DMPCollection(DistributedModelParallel):
         ):
             self._register_sparse_arch_forward_hook(rs_awaitable_hook_module)
 
-        # Initialize FusedShardedRelayMultiGroup for 2D sparse parallelism if enabled.
-        # Creates a single FusedShardedRelayMultiGroup that executes all sparse groups
-        # in lockstep phases to eliminate XGMI link contention.
-        #
-        # NOTE: Sharded relay can be enabled via:
-        # 1. The use_sharded_relay parameter (explicit)
-        # 2. The NCCL_SHARDED_RELAY_MODE_ENABLE=1 environment variable (implicit)
-        #
-        # Active ranks are passed to the C++ ncclShardedRelayAllReduce API via
-        # function arguments.
-        #
-        # When RCCLX sharded relay is available, we create RCCLX comm to enable
-        # native ncclShardedRelayAllReduce. Otherwise, falls back to dist.all_reduce.
-        sharded_relay_env = os.environ.get("NCCL_SHARDED_RELAY_MODE_ENABLE", "0")
-        self._use_sharded_relay: bool = use_sharded_relay or sharded_relay_env == "1"
-        self._sharded_relay_state: ShardedRelayState | None = None
-
-        if self._use_sharded_relay:
-            if sharded_relay_env == "1" and not use_sharded_relay:
-                logger.info(
-                    "[TorchRec 2D Parallel] Sharded relay auto-enabled via "
-                    "NCCL_SHARDED_RELAY_MODE_ENABLE=1 environment variable."
-                )
-            self._setup_sharded_relay_per_context(
-                world_size=world_size,
-                use_inter_host_allreduce=use_inter_host_allreduce,
-                model_parallel_group_size=sharding_group_size,
-            )
-
-    def _setup_sharded_relay_per_context(
-        self,
-        world_size: int,
-        use_inter_host_allreduce: bool,
-        model_parallel_group_size: int = 32,
-    ) -> None:
-        """Set up fused sharded relay; delegates to sharded_relay_utils.
-
-        Args:
-            world_size: Total number of ranks across all nodes.
-            use_inter_host_allreduce: If True, sharded relay is not supported.
-            model_parallel_group_size: Number of GPUs in the model-parallel
-                (sharding) dimension of the 2D topology. This is the DMPCollection
-                ``sharding_group_size`` parameter (e.g., 32 for a 64-GPU job with
-                ``num_parallel_worlds=2``).
-
-                The sharded relay algorithm operates on *replica groups* — pairs
-                of ranks that hold the same model shard. The replica group size is:
-
-                    replica_group_size = world_size // model_parallel_group_size
-
-                For a 64-GPU job with ``num_parallel_worlds=2``:
-                    model_parallel_group_size = 32
-                    replica_group_size        =  2  ← passed to setup_sharded_relay
-        """
-        # Convert from model-parallel group size to replica group size.
-        # setup_sharded_relay expects the number of active ranks per sparse group,
-        # which equals the number of data-parallel replicas (num_parallel_worlds),
-        # not the number of model-parallel ranks per shard.
-        replica_group_size = world_size // model_parallel_group_size
-        self._sharded_relay_state = setup_sharded_relay(
-            global_rank=self._global_rank,
-            world_size=world_size,
-            use_inter_host_allreduce=use_inter_host_allreduce,
-            sharding_group_size=replica_group_size,
-        )
-        self._use_sharded_relay = self._sharded_relay_state is not None
-
     def _shard_modules_impl(
         self,
         module: nn.Module,
@@ -1567,14 +1493,10 @@ class DMPCollection(DistributedModelParallel):
         It uses the `dist.AllreduceCoalescedOptions` to perform an all-reduce operation on the weights,
         which averages the weights across all processes in the inter-process group.
 
-        For sharded relay mode, the FusedShardedRelayMultiGroup executes all groups in lockstep
-        phases with a blocking call, so no async work handling is needed.
-
         Args:
             include_optimizer_state (bool): Flag to include optimizer state syncing upon call
         """
         # We sync per context to use the right all reduce process group.
-        # For sharded relay mode, _allreduce_tensors uses blocking fused calls internally.
         for ctx in self._ctxs:
             if len(ctx.hash_zch_modules) > 0:
                 # Do syncing of managed collision modules.
@@ -1718,7 +1640,6 @@ class DMPCollection(DistributedModelParallel):
         sync_modules = [module for module, _ in ctx.modules_to_sync]
         if (
             self._custom_all_reduce is None
-            and not self._use_sharded_relay
             and ctx.replica_pg.size() == 1
             and (
                 not sync_modules
@@ -1762,30 +1683,12 @@ class DMPCollection(DistributedModelParallel):
         Collective Communication:
             - allreduce_coalesced on the provided process group (pg)
 
-        For sharded relay mode with 2D sparse parallelism:
-        - Uses FusedShardedRelayMultiGroup for phase-synchronized execution
-        - ALL groups execute in lockstep phases to eliminate XGMI link contention
-        - Single fused blocking call handles all groups in parallel
-
         Args:
             ctx: The DMPCollectionContext containing the process group
             tensors_dict: Dictionary of tensors grouped by dtype
             annotation: Annotation string for profiling
             opts: Optional allreduce coalesced options
         """
-        if self._use_sharded_relay and self._sharded_relay_state is not None:
-            # Propagate the reduce op from opts so callers (e.g.
-            # sync_hash_zch_weights) that pass ReduceOp.SUM are honored
-            # instead of being silently averaged.
-            op = opts.reduceOp if opts is not None else dist.ReduceOp.AVG
-            allreduce_tensors_with_sharded_relay(
-                self._sharded_relay_state,
-                tensors_dict,
-                annotation,
-                op=op,
-            )
-            return
-
         all_reduce_hook = self._all_reduce_hook
         custom_all_reduce = self._custom_all_reduce
         if all_reduce_hook is not None:

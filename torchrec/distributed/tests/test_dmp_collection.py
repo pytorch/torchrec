@@ -326,8 +326,6 @@ class TestDMPCollectionAllReduceHook(unittest.TestCase):
         dmp = DMPCollection.__new__(DMPCollection)
         dmp._custom_all_reduce = None
         dmp._all_reduce_hook = None
-        dmp._use_sharded_relay = False
-        dmp._sharded_relay_state = None
         return dmp
 
     def test_set_hook_receives_process_group_and_tensors(self) -> None:
@@ -497,7 +495,6 @@ class TestDMPCollectionSyncTensors(unittest.TestCase):
     def test_sync_skips_default_allreduce_for_single_replica(self) -> None:
         dmp = self._dmp_shell(MockModule())
         dmp._custom_all_reduce = None
-        dmp._use_sharded_relay = False
         dmp._allreduce_tensors = MagicMock()
         context = self._context()
         kernel = MockSyncableEmbeddingKernel()
@@ -512,7 +509,6 @@ class TestDMPCollectionSyncTensors(unittest.TestCase):
     def test_sync_skips_default_allreduce_for_empty_modules(self) -> None:
         dmp = self._dmp_shell(MockModule())
         dmp._custom_all_reduce = None
-        dmp._use_sharded_relay = False
         dmp._restore_stashed_sync_tensors = MagicMock()
         dmp._allreduce_tensors = MagicMock()
         context = self._context()
@@ -527,7 +523,6 @@ class TestDMPCollectionSyncTensors(unittest.TestCase):
     def test_sync_keeps_default_allreduce_for_non_triton_module(self) -> None:
         dmp = self._dmp_shell(MockModule())
         dmp._custom_all_reduce = None
-        dmp._use_sharded_relay = False
         dmp._restore_stashed_sync_tensors = MagicMock()
         dmp._allreduce_tensors = MagicMock()
         context = self._context()
