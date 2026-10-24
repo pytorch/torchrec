@@ -3154,6 +3154,35 @@ class StagedTrainPipelineTest(TrainPipelineSparseDistTestBase):
         not torch.cuda.is_available(),
         "Not enough GPUs, this test requires at least one GPU",
     )
+    def test_empty_dataloader(self) -> None:
+        sharded_model, _ = self._generate_sharded_model_and_optimizer(
+            self._setup_model(),
+            ShardingType.TABLE_WISE.value,
+            EmbeddingComputeKernel.FUSED.value,
+        )
+        sdd = SparseDataDistUtil[ModelInput](
+            model=sharded_model,
+            data_dist_stream=torch.cuda.Stream(),
+            apply_jit=False,
+        )
+        pipeline = StagedTrainPipeline(
+            pipeline_stages=[
+                PipelineStage(
+                    name="data_copy",
+                    runnable=partial(get_h2d_func, device=self.device),
+                    stream=torch.cuda.Stream(),
+                ),
+                sdd.start_sparse_data_dist_stage(),
+            ],
+            compute_stream=torch.cuda.current_stream(),
+        )
+
+        self.assertIsNone(pipeline.progress(iter([])))
+
+    @unittest.skipIf(
+        not torch.cuda.is_available(),
+        "Not enough GPUs, this test requires at least one GPU",
+    )
     def test_pipelining_embedding_lookup(self) -> None:
         model = self._setup_model()
 
