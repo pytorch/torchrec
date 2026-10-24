@@ -8,18 +8,37 @@
 # pyre-strict
 
 import unittest
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import torch
 import torch.distributed as dist
 import torch.nn as nn
+from torch.distributed.remote_device import _remote_device
+from torch.distributed.tensor import DTensor
+from torchrec.distributed.embedding_types import EmbeddingComputeKernel
 from torchrec.distributed.model_parallel import DMPCollection
+from torchrec.distributed.sharding_plan import (
+    construct_module_sharding_plan,
+    table_wise,
+)
+from torchrec.distributed.shards_wrapper import LocalShardsWrapper
+from torchrec.distributed.test_utils.multi_process import (
+    MultiProcessContext,
+    MultiProcessTestBase,
+)
 from torchrec.distributed.types import (
     DMPCollectionConfig,
     DMPCollectionContext,
+    EmbeddingModuleShardingPlan,
+    EnumerableShardingSpec,
+    ParameterSharding,
     ShardingPlan,
     ShardingStrategy,
+    ShardMetadata,
 )
+from torchrec.modules.embedding_configs import EmbeddingBagConfig
+from torchrec.modules.embedding_modules import EmbeddingBagCollection
 
 
 class MockModule(nn.Module):
@@ -614,6 +633,221 @@ class TestEnsureReduceScatterComplete(unittest.TestCase):
             mock_module._rs_awaitable = None
 
         mock_awaitable.wait.assert_called_once()
+
+
+def _sharding_plan(device_str: str) -> ShardingPlan:
+    return ShardingPlan(
+        {
+            "ebc": EmbeddingModuleShardingPlan(
+                {
+                    "table_0": ParameterSharding(
+                        sharding_type="column_wise",
+                        compute_kernel="dense",
+                        ranks=[0, 1],
+                        sharding_spec=EnumerableShardingSpec(
+                            shards=[
+                                ShardMetadata(
+                                    shard_offsets=[0, 0],
+                                    shard_sizes=[64, 32],
+                                    placement=f"rank:0/{device_str}",
+                                ),
+                                ShardMetadata(
+                                    shard_offsets=[0, 32],
+                                    shard_sizes=[64, 32],
+                                    placement=f"rank:1/{device_str}",
+                                ),
+                            ]
+                        ),
+                    )
+                }
+            )
+        }
+    )
+
+
+class TestDMPCollectionRemapPlacement(unittest.TestCase):
+    """Device index in the placements `_remap_sharding_plan` rewrites."""
+
+    def _dmp(self, device: torch.device) -> DMPCollection:
+        dmp = DMPCollection.__new__(DMPCollection)
+        dmp._device = device
+        return dmp
+
+    def _remap(self, device_str: str) -> ShardingPlan:
+        # rank 1 with step 2 puts group_start at 1, so both shards remap onto odd
+        # global ranks, where `rank % local_size` is 1 rather than 0.
+        plan = _sharding_plan(device_str)
+        with patch(
+            "torchrec.distributed.model_parallel.get_local_size", return_value=2
+        ):
+            self._dmp(torch.device(device_str))._remap_sharding_plan(
+                plan=plan, rank=1, step=2, sharding_group_size=2
+            )
+        return plan
+
+    def _table(self, plan: ShardingPlan) -> ParameterSharding:
+        return cast(EmbeddingModuleShardingPlan, plan.plan["ebc"])["table_0"]
+
+    def _placements(self, plan: ShardingPlan) -> list[_remote_device]:
+        spec = self._table(plan).sharding_spec
+        assert isinstance(spec, EnumerableShardingSpec)
+        placements = []
+        for shard in spec.shards:
+            assert shard.placement is not None
+            placements.append(shard.placement)
+        return placements
+
+    def _devices(self, plan: ShardingPlan) -> list[torch.device]:
+        return [p.device() for p in self._placements(plan)]
+
+    def _ranks(self, plan: ShardingPlan) -> list[int | None]:
+        return [p.rank() for p in self._placements(plan)]
+
+    def test_cpu_placement_carries_no_device_index(self) -> None:
+        plan = self._remap("cpu")
+
+        # Shard.__post_init__ compares placement.device() against the local
+        # tensor's device with `!=`, and torch.device("cpu:0") is not equal to
+        # torch.device("cpu"), so any index here fails every shard built from
+        # this plan at ShardedTensor construction.
+        self.assertEqual(
+            self._devices(plan), [torch.device("cpu"), torch.device("cpu")]
+        )
+        self.assertEqual(self._ranks(plan), [1, 3])
+
+    def test_accelerator_placements_keep_their_device_index(self) -> None:
+        for device_str in ("cuda", "mtia"):
+            with self.subTest(device=device_str):
+                plan = self._remap(device_str)
+
+                self.assertEqual(
+                    self._devices(plan),
+                    [torch.device(device_str, 1), torch.device(device_str, 1)],
+                )
+                self.assertEqual(self._ranks(plan), [1, 3])
+
+    def test_ranks_are_remapped_regardless_of_device(self) -> None:
+        for device_str in ("cpu", "cuda"):
+            with self.subTest(device=device_str):
+                plan = self._remap(device_str)
+                self.assertEqual(self._table(plan).ranks, [1, 3])
+
+
+def _test_cpu_construction(
+    rank: int,
+    world_size: int,
+    sharding_group_size: int,
+) -> None:
+    with MultiProcessContext(rank=rank, world_size=world_size, backend="gloo") as ctx:
+        assert ctx.pg is not None
+        # Not ctx.device: it resolves to CUDA whenever the host has GPUs, which is
+        # precisely the CPU-job-on-a-GPU-host case that must keep working.
+        dmp = DMPCollection(
+            module=MockModule(),
+            device=torch.device("cpu"),
+            plan=ShardingPlan({}),
+            world_size=world_size,
+            sharding_group_size=sharding_group_size,
+            global_pg=ctx.pg,
+            init_parameters=False,
+            init_data_parallel=False,
+        )
+
+        mesh = dmp.device_mesh
+        assert mesh.device_type == "cpu", f"expected a cpu mesh, got {mesh.device_type}"
+        expected_shape = (world_size // sharding_group_size, sharding_group_size)
+        assert (
+            tuple(mesh.mesh.shape) == expected_shape
+        ), f"expected mesh {expected_shape}, got {tuple(mesh.mesh.shape)}"
+
+
+class _TableModel(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ebc = EmbeddingBagCollection(
+            tables=[
+                EmbeddingBagConfig(
+                    name="table_0",
+                    embedding_dim=4,
+                    num_embeddings=8,
+                    feature_names=["f0"],
+                )
+            ],
+            device=torch.device("meta"),
+        )
+
+
+def _test_cpu_sharded_table_sync(rank: int, world_size: int) -> None:
+    with MultiProcessContext(rank=rank, world_size=world_size, backend="gloo") as ctx:
+        assert ctx.pg is not None
+        model = _TableModel()
+        # A plan for a one-rank sharding group; DMPCollection remaps it onto
+        # each replica's rank.
+        plan = ShardingPlan(
+            {
+                "ebc": construct_module_sharding_plan(
+                    model.ebc,
+                    {
+                        "table_0": table_wise(
+                            rank=0, compute_kernel=EmbeddingComputeKernel.FUSED.value
+                        )
+                    },
+                    local_size=1,
+                    world_size=1,
+                    device_type="cpu",
+                )
+            }
+        )
+        dmp = DMPCollection(
+            module=model,
+            device=torch.device("cpu"),
+            plan=plan,
+            world_size=world_size,
+            sharding_group_size=1,
+            global_pg=ctx.pg,
+            init_data_parallel=False,
+        )
+
+        weight = dmp.state_dict()["ebc.embedding_bags.table_0.weight"]
+        assert isinstance(weight, DTensor), f"got {type(weight)}"
+        local = weight.to_local()
+        assert isinstance(local, LocalShardsWrapper), f"got {type(local)}"
+        shard = local.local_shards()[0]
+        assert shard.device == torch.device("cpu"), f"got {shard.device}"
+
+        # Each replica holds a full copy of the table, and sync() averages the
+        # copies over the replica group.
+        shard.fill_(float(rank))
+        dmp.sync()
+        expected = sum(range(world_size)) / world_size
+        assert torch.all(shard == expected), f"expected {expected}, got {shard}"
+
+
+class TestDMPCollectionCPUConstruction(MultiProcessTestBase):
+    """DMPCollection must build and sync on a CPU topology, not just CUDA and MTIA."""
+
+    def test_cpu_two_replicas(self) -> None:
+        self._run_multi_process_test(
+            callable=_test_cpu_construction,
+            world_size=2,
+            sharding_group_size=1,
+        )
+
+    def test_cpu_single_replica(self) -> None:
+        # num_parallel_worlds=1 in APF, so sharding_group_size == world_size and the
+        # replica dimension collapses to 1. This is the shape Ads CPU transfer
+        # learning runs, and the rank remap degenerates to identity.
+        self._run_multi_process_test(
+            callable=_test_cpu_construction,
+            world_size=2,
+            sharding_group_size=2,
+        )
+
+    def test_cpu_sharded_table_syncs_across_replicas(self) -> None:
+        self._run_multi_process_test(
+            callable=_test_cpu_sharded_table_sync,
+            world_size=2,
+        )
 
 
 if __name__ == "__main__":

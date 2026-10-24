@@ -1206,7 +1206,10 @@ class DMPCollection(DistributedModelParallel):
 
     Args:
             module (nn.Module): The module to be sharded.
-            device (torch.device): The device to use for the sharded module.
+            device (torch.device): The device to use for the sharded module. CUDA, MTIA
+                and CPU are supported. CPU runs the replica-dim collectives over gloo and
+                is intended for offline jobs (e.g. transfer learning) that build a sharded
+                module without training on accelerators.
             plan (ShardingPlan): The sharding plan to use, created for sharding group world size.
             sharding_group_size (int): The number of GPUs to model parallel shard the embedding tables over
             world_size (int): The total number of GPUs.
@@ -1285,9 +1288,11 @@ class DMPCollection(DistributedModelParallel):
         rs_awaitable_hook_module: Optional[str] = None,
         device_mesh_backend_override: Optional[Tuple[BackendConfig, ...]] = None,
     ) -> None:
-        assert (
-            device.type == "cuda" or device.type == "mtia"
-        ), "DMPCollection only supports CUDA or MTIA"
+        assert device.type in (
+            "cuda",
+            "mtia",
+            "cpu",
+        ), f"DMPCollection only supports CUDA, MTIA or CPU, got {device.type}"
         # TODO: Add assertion that world_size != sharding_group_size
         self._device = device
         self._pg: dist.ProcessGroup = global_pg
@@ -1903,8 +1908,18 @@ class DMPCollection(DistributedModelParallel):
                                 )
                             else:
                                 shard_rank = shard_rank_val * step + group_start
+                            # Only accelerators carry a device index, matching
+                            # placement() in sharding_plan.py and planner/utils.py.
+                            # A "cpu:0" placement does not compare equal to a tensor's
+                            # plain "cpu" device, so Shard.__post_init__ would reject
+                            # every shard built from this plan.
+                            param_device = self._device.type
+                            if param_device in {"cuda", "mtia", "tpu"}:
+                                param_device = torch.device(
+                                    param_device, shard_rank % get_local_size()
+                                )
                             shard.placement = _remote_device(
-                                f"rank:{shard_rank}/{self._device.type}:{shard_rank % get_local_size()}"
+                                f"rank:{shard_rank}/{param_device}"
                             )
         return
 
