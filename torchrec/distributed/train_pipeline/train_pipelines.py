@@ -2648,6 +2648,7 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             # batch 0
             batch = self._batch_loader.get_next_batch()
             if batch is None:
+                self.reset()
                 raise StopIteration
             self.batches.append(batch)
             self.contexts.append(self._create_context())
@@ -2658,7 +2659,7 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
                 self.contexts[0],
                 self._pipelined_forward_type,
             )
-            self.start_sparse_data_dist(self.batches[0], self.contexts[0])
+            # _init_pipelined_modules started batch 0's input dist; only wait on it.
             self.wait_sparse_data_dist(self.contexts[0])
 
         batch = self._batch_loader.get_next_batch()
@@ -2670,6 +2671,9 @@ class EvalPipelineSparseDist(TrainPipelineSparseDist[In, Out]):
             one_time_rank0_logger.info(
                 f"training stopped at {self._batch_count} batches"
             )
+            # The loader thread has exited on the exhausted iterator; drop it so the
+            # next call starts on the iterator it is given.
+            self.reset()
             raise StopIteration
 
         with record_function("## wait_for_batch ##"):
